@@ -18,8 +18,8 @@ function loadEnvFile(filePath) {
     }
   } catch (_) {}
 }
-loadEnvFile(path.join(appDir, '.env.test.local'));
 loadEnvFile(path.join(appDir, '.env'));
+loadEnvFile(path.join(appDir, '.env.test.local'));
 
 // Require credentials from environment variables - no hardcoded fallbacks
 const TEST_EMAIL = process.env.TEST_EMAIL;

@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { submitForm } = require('../helpers/auth-helpers');
+const { submitForm, waitForAuthReady } = require('../helpers/auth-helpers');
 
 function generateUniqueSignupEmail() {
   const fallbackBase = 'jobhackai.e2e@gmail.com';
@@ -23,37 +23,39 @@ test.describe('Authentication', () => {
     const context = await browser.newContext({
       baseURL: baseURL
     });
-    const page = await context.newPage();
-    
-    await page.goto('/login');
-    
-    // Wait for login form using actual selector
-    await page.waitForSelector('#loginEmail');
-    
-    // Require credentials from environment variables - no hardcoded fallbacks
-    const TEST_EMAIL = process.env.TEST_EMAIL;
-    const TEST_PASSWORD = process.env.TEST_PASSWORD;
-    
-    if (!TEST_EMAIL || !TEST_PASSWORD) {
-      throw new Error('TEST_EMAIL and TEST_PASSWORD environment variables must be set');
+    try {
+      const page = await context.newPage();
+
+      await page.goto('/login');
+
+      // Wait for login form using actual selector
+      await page.waitForSelector('#loginEmail');
+
+      // Require credentials from environment variables - no hardcoded fallbacks
+      const TEST_EMAIL = process.env.TEST_EMAIL;
+      const TEST_PASSWORD = process.env.TEST_PASSWORD;
+
+      if (!TEST_EMAIL || !TEST_PASSWORD) {
+        throw new Error('TEST_EMAIL and TEST_PASSWORD environment variables must be set');
+      }
+
+      // Fill credentials
+      await page.fill('#loginEmail', TEST_EMAIL);
+      await page.fill('#loginPassword', TEST_PASSWORD);
+
+      // Submit form - use form submission instead of button click to avoid element detachment
+      // The form submit handler triggers async navigation which can detach the button element
+      await Promise.all([
+        page.waitForURL(/\/dashboard/, { timeout: 20000 }),
+        submitForm(page, '#loginForm')
+      ]);
+
+      // Verify dashboard loaded - wait for DOM to be ready instead of networkidle
+      await expect(page).toHaveURL(/\/dashboard/);
+      await page.waitForLoadState('domcontentloaded');
+    } finally {
+      await context.close();
     }
-    
-    // Fill credentials
-    await page.fill('#loginEmail', TEST_EMAIL);
-    await page.fill('#loginPassword', TEST_PASSWORD);
-    
-    // Submit form - use form submission instead of button click to avoid element detachment
-    // The form submit handler triggers async navigation which can detach the button element
-    await Promise.all([
-      page.waitForURL(/\/dashboard/, { timeout: 20000 }),
-      submitForm(page, '#loginForm')
-    ]);
-    
-    // Verify dashboard loaded - wait for DOM to be ready instead of networkidle
-    await expect(page).toHaveURL(/\/dashboard/);
-    await page.waitForLoadState('domcontentloaded');
-    
-    await context.close();
   });
   
   test('should protect dashboard from unauthenticated access', async ({ browser, baseURL }) => {
@@ -62,40 +64,42 @@ test.describe('Authentication', () => {
       baseURL: baseURL,
       storageState: undefined // Explicitly no storage state
     });
-    const page = await context.newPage();
-    
-    // Clear any localStorage that might have been set
-    await page.addInitScript(() => {
-      localStorage.clear();
-      sessionStorage.clear();
-    });
-    
-    // Navigate to dashboard - auth guard should redirect to login
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
-    
-    // Wait for redirect - auth guard can take up to 10 seconds to check auth state
-    // Use waitForURL with longer timeout and check for either login or verify-email redirect
     try {
-      await page.waitForURL(/\/login|\/verify-email/, { timeout: 20000 });
-    } catch (error) {
-      // If redirect didn't happen, check current URL and fail with helpful message
-      const currentURL = page.url();
-      if (currentURL.includes('/dashboard')) {
-        // Check if auth guard script is present
-        const hasAuthGuard = await page.evaluate(() => {
-          return document.querySelector('script[src*="static-auth-guard"]') !== null ||
-                 Array.from(document.scripts).some(s => s.textContent.includes('auth-pending'));
-        });
-        throw new Error(`Auth guard did not redirect. Current URL: ${currentURL}. Auth guard script present: ${hasAuthGuard}. Auth guard may not be working or page loaded before guard executed.`);
+      const page = await context.newPage();
+
+      // Clear any localStorage that might have been set
+      await page.addInitScript(() => {
+        localStorage.clear();
+        sessionStorage.clear();
+      });
+
+      // Navigate to dashboard - auth guard should redirect to login
+      await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+
+      // Wait for redirect - auth guard can take up to 10 seconds to check auth state
+      // Use waitForURL with longer timeout and check for either login or verify-email redirect
+      try {
+        await page.waitForURL(/\/login|\/verify-email/, { timeout: 20000 });
+      } catch (error) {
+        // If redirect didn't happen, check current URL and fail with helpful message
+        const currentURL = page.url();
+        if (currentURL.includes('/dashboard')) {
+          // Check if auth guard script is present
+          const hasAuthGuard = await page.evaluate(() => {
+            return document.querySelector('script[src*="static-auth-guard"]') !== null ||
+                   Array.from(document.scripts).some(s => s.textContent.includes('auth-pending'));
+          });
+          throw new Error(`Auth guard did not redirect. Current URL: ${currentURL}. Auth guard script present: ${hasAuthGuard}. Auth guard may not be working or page loaded before guard executed.`);
+        }
+        throw error;
       }
-      throw error;
+
+      // Verify we're redirected away from dashboard
+      const finalURL = page.url();
+      expect(finalURL).toMatch(/\/login|\/verify-email/);
+    } finally {
+      await context.close();
     }
-    
-    // Verify we're redirected away from dashboard
-    const finalURL = page.url();
-    expect(finalURL).toMatch(/\/login|\/verify-email/);
-    
-    await context.close();
   });
 
   test('should sign up and reach verify-email with working resend flow', async ({ browser, baseURL }) => {
@@ -186,4 +190,90 @@ test.describe('Authentication', () => {
       await context.close();
     }
   });
+
+  test('logout clears auth state and shows visitor nav', async ({ page, baseURL }) => {
+    test.setTimeout(30000);
+    await page.goto('/account-setting.html');
+    await page.waitForLoadState('domcontentloaded');
+    await waitForAuthReady(page, 15000);
+
+    const logoutBtn = page.locator('[data-action="logout"]');
+    await expect(logoutBtn).toBeVisible({ timeout: 5000 });
+
+    await Promise.all([
+      page.waitForURL(/\/login/, { timeout: 15000 }),
+      logoutBtn.click(),
+    ]);
+
+    await expect(page).toHaveURL(/\/login/);
+
+    const newPage = await page.context().newPage();
+    try {
+      await newPage.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+      await newPage.waitForURL(/\/login|\/verify-email/, { timeout: 20000 });
+      const url = newPage.url();
+      expect(url).toMatch(/\/login|\/verify-email/);
+      const authNavLoc = newPage.locator('.nav-actions .user-plan-badge, .nav-user-menu');
+      const authCount = await authNavLoc.count();
+      let hasAuthNav = false;
+      for (let i = 0; i < authCount; i++) {
+        if (await authNavLoc.nth(i).isVisible().catch(() => false)) {
+          hasAuthNav = true;
+          break;
+        }
+      }
+      expect(hasAuthNav).toBeFalsy();
+    } finally {
+      await newPage.close();
+    }
+  });
+
+  test('should protect resume-feedback from unauthenticated access', async ({ browser, baseURL }) => {
+    const context = await browser.newContext({
+      baseURL,
+      storageState: undefined,
+    });
+    try {
+      const page = await context.newPage();
+      await page.addInitScript(() => {
+        localStorage.clear();
+        sessionStorage.clear();
+      });
+      await page.goto('/resume-feedback-pro.html', { waitUntil: 'domcontentloaded' });
+      try {
+        await page.waitForURL(/\/login|\/verify-email/, { timeout: 20000 });
+      } catch (e) {
+        const currentURL = page.url();
+        throw new Error(`Auth guard did not redirect from resume-feedback. Current URL: ${currentURL}`);
+      }
+      expect(page.url()).toMatch(/\/login|\/verify-email/);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('should protect account-setting from unauthenticated access', async ({ browser, baseURL }) => {
+    const context = await browser.newContext({
+      baseURL,
+      storageState: undefined,
+    });
+    try {
+      const page = await context.newPage();
+      await page.addInitScript(() => {
+        localStorage.clear();
+        sessionStorage.clear();
+      });
+      await page.goto('/account-setting.html', { waitUntil: 'domcontentloaded' });
+      try {
+        await page.waitForURL(/\/login|\/verify-email/, { timeout: 20000 });
+      } catch (e) {
+        const currentURL = page.url();
+        throw new Error(`Auth guard did not redirect from account-setting. Current URL: ${currentURL}`);
+      }
+      expect(page.url()).toMatch(/\/login|\/verify-email/);
+    } finally {
+      await context.close();
+    }
+  });
+
 });

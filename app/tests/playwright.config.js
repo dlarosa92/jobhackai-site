@@ -18,8 +18,8 @@ function loadEnvFile(filePath) {
     }
   } catch (_) {}
 }
-loadEnvFile(path.join(appDir, '.env.test.local'));
 loadEnvFile(path.join(appDir, '.env'));
+loadEnvFile(path.join(appDir, '.env.test.local'));
 
 const ENVIRONMENTS = {
   dev: 'https://dev.jobhackai.io',
