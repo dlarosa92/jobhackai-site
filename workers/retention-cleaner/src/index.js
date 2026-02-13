@@ -31,11 +31,16 @@ async function runCleanup(env) {
   );
 
   // 2. Resume sessions — first clean up KV keys, then delete
+  // Only target sessions with no recent feedback, since upsertResumeSessionWithScores
+  // reuses old rows without refreshing created_at.
+  const resumeCleanupCondition = `created_at < ? AND id NOT IN (
+    SELECT DISTINCT resume_session_id FROM feedback_sessions WHERE created_at >= ?
+  )`;
   if (env.JOBHACKAI_KV) {
     try {
       const sessions = await db.prepare(
-        'SELECT id, raw_text_location FROM resume_sessions WHERE created_at < ?'
-      ).bind(cutoff).all();
+        `SELECT id, raw_text_location FROM resume_sessions WHERE ${resumeCleanupCondition}`
+      ).bind(cutoff, cutoff).all();
       const rows = sessions.results || [];
       for (const session of rows) {
         if (session.raw_text_location) {
@@ -63,11 +68,11 @@ async function runCleanup(env) {
     cutoff
   );
 
-  // 4. Resume sessions
+  // 4. Resume sessions — skip rows that still have recent feedback (active reuse)
   results.resume_sessions = await deleteRows(
     db,
-    'DELETE FROM resume_sessions WHERE created_at < ?',
-    cutoff
+    `DELETE FROM resume_sessions WHERE ${resumeCleanupCondition}`,
+    cutoff, cutoff
   );
 
   // 5. Interview question sets
@@ -101,9 +106,9 @@ async function runCleanup(env) {
   console.log('[retention-cleaner] cleanup complete', results);
 }
 
-async function deleteRows(db, sql, bind) {
+async function deleteRows(db, sql, ...binds) {
   try {
-    const res = await db.prepare(sql).bind(bind).run();
+    const res = await db.prepare(sql).bind(...binds).run();
     const changes =
       typeof res?.meta?.changes === 'number'
         ? res.meta.changes
