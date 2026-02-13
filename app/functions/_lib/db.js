@@ -76,11 +76,10 @@ export async function getOrCreateUserByAuthId(env, authId, email = null) {
     }
 
     if (existing) {
-      // Only update last_login_at when called with an email (real login flow).
-      // Internal helpers (updateUserPlan, resetFeatureDailyUsage, etc.) call
-      // with email=null, so they should NOT refresh login timestamps or clear
-      // deletion warnings — otherwise background Stripe webhooks would make
-      // inactive accounts look recently active.
+      // Always refresh last_login_at and clear any pending deletion warning.
+      // All remaining callers of getOrCreateUserByAuthId are user-initiated
+      // API requests (webhook/background paths were decoupled in updateUserPlan,
+      // resetFeatureDailyUsage, and resetUsageEvents).
       if (email && email !== existing.email) {
         try {
           await db.prepare(
@@ -98,7 +97,7 @@ export async function getOrCreateUserByAuthId(env, authId, email = null) {
         }
         existing.email = email;
         existing.updated_at = new Date().toISOString();
-      } else if (email) {
+      } else {
         try {
           await db.prepare(
             'UPDATE users SET last_login_at = datetime(\'now\'), deletion_warning_sent_at = NULL WHERE id = ?'
@@ -111,7 +110,6 @@ export async function getOrCreateUserByAuthId(env, authId, email = null) {
           }
         }
       }
-      // When email is null (internal/background call), skip login timestamp update
       return existing;
     }
 
@@ -140,9 +138,6 @@ export async function getOrCreateUserByAuthId(env, authId, email = null) {
     if (!result.plan) {
       result.plan = 'free';
     }
-
-    // Flag as newly created so callers can detect new users
-    result._isNewUser = true;
 
     // Send welcome email for new users (non-blocking)
     if (email) {
