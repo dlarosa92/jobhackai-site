@@ -1,5 +1,7 @@
 import { updateUserPlan, getUserPlanData, resetFeatureDailyUsage, resetUsageEvents } from '../_lib/db.js';
 import { stripe, pickBestSubscription } from '../_lib/billing-utils.js';
+import { sendEmail } from '../_lib/email.js';
+import { subscriptionCancelledEmail } from '../_lib/email-templates.js';
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -411,11 +413,31 @@ export async function onRequest(context) {
           scheduledAt: null, // Clear scheduled date
           hasEverPaid: isPaidPlan(deletedPlan) ? 1 : undefined
         }, event.created);
-        
+
         // Clean up resume data when subscription is deleted (KV cleanup)
         await env.JOBHACKAI_KV?.delete(`user:${uid}:lastResume`);
         await env.JOBHACKAI_KV?.delete(`usage:${uid}`);
         console.log(`✅ D1 WRITE SUCCESS: ${uid} → free (resume data cleaned up)`);
+
+        // Send subscription cancelled email (non-blocking)
+        // Note: Stripe may also send its own cancellation email; we send ours for consistency
+        if (uid) {
+          try {
+            const userData = await getUserPlanData(env, uid);
+            if (userData?.email) {
+              const userName = userData.email.split('@')[0];
+              const periodEnd = deletedSub.current_period_end
+                ? new Date(deletedSub.current_period_end * 1000).toISOString()
+                : null;
+              const { subject, html } = subscriptionCancelledEmail(userName, deletedPlan, periodEnd);
+              sendEmail(env, { to: userData.email, subject, html }).catch((e) => {
+                console.warn('[WEBHOOK] Failed to send cancellation email (non-blocking):', e.message);
+              });
+            }
+          } catch (emailErr) {
+            console.warn('[WEBHOOK] Error sending cancellation email (non-blocking):', emailErr.message);
+          }
+        }
       }
     }
 
