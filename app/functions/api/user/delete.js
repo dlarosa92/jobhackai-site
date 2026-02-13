@@ -92,11 +92,10 @@ export async function onRequest(context) {
 
     // 3. Delete from all related D1 tables (order matters for foreign keys)
     const deletions = [
-      // Tables using auth_id directly
+      // Tables using auth_id (TEXT) directly as user_id
       { table: 'linkedin_runs', sql: "DELETE FROM linkedin_runs WHERE user_id = ?", bind: uid },
       { table: 'role_usage_log', sql: "DELETE FROM role_usage_log WHERE user_id = ?", bind: uid },
-      // Tables using users.id
-      { table: 'cover_letter_history', sql: "DELETE FROM cover_letter_history WHERE user_id = ?", bind: userId },
+      { table: 'cover_letter_history', sql: "DELETE FROM cover_letter_history WHERE user_id = ?", bind: uid },
       { table: 'feature_daily_usage', sql: "DELETE FROM feature_daily_usage WHERE user_id = ?", bind: userId },
       { table: 'cookie_consents', sql: "DELETE FROM cookie_consents WHERE user_id = ?", bind: userId },
       // feedback_sessions must be deleted before resume_sessions (FK)
@@ -134,12 +133,20 @@ export async function onRequest(context) {
       }
     }
 
-    // 5. Delete the user record itself
+    // 5. Delete the user record itself — this MUST succeed for deletion to be considered complete
+    let userDeleted = false;
     try {
-      await db.prepare('DELETE FROM users WHERE auth_id = ?').bind(uid).run();
-      console.log('[DELETE-USER] Deleted user record:', uid);
+      const delResult = await db.prepare('DELETE FROM users WHERE auth_id = ?').bind(uid).run();
+      const changes = delResult?.meta?.changes ?? delResult?.changes ?? 0;
+      userDeleted = changes > 0;
+      if (userDeleted) {
+        console.log('[DELETE-USER] Deleted user record:', uid);
+      } else {
+        console.error('[DELETE-USER] User record not found or already deleted:', uid);
+      }
     } catch (userDelErr) {
       errors.push(`Failed to delete user record: ${userDelErr.message}`);
+      console.error('[DELETE-USER] Critical: user record deletion failed:', userDelErr.message);
     }
 
     // 6. Clean up KV keys
@@ -160,6 +167,14 @@ export async function onRequest(context) {
       } catch (kvErr) {
         errors.push(`KV cleanup error: ${kvErr.message}`);
       }
+    }
+
+    if (!userDeleted) {
+      return new Response(JSON.stringify({
+        ok: false,
+        error: 'Failed to delete user record',
+        partialErrors: errors
+      }), { status: 500, headers: corsHeaders(origin, env) });
     }
 
     return new Response(JSON.stringify({

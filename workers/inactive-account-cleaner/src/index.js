@@ -129,7 +129,7 @@ async function deleteUserData(db, env, user) {
   const deletions = [
     { sql: "DELETE FROM linkedin_runs WHERE user_id = ?", bind: uid },
     { sql: "DELETE FROM role_usage_log WHERE user_id = ?", bind: uid },
-    { sql: "DELETE FROM cover_letter_history WHERE user_id = ?", bind: userId },
+    { sql: "DELETE FROM cover_letter_history WHERE user_id = ?", bind: uid },
     { sql: "DELETE FROM feature_daily_usage WHERE user_id = ?", bind: userId },
     { sql: "DELETE FROM cookie_consents WHERE user_id = ?", bind: userId },
     { sql: "DELETE FROM feedback_sessions WHERE resume_session_id IN (SELECT id FROM resume_sessions WHERE user_id = ?)", bind: userId },
@@ -158,7 +158,12 @@ async function deleteUserData(db, env, user) {
       }
       await env.JOBHACKAI_KV.delete(`resume:${session.id}`).catch(() => {});
     }
+    // Clean up all billing and customer cache keys
     await env.JOBHACKAI_KV.delete(`cusByUid:${uid}`).catch(() => {});
+    await env.JOBHACKAI_KV.delete(`planByUid:${uid}`).catch(() => {});
+    await env.JOBHACKAI_KV.delete(`billingStatus:${uid}`).catch(() => {});
+    await env.JOBHACKAI_KV.delete(`trialUsedByUid:${uid}`).catch(() => {});
+    await env.JOBHACKAI_KV.delete(`trialEndByUid:${uid}`).catch(() => {});
   }
 }
 
