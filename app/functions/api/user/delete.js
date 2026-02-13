@@ -143,7 +143,10 @@ export async function onRequest(context) {
     if (userDeleted && userEmail) {
       try {
         const { subject, html } = accountDeletedEmail(userEmail);
-        await sendEmail(env, { to: userEmail, subject, html });
+        const emailResult = await sendEmail(env, { to: userEmail, subject, html });
+        if (!emailResult.ok) {
+          errors.push(`Deletion email not delivered: ${emailResult.error || 'unknown'}`);
+        }
       } catch (emailErr) {
         errors.push(`Failed to send deletion email: ${emailErr.message}`);
       }

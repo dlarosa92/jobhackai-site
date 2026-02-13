@@ -39,10 +39,21 @@ export async function onRequest(context) {
   }
 
   try {
-    // Look up user
-    const user = await db.prepare(
-      'SELECT id, auth_id, email, plan, created_at, updated_at, last_login_at, last_activity_at FROM users WHERE auth_id = ?'
-    ).bind(uid).first();
+    // Look up user (with fallback for pre-migration environments without activity columns)
+    let user;
+    try {
+      user = await db.prepare(
+        'SELECT id, auth_id, email, plan, created_at, updated_at, last_login_at, last_activity_at FROM users WHERE auth_id = ?'
+      ).bind(uid).first();
+    } catch (colErr) {
+      if (colErr.message && colErr.message.includes('no such column')) {
+        user = await db.prepare(
+          'SELECT id, auth_id, email, plan, created_at, updated_at FROM users WHERE auth_id = ?'
+        ).bind(uid).first();
+      } else {
+        throw colErr;
+      }
+    }
 
     if (!user) {
       return new Response(JSON.stringify({ error: 'User not found' }), {

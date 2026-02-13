@@ -53,10 +53,13 @@ async function runCleanup(env) {
     }
   }
 
-  // 3. Feedback sessions (must delete before resume_sessions due to FK)
+  // 3. Feedback sessions — delete by own created_at, not parent resume's.
+  // upsertResumeSessionWithScores reuses old resume rows, so feedback linked to
+  // an old resume may still be recent. Also delete orphaned feedback whose
+  // parent resume is being removed (FK safety).
   results.feedback_sessions = await deleteRows(
     db,
-    'DELETE FROM feedback_sessions WHERE resume_session_id IN (SELECT id FROM resume_sessions WHERE created_at < ?)',
+    'DELETE FROM feedback_sessions WHERE created_at < ?',
     cutoff
   );
 
