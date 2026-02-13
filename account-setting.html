@@ -1332,6 +1332,19 @@
             throw new Error(data.error || 'Deletion failed');
           }
 
+          // Delete Firebase Auth user to prevent re-authentication
+          try {
+            await user.delete();
+          } catch (fbErr) {
+            console.warn('[ACCOUNT-SETTINGS] Firebase user.delete() failed (non-blocking):', fbErr.message);
+            // Fall back to sign out if delete fails (e.g., requires recent login)
+            try {
+              if (window.FirebaseAuthManager?.signOut) {
+                await window.FirebaseAuthManager.signOut();
+              }
+            } catch (_) {}
+          }
+
           localStorage.clear();
           window.location.href = 'index.html';
         } catch (error) {

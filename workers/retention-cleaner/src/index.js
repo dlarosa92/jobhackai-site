@@ -79,11 +79,11 @@ async function runCleanup(env) {
     cutoff
   );
 
-  // 7. Cover letter history
+  // 7. Cover letter history (created_at is epoch ms, not ISO string)
   results.cover_letter_history = await deleteRows(
     db,
     'DELETE FROM cover_letter_history WHERE created_at < ?',
-    cutoff
+    cutoffMs
   );
 
   // 8. Usage events
