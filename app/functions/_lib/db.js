@@ -76,25 +76,61 @@ export async function getOrCreateUserByAuthId(env, authId, email = null) {
     }
 
     if (existing) {
-      // Update email if provided and different, and always update last_login_at
+      // Only update last_login_at when called with an email (real login flow).
+      // Internal helpers (updateUserPlan, resetFeatureDailyUsage, etc.) call
+      // with email=null, so they should NOT refresh login timestamps or clear
+      // deletion warnings — otherwise background Stripe webhooks would make
+      // inactive accounts look recently active.
       if (email && email !== existing.email) {
-        await db.prepare(
-          'UPDATE users SET email = ?, last_login_at = datetime(\'now\'), deletion_warning_sent_at = NULL, updated_at = datetime(\'now\') WHERE id = ?'
-        ).bind(email, existing.id).run();
+        try {
+          await db.prepare(
+            'UPDATE users SET email = ?, last_login_at = datetime(\'now\'), deletion_warning_sent_at = NULL, updated_at = datetime(\'now\') WHERE id = ?'
+          ).bind(email, existing.id).run();
+        } catch (colErr) {
+          if (colErr.message && colErr.message.includes('no such column')) {
+            console.warn('[DB] Activity columns not yet migrated, falling back');
+            await db.prepare(
+              'UPDATE users SET email = ?, updated_at = datetime(\'now\') WHERE id = ?'
+            ).bind(email, existing.id).run();
+          } else {
+            throw colErr;
+          }
+        }
         existing.email = email;
         existing.updated_at = new Date().toISOString();
-      } else {
-        await db.prepare(
-          'UPDATE users SET last_login_at = datetime(\'now\'), deletion_warning_sent_at = NULL WHERE id = ?'
-        ).bind(existing.id).run();
+      } else if (email) {
+        try {
+          await db.prepare(
+            'UPDATE users SET last_login_at = datetime(\'now\'), deletion_warning_sent_at = NULL WHERE id = ?'
+          ).bind(existing.id).run();
+        } catch (colErr) {
+          if (colErr.message && colErr.message.includes('no such column')) {
+            console.warn('[DB] Activity columns not yet migrated, skipping last_login_at update');
+          } else {
+            throw colErr;
+          }
+        }
       }
+      // When email is null (internal/background call), skip login timestamp update
       return existing;
     }
 
     // Create new user
-    const result = await db.prepare(
-      'INSERT INTO users (auth_id, email, last_login_at) VALUES (?, ?, datetime(\'now\')) RETURNING id, auth_id, email, created_at, updated_at'
-    ).bind(authId, email).first();
+    let result;
+    try {
+      result = await db.prepare(
+        'INSERT INTO users (auth_id, email, last_login_at) VALUES (?, ?, datetime(\'now\')) RETURNING id, auth_id, email, created_at, updated_at'
+      ).bind(authId, email).first();
+    } catch (insertErr) {
+      if (insertErr.message && insertErr.message.includes('no such column')) {
+        console.warn('[DB] last_login_at column not yet migrated, inserting without it');
+        result = await db.prepare(
+          'INSERT INTO users (auth_id, email) VALUES (?, ?) RETURNING id, auth_id, email, created_at, updated_at'
+        ).bind(authId, email).first();
+      } else {
+        throw insertErr;
+      }
+    }
 
     if (!result) {
       throw new Error('Failed to create user: INSERT returned null');
@@ -532,7 +568,12 @@ export async function logUsageEvent(env, userId, feature, tokensUsed = null, met
         'UPDATE users SET last_activity_at = datetime(\'now\'), deletion_warning_sent_at = NULL WHERE id = ?'
       ).bind(userId).run();
     } catch (activityErr) {
-      console.warn('[DB] Failed to update last_activity_at (non-blocking):', activityErr.message);
+      // Gracefully handle pre-migration environments where columns don't exist yet
+      if (activityErr.message && activityErr.message.includes('no such column')) {
+        console.warn('[DB] Activity columns not yet migrated, skipping last_activity_at update');
+      } else {
+        console.warn('[DB] Failed to update last_activity_at (non-blocking):', activityErr.message);
+      }
     }
 
     console.log('[DB] Logged usage event:', { id: result.id, userId, feature, tokensUsed });
