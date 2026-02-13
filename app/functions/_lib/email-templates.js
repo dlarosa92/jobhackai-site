@@ -92,45 +92,6 @@ export function accountDeletedEmail(userEmail) {
 }
 
 /**
- * Email when data export is ready for download
- */
-export function dataExportReadyEmail(userName, downloadUrl) {
-  const name = userName || 'there';
-  const body = `
-    <h2 style="margin:0 0 16px;font-size:20px;color:#1F2937;">Your data export is ready</h2>
-    <p style="margin:0 0 16px;font-size:15px;color:#374151;line-height:1.6;">
-      Hi ${name}, your requested data export is ready to download. Click the button below to download your data.
-    </p>
-    ${actionButton('Download My Data', downloadUrl)}
-    <p style="margin:0;font-size:13px;color:#9ca3af;line-height:1.5;">
-      This link expires in 24 hours. If you did not request this export, please contact us immediately.
-    </p>
-  `;
-  return { subject: 'Your data export is ready', html: emailWrapper(body) };
-}
-
-/**
- * Warning email sent 30 days before inactive account deletion
- */
-export function inactivityWarningEmail(userName) {
-  const name = userName || 'there';
-  const body = `
-    <h2 style="margin:0 0 16px;font-size:20px;color:#1F2937;">Your account will be deleted in 30 days</h2>
-    <p style="margin:0 0 16px;font-size:15px;color:#374151;line-height:1.6;">
-      Hi ${name}, we noticed you haven't used JobHackAI in over 24 months. Per our data retention policy, inactive accounts are automatically deleted after this period.
-    </p>
-    <p style="margin:0 0 16px;font-size:15px;color:#374151;line-height:1.6;">
-      If you'd like to keep your account, simply log in within the next 30 days and your account will remain active.
-    </p>
-    ${actionButton('Log In to Keep My Account', 'https://app.jobhackai.io/login.html')}
-    <p style="margin:0;font-size:13px;color:#9ca3af;line-height:1.5;">
-      <a href="https://app.jobhackai.io/privacy.html" style="color:#9ca3af;text-decoration:underline;">View our privacy policy</a>
-    </p>
-  `;
-  return { subject: 'Your JobHackAI account will be deleted in 30 days', html: emailWrapper(body) };
-}
-
-/**
  * Confirmation email when a subscription is cancelled
  */
 export function subscriptionCancelledEmail(userName, planName, accessEndDate) {
