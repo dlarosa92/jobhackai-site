@@ -47,21 +47,29 @@ async function sendWarningEmails(db, env) {
     console.log(`[inactive-cleaner] Found ${users.length} users for 23-month warning`);
 
     for (const user of users) {
-      if (!user.email) continue;
-
       try {
-        const userName = user.email.split('@')[0];
-        const { subject, html } = inactivityWarningEmail(userName);
-        const emailResult = await sendEmail(env, { to: user.email, subject, html });
+        if (user.email) {
+          const userName = user.email.split('@')[0];
+          const { subject, html } = inactivityWarningEmail(userName);
+          const emailResult = await sendEmail(env, { to: user.email, subject, html });
 
-        if (emailResult.ok) {
+          if (emailResult.ok) {
+            await db.prepare(
+              'UPDATE users SET deletion_warning_sent_at = datetime(\'now\') WHERE id = ?'
+            ).bind(user.id).run();
+            console.log(`[inactive-cleaner] Warning sent to ${user.email}`);
+          } else {
+            console.warn(`[inactive-cleaner] Warning email failed for user ${user.id}, skipping flag`);
+          }
+        } else {
+          // No email on file — flag for deletion directly (can't send warning)
           await db.prepare(
             'UPDATE users SET deletion_warning_sent_at = datetime(\'now\') WHERE id = ?'
           ).bind(user.id).run();
-          console.log(`[inactive-cleaner] Warning sent to ${user.email}`);
+          console.log(`[inactive-cleaner] No email for user ${user.id}, flagged for deletion without warning`);
         }
-      } catch (emailErr) {
-        console.warn(`[inactive-cleaner] Failed to warn ${user.email}:`, emailErr.message);
+      } catch (err) {
+        console.warn(`[inactive-cleaner] Failed to process warning for user ${user.id}:`, err.message);
       }
     }
   } catch (err) {
@@ -110,13 +118,7 @@ async function deleteUserData(db, env, user) {
   const userId = user.id;
   const uid = user.auth_id;
 
-  // Send deletion confirmation email before removing data
-  if (user.email) {
-    const { subject, html } = accountDeletedEmail(user.email);
-    await sendEmail(env, { to: user.email, subject, html }).catch(() => {});
-  }
-
-  // Get resume sessions for KV cleanup
+  // Get resume sessions for KV cleanup before deleting
   let resumeSessions = [];
   try {
     const res = await db.prepare(
@@ -149,6 +151,12 @@ async function deleteUserData(db, env, user) {
 
   // Delete user record
   await db.prepare('DELETE FROM users WHERE id = ?').bind(userId).run();
+
+  // Send deletion confirmation email AFTER successful user record deletion
+  if (user.email) {
+    const { subject, html } = accountDeletedEmail(user.email);
+    await sendEmail(env, { to: user.email, subject, html }).catch(() => {});
+  }
 
   // KV cleanup
   if (env.JOBHACKAI_KV) {

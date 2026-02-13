@@ -17,8 +17,10 @@ async function runCleanup(env) {
     return;
   }
 
-  const cutoff = new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
-  const cutoffMs = Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  // Use SQLite datetime format (YYYY-MM-DD HH:MM:SS) to match datetime('now') columns
+  const cutoffDate = new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const cutoff = cutoffDate.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '');
+  const cutoffMs = cutoffDate.getTime();
   const results = {};
 
   // 1. LinkedIn runs (existing logic — uses epoch ms and is_pinned)
