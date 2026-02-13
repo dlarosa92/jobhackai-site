@@ -239,8 +239,16 @@ export async function updateUserPlan(env, authId, {
   }
 
   try {
-    // Ensure user exists first
-    await getOrCreateUserByAuthId(env, authId);
+    // Look up user — do NOT auto-create. Auto-creating here would resurrect
+    // users deleted by /api/user/delete when a follow-on Stripe webhook
+    // (customer.subscription.deleted) fires after the users row is removed.
+    const existingUser = await db.prepare(
+      'SELECT id FROM users WHERE auth_id = ?'
+    ).bind(authId).first();
+    if (!existingUser) {
+      console.warn('[DB] updateUserPlan: user not found, skipping plan update for:', authId);
+      return false;
+    }
 
     // Build UPDATE query dynamically to only set provided fields
     const updates = [];
@@ -1530,8 +1538,10 @@ export async function resetFeatureDailyUsage(env, authId, feature) {
   }
 
   try {
-    // Get user ID from auth ID
-    const d1User = await getOrCreateUserByAuthId(env, authId);
+    // Look up user — do NOT auto-create (webhook paths could resurrect deleted users)
+    const d1User = await db.prepare(
+      'SELECT id FROM users WHERE auth_id = ?'
+    ).bind(authId).first();
     if (!d1User || !d1User.id) {
       console.warn('[DB] User not found for resetFeatureDailyUsage:', authId);
       return false;
@@ -1573,8 +1583,10 @@ export async function resetUsageEvents(env, authId, feature) {
   }
 
   try {
-    // Get user ID from auth ID
-    const d1User = await getOrCreateUserByAuthId(env, authId);
+    // Look up user — do NOT auto-create (webhook paths could resurrect deleted users)
+    const d1User = await db.prepare(
+      'SELECT id FROM users WHERE auth_id = ?'
+    ).bind(authId).first();
     if (!d1User || !d1User.id) {
       console.warn('[DB] User not found for resetUsageEvents:', authId);
       return false;
