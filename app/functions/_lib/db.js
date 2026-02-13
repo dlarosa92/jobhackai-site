@@ -15,6 +15,8 @@
  */
 
 import { sanitizeRoleSpecificFeedback } from './feedback-validator.js';
+import { sendEmail } from './email.js';
+import { welcomeEmail } from './email-templates.js';
 
 /**
  * Resolve the D1 binding from the environment.
@@ -74,20 +76,24 @@ export async function getOrCreateUserByAuthId(env, authId, email = null) {
     }
 
     if (existing) {
-      // Update email if provided and different
+      // Update email if provided and different, and always update last_login_at
       if (email && email !== existing.email) {
         await db.prepare(
-          'UPDATE users SET email = ?, updated_at = datetime(\'now\') WHERE id = ?'
+          'UPDATE users SET email = ?, last_login_at = datetime(\'now\'), updated_at = datetime(\'now\') WHERE id = ?'
         ).bind(email, existing.id).run();
         existing.email = email;
         existing.updated_at = new Date().toISOString();
+      } else {
+        await db.prepare(
+          'UPDATE users SET last_login_at = datetime(\'now\') WHERE id = ?'
+        ).bind(existing.id).run();
       }
       return existing;
     }
 
     // Create new user
     const result = await db.prepare(
-      'INSERT INTO users (auth_id, email) VALUES (?, ?) RETURNING id, auth_id, email, created_at, updated_at'
+      'INSERT INTO users (auth_id, email, last_login_at) VALUES (?, ?, datetime(\'now\')) RETURNING id, auth_id, email, created_at, updated_at'
     ).bind(authId, email).first();
 
     if (!result) {
@@ -97,6 +103,18 @@ export async function getOrCreateUserByAuthId(env, authId, email = null) {
     // Add plan property if it wasn't returned (pre-migration state)
     if (!result.plan) {
       result.plan = 'free';
+    }
+
+    // Flag as newly created so callers can detect new users
+    result._isNewUser = true;
+
+    // Send welcome email for new users (non-blocking)
+    if (email) {
+      const userName = email.split('@')[0];
+      const { subject, html } = welcomeEmail(userName);
+      sendEmail(env, { to: email, subject, html }).catch((err) => {
+        console.warn('[DB] Failed to send welcome email (non-blocking):', err.message);
+      });
     }
 
     console.log('[DB] Created new user:', { id: result.id, authId });
@@ -503,10 +521,19 @@ export async function logUsageEvent(env, userId, feature, tokensUsed = null, met
     const metaStr = meta ? JSON.stringify(meta) : null;
 
     const result = await db.prepare(
-      `INSERT INTO usage_events (user_id, feature, tokens_used, meta_json) 
-       VALUES (?, ?, ?, ?) 
+      `INSERT INTO usage_events (user_id, feature, tokens_used, meta_json)
+       VALUES (?, ?, ?, ?)
        RETURNING id, user_id, feature, tokens_used, meta_json, created_at`
     ).bind(userId, feature, tokensUsed, metaStr).first();
+
+    // Update last_activity_at for the user
+    try {
+      await db.prepare(
+        'UPDATE users SET last_activity_at = datetime(\'now\') WHERE id = ?'
+      ).bind(userId).run();
+    } catch (activityErr) {
+      console.warn('[DB] Failed to update last_activity_at (non-blocking):', activityErr.message);
+    }
 
     console.log('[DB] Logged usage event:', { id: result.id, userId, feature, tokensUsed });
     return result;
