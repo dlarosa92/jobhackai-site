@@ -79,13 +79,13 @@ export async function getOrCreateUserByAuthId(env, authId, email = null) {
       // Update email if provided and different, and always update last_login_at
       if (email && email !== existing.email) {
         await db.prepare(
-          'UPDATE users SET email = ?, last_login_at = datetime(\'now\'), updated_at = datetime(\'now\') WHERE id = ?'
+          'UPDATE users SET email = ?, last_login_at = datetime(\'now\'), deletion_warning_sent_at = NULL, updated_at = datetime(\'now\') WHERE id = ?'
         ).bind(email, existing.id).run();
         existing.email = email;
         existing.updated_at = new Date().toISOString();
       } else {
         await db.prepare(
-          'UPDATE users SET last_login_at = datetime(\'now\') WHERE id = ?'
+          'UPDATE users SET last_login_at = datetime(\'now\'), deletion_warning_sent_at = NULL WHERE id = ?'
         ).bind(existing.id).run();
       }
       return existing;
@@ -526,10 +526,10 @@ export async function logUsageEvent(env, userId, feature, tokensUsed = null, met
        RETURNING id, user_id, feature, tokens_used, meta_json, created_at`
     ).bind(userId, feature, tokensUsed, metaStr).first();
 
-    // Update last_activity_at for the user
+    // Update last_activity_at for the user and clear any deletion warning
     try {
       await db.prepare(
-        'UPDATE users SET last_activity_at = datetime(\'now\') WHERE id = ?'
+        'UPDATE users SET last_activity_at = datetime(\'now\'), deletion_warning_sent_at = NULL WHERE id = ?'
       ).bind(userId).run();
     } catch (activityErr) {
       console.warn('[DB] Failed to update last_activity_at (non-blocking):', activityErr.message);

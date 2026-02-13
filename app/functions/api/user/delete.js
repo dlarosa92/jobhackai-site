@@ -123,17 +123,7 @@ export async function onRequest(context) {
       }
     }
 
-    // 4. Send account deletion email BEFORE deleting user record
-    if (userEmail) {
-      try {
-        const { subject, html } = accountDeletedEmail(userEmail);
-        await sendEmail(env, { to: userEmail, subject, html });
-      } catch (emailErr) {
-        errors.push(`Failed to send deletion email: ${emailErr.message}`);
-      }
-    }
-
-    // 5. Delete the user record itself — this MUST succeed for deletion to be considered complete
+    // 4. Delete the user record itself — this MUST succeed for deletion to be considered complete
     let userDeleted = false;
     try {
       const delResult = await db.prepare('DELETE FROM users WHERE auth_id = ?').bind(uid).run();
@@ -147,6 +137,16 @@ export async function onRequest(context) {
     } catch (userDelErr) {
       errors.push(`Failed to delete user record: ${userDelErr.message}`);
       console.error('[DELETE-USER] Critical: user record deletion failed:', userDelErr.message);
+    }
+
+    // 5. Send account deletion email AFTER successful user record deletion
+    if (userDeleted && userEmail) {
+      try {
+        const { subject, html } = accountDeletedEmail(userEmail);
+        await sendEmail(env, { to: userEmail, subject, html });
+      } catch (emailErr) {
+        errors.push(`Failed to send deletion email: ${emailErr.message}`);
+      }
     }
 
     // 6. Clean up KV keys
