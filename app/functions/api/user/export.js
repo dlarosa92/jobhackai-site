@@ -72,8 +72,7 @@ export async function onRequest(context) {
       mockInterviewSessions,
       coverLetterHistory,
       usageEvents,
-      cookieConsentRows,
-      planChangeHistory
+      cookieConsentRows
     ] = await Promise.all([
       queryAll(db, 'SELECT id, title, role, ats_score, ats_ready, created_at FROM resume_sessions WHERE user_id = ?', userId),
       queryAll(db, 'SELECT fs.id, fs.resume_session_id, fs.created_at FROM feedback_sessions fs INNER JOIN resume_sessions rs ON fs.resume_session_id = rs.id WHERE rs.user_id = ?', userId),
@@ -82,8 +81,7 @@ export async function onRequest(context) {
       queryAll(db, 'SELECT id, created_at FROM mock_interview_sessions WHERE user_id = ?', userId),
       queryAll(db, 'SELECT id, title, role, company, seniority, tone, created_at FROM cover_letter_history WHERE user_id = ?', uid),
       queryAll(db, 'SELECT id, feature, tokens_used, created_at FROM usage_events WHERE user_id = ?', userId),
-      queryAll(db, 'SELECT consent_json, updated_at FROM cookie_consents WHERE user_id = ?', userId),
-      queryAll(db, 'SELECT * FROM plan_change_history WHERE user_id = ?', userId)
+      queryAll(db, 'SELECT consent_json, updated_at FROM cookie_consents WHERE user_id = ?', userId)
     ]);
 
     const cookieConsent = cookieConsentRows.length > 0 ? cookieConsentRows[0] : null;
@@ -106,8 +104,7 @@ export async function onRequest(context) {
       mockInterviewSessions,
       coverLetterHistory,
       usageEvents,
-      cookieConsent,
-      planChangeHistory
+      cookieConsent
     };
 
     const headers = {
