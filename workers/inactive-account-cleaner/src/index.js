@@ -228,9 +228,62 @@ async function deleteFirebaseAuthUser(env, uid) {
   }
 }
 
+async function cancelStripeSubscriptions(env, customerId) {
+  const apiBase = 'https://api.stripe.com/v1';
+  const headers = {
+    'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`,
+    'Content-Type': 'application/x-www-form-urlencoded'
+  };
+
+  // List active/trialing/past_due subscriptions for this customer
+  const listRes = await fetch(
+    `${apiBase}/subscriptions?customer=${encodeURIComponent(customerId)}&status=all&limit=100`,
+    { headers }
+  );
+  if (!listRes.ok) {
+    const errText = await listRes.text().catch(() => '');
+    console.warn(`[inactive-cleaner] Stripe list subscriptions failed (${listRes.status}):`, errText);
+    return;
+  }
+
+  const listData = await listRes.json();
+  const activeSubs = (listData?.data || []).filter(s =>
+    s && ['active', 'trialing', 'past_due'].includes(s.status)
+  );
+
+  for (const sub of activeSubs) {
+    try {
+      const cancelRes = await fetch(`${apiBase}/subscriptions/${sub.id}`, {
+        method: 'DELETE',
+        headers
+      });
+      if (cancelRes.ok) {
+        console.log(`[inactive-cleaner] Cancelled Stripe subscription: ${sub.id}`);
+      } else {
+        const errText = await cancelRes.text().catch(() => '');
+        console.warn(`[inactive-cleaner] Failed to cancel subscription ${sub.id} (${cancelRes.status}):`, errText);
+      }
+    } catch (err) {
+      console.warn(`[inactive-cleaner] Stripe cancel error for ${sub.id}:`, err.message);
+    }
+  }
+}
+
 async function deleteUserData(db, env, user) {
   const userId = user.id;
   const uid = user.auth_id;
+
+  // Cancel any active Stripe subscriptions before deleting data.
+  // The deletion query filters to plan = 'free', but billing state can be out
+  // of sync — a stale plan column shouldn't let a charging subscription survive.
+  if (user.stripe_customer_id && env.STRIPE_SECRET_KEY) {
+    try {
+      await cancelStripeSubscriptions(env, user.stripe_customer_id);
+    } catch (stripeErr) {
+      console.warn(`[inactive-cleaner] Stripe cancellation error for ${uid}:`, stripeErr.message);
+      // Continue with deletion — Stripe cancellation is best-effort
+    }
+  }
 
   // Delete Firebase Auth identity FIRST so the user cannot re-authenticate.
   // If this fails, abort the entire deletion to avoid leaving an active

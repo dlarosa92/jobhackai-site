@@ -895,6 +895,20 @@ export async function updateResumeSessionAtsScore(env, sessionId, atsScore) {
     console.log('[DB] Updated ats_score:', { sessionId, atsScore });
     return true;
   } catch (error) {
+    // Fallback for pre-migration environments where updated_at column doesn't exist yet
+    const msg = error?.message || '';
+    if (msg.includes('no such column')) {
+      try {
+        await db.prepare(
+          'UPDATE resume_sessions SET ats_score = ? WHERE id = ?'
+        ).bind(atsScore, sessionId).run();
+        console.warn('[DB] Updated ats_score without updated_at (migration 016 not applied):', { sessionId, atsScore });
+        return true;
+      } catch (fallbackErr) {
+        console.error('[DB] Fallback updateResumeSessionAtsScore error:', fallbackErr);
+        return false;
+      }
+    }
     console.error('[DB] Error in updateResumeSessionAtsScore:', error);
     return false;
   }
@@ -957,47 +971,65 @@ export async function upsertResumeSessionWithScores(env, userId, {
   try {
     const rawTextLocation = `resume:${resumeId}`;
     const ruleBasedScoresJson = ruleBasedScores ? JSON.stringify(ruleBasedScores) : null;
-    
+
     // Set ats_ready = 1 when ATS data is provided (never reset to 0)
     const atsReadyValue = (atsScore !== null || ruleBasedScoresJson !== null) ? 1 : null;
 
-    // OPTIMIZATION: Use single query with UPDATE + INSERT fallback
-    // This reduces database round trips from 2 to 1 (or 2 if UPDATE affects 0 rows)
-    // First, try to update the most recent session for this resumeId
-    const updateResult = await db.prepare(
-      `UPDATE resume_sessions
-       SET ats_score = COALESCE(?, ats_score),
-           rule_based_scores_json = COALESCE(?, rule_based_scores_json),
-           role = COALESCE(?, role),
-           ats_ready = COALESCE(?, ats_ready),
-           updated_at = datetime('now')
-       WHERE id = (
-         SELECT id FROM resume_sessions
-         WHERE user_id = ? AND raw_text_location = ?
-         ORDER BY created_at DESC
-         LIMIT 1
-       )
-       RETURNING id, user_id, title, role, created_at, updated_at, raw_text_location, ats_score, rule_based_scores_json, ats_ready`
-    ).bind(atsScore, ruleBasedScoresJson, role, atsReadyValue, userId, rawTextLocation).first();
-
-    if (updateResult) {
-      // Update succeeded - return updated session
-      return updateResult;
-    }
-
-    // No existing session found - insert new one
-    const insertAtsReady = atsReadyValue !== null ? 1 : 0;
-    const insertResult = await db.prepare(
-      `INSERT INTO resume_sessions (user_id, title, role, raw_text_location, ats_score, rule_based_scores_json, ats_ready)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
-       RETURNING id, user_id, title, role, created_at, updated_at, raw_text_location, ats_score, rule_based_scores_json, ats_ready`
-    ).bind(userId, role, role, rawTextLocation, atsScore, ruleBasedScoresJson, insertAtsReady).first();
-
-    return insertResult || null;
+    return await _upsertResumeSession(db, { userId, rawTextLocation, atsScore, ruleBasedScoresJson, role, atsReadyValue, withUpdatedAt: true });
   } catch (error) {
+    // Fallback for pre-migration environments where updated_at column doesn't exist yet
+    const msg = error?.message || '';
+    if (msg.includes('no such column')) {
+      try {
+        console.warn('[DB] upsertResumeSessionWithScores: retrying without updated_at (migration 016 not applied)');
+        const rawTextLocation = `resume:${resumeId}`;
+        const ruleBasedScoresJson = ruleBasedScores ? JSON.stringify(ruleBasedScores) : null;
+        const atsReadyValue = (atsScore !== null || ruleBasedScoresJson !== null) ? 1 : null;
+        return await _upsertResumeSession(db, { userId, rawTextLocation, atsScore, ruleBasedScoresJson, role, atsReadyValue, withUpdatedAt: false });
+      } catch (fallbackErr) {
+        console.error('[DB] Fallback upsertResumeSessionWithScores error:', fallbackErr);
+        return null;
+      }
+    }
     console.error('[DB] Error in upsertResumeSessionWithScores:', error);
     return null;
   }
+}
+
+/** Internal helper for upsertResumeSessionWithScores to allow retry without updated_at. */
+async function _upsertResumeSession(db, { userId, rawTextLocation, atsScore, ruleBasedScoresJson, role, atsReadyValue, withUpdatedAt }) {
+  const updatedAtClause = withUpdatedAt ? "updated_at = datetime('now')," : '';
+  const returningUpdatedAt = withUpdatedAt ? ', updated_at' : '';
+
+  const updateResult = await db.prepare(
+    `UPDATE resume_sessions
+     SET ats_score = COALESCE(?, ats_score),
+         rule_based_scores_json = COALESCE(?, rule_based_scores_json),
+         role = COALESCE(?, role),
+         ats_ready = COALESCE(?, ats_ready),
+         ${updatedAtClause}
+         id = id
+     WHERE id = (
+       SELECT id FROM resume_sessions
+       WHERE user_id = ? AND raw_text_location = ?
+       ORDER BY created_at DESC
+       LIMIT 1
+     )
+     RETURNING id, user_id, title, role, created_at${returningUpdatedAt}, raw_text_location, ats_score, rule_based_scores_json, ats_ready`
+  ).bind(atsScore, ruleBasedScoresJson, role, atsReadyValue, userId, rawTextLocation).first();
+
+  if (updateResult) {
+    return updateResult;
+  }
+
+  const insertAtsReady = atsReadyValue !== null ? 1 : 0;
+  const insertResult = await db.prepare(
+    `INSERT INTO resume_sessions (user_id, title, role, raw_text_location, ats_score, rule_based_scores_json, ats_ready)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     RETURNING id, user_id, title, role, created_at${returningUpdatedAt}, raw_text_location, ats_score, rule_based_scores_json, ats_ready`
+  ).bind(userId, role, role, rawTextLocation, atsScore, ruleBasedScoresJson, insertAtsReady).first();
+
+  return insertResult || null;
 }
 
 /**

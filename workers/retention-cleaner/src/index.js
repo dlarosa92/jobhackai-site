@@ -33,18 +33,28 @@ async function runCleanup(env) {
   // 2. Resume sessions — first clean up KV keys, then delete
   // Keep sessions that were recently updated (ATS scoring refreshes updated_at)
   // OR that have recent feedback_sessions.
-  const resumeCleanupCondition = `created_at < ?
-    AND (updated_at IS NULL OR updated_at < ?)
-    AND id NOT IN (
-      SELECT DISTINCT resume_session_id FROM feedback_sessions WHERE created_at >= ?
-    )`;
+  // The updated_at column may not exist if migration 016 hasn't been applied yet;
+  // detect this and fall back to a simpler condition using only created_at.
+  const hasUpdatedAt = await checkColumnExists(db, 'resume_sessions', 'updated_at');
+  const resumeCleanupCondition = hasUpdatedAt
+    ? `created_at < ?
+       AND (updated_at IS NULL OR updated_at < ?)
+       AND id NOT IN (
+         SELECT DISTINCT resume_session_id FROM feedback_sessions WHERE created_at >= ?
+       )`
+    : `created_at < ?
+       AND id NOT IN (
+         SELECT DISTINCT resume_session_id FROM feedback_sessions WHERE created_at >= ?
+       )`;
+  const resumeBinds = hasUpdatedAt ? [cutoff, cutoff, cutoff] : [cutoff, cutoff];
+
   if (!env.JOBHACKAI_KV) {
     console.warn('[retention-cleaner] JOBHACKAI_KV not bound — skipping KV cleanup for resume sessions');
   } else {
     try {
       const sessions = await db.prepare(
         `SELECT id, raw_text_location FROM resume_sessions WHERE ${resumeCleanupCondition}`
-      ).bind(cutoff, cutoff, cutoff).all();
+      ).bind(...resumeBinds).all();
       const rows = sessions.results || [];
       for (const session of rows) {
         if (session.raw_text_location) {
@@ -76,7 +86,7 @@ async function runCleanup(env) {
   results.resume_sessions = await deleteRows(
     db,
     `DELETE FROM resume_sessions WHERE ${resumeCleanupCondition}`,
-    cutoff, cutoff, cutoff
+    ...resumeBinds
   );
 
   // 5. Interview question sets
@@ -108,6 +118,16 @@ async function runCleanup(env) {
   );
 
   console.log('[retention-cleaner] cleanup complete', results);
+}
+
+async function checkColumnExists(db, table, column) {
+  try {
+    const info = await db.prepare(`PRAGMA table_info('${table}')`).all();
+    const columns = new Set((info.results || []).map(r => r.name));
+    return columns.has(column);
+  } catch (_) {
+    return false;
+  }
 }
 
 async function deleteRows(db, sql, ...binds) {
