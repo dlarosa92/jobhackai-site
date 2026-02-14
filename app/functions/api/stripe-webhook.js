@@ -1,4 +1,4 @@
-import { updateUserPlan, getUserPlanData, resetFeatureDailyUsage, resetUsageEvents, getDb } from '../_lib/db.js';
+import { updateUserPlan, getUserPlanData, resetFeatureDailyUsage, resetUsageEvents, getDb, ensureUserExists } from '../_lib/db.js';
 import { stripe, pickBestSubscription } from '../_lib/billing-utils.js';
 import { sendEmail } from '../_lib/email.js';
 import { subscriptionCancelledEmail } from '../_lib/email-templates.js';
@@ -105,14 +105,19 @@ export async function onRequest(context) {
     }
   };
 
-  // Resolve uid from customer metadata when possible
-  const fetchUidFromCustomer = async (customerId) => {
-    if (!customerId) return null;
+  // Resolve uid (and email) from customer metadata when possible
+  const fetchCustomerInfo = async (customerId) => {
+    if (!customerId) return { uid: null, email: null };
     const res = await fetch(`https://api.stripe.com/v1/customers/${customerId}`, {
       headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}` }
     });
     const c = await res.json();
-    return c?.metadata?.firebaseUid || null;
+    return { uid: c?.metadata?.firebaseUid || null, email: c?.email || null };
+  };
+  // Backward-compat helper used by event handlers
+  const fetchUidFromCustomer = async (customerId) => {
+    const { uid } = await fetchCustomerInfo(customerId);
+    return uid;
   };
 
   try {
@@ -129,7 +134,7 @@ export async function onRequest(context) {
       const sess = await r.json();
       const priceId = sess?.line_items?.data?.[0]?.price?.id || '';
       const customerId = sess?.customer || event.data?.object?.customer || null;
-      const uid = await fetchUidFromCustomer(customerId);
+      const { uid, email: customerEmail } = await fetchCustomerInfo(customerId);
       
       // Determine effective plan based on original plan and subscription status
       let effectivePlan = 'free';
@@ -143,6 +148,9 @@ export async function onRequest(context) {
       
       console.log(`📝 CHECKOUT DATA: originalPlan=${originalPlan}, priceId=${priceId}, effectivePlan=${effectivePlan}, customerId=${customerId}, uid=${uid}`);
       if (effectivePlan && uid) {
+        // Ensure user row exists in D1 before updating plan (first-time subscribers
+        // may not have a row yet if they haven't logged in since D1 was introduced)
+        await ensureUserExists(env, uid, customerEmail);
         // Get subscription details if available
         const subscriptionId = sess?.subscription || null;
         let subscription = null;
@@ -194,8 +202,8 @@ export async function onRequest(context) {
       const pId = items[0]?.price?.id || '';
       const plan = priceToPlan(env, pId);
       const customerId = event.data.object.customer || null;
-      const uid = await fetchUidFromCustomer(customerId);
-      
+      const { uid, email: customerEmail } = await fetchCustomerInfo(customerId);
+
       let effectivePlan = 'free';
       if (status === 'trialing' && originalPlan === 'trial') {
         effectivePlan = 'trial'; // User is in trial period
@@ -203,10 +211,13 @@ export async function onRequest(context) {
         // Extract plan from price ID (auto-converts trial to essential)
         effectivePlan = plan || 'essential';
       }
-      
+
       const sub = event.data.object;
       const trialEndsAtISO = sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null;
-      
+
+      // Ensure user row exists before plan update (first-time subscribers)
+      if (uid) await ensureUserExists(env, uid, customerEmail);
+
       console.log(`📝 SUBSCRIPTION DATA: status=${status}, priceId=${pId}, basePlan=${plan}, effectivePlan=${effectivePlan}, uid=${uid}`);
       console.log(`🔄 TRIAL CONVERSION CHECK:`, {
         eventType: event.type,
@@ -237,8 +248,11 @@ export async function onRequest(context) {
       console.log('🎯 WEBHOOK: customer.subscription.updated received');
       const sub = event.data.object;
       const customerId = sub.customer || null;
-      const uid = await fetchUidFromCustomer(customerId);
-      
+      const { uid, email: customerEmail } = await fetchCustomerInfo(customerId);
+
+      // Ensure user row exists before plan update (first-time subscribers)
+      if (uid) await ensureUserExists(env, uid, customerEmail);
+
       // Handle scheduled cancellation
       let cancelAt = null;
       if (sub.cancel_at_period_end === true && sub.cancel_at) {
@@ -432,9 +446,10 @@ export async function onRequest(context) {
                 ? new Date(deletedSub.current_period_end * 1000).toISOString()
                 : null;
               const { subject, html } = subscriptionCancelledEmail(userName, deletedPlan, periodEnd);
-              sendEmail(env, { to: userRow.email, subject, html }).catch((e) => {
+              const emailPromise = sendEmail(env, { to: userRow.email, subject, html }).catch((e) => {
                 console.warn('[WEBHOOK] Failed to send cancellation email (non-blocking):', e.message);
               });
+              context.waitUntil(emailPromise);
             }
           } catch (emailErr) {
             console.warn('[WEBHOOK] Error sending cancellation email (non-blocking):', emailErr.message);
