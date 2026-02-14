@@ -16,11 +16,31 @@ async function runInactiveAccountCleanup(env) {
     return;
   }
 
+  // Guard: verify activity-tracking columns exist (added by migration 015).
+  // Fresh databases created from an older schema.sql may lack them.
+  const hasColumns = await checkActivityColumns(db);
+  if (!hasColumns) {
+    console.warn('[inactive-cleaner] Skipping: activity-tracking columns (last_login_at, deletion_warning_sent_at) not present. Run migration 015.');
+    return;
+  }
+
   // Phase 1: Send warning emails to users at 23 months inactive
   await sendWarningEmails(db, env);
 
   // Phase 2: Delete users at 24+ months who were already warned
   await deleteInactiveUsers(db, env);
+}
+
+async function checkActivityColumns(db) {
+  try {
+    // PRAGMA table_info returns column metadata; check for the columns we need
+    const info = await db.prepare("PRAGMA table_info('users')").all();
+    const columns = new Set((info.results || []).map(r => r.name));
+    return columns.has('last_login_at') && columns.has('deletion_warning_sent_at');
+  } catch (err) {
+    console.error('[inactive-cleaner] Failed to inspect users table:', err.message);
+    return false;
+  }
 }
 
 async function sendWarningEmails(db, env) {
