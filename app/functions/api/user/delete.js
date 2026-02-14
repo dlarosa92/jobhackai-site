@@ -145,7 +145,11 @@ export async function onRequest(context) {
       }), { status: 500, headers: corsHeaders(origin, env) });
     }
 
-    // --- Point of no return: Firebase identity is gone, proceed with data cleanup ---
+    // --- Point of no return: Firebase identity is gone. ---
+    // From this point, the user can no longer authenticate, so self-service
+    // retry is impossible. All remaining steps are best-effort cleanup;
+    // failures are collected as warnings but we always return 200 because
+    // the account deletion (auth removal) has already succeeded.
 
     // 2. Cancel Stripe subscription if active (best-effort)
     if (customerId) {
@@ -269,13 +273,12 @@ export async function onRequest(context) {
     }
 
     if (!userDeleted) {
-      return new Response(JSON.stringify({
-        ok: false,
-        error: 'Failed to delete user record',
-        partialErrors: errors
-      }), { status: 500, headers: corsHeaders(origin, env) });
+      errors.push('Failed to delete user record from database (will be cleaned up by retention worker)');
     }
 
+    // Always return 200 after Firebase Auth is deleted — the user can no
+    // longer authenticate, so the deletion succeeded from their perspective.
+    // Any cleanup failures are surfaced as warnings for server-side monitoring.
     return new Response(JSON.stringify({
       ok: true,
       message: 'Account deleted successfully',
