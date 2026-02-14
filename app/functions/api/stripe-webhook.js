@@ -1,4 +1,4 @@
-import { updateUserPlan, getUserPlanData, resetFeatureDailyUsage, resetUsageEvents, getDb, getOrCreateUserByAuthId } from '../_lib/db.js';
+import { updateUserPlan, getUserPlanData, resetFeatureDailyUsage, resetUsageEvents, getDb, getOrCreateUserByAuthId, isDeletedUser } from '../_lib/db.js';
 import { stripe, pickBestSubscription } from '../_lib/billing-utils.js';
 import { sendEmail } from '../_lib/email.js';
 import { subscriptionCancelledEmail } from '../_lib/email-templates.js';
@@ -154,8 +154,10 @@ export async function onRequest(context) {
         const db = getDb(env);
         const existingUser = db ? await db.prepare('SELECT id FROM users WHERE auth_id = ?').bind(uid).first() : null;
         if (!existingUser) {
-          const tombstone = await env.JOBHACKAI_KV?.get(`deleted:${uid}`);
-          if (tombstone) {
+          // Check D1 tombstone first (authoritative); KV as fallback when D1 unavailable
+          const d1Tombstone = await isDeletedUser(env, uid);
+          const kvTombstone = await env.JOBHACKAI_KV?.get(`deleted:${uid}`);
+          if (d1Tombstone || kvTombstone) {
             console.log(`⏭️ [WEBHOOK] Skipping checkout plan update: user ${uid} was deleted (tombstone found)`);
             return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
           }
@@ -237,8 +239,9 @@ export async function onRequest(context) {
         const db = getDb(env);
         const existingUser = db ? await db.prepare('SELECT id FROM users WHERE auth_id = ?').bind(uid).first() : null;
         if (!existingUser) {
-          const tombstone = await env.JOBHACKAI_KV?.get(`deleted:${uid}`);
-          if (tombstone) {
+          const d1Tombstone = await isDeletedUser(env, uid);
+          const kvTombstone = await env.JOBHACKAI_KV?.get(`deleted:${uid}`);
+          if (d1Tombstone || kvTombstone) {
             console.log(`⏭️ [WEBHOOK] Skipping subscription.created plan update: user ${uid} was deleted (tombstone found)`);
             return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
           }
@@ -290,8 +293,9 @@ export async function onRequest(context) {
         const db = getDb(env);
         const existingUser = db ? await db.prepare('SELECT id FROM users WHERE auth_id = ?').bind(uid).first() : null;
         if (!existingUser) {
-          const tombstone = await env.JOBHACKAI_KV?.get(`deleted:${uid}`);
-          if (tombstone) {
+          const d1Tombstone = await isDeletedUser(env, uid);
+          const kvTombstone = await env.JOBHACKAI_KV?.get(`deleted:${uid}`);
+          if (d1Tombstone || kvTombstone) {
             console.log(`⏭️ [WEBHOOK] Skipping subscription.updated plan update: user ${uid} was deleted (tombstone found)`);
             return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
           }

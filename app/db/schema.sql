@@ -175,3 +175,15 @@ CREATE TABLE IF NOT EXISTS mock_interview_usage (
 );
 
 CREATE INDEX IF NOT EXISTS idx_mock_interview_usage_user_month ON mock_interview_usage(user_id, month);
+
+-- ============================================================
+-- DELETED_AUTH_IDS TABLE (migration 017)
+-- Tombstone for deleted users; prevents Stripe webhooks from
+-- recreating rows when KV tombstone is unavailable.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS deleted_auth_ids (
+  auth_id TEXT PRIMARY KEY,
+  deleted_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_deleted_auth_ids_deleted_at ON deleted_auth_ids(deleted_at);
