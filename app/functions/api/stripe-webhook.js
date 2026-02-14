@@ -1,4 +1,4 @@
-import { updateUserPlan, getUserPlanData, resetFeatureDailyUsage, resetUsageEvents, getDb } from '../_lib/db.js';
+import { updateUserPlan, getUserPlanData, resetFeatureDailyUsage, resetUsageEvents, getDb, getOrCreateUserByAuthId } from '../_lib/db.js';
 import { stripe, pickBestSubscription } from '../_lib/billing-utils.js';
 import { sendEmail } from '../_lib/email.js';
 import { subscriptionCancelledEmail } from '../_lib/email-templates.js';
@@ -148,12 +148,18 @@ export async function onRequest(context) {
       
       console.log(`📝 CHECKOUT DATA: originalPlan=${originalPlan}, priceId=${priceId}, effectivePlan=${effectivePlan}, customerId=${customerId}, uid=${uid}`);
       if (effectivePlan && uid) {
-        // Skip if user row was deleted (prevents recreating deleted accounts from delayed webhooks)
+        // Ensure user row exists in D1. First-time subscribers may not have a row yet
+        // (checkout.session.completed is the first webhook after payment).
         const db = getDb(env);
         const existingUser = db ? await db.prepare('SELECT id FROM users WHERE auth_id = ?').bind(uid).first() : null;
         if (!existingUser) {
-          console.log(`⏭️ [WEBHOOK] Skipping checkout plan update: user ${uid} not found in D1 (likely deleted)`);
-          return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
+          try {
+            await getOrCreateUserByAuthId(env, uid, customerEmail || '');
+            console.log(`✅ [WEBHOOK] Created missing user row for first-time subscriber: ${uid}`);
+          } catch (createErr) {
+            console.error(`❌ [WEBHOOK] Failed to create user row for ${uid}:`, createErr?.message || createErr);
+            return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
+          }
         }
         // Get subscription details if available
         const subscriptionId = sess?.subscription || null;
@@ -219,13 +225,18 @@ export async function onRequest(context) {
       const sub = event.data.object;
       const trialEndsAtISO = sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null;
 
-      // Skip if user row was deleted (prevents recreating deleted accounts from delayed webhooks)
+      // Ensure user row exists in D1 for first-time subscribers
       if (uid) {
         const db = getDb(env);
         const existingUser = db ? await db.prepare('SELECT id FROM users WHERE auth_id = ?').bind(uid).first() : null;
         if (!existingUser) {
-          console.log(`⏭️ [WEBHOOK] Skipping subscription.created plan update: user ${uid} not found in D1 (likely deleted)`);
-          return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
+          try {
+            await getOrCreateUserByAuthId(env, uid, customerEmail || '');
+            console.log(`✅ [WEBHOOK] Created missing user row for first-time subscriber: ${uid}`);
+          } catch (createErr) {
+            console.error(`❌ [WEBHOOK] Failed to create user row for ${uid}:`, createErr?.message || createErr);
+            return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
+          }
         }
       }
 
@@ -261,13 +272,18 @@ export async function onRequest(context) {
       const customerId = sub.customer || null;
       const { uid, email: customerEmail } = await fetchCustomerInfo(customerId);
 
-      // Skip if user row was deleted (prevents recreating deleted accounts from delayed webhooks)
+      // Ensure user row exists in D1 for first-time subscribers
       if (uid) {
         const db = getDb(env);
         const existingUser = db ? await db.prepare('SELECT id FROM users WHERE auth_id = ?').bind(uid).first() : null;
         if (!existingUser) {
-          console.log(`⏭️ [WEBHOOK] Skipping subscription.updated plan update: user ${uid} not found in D1 (likely deleted)`);
-          return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
+          try {
+            await getOrCreateUserByAuthId(env, uid, customerEmail || '');
+            console.log(`✅ [WEBHOOK] Created missing user row for first-time subscriber: ${uid}`);
+          } catch (createErr) {
+            console.error(`❌ [WEBHOOK] Failed to create user row for ${uid}:`, createErr?.message || createErr);
+            return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
+          }
         }
       }
 
