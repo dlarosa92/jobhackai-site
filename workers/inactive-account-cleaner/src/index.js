@@ -134,9 +134,104 @@ async function deleteInactiveUsers(db, env) {
   }
 }
 
+async function deleteFirebaseAuthUser(env, uid) {
+  const saJson = (env.FIREBASE_SERVICE_ACCOUNT_JSON || '').trim();
+  if (!saJson) {
+    return { ok: false, error: 'FIREBASE_SERVICE_ACCOUNT_JSON not configured' };
+  }
+
+  let sa;
+  try {
+    sa = JSON.parse(saJson);
+  } catch (e) {
+    return { ok: false, error: `Invalid service account JSON: ${e.message}` };
+  }
+
+  // Build a JWT to exchange for a Google OAuth2 access token
+  const now = Math.floor(Date.now() / 1000);
+  const header = { alg: 'RS256', typ: 'JWT' };
+  const payload = {
+    iss: sa.client_email,
+    scope: 'https://www.googleapis.com/auth/identitytoolkit',
+    aud: 'https://oauth2.googleapis.com/token',
+    iat: now,
+    exp: now + 3600
+  };
+
+  const b64url = (obj) => btoa(JSON.stringify(obj)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const signingInput = `${b64url(header)}.${b64url(payload)}`;
+
+  let accessToken;
+  try {
+    // Import the RSA private key for signing
+    const pemBody = sa.private_key
+      .replace(/-----BEGIN PRIVATE KEY-----/, '')
+      .replace(/-----END PRIVATE KEY-----/, '')
+      .replace(/\s/g, '');
+    const keyBuffer = Uint8Array.from(atob(pemBody), c => c.charCodeAt(0));
+    const cryptoKey = await crypto.subtle.importKey(
+      'pkcs8', keyBuffer, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']
+    );
+
+    const sig = await crypto.subtle.sign(
+      'RSASSA-PKCS1-v1_5', cryptoKey,
+      new TextEncoder().encode(signingInput)
+    );
+    const b64sig = btoa(String.fromCharCode(...new Uint8Array(sig)))
+      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+    const jwt = `${signingInput}.${b64sig}`;
+
+    // Exchange JWT for access token
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`
+    });
+    if (!tokenRes.ok) {
+      const errText = await tokenRes.text().catch(() => '');
+      return { ok: false, error: `OAuth2 token exchange failed (${tokenRes.status}): ${errText}` };
+    }
+    const tokenData = await tokenRes.json();
+    accessToken = tokenData.access_token;
+  } catch (e) {
+    return { ok: false, error: `Service account auth failed: ${e.message}` };
+  }
+
+  // Delete the Firebase Auth user using the Admin API (localId, not idToken)
+  try {
+    const deleteRes = await fetch(
+      'https://identitytoolkit.googleapis.com/v1/accounts:delete',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({ localId: [uid] })
+      }
+    );
+    if (!deleteRes.ok) {
+      const errText = await deleteRes.text().catch(() => '');
+      return { ok: false, error: `Firebase Auth delete failed (${deleteRes.status}): ${errText}` };
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: `Firebase Auth delete request failed: ${e.message}` };
+  }
+}
+
 async function deleteUserData(db, env, user) {
   const userId = user.id;
   const uid = user.auth_id;
+
+  // Delete Firebase Auth identity so the user cannot re-authenticate
+  const fbResult = await deleteFirebaseAuthUser(env, uid);
+  if (fbResult.ok) {
+    console.log(`[inactive-cleaner] Firebase Auth user deleted: ${uid}`);
+  } else {
+    console.warn(`[inactive-cleaner] Firebase Auth deletion skipped: ${fbResult.error}`);
+  }
 
   // Get resume sessions for KV cleanup before deleting
   let resumeSessions = [];
@@ -192,6 +287,9 @@ async function deleteUserData(db, env, user) {
     await env.JOBHACKAI_KV.delete(`billingStatus:${uid}`).catch(() => {});
     await env.JOBHACKAI_KV.delete(`trialUsedByUid:${uid}`).catch(() => {});
     await env.JOBHACKAI_KV.delete(`trialEndByUid:${uid}`).catch(() => {});
+    // User-scoped data keys
+    await env.JOBHACKAI_KV.delete(`user:${uid}:lastResume`).catch(() => {});
+    await env.JOBHACKAI_KV.delete(`atsUsage:${uid}:lifetime`).catch(() => {});
   }
 }
 

@@ -69,8 +69,14 @@ export async function onRequest(context) {
         );
         for (const sub of activeSubs) {
           try {
-            await stripe(env, `/subscriptions/${sub.id}`, { method: 'DELETE' });
-            console.log('[DELETE-USER] Cancelled subscription:', sub.id);
+            const cancelRes = await stripe(env, `/subscriptions/${sub.id}`, { method: 'DELETE' });
+            if (!cancelRes.ok) {
+              const errBody = await cancelRes.text().catch(() => '');
+              errors.push(`Failed to cancel subscription ${sub.id}: Stripe returned ${cancelRes.status}: ${errBody}`);
+              console.error('[DELETE-USER] Stripe cancellation failed:', sub.id, cancelRes.status, errBody);
+            } else {
+              console.log('[DELETE-USER] Cancelled subscription:', sub.id);
+            }
           } catch (subErr) {
             errors.push(`Failed to cancel subscription ${sub.id}: ${subErr.message}`);
           }
@@ -197,6 +203,9 @@ export async function onRequest(context) {
         await env.JOBHACKAI_KV.delete(`cusByUid:${uid}`);
         // Billing caches
         await invalidateBillingCaches(env, uid);
+        // User-scoped data keys
+        await env.JOBHACKAI_KV.delete(`user:${uid}:lastResume`);
+        await env.JOBHACKAI_KV.delete(`atsUsage:${uid}:lifetime`);
         console.log('[DELETE-USER] KV cleanup complete');
       } catch (kvErr) {
         errors.push(`KV cleanup error: ${kvErr.message}`);
