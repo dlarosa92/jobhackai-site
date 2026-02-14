@@ -220,6 +220,14 @@ export async function onRequest(context) {
       }), { status: 500, headers: corsHeaders(origin, env) });
     }
 
+    if (!firebaseAuthDeleted) {
+      return new Response(JSON.stringify({
+        ok: false,
+        error: 'Account data removed but Firebase Auth identity could not be deleted. Contact support if you can still log in.',
+        partialErrors: errors
+      }), { status: 500, headers: corsHeaders(origin, env) });
+    }
+
     return new Response(JSON.stringify({
       ok: true,
       message: 'Account deleted successfully',
