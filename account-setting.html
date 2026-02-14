@@ -1341,6 +1341,19 @@
           } catch (_) {}
 
           localStorage.clear();
+
+          // Surface any partial-cleanup warnings from the API before redirecting.
+          // The API returns { ok: true, warnings: [...] } when Firebase Auth was
+          // deleted but some cleanup steps (Stripe, D1 tables, KV) had issues.
+          if (data.warnings && data.warnings.length > 0) {
+            console.warn('[ACCOUNT-SETTINGS] Deletion warnings:', data.warnings);
+            alert(
+              'Your account has been deleted, but some cleanup steps encountered issues:\n\n' +
+              data.warnings.map(w => '- ' + w).join('\n') +
+              '\n\nIf billing continues, please contact support at privacy@jobhackai.io.'
+            );
+          }
+
           window.location.href = 'index.html';
         } catch (error) {
           console.error('[ACCOUNT-SETTINGS] Delete account error:', error);
