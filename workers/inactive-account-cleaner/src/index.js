@@ -20,7 +20,7 @@ async function runInactiveAccountCleanup(env) {
   // Fresh databases created from an older schema.sql may lack them.
   const hasColumns = await checkActivityColumns(db);
   if (!hasColumns) {
-    console.warn('[inactive-cleaner] Skipping: activity-tracking columns (last_login_at, deletion_warning_sent_at) not present. Run migration 015.');
+    console.warn('[inactive-cleaner] Skipping: activity-tracking columns (last_login_at, last_activity_at, deletion_warning_sent_at) not present. Run migration 015.');
     return;
   }
 
@@ -36,7 +36,7 @@ async function checkActivityColumns(db) {
     // PRAGMA table_info returns column metadata; check for the columns we need
     const info = await db.prepare("PRAGMA table_info('users')").all();
     const columns = new Set((info.results || []).map(r => r.name));
-    return columns.has('last_login_at') && columns.has('deletion_warning_sent_at');
+    return columns.has('last_login_at') && columns.has('deletion_warning_sent_at') && columns.has('last_activity_at');
   } catch (err) {
     console.error('[inactive-cleaner] Failed to inspect users table:', err.message);
     return false;
