@@ -45,26 +45,20 @@ export async function onRequest(context) {
   const errors = [];
 
   try {
-    // Look up user
+    // Look up user — may be null if D1 and Firebase are out of sync
     const user = await db.prepare(
       'SELECT id, auth_id, email, stripe_customer_id FROM users WHERE auth_id = ?'
     ).bind(uid).first();
 
-    if (!user) {
-      return new Response(JSON.stringify({ error: 'User not found' }), {
-        status: 404, headers: corsHeaders(origin, env)
-      });
-    }
-
-    const userId = user.id;
-    const userEmail = user.email || email;
+    const userId = user?.id || null;
+    const userEmail = user?.email || email;
 
     // Resolve Stripe customer ID using a 2-step fallback (D1 → KV → Stripe
     // email search) so subscriptions are cancelled even when the users row
     // has a stale or missing stripe_customer_id.
     // Note: getUserPlanData is intentionally skipped here because it reads
     // stripe_customer_id from the same users row already fetched above.
-    let customerId = user.stripe_customer_id || null;
+    let customerId = user?.stripe_customer_id || null;
     if (!customerId) {
       try {
         customerId = await env.JOBHACKAI_KV?.get(kvCusKey(uid)) || null;
@@ -179,35 +173,43 @@ export async function onRequest(context) {
 
     // 3. Get resume sessions for KV cleanup before deleting
     let resumeSessions = [];
-    try {
-      resumeSessions = await db.prepare(
-        'SELECT id, raw_text_location FROM resume_sessions WHERE user_id = ?'
-      ).bind(userId).all().then(r => r.results || []);
-    } catch (e) {
-      errors.push(`Failed to fetch resume sessions: ${e.message}`);
+    if (userId) {
+      try {
+        resumeSessions = await db.prepare(
+          'SELECT id, raw_text_location FROM resume_sessions WHERE user_id = ?'
+        ).bind(userId).all().then(r => r.results || []);
+      } catch (e) {
+        errors.push(`Failed to fetch resume sessions: ${e.message}`);
+      }
     }
 
     // 4. Delete from all related D1 tables (order matters for foreign keys)
+    //    Tables keyed by auth_id (uid) are always cleaned; tables keyed by
+    //    integer userId are skipped when no D1 row existed (nothing to delete).
     const deletions = [
-      // Tables using auth_id (TEXT) directly as user_id
+      // Tables using auth_id (TEXT) directly as user_id — always safe
       { table: 'linkedin_runs', sql: "DELETE FROM linkedin_runs WHERE user_id = ?", bind: uid },
       { table: 'role_usage_log', sql: "DELETE FROM role_usage_log WHERE user_id = ?", bind: uid },
       { table: 'cover_letter_history', sql: "DELETE FROM cover_letter_history WHERE user_id = ?", bind: uid },
-      { table: 'feature_daily_usage', sql: "DELETE FROM feature_daily_usage WHERE user_id = ?", bind: userId },
-      { table: 'cookie_consents', sql: "DELETE FROM cookie_consents WHERE user_id = ?", bind: userId },
-      // feedback_sessions must be deleted before resume_sessions (FK)
-      {
-        table: 'feedback_sessions',
-        sql: "DELETE FROM feedback_sessions WHERE resume_session_id IN (SELECT id FROM resume_sessions WHERE user_id = ?)",
-        bind: userId
-      },
-      { table: 'resume_sessions', sql: "DELETE FROM resume_sessions WHERE user_id = ?", bind: userId },
-      { table: 'usage_events', sql: "DELETE FROM usage_events WHERE user_id = ?", bind: userId },
-      { table: 'interview_question_sets', sql: "DELETE FROM interview_question_sets WHERE user_id = ?", bind: userId },
-      { table: 'mock_interview_sessions', sql: "DELETE FROM mock_interview_sessions WHERE user_id = ?", bind: userId },
-      { table: 'mock_interview_usage', sql: "DELETE FROM mock_interview_usage WHERE user_id = ?", bind: userId },
-      { table: 'plan_change_history', sql: "DELETE FROM plan_change_history WHERE user_id = ?", bind: userId },
     ];
+    if (userId) {
+      deletions.push(
+        { table: 'feature_daily_usage', sql: "DELETE FROM feature_daily_usage WHERE user_id = ?", bind: userId },
+        { table: 'cookie_consents', sql: "DELETE FROM cookie_consents WHERE user_id = ?", bind: userId },
+        // feedback_sessions must be deleted before resume_sessions (FK)
+        {
+          table: 'feedback_sessions',
+          sql: "DELETE FROM feedback_sessions WHERE resume_session_id IN (SELECT id FROM resume_sessions WHERE user_id = ?)",
+          bind: userId
+        },
+        { table: 'resume_sessions', sql: "DELETE FROM resume_sessions WHERE user_id = ?", bind: userId },
+        { table: 'usage_events', sql: "DELETE FROM usage_events WHERE user_id = ?", bind: userId },
+        { table: 'interview_question_sets', sql: "DELETE FROM interview_question_sets WHERE user_id = ?", bind: userId },
+        { table: 'mock_interview_sessions', sql: "DELETE FROM mock_interview_sessions WHERE user_id = ?", bind: userId },
+        { table: 'mock_interview_usage', sql: "DELETE FROM mock_interview_usage WHERE user_id = ?", bind: userId },
+        { table: 'plan_change_history', sql: "DELETE FROM plan_change_history WHERE user_id = ?", bind: userId },
+      );
+    }
 
     for (const { table, sql, bind } of deletions) {
       try {
@@ -220,7 +222,7 @@ export async function onRequest(context) {
       }
     }
 
-    // 5. Delete the user record itself — this MUST succeed for deletion to be considered complete
+    // 5. Delete the user record itself (uses auth_id so it works even without userId)
     let userDeleted = false;
     try {
       const delResult = await db.prepare('DELETE FROM users WHERE auth_id = ?').bind(uid).run();
@@ -229,15 +231,16 @@ export async function onRequest(context) {
       if (userDeleted) {
         console.log('[DELETE-USER] Deleted user record:', uid);
       } else {
-        console.error('[DELETE-USER] User record not found or already deleted:', uid);
+        // No D1 row — not an error if the user only existed in Firebase
+        console.log('[DELETE-USER] No user record in D1 for:', uid);
       }
     } catch (userDelErr) {
       errors.push(`Failed to delete user record: ${userDelErr.message}`);
       console.error('[DELETE-USER] Critical: user record deletion failed:', userDelErr.message);
     }
 
-    // 6. Send account deletion email AFTER successful user record deletion
-    if (userDeleted && userEmail) {
+    // 6. Send account deletion email
+    if (userEmail) {
       try {
         const { subject, html } = accountDeletedEmail(userEmail);
         const emailResult = await sendEmail(env, { to: userEmail, subject, html });
@@ -272,7 +275,8 @@ export async function onRequest(context) {
       }
     }
 
-    if (!userDeleted) {
+    if (!userDeleted && user) {
+      // Only warn if a D1 row existed but couldn't be removed
       errors.push('Failed to delete user record from database (will be cleaned up by retention worker)');
     }
 
