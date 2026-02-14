@@ -131,8 +131,15 @@ async function queryAll(db, sql, bind) {
     const result = await db.prepare(sql).bind(bind).all();
     return result.results || [];
   } catch (e) {
-    console.warn('[EXPORT] Query failed:', e.message);
-    return [];
+    // Tables may not exist in pre-migration environments — return [] for those.
+    // All other errors (connection, permissions, etc.) must propagate so the
+    // export returns 500 rather than silently omitting data.
+    const msg = e?.message || '';
+    if (msg.includes('no such table') || msg.includes('no such column')) {
+      console.warn('[EXPORT] Query skipped (missing table/column):', msg);
+      return [];
+    }
+    throw e;
   }
 }
 
