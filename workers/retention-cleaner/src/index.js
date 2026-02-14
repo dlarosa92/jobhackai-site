@@ -31,16 +31,18 @@ async function runCleanup(env) {
   );
 
   // 2. Resume sessions — first clean up KV keys, then delete
-  // Only target sessions with no recent feedback, since upsertResumeSessionWithScores
-  // reuses old rows without refreshing created_at.
-  const resumeCleanupCondition = `created_at < ? AND id NOT IN (
-    SELECT DISTINCT resume_session_id FROM feedback_sessions WHERE created_at >= ?
-  )`;
+  // Keep sessions that were recently updated (ATS scoring refreshes updated_at)
+  // OR that have recent feedback_sessions.
+  const resumeCleanupCondition = `created_at < ?
+    AND (updated_at IS NULL OR updated_at < ?)
+    AND id NOT IN (
+      SELECT DISTINCT resume_session_id FROM feedback_sessions WHERE created_at >= ?
+    )`;
   if (env.JOBHACKAI_KV) {
     try {
       const sessions = await db.prepare(
         `SELECT id, raw_text_location FROM resume_sessions WHERE ${resumeCleanupCondition}`
-      ).bind(cutoff, cutoff).all();
+      ).bind(cutoff, cutoff, cutoff).all();
       const rows = sessions.results || [];
       for (const session of rows) {
         if (session.raw_text_location) {
@@ -72,7 +74,7 @@ async function runCleanup(env) {
   results.resume_sessions = await deleteRows(
     db,
     `DELETE FROM resume_sessions WHERE ${resumeCleanupCondition}`,
-    cutoff, cutoff
+    cutoff, cutoff, cutoff
   );
 
   // 5. Interview question sets

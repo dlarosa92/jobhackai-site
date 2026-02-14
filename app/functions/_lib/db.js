@@ -924,7 +924,7 @@ export async function updateResumeSessionAtsScore(env, sessionId, atsScore) {
 
   try {
     await db.prepare(
-      'UPDATE resume_sessions SET ats_score = ? WHERE id = ?'
+      'UPDATE resume_sessions SET ats_score = ?, updated_at = datetime(\'now\') WHERE id = ?'
     ).bind(atsScore, sessionId).run();
 
     console.log('[DB] Updated ats_score:', { sessionId, atsScore });
@@ -1000,18 +1000,19 @@ export async function upsertResumeSessionWithScores(env, userId, {
     // This reduces database round trips from 2 to 1 (or 2 if UPDATE affects 0 rows)
     // First, try to update the most recent session for this resumeId
     const updateResult = await db.prepare(
-      `UPDATE resume_sessions 
+      `UPDATE resume_sessions
        SET ats_score = COALESCE(?, ats_score),
            rule_based_scores_json = COALESCE(?, rule_based_scores_json),
            role = COALESCE(?, role),
-           ats_ready = COALESCE(?, ats_ready)
+           ats_ready = COALESCE(?, ats_ready),
+           updated_at = datetime('now')
        WHERE id = (
          SELECT id FROM resume_sessions
          WHERE user_id = ? AND raw_text_location = ?
          ORDER BY created_at DESC
          LIMIT 1
        )
-       RETURNING id, user_id, title, role, created_at, raw_text_location, ats_score, rule_based_scores_json, ats_ready`
+       RETURNING id, user_id, title, role, created_at, updated_at, raw_text_location, ats_score, rule_based_scores_json, ats_ready`
     ).bind(atsScore, ruleBasedScoresJson, role, atsReadyValue, userId, rawTextLocation).first();
 
     if (updateResult) {
@@ -1024,7 +1025,7 @@ export async function upsertResumeSessionWithScores(env, userId, {
     const insertResult = await db.prepare(
       `INSERT INTO resume_sessions (user_id, title, role, raw_text_location, ats_score, rule_based_scores_json, ats_ready)
        VALUES (?, ?, ?, ?, ?, ?, ?)
-       RETURNING id, user_id, title, role, created_at, raw_text_location, ats_score, rule_based_scores_json, ats_ready`
+       RETURNING id, user_id, title, role, created_at, updated_at, raw_text_location, ats_score, rule_based_scores_json, ats_ready`
     ).bind(userId, role, role, rawTextLocation, atsScore, ruleBasedScoresJson, insertAtsReady).first();
 
     return insertResult || null;
