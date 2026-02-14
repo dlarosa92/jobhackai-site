@@ -150,9 +150,14 @@ async function deleteFirebaseAuthUser(env, uid) {
   // Build a JWT to exchange for a Google OAuth2 access token
   const now = Math.floor(Date.now() / 1000);
   const header = { alg: 'RS256', typ: 'JWT' };
+  const projectId = sa.project_id;
+  if (!projectId) {
+    return { ok: false, error: 'Service account JSON missing project_id' };
+  }
+
   const payload = {
     iss: sa.client_email,
-    scope: 'https://www.googleapis.com/auth/identitytoolkit',
+    scope: 'https://www.googleapis.com/auth/cloud-platform',
     aud: 'https://oauth2.googleapis.com/token',
     iat: now,
     exp: now + 3600
@@ -198,17 +203,19 @@ async function deleteFirebaseAuthUser(env, uid) {
     return { ok: false, error: `Service account auth failed: ${e.message}` };
   }
 
-  // Delete the Firebase Auth user using the Admin API (localId, not idToken)
+  // Delete the Firebase Auth user using the Admin API (project-scoped endpoint).
+  // The project-scoped URL is required when authenticating with a service
+  // account Bearer token and specifying localId instead of idToken.
   try {
     const deleteRes = await fetch(
-      'https://identitytoolkit.googleapis.com/v1/accounts:delete',
+      `https://identitytoolkit.googleapis.com/v1/projects/${projectId}/accounts:delete`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`
         },
-        body: JSON.stringify({ localId: uid })
+        body: JSON.stringify({ localId: uid, targetProjectId: projectId })
       }
     );
     if (!deleteRes.ok) {

@@ -1,6 +1,6 @@
 import { getBearer, verifyFirebaseIdToken } from '../../_lib/firebase-auth.js';
-import { getDb } from '../../_lib/db.js';
-import { stripe, listSubscriptions, invalidateBillingCaches } from '../../_lib/billing-utils.js';
+import { getDb, getUserPlanData } from '../../_lib/db.js';
+import { stripe, listSubscriptions, invalidateBillingCaches, kvCusKey } from '../../_lib/billing-utils.js';
 import { sendEmail } from '../../_lib/email.js';
 import { accountDeletedEmail } from '../../_lib/email-templates.js';
 
@@ -58,7 +58,59 @@ export async function onRequest(context) {
 
     const userId = user.id;
     const userEmail = user.email || email;
-    const customerId = user.stripe_customer_id;
+
+    // Resolve Stripe customer ID using the same 3-step fallback as other
+    // billing endpoints (D1 → KV → Stripe email search) so subscriptions
+    // are cancelled even when the users row has a stale or missing ID.
+    let customerId = user.stripe_customer_id || null;
+    if (!customerId) {
+      try {
+        customerId = await env.JOBHACKAI_KV?.get(kvCusKey(uid)) || null;
+        if (customerId) console.log('[DELETE-USER] Found customer ID in KV:', customerId);
+      } catch (_) {}
+    }
+    if (!customerId) {
+      try {
+        const planData = await getUserPlanData(env, uid);
+        if (planData?.stripeCustomerId) {
+          customerId = planData.stripeCustomerId;
+          console.log('[DELETE-USER] Found customer ID in D1 plan data:', customerId);
+        }
+      } catch (_) {}
+    }
+    if (!customerId && userEmail) {
+      try {
+        const searchRes = await stripe(env, `/customers?email=${encodeURIComponent(userEmail)}&limit=100`);
+        if (searchRes.ok) {
+          const searchData = await searchRes.json();
+          const customers = (searchData?.data || []).filter(c => c && c.deleted !== true);
+          const uidMatches = customers.filter(c => c?.metadata?.firebaseUid === uid);
+          const candidates = uidMatches.length > 0 ? uidMatches : customers;
+          // Prefer customer with active subscription
+          for (const candidate of candidates) {
+            const subsRes = await stripe(env, `/subscriptions?customer=${candidate.id}&status=all&limit=10`);
+            if (subsRes.ok) {
+              const subsData = await subsRes.json();
+              const hasActive = (subsData?.data || []).some(s =>
+                s && ['active', 'trialing', 'past_due'].includes(s.status)
+              );
+              if (hasActive) {
+                customerId = candidate.id;
+                break;
+              }
+            }
+          }
+          if (!customerId && candidates.length > 0) {
+            customerId = candidates.sort((a, b) => (b.created || 0) - (a.created || 0))[0]?.id || null;
+          }
+          if (customerId) {
+            console.log('[DELETE-USER] Found customer ID via Stripe email search:', customerId);
+          }
+        }
+      } catch (searchErr) {
+        errors.push(`Stripe customer email search failed: ${searchErr.message}`);
+      }
+    }
 
     // 1. Delete Firebase Auth identity FIRST, before any data mutations.
     //    If this fails we abort immediately — nothing has been touched yet,
