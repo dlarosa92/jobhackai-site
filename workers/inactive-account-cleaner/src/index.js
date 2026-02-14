@@ -385,8 +385,15 @@ async function deleteUserData(db, env, user) {
   // Delete user record
   await db.prepare('DELETE FROM users WHERE id = ?').bind(userId).run();
 
-  // Write a tombstone so delayed Stripe webhooks don't recreate this user.
-  // 30-day TTL covers Stripe's retry window with margin.
+  // Write tombstones so delayed Stripe webhooks don't recreate this user.
+  // D1 is authoritative; KV is best-effort cache.
+  try {
+    await db.prepare(
+      'INSERT OR REPLACE INTO deleted_auth_ids (auth_id, deleted_at) VALUES (?, datetime(\'now\'))'
+    ).bind(uid).run();
+  } catch (d1Err) {
+    console.error('[inactive-cleaner] D1 tombstone write failed for', uid, ':', d1Err?.message || d1Err);
+  }
   if (env.JOBHACKAI_KV) {
     try {
       await env.JOBHACKAI_KV.put(`deleted:${uid}`, '1', { expirationTtl: 2592000 });

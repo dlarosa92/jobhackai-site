@@ -1,5 +1,5 @@
 import { getBearer, verifyFirebaseIdToken } from '../../_lib/firebase-auth.js';
-import { getDb } from '../../_lib/db.js';
+import { getDb, writeDeletedTombstone } from '../../_lib/db.js';
 import { stripe, listSubscriptions, invalidateBillingCaches, kvCusKey } from '../../_lib/billing-utils.js';
 import { sendEmail } from '../../_lib/email.js';
 import { accountDeletedEmail } from '../../_lib/email-templates.js';
@@ -280,12 +280,21 @@ export async function onRequest(context) {
       errors.push('Failed to delete user record from database (will be cleaned up by retention worker)');
     }
 
-    // Write a tombstone so delayed Stripe webhooks don't recreate this user.
-    // 30-day TTL covers Stripe's retry window with margin.
+    // Write tombstones so delayed Stripe webhooks don't recreate this user.
+    // D1 is authoritative; KV is best-effort cache. If D1 tombstone fails,
+    // delayed webhooks may recreate the account — surface as error for monitoring.
+    const tombstoneWritten = await writeDeletedTombstone(env, uid);
+    if (!tombstoneWritten) {
+      errors.push('Failed to write deletion tombstone to database — delayed Stripe webhooks may recreate this account');
+      console.error('[DELETE-USER] Critical: D1 tombstone write failed for:', uid);
+    }
     if (env.JOBHACKAI_KV) {
       try {
         await env.JOBHACKAI_KV.put(`deleted:${uid}`, '1', { expirationTtl: 2592000 });
-      } catch (_) {}
+      } catch (kvTombErr) {
+        errors.push(`KV tombstone write failed: ${kvTombErr.message}`);
+        console.warn('[DELETE-USER] KV tombstone write failed (D1 tombstone is authoritative):', kvTombErr?.message || kvTombErr);
+      }
     }
 
     // Always return 200 after Firebase Auth is deleted — the user can no

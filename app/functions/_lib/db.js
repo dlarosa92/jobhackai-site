@@ -339,6 +339,51 @@ export async function updateUserPlan(env, authId, {
 }
 
 /**
+ * Write a tombstone for a deleted user so delayed Stripe webhooks don't recreate the row.
+ * D1 is authoritative; callers should also write to KV (deleted:${uid}) as best-effort cache.
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {string} authId - Firebase UID
+ * @returns {Promise<boolean>} True if tombstone was written, false on error
+ */
+export async function writeDeletedTombstone(env, authId) {
+  const db = getDb(env);
+  if (!db) {
+    console.warn('[DB] D1 binding not available for tombstone write');
+    return false;
+  }
+  try {
+    await db.prepare(
+      'INSERT OR REPLACE INTO deleted_auth_ids (auth_id, deleted_at) VALUES (?, datetime(\'now\'))'
+    ).bind(authId).run();
+    return true;
+  } catch (error) {
+    console.error('[DB] Error writing deleted tombstone:', error);
+    return false;
+  }
+}
+
+/**
+ * Check if a user was intentionally deleted (tombstone exists in D1).
+ * Used by Stripe webhook to avoid recreating users when KV tombstone is unavailable.
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {string} authId - Firebase UID
+ * @returns {Promise<boolean>} True if tombstone exists
+ */
+export async function isDeletedUser(env, authId) {
+  const db = getDb(env);
+  if (!db) return false;
+  try {
+    const row = await db.prepare(
+      'SELECT 1 FROM deleted_auth_ids WHERE auth_id = ?'
+    ).bind(authId).first();
+    return !!row;
+  } catch (error) {
+    console.warn('[DB] Error checking deleted tombstone:', error?.message || error);
+    return false;
+  }
+}
+
+/**
  * Get full user plan data including subscription metadata
  * @param {Object} env - Cloudflare environment with DB binding
  * @param {string} authId - Firebase UID
