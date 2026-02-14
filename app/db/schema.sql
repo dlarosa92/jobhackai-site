@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS resume_sessions (
   title TEXT,                            -- User-friendly label (e.g., "Senior Data Engineer Resume")
   role TEXT,                             -- Target role (jobTitle from request)
   created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),  -- Refreshed on ATS upserts so retention cleaner sees activity
   raw_text_location TEXT,                -- Pointer to KV key (e.g., "resume:${resumeId}") or null
   ats_score INTEGER,                     -- Overall ATS score (0-100) for quick history display
   ats_ready INTEGER NOT NULL DEFAULT 0,  -- Explicit ATS readiness flag (1 = ready, 0 = not ready)
