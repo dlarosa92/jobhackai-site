@@ -208,7 +208,7 @@ async function deleteFirebaseAuthUser(env, uid) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`
         },
-        body: JSON.stringify({ localId: [uid] })
+        body: JSON.stringify({ localId: uid })
       }
     );
     if (!deleteRes.ok) {
@@ -274,7 +274,9 @@ async function deleteUserData(db, env, user) {
   }
 
   // KV cleanup
-  if (env.JOBHACKAI_KV) {
+  if (!env.JOBHACKAI_KV) {
+    console.warn('[inactive-cleaner] JOBHACKAI_KV not bound — skipping KV cleanup for user:', uid);
+  } else {
     for (const session of resumeSessions) {
       if (session.raw_text_location) {
         await env.JOBHACKAI_KV.delete(session.raw_text_location).catch(() => {});

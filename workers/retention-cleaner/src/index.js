@@ -38,7 +38,9 @@ async function runCleanup(env) {
     AND id NOT IN (
       SELECT DISTINCT resume_session_id FROM feedback_sessions WHERE created_at >= ?
     )`;
-  if (env.JOBHACKAI_KV) {
+  if (!env.JOBHACKAI_KV) {
+    console.warn('[retention-cleaner] JOBHACKAI_KV not bound — skipping KV cleanup for resume sessions');
+  } else {
     try {
       const sessions = await db.prepare(
         `SELECT id, raw_text_location FROM resume_sessions WHERE ${resumeCleanupCondition}`

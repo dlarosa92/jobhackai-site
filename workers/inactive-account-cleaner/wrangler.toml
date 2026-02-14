@@ -9,35 +9,36 @@ crons = ["0 4 1 * *"] # Monthly: 1st at 04:00 UTC
 # wrangler secret put RESEND_API_KEY --env <environment>
 # wrangler secret put FIREBASE_SERVICE_ACCOUNT_JSON --env <environment>
 #
-# IMPORTANT: KV namespace bindings are REQUIRED for resume/billing cache cleanup.
-# Without these, stale KV data will remain after account deletion.
-# kv_namespaces = [
-#   { binding = "JOBHACKAI_KV", id = "<kv-namespace-id>" }
-# ]
+# IMPORTANT: KV namespace bindings below are REQUIRED for resume/billing cache cleanup.
+# Replace the placeholder IDs with actual KV namespace IDs before deploying.
+# Run: wrangler kv namespace list
 
 [env.dev]
 name = "jobhackai-inactive-account-cleaner-dev"
 d1_databases = [
   { binding = "JOBHACKAI_DB", database_id = "c5c0eee5-a223-4ea2-974e-f4aee5a28bab" }
 ]
-# kv_namespaces = [
-#   { binding = "JOBHACKAI_KV", id = "<dev-kv-namespace-id>" }
-# ]
+kv_namespaces = [
+  # REPLACE with actual dev KV namespace ID (wrangler kv namespace list)
+  { binding = "JOBHACKAI_KV", id = "<dev-kv-namespace-id>" }
+]
 
 [env.qa]
 name = "jobhackai-inactive-account-cleaner-qa"
 d1_databases = [
   { binding = "JOBHACKAI_DB", database_id = "80d87a73-6615-4823-b7a4-19a8821b4f87" }
 ]
-# kv_namespaces = [
-#   { binding = "JOBHACKAI_KV", id = "<qa-kv-namespace-id>" }
-# ]
+kv_namespaces = [
+  # REPLACE with actual qa KV namespace ID (wrangler kv namespace list)
+  { binding = "JOBHACKAI_KV", id = "<qa-kv-namespace-id>" }
+]
 
 [env.production]
 name = "jobhackai-inactive-account-cleaner-prod"
 d1_databases = [
   { binding = "JOBHACKAI_DB", database_id = "f9b709fd-56c3-4a0b-8141-4542327c9d4d" }
 ]
-# kv_namespaces = [
-#   { binding = "JOBHACKAI_KV", id = "<prod-kv-namespace-id>" }
-# ]
+kv_namespaces = [
+  # REPLACE with actual prod KV namespace ID (wrangler kv namespace list)
+  { binding = "JOBHACKAI_KV", id = "<prod-kv-namespace-id>" }
+]
