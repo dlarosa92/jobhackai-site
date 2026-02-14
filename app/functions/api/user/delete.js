@@ -1,5 +1,5 @@
 import { getBearer, verifyFirebaseIdToken } from '../../_lib/firebase-auth.js';
-import { getDb, getUserPlanData } from '../../_lib/db.js';
+import { getDb } from '../../_lib/db.js';
 import { stripe, listSubscriptions, invalidateBillingCaches, kvCusKey } from '../../_lib/billing-utils.js';
 import { sendEmail } from '../../_lib/email.js';
 import { accountDeletedEmail } from '../../_lib/email-templates.js';
@@ -59,23 +59,16 @@ export async function onRequest(context) {
     const userId = user.id;
     const userEmail = user.email || email;
 
-    // Resolve Stripe customer ID using the same 3-step fallback as other
-    // billing endpoints (D1 → KV → Stripe email search) so subscriptions
-    // are cancelled even when the users row has a stale or missing ID.
+    // Resolve Stripe customer ID using a 2-step fallback (D1 → KV → Stripe
+    // email search) so subscriptions are cancelled even when the users row
+    // has a stale or missing stripe_customer_id.
+    // Note: getUserPlanData is intentionally skipped here because it reads
+    // stripe_customer_id from the same users row already fetched above.
     let customerId = user.stripe_customer_id || null;
     if (!customerId) {
       try {
         customerId = await env.JOBHACKAI_KV?.get(kvCusKey(uid)) || null;
         if (customerId) console.log('[DELETE-USER] Found customer ID in KV:', customerId);
-      } catch (_) {}
-    }
-    if (!customerId) {
-      try {
-        const planData = await getUserPlanData(env, uid);
-        if (planData?.stripeCustomerId) {
-          customerId = planData.stripeCustomerId;
-          console.log('[DELETE-USER] Found customer ID in D1 plan data:', customerId);
-        }
       } catch (_) {}
     }
     if (!customerId && userEmail) {
