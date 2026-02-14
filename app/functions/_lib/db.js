@@ -38,41 +38,6 @@ export function getDb(env) {
 }
 
 /**
- * Ensure a user row exists for the given auth ID.
- * Used by webhook handlers to create a minimal user record when one doesn't
- * exist yet (e.g. first-time subscribers whose login hasn't hit D1 yet).
- *
- * Unlike getOrCreateUserByAuthId, this does NOT update last_login_at or send
- * welcome emails — it only guarantees a row exists so that updateUserPlan
- * can proceed.
- *
- * @param {Object} env - Cloudflare environment with DB binding
- * @param {string} authId - Firebase UID
- * @param {string|null} email - User email (optional, used only on INSERT)
- * @returns {Promise<boolean>} true if a row now exists
- */
-export async function ensureUserExists(env, authId, email = null) {
-  const db = getDb(env);
-  if (!db || !authId) return false;
-  try {
-    const existing = await db.prepare(
-      'SELECT id FROM users WHERE auth_id = ?'
-    ).bind(authId).first();
-    if (existing) return true;
-
-    // INSERT with ON CONFLICT to avoid races with concurrent webhook/login
-    await db.prepare(
-      'INSERT INTO users (auth_id, email) VALUES (?, ?) ON CONFLICT (auth_id) DO NOTHING'
-    ).bind(authId, email).run();
-    console.log('[DB] ensureUserExists: created minimal user row for', authId);
-    return true;
-  } catch (error) {
-    console.error('[DB] ensureUserExists error:', error);
-    return false;
-  }
-}
-
-/**
  * Get or create a user by Firebase auth ID
  * @param {Object} env - Cloudflare environment with DB binding
  * @param {string} authId - Firebase UID

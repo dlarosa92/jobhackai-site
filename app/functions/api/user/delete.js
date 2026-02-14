@@ -129,24 +129,10 @@ export async function onRequest(context) {
       }
     }
 
-    // 4. Delete the user record itself — this MUST succeed for deletion to be considered complete
-    let userDeleted = false;
-    try {
-      const delResult = await db.prepare('DELETE FROM users WHERE auth_id = ?').bind(uid).run();
-      const changes = delResult?.meta?.changes ?? delResult?.changes ?? 0;
-      userDeleted = changes > 0;
-      if (userDeleted) {
-        console.log('[DELETE-USER] Deleted user record:', uid);
-      } else {
-        console.error('[DELETE-USER] User record not found or already deleted:', uid);
-      }
-    } catch (userDelErr) {
-      errors.push(`Failed to delete user record: ${userDelErr.message}`);
-      console.error('[DELETE-USER] Critical: user record deletion failed:', userDelErr.message);
-    }
-
-    // 5. Delete Firebase Auth user server-side so the identity account
-    //    cannot be used to re-authenticate after app data is removed.
+    // 4. Delete Firebase Auth user BEFORE removing the users row.
+    //    If Firebase deletion fails we abort and return 500 so the caller
+    //    can retry — the users row still exists, preventing an orphaned
+    //    Firebase identity that could re-create the account on login.
     let firebaseAuthDeleted = false;
     const firebaseApiKey = (env.FIREBASE_WEB_API_KEY || '').trim();
     if (firebaseApiKey && token) {
@@ -174,6 +160,30 @@ export async function onRequest(context) {
     } else {
       errors.push('Firebase Auth deletion skipped: FIREBASE_WEB_API_KEY not configured');
       console.warn('[DELETE-USER] FIREBASE_WEB_API_KEY not configured, skipping Firebase Auth deletion');
+    }
+
+    if (!firebaseAuthDeleted) {
+      return new Response(JSON.stringify({
+        ok: false,
+        error: 'Firebase Auth identity could not be deleted. Account data has been preserved so you can retry.',
+        partialErrors: errors
+      }), { status: 500, headers: corsHeaders(origin, env) });
+    }
+
+    // 5. Delete the user record itself — this MUST succeed for deletion to be considered complete
+    let userDeleted = false;
+    try {
+      const delResult = await db.prepare('DELETE FROM users WHERE auth_id = ?').bind(uid).run();
+      const changes = delResult?.meta?.changes ?? delResult?.changes ?? 0;
+      userDeleted = changes > 0;
+      if (userDeleted) {
+        console.log('[DELETE-USER] Deleted user record:', uid);
+      } else {
+        console.error('[DELETE-USER] User record not found or already deleted:', uid);
+      }
+    } catch (userDelErr) {
+      errors.push(`Failed to delete user record: ${userDelErr.message}`);
+      console.error('[DELETE-USER] Critical: user record deletion failed:', userDelErr.message);
     }
 
     // 6. Send account deletion email AFTER successful user record deletion
@@ -216,14 +226,6 @@ export async function onRequest(context) {
       return new Response(JSON.stringify({
         ok: false,
         error: 'Failed to delete user record',
-        partialErrors: errors
-      }), { status: 500, headers: corsHeaders(origin, env) });
-    }
-
-    if (!firebaseAuthDeleted) {
-      return new Response(JSON.stringify({
-        ok: false,
-        error: 'Account data removed but Firebase Auth identity could not be deleted. Contact support if you can still log in.',
         partialErrors: errors
       }), { status: 500, headers: corsHeaders(origin, env) });
     }
