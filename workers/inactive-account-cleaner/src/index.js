@@ -225,12 +225,15 @@ async function deleteUserData(db, env, user) {
   const userId = user.id;
   const uid = user.auth_id;
 
-  // Delete Firebase Auth identity so the user cannot re-authenticate
+  // Delete Firebase Auth identity FIRST so the user cannot re-authenticate.
+  // If this fails, abort the entire deletion to avoid leaving an active
+  // Firebase identity while app data is removed (the user could log in
+  // and be re-provisioned after retention deletion).
   const fbResult = await deleteFirebaseAuthUser(env, uid);
   if (fbResult.ok) {
     console.log(`[inactive-cleaner] Firebase Auth user deleted: ${uid}`);
   } else {
-    console.warn(`[inactive-cleaner] Firebase Auth deletion skipped: ${fbResult.error}`);
+    throw new Error(`Firebase Auth deletion failed for ${uid}, aborting data deletion: ${fbResult.error}`);
   }
 
   // Get resume sessions for KV cleanup before deleting
