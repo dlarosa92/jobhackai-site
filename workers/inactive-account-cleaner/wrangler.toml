@@ -5,8 +5,9 @@ compatibility_date = "2024-12-11"
 [triggers]
 crons = ["0 4 1 * *"] # Monthly: 1st at 04:00 UTC
 
-# IMPORTANT: Add RESEND_API_KEY as a Worker secret:
+# IMPORTANT: Add these Worker secrets:
 # wrangler secret put RESEND_API_KEY --env <environment>
+# wrangler secret put FIREBASE_SERVICE_ACCOUNT_JSON --env <environment>
 #
 # IMPORTANT: KV namespace bindings are REQUIRED for resume/billing cache cleanup.
 # Without these, stale KV data will remain after account deletion.
