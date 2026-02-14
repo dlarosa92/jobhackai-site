@@ -228,6 +228,30 @@ async function deleteFirebaseAuthUser(env, uid) {
   }
 }
 
+async function findStripeCustomerByEmail(env, email, uid) {
+  const apiBase = 'https://api.stripe.com/v1';
+  const headers = {
+    'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`
+  };
+
+  const searchRes = await fetch(
+    `${apiBase}/customers?email=${encodeURIComponent(email)}&limit=100`,
+    { headers }
+  );
+  if (!searchRes.ok) return null;
+
+  const searchData = await searchRes.json();
+  const customers = (searchData?.data || []).filter(c => c && c.deleted !== true);
+  if (customers.length === 0) return null;
+
+  // Prefer customer whose metadata matches this Firebase UID
+  const uidMatch = customers.find(c => c?.metadata?.firebaseUid === uid);
+  if (uidMatch) return uidMatch.id;
+
+  // Otherwise return the most recently created customer
+  return customers.sort((a, b) => (b.created || 0) - (a.created || 0))[0]?.id || null;
+}
+
 async function cancelStripeSubscriptions(env, customerId) {
   const apiBase = 'https://api.stripe.com/v1';
   const headers = {
@@ -276,12 +300,28 @@ async function deleteUserData(db, env, user) {
   // Cancel any active Stripe subscriptions before deleting data.
   // The deletion query filters to plan = 'free', but billing state can be out
   // of sync — a stale plan column shouldn't let a charging subscription survive.
-  if (user.stripe_customer_id && env.STRIPE_SECRET_KEY) {
-    try {
-      await cancelStripeSubscriptions(env, user.stripe_customer_id);
-    } catch (stripeErr) {
-      console.warn(`[inactive-cleaner] Stripe cancellation error for ${uid}:`, stripeErr.message);
-      // Continue with deletion — Stripe cancellation is best-effort
+  if (env.STRIPE_SECRET_KEY) {
+    let stripeCustomerId = user.stripe_customer_id || null;
+
+    // Fallback: if stripe_customer_id is missing/stale, search by email
+    if (!stripeCustomerId && user.email) {
+      try {
+        stripeCustomerId = await findStripeCustomerByEmail(env, user.email, uid);
+        if (stripeCustomerId) {
+          console.log(`[inactive-cleaner] Found Stripe customer via email search: ${stripeCustomerId}`);
+        }
+      } catch (searchErr) {
+        console.warn(`[inactive-cleaner] Stripe email search error for ${uid}:`, searchErr.message);
+      }
+    }
+
+    if (stripeCustomerId) {
+      try {
+        await cancelStripeSubscriptions(env, stripeCustomerId);
+      } catch (stripeErr) {
+        console.warn(`[inactive-cleaner] Stripe cancellation error for ${uid}:`, stripeErr.message);
+        // Continue with deletion — Stripe cancellation is best-effort
+      }
     }
   }
 
