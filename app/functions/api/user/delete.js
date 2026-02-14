@@ -139,7 +139,38 @@ export async function onRequest(context) {
       console.error('[DELETE-USER] Critical: user record deletion failed:', userDelErr.message);
     }
 
-    // 5. Send account deletion email AFTER successful user record deletion
+    // 5. Delete Firebase Auth user server-side so the identity account
+    //    cannot be used to re-authenticate after app data is removed.
+    let firebaseAuthDeleted = false;
+    const firebaseApiKey = (env.FIREBASE_WEB_API_KEY || '').trim();
+    if (firebaseApiKey && token) {
+      try {
+        const fbRes = await fetch(
+          `https://identitytoolkit.googleapis.com/v1/accounts:delete?key=${encodeURIComponent(firebaseApiKey)}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idToken: token })
+          }
+        );
+        if (fbRes.ok) {
+          firebaseAuthDeleted = true;
+          console.log('[DELETE-USER] Firebase Auth user deleted:', uid);
+        } else {
+          const fbErr = await fbRes.text().catch(() => '');
+          errors.push(`Firebase Auth deletion failed (${fbRes.status}): ${fbErr}`);
+          console.error('[DELETE-USER] Firebase Auth deletion failed:', fbRes.status, fbErr);
+        }
+      } catch (fbDelErr) {
+        errors.push(`Firebase Auth deletion error: ${fbDelErr.message}`);
+        console.error('[DELETE-USER] Firebase Auth deletion error:', fbDelErr.message);
+      }
+    } else {
+      errors.push('Firebase Auth deletion skipped: FIREBASE_WEB_API_KEY not configured');
+      console.warn('[DELETE-USER] FIREBASE_WEB_API_KEY not configured, skipping Firebase Auth deletion');
+    }
+
+    // 6. Send account deletion email AFTER successful user record deletion
     if (userDeleted && userEmail) {
       try {
         const { subject, html } = accountDeletedEmail(userEmail);
@@ -152,7 +183,7 @@ export async function onRequest(context) {
       }
     }
 
-    // 6. Clean up KV keys
+    // 7. Clean up KV keys
     if (env.JOBHACKAI_KV) {
       try {
         // Resume session KV keys
