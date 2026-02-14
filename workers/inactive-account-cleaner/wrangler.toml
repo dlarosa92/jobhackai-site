@@ -8,6 +8,7 @@ crons = ["0 4 1 * *"] # Monthly: 1st at 04:00 UTC
 # IMPORTANT: Add these Worker secrets:
 # wrangler secret put RESEND_API_KEY --env <environment>
 # wrangler secret put FIREBASE_SERVICE_ACCOUNT_JSON --env <environment>
+# wrangler secret put STRIPE_SECRET_KEY --env <environment>
 
 [env.dev]
 name = "jobhackai-inactive-account-cleaner-dev"
