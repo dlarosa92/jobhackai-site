@@ -1,5 +1,5 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
-import { isTrialEligible, getUserPlanData } from '../_lib/db.js';
+import { isTrialEligible, getUserPlanData, getOrCreateUserByAuthId } from '../_lib/db.js';
 import {
   stripe,
   planToPrice,
@@ -259,6 +259,15 @@ export async function onRequest(context) {
           console.log('🟡 [CHECKOUT] Failed to backfill customer metadata', e?.message || e);
         }
       }
+    }
+
+    // Ensure user row exists in D1 before creating checkout session.
+    // Without this, first-time subscribers who haven't logged in yet won't have
+    // a D1 row, and webhook handlers will skip their plan updates.
+    try {
+      await getOrCreateUserByAuthId(env, uid, email);
+    } catch (ensureErr) {
+      console.warn('⚠️ [CHECKOUT] Failed to ensure user row in D1 (non-fatal):', ensureErr?.message || ensureErr);
     }
 
     // Guard against duplicate subscriptions for paid plans.
