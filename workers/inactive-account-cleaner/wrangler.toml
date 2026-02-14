@@ -32,8 +32,6 @@ name = "jobhackai-inactive-account-cleaner-prod"
 d1_databases = [
   { binding = "JOBHACKAI_DB", database_id = "f9b709fd-56c3-4a0b-8141-4542327c9d4d" }
 ]
-# TODO: Replace with actual prod KV namespace ID before production deployment.
-# Run: wrangler kv namespace list
-# kv_namespaces = [
-#   { binding = "JOBHACKAI_KV", id = "<prod-kv-namespace-id>" }
-# ]
+kv_namespaces = [
+  { binding = "JOBHACKAI_KV", id = "339c38b128ce4ddc9a3c0f4d407e0e2d" }
+]
