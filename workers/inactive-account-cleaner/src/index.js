@@ -267,7 +267,7 @@ async function cancelStripeSubscriptions(env, customerId) {
   if (!listRes.ok) {
     const errText = await listRes.text().catch(() => '');
     console.warn(`[inactive-cleaner] Stripe list subscriptions failed (${listRes.status}):`, errText);
-    return;
+    return { ok: false, error: `List subscriptions failed (${listRes.status}): ${errText}` };
   }
 
   const listData = await listRes.json();
@@ -275,6 +275,11 @@ async function cancelStripeSubscriptions(env, customerId) {
     s && ['active', 'trialing', 'past_due'].includes(s.status)
   );
 
+  if (activeSubs.length === 0) {
+    return { ok: true, cancelled: 0 };
+  }
+
+  const failures = [];
   for (const sub of activeSubs) {
     try {
       const cancelRes = await fetch(`${apiBase}/subscriptions/${sub.id}`, {
@@ -286,11 +291,18 @@ async function cancelStripeSubscriptions(env, customerId) {
       } else {
         const errText = await cancelRes.text().catch(() => '');
         console.warn(`[inactive-cleaner] Failed to cancel subscription ${sub.id} (${cancelRes.status}):`, errText);
+        failures.push(sub.id);
       }
     } catch (err) {
       console.warn(`[inactive-cleaner] Stripe cancel error for ${sub.id}:`, err.message);
+      failures.push(sub.id);
     }
   }
+
+  if (failures.length > 0) {
+    return { ok: false, error: `Failed to cancel subscriptions: ${failures.join(', ')}` };
+  }
+  return { ok: true, cancelled: activeSubs.length };
 }
 
 async function deleteUserData(db, env, user) {
@@ -316,11 +328,14 @@ async function deleteUserData(db, env, user) {
     }
 
     if (stripeCustomerId) {
+      let cancelResult;
       try {
-        await cancelStripeSubscriptions(env, stripeCustomerId);
+        cancelResult = await cancelStripeSubscriptions(env, stripeCustomerId);
       } catch (stripeErr) {
-        console.warn(`[inactive-cleaner] Stripe cancellation error for ${uid}:`, stripeErr.message);
-        // Continue with deletion — Stripe cancellation is best-effort
+        cancelResult = { ok: false, error: stripeErr.message };
+      }
+      if (cancelResult && !cancelResult.ok) {
+        throw new Error(`Stripe cancellation failed for ${uid}, aborting deletion to avoid orphaned billing: ${cancelResult.error}`);
       }
     }
   }
