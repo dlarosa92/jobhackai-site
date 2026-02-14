@@ -5,18 +5,13 @@ compatibility_date = "2024-12-11"
 [triggers]
 crons = ["0 3 * * *"] # daily at 03:00 UTC
 
-# IMPORTANT: KV namespace bindings below are REQUIRED for resume session cleanup.
-# Replace the placeholder IDs with actual KV namespace IDs before deploying.
-# Run: wrangler kv namespace list
-
 [env.dev]
 name = "jobhackai-retention-cleaner-dev"
 d1_databases = [
   { binding = "JOBHACKAI_DB", database_id = "c5c0eee5-a223-4ea2-974e-f4aee5a28bab" }
 ]
 kv_namespaces = [
-  # REPLACE with actual dev KV namespace ID (wrangler kv namespace list)
-  { binding = "JOBHACKAI_KV", id = "<dev-kv-namespace-id>" }
+  { binding = "JOBHACKAI_KV", id = "5237372648c34aa6880f91e1a0c9708a" }
 ]
 
 [env.qa]
@@ -25,8 +20,7 @@ d1_databases = [
   { binding = "JOBHACKAI_DB", database_id = "80d87a73-6615-4823-b7a4-19a8821b4f87" }
 ]
 kv_namespaces = [
-  # REPLACE with actual qa KV namespace ID (wrangler kv namespace list)
-  { binding = "JOBHACKAI_KV", id = "<qa-kv-namespace-id>" }
+  { binding = "JOBHACKAI_KV", id = "5237372648c34aa6880f91e1a0c9708a" }
 ]
 
 [env.production]
@@ -34,8 +28,8 @@ name = "jobhackai-retention-cleaner-prod"
 d1_databases = [
   { binding = "JOBHACKAI_DB", database_id = "f9b709fd-56c3-4a0b-8141-4542327c9d4d" }
 ]
-kv_namespaces = [
-  # REPLACE with actual prod KV namespace ID (wrangler kv namespace list)
-  { binding = "JOBHACKAI_KV", id = "<prod-kv-namespace-id>" }
-]
-
+# TODO: Replace with actual prod KV namespace ID before production deployment.
+# Run: wrangler kv namespace list
+# kv_namespaces = [
+#   { binding = "JOBHACKAI_KV", id = "<prod-kv-namespace-id>" }
+# ]
