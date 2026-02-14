@@ -60,79 +60,9 @@ export async function onRequest(context) {
     const userEmail = user.email || email;
     const customerId = user.stripe_customer_id;
 
-    // 1. Cancel Stripe subscription if active (best-effort)
-    if (customerId) {
-      try {
-        const subs = await listSubscriptions(env, customerId);
-        const activeSubs = subs.filter(s =>
-          s && ['active', 'trialing', 'past_due'].includes(s.status)
-        );
-        for (const sub of activeSubs) {
-          try {
-            const cancelRes = await stripe(env, `/subscriptions/${sub.id}`, { method: 'DELETE' });
-            if (!cancelRes.ok) {
-              const errBody = await cancelRes.text().catch(() => '');
-              errors.push(`Failed to cancel subscription ${sub.id}: Stripe returned ${cancelRes.status}: ${errBody}`);
-              console.error('[DELETE-USER] Stripe cancellation failed:', sub.id, cancelRes.status, errBody);
-            } else {
-              console.log('[DELETE-USER] Cancelled subscription:', sub.id);
-            }
-          } catch (subErr) {
-            errors.push(`Failed to cancel subscription ${sub.id}: ${subErr.message}`);
-          }
-        }
-      } catch (stripeErr) {
-        errors.push(`Stripe cleanup error: ${stripeErr.message}`);
-      }
-    }
-
-    // 2. Get resume sessions for KV cleanup before deleting
-    let resumeSessions = [];
-    try {
-      resumeSessions = await db.prepare(
-        'SELECT id, raw_text_location FROM resume_sessions WHERE user_id = ?'
-      ).bind(userId).all().then(r => r.results || []);
-    } catch (e) {
-      errors.push(`Failed to fetch resume sessions: ${e.message}`);
-    }
-
-    // 3. Delete from all related D1 tables (order matters for foreign keys)
-    const deletions = [
-      // Tables using auth_id (TEXT) directly as user_id
-      { table: 'linkedin_runs', sql: "DELETE FROM linkedin_runs WHERE user_id = ?", bind: uid },
-      { table: 'role_usage_log', sql: "DELETE FROM role_usage_log WHERE user_id = ?", bind: uid },
-      { table: 'cover_letter_history', sql: "DELETE FROM cover_letter_history WHERE user_id = ?", bind: uid },
-      { table: 'feature_daily_usage', sql: "DELETE FROM feature_daily_usage WHERE user_id = ?", bind: userId },
-      { table: 'cookie_consents', sql: "DELETE FROM cookie_consents WHERE user_id = ?", bind: userId },
-      // feedback_sessions must be deleted before resume_sessions (FK)
-      {
-        table: 'feedback_sessions',
-        sql: "DELETE FROM feedback_sessions WHERE resume_session_id IN (SELECT id FROM resume_sessions WHERE user_id = ?)",
-        bind: userId
-      },
-      { table: 'resume_sessions', sql: "DELETE FROM resume_sessions WHERE user_id = ?", bind: userId },
-      { table: 'usage_events', sql: "DELETE FROM usage_events WHERE user_id = ?", bind: userId },
-      { table: 'interview_question_sets', sql: "DELETE FROM interview_question_sets WHERE user_id = ?", bind: userId },
-      { table: 'mock_interview_sessions', sql: "DELETE FROM mock_interview_sessions WHERE user_id = ?", bind: userId },
-      { table: 'mock_interview_usage', sql: "DELETE FROM mock_interview_usage WHERE user_id = ?", bind: userId },
-      { table: 'plan_change_history', sql: "DELETE FROM plan_change_history WHERE user_id = ?", bind: userId },
-    ];
-
-    for (const { table, sql, bind } of deletions) {
-      try {
-        const res = await db.prepare(sql).bind(bind).run();
-        const changes = res?.meta?.changes ?? res?.changes ?? 0;
-        console.log(`[DELETE-USER] Deleted ${changes} rows from ${table}`);
-      } catch (delErr) {
-        errors.push(`Failed to delete from ${table}: ${delErr.message}`);
-        console.error(`[DELETE-USER] Error deleting from ${table}:`, delErr.message);
-      }
-    }
-
-    // 4. Delete Firebase Auth user BEFORE removing the users row.
-    //    If Firebase deletion fails we abort and return 500 so the caller
-    //    can retry — the users row still exists, preventing an orphaned
-    //    Firebase identity that could re-create the account on login.
+    // 1. Delete Firebase Auth identity FIRST, before any data mutations.
+    //    If this fails we abort immediately — nothing has been touched yet,
+    //    so the caller can safely retry without data loss or orphaned state.
     let firebaseAuthDeleted = false;
     const firebaseApiKey = (env.FIREBASE_WEB_API_KEY || '').trim();
     if (firebaseApiKey && token) {
@@ -165,9 +95,80 @@ export async function onRequest(context) {
     if (!firebaseAuthDeleted) {
       return new Response(JSON.stringify({
         ok: false,
-        error: 'Firebase Auth identity could not be deleted. Account data has been preserved so you can retry.',
+        error: 'Firebase Auth identity could not be deleted. No data has been modified — you can safely retry.',
         partialErrors: errors
       }), { status: 500, headers: corsHeaders(origin, env) });
+    }
+
+    // --- Point of no return: Firebase identity is gone, proceed with data cleanup ---
+
+    // 2. Cancel Stripe subscription if active (best-effort)
+    if (customerId) {
+      try {
+        const subs = await listSubscriptions(env, customerId);
+        const activeSubs = subs.filter(s =>
+          s && ['active', 'trialing', 'past_due'].includes(s.status)
+        );
+        for (const sub of activeSubs) {
+          try {
+            const cancelRes = await stripe(env, `/subscriptions/${sub.id}`, { method: 'DELETE' });
+            if (!cancelRes.ok) {
+              const errBody = await cancelRes.text().catch(() => '');
+              errors.push(`Failed to cancel subscription ${sub.id}: Stripe returned ${cancelRes.status}: ${errBody}`);
+              console.error('[DELETE-USER] Stripe cancellation failed:', sub.id, cancelRes.status, errBody);
+            } else {
+              console.log('[DELETE-USER] Cancelled subscription:', sub.id);
+            }
+          } catch (subErr) {
+            errors.push(`Failed to cancel subscription ${sub.id}: ${subErr.message}`);
+          }
+        }
+      } catch (stripeErr) {
+        errors.push(`Stripe cleanup error: ${stripeErr.message}`);
+      }
+    }
+
+    // 3. Get resume sessions for KV cleanup before deleting
+    let resumeSessions = [];
+    try {
+      resumeSessions = await db.prepare(
+        'SELECT id, raw_text_location FROM resume_sessions WHERE user_id = ?'
+      ).bind(userId).all().then(r => r.results || []);
+    } catch (e) {
+      errors.push(`Failed to fetch resume sessions: ${e.message}`);
+    }
+
+    // 4. Delete from all related D1 tables (order matters for foreign keys)
+    const deletions = [
+      // Tables using auth_id (TEXT) directly as user_id
+      { table: 'linkedin_runs', sql: "DELETE FROM linkedin_runs WHERE user_id = ?", bind: uid },
+      { table: 'role_usage_log', sql: "DELETE FROM role_usage_log WHERE user_id = ?", bind: uid },
+      { table: 'cover_letter_history', sql: "DELETE FROM cover_letter_history WHERE user_id = ?", bind: uid },
+      { table: 'feature_daily_usage', sql: "DELETE FROM feature_daily_usage WHERE user_id = ?", bind: userId },
+      { table: 'cookie_consents', sql: "DELETE FROM cookie_consents WHERE user_id = ?", bind: userId },
+      // feedback_sessions must be deleted before resume_sessions (FK)
+      {
+        table: 'feedback_sessions',
+        sql: "DELETE FROM feedback_sessions WHERE resume_session_id IN (SELECT id FROM resume_sessions WHERE user_id = ?)",
+        bind: userId
+      },
+      { table: 'resume_sessions', sql: "DELETE FROM resume_sessions WHERE user_id = ?", bind: userId },
+      { table: 'usage_events', sql: "DELETE FROM usage_events WHERE user_id = ?", bind: userId },
+      { table: 'interview_question_sets', sql: "DELETE FROM interview_question_sets WHERE user_id = ?", bind: userId },
+      { table: 'mock_interview_sessions', sql: "DELETE FROM mock_interview_sessions WHERE user_id = ?", bind: userId },
+      { table: 'mock_interview_usage', sql: "DELETE FROM mock_interview_usage WHERE user_id = ?", bind: userId },
+      { table: 'plan_change_history', sql: "DELETE FROM plan_change_history WHERE user_id = ?", bind: userId },
+    ];
+
+    for (const { table, sql, bind } of deletions) {
+      try {
+        const res = await db.prepare(sql).bind(bind).run();
+        const changes = res?.meta?.changes ?? res?.changes ?? 0;
+        console.log(`[DELETE-USER] Deleted ${changes} rows from ${table}`);
+      } catch (delErr) {
+        errors.push(`Failed to delete from ${table}: ${delErr.message}`);
+        console.error(`[DELETE-USER] Error deleting from ${table}:`, delErr.message);
+      }
     }
 
     // 5. Delete the user record itself — this MUST succeed for deletion to be considered complete
