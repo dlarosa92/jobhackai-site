@@ -385,6 +385,14 @@ async function deleteUserData(db, env, user) {
   // Delete user record
   await db.prepare('DELETE FROM users WHERE id = ?').bind(userId).run();
 
+  // Write a tombstone so delayed Stripe webhooks don't recreate this user.
+  // 30-day TTL covers Stripe's retry window with margin.
+  if (env.JOBHACKAI_KV) {
+    try {
+      await env.JOBHACKAI_KV.put(`deleted:${uid}`, '1', { expirationTtl: 2592000 });
+    } catch (_) {}
+  }
+
   // Send deletion confirmation email AFTER successful user record deletion
   if (user.email) {
     const { subject, html } = accountDeletedEmail(user.email);

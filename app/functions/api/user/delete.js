@@ -276,6 +276,14 @@ export async function onRequest(context) {
       errors.push('Failed to delete user record from database (will be cleaned up by retention worker)');
     }
 
+    // Write a tombstone so delayed Stripe webhooks don't recreate this user.
+    // 30-day TTL covers Stripe's retry window with margin.
+    if (env.JOBHACKAI_KV) {
+      try {
+        await env.JOBHACKAI_KV.put(`deleted:${uid}`, '1', { expirationTtl: 2592000 });
+      } catch (_) {}
+    }
+
     // Always return 200 after Firebase Auth is deleted — the user can no
     // longer authenticate, so the deletion succeeded from their perspective.
     // Any cleanup failures are surfaced as warnings for server-side monitoring.

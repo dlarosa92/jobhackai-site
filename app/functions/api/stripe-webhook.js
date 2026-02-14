@@ -150,9 +150,15 @@ export async function onRequest(context) {
       if (effectivePlan && uid) {
         // Ensure user row exists in D1. First-time subscribers may not have a row yet
         // (checkout.session.completed is the first webhook after payment).
+        // However, skip if a tombstone exists — the account was intentionally deleted.
         const db = getDb(env);
         const existingUser = db ? await db.prepare('SELECT id FROM users WHERE auth_id = ?').bind(uid).first() : null;
         if (!existingUser) {
+          const tombstone = await env.JOBHACKAI_KV?.get(`deleted:${uid}`);
+          if (tombstone) {
+            console.log(`⏭️ [WEBHOOK] Skipping checkout plan update: user ${uid} was deleted (tombstone found)`);
+            return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
+          }
           try {
             await getOrCreateUserByAuthId(env, uid, customerEmail || '');
             console.log(`✅ [WEBHOOK] Created missing user row for first-time subscriber: ${uid}`);
@@ -225,11 +231,17 @@ export async function onRequest(context) {
       const sub = event.data.object;
       const trialEndsAtISO = sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null;
 
-      // Ensure user row exists in D1 for first-time subscribers
+      // Ensure user row exists in D1 for first-time subscribers.
+      // Skip if a tombstone exists — the account was intentionally deleted.
       if (uid) {
         const db = getDb(env);
         const existingUser = db ? await db.prepare('SELECT id FROM users WHERE auth_id = ?').bind(uid).first() : null;
         if (!existingUser) {
+          const tombstone = await env.JOBHACKAI_KV?.get(`deleted:${uid}`);
+          if (tombstone) {
+            console.log(`⏭️ [WEBHOOK] Skipping subscription.created plan update: user ${uid} was deleted (tombstone found)`);
+            return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
+          }
           try {
             await getOrCreateUserByAuthId(env, uid, customerEmail || '');
             console.log(`✅ [WEBHOOK] Created missing user row for first-time subscriber: ${uid}`);
@@ -272,11 +284,17 @@ export async function onRequest(context) {
       const customerId = sub.customer || null;
       const { uid, email: customerEmail } = await fetchCustomerInfo(customerId);
 
-      // Ensure user row exists in D1 for first-time subscribers
+      // Ensure user row exists in D1 for first-time subscribers.
+      // Skip if a tombstone exists — the account was intentionally deleted.
       if (uid) {
         const db = getDb(env);
         const existingUser = db ? await db.prepare('SELECT id FROM users WHERE auth_id = ?').bind(uid).first() : null;
         if (!existingUser) {
+          const tombstone = await env.JOBHACKAI_KV?.get(`deleted:${uid}`);
+          if (tombstone) {
+            console.log(`⏭️ [WEBHOOK] Skipping subscription.updated plan update: user ${uid} was deleted (tombstone found)`);
+            return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
+          }
           try {
             await getOrCreateUserByAuthId(env, uid, customerEmail || '');
             console.log(`✅ [WEBHOOK] Created missing user row for first-time subscriber: ${uid}`);
