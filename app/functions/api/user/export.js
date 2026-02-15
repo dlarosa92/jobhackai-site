@@ -48,7 +48,7 @@ export async function onRequest(context) {
     } catch (colErr) {
       if (colErr.message && colErr.message.includes('no such column')) {
         user = await db.prepare(
-          'SELECT id, auth_id, email, plan, created_at, updated_at FROM users WHERE auth_id = ?'
+          'SELECT id, auth_id, email, created_at, updated_at FROM users WHERE auth_id = ?'
         ).bind(uid).first();
       } else {
         throw colErr;
@@ -91,11 +91,11 @@ export async function onRequest(context) {
       exportDate: new Date().toISOString(),
       user: {
         email: user.email,
-        plan: user.plan,
+        ...(user.plan !== undefined && { plan: user.plan }),
         createdAt: user.created_at,
         updatedAt: user.updated_at,
-        lastLoginAt: user.last_login_at,
-        lastActivityAt: user.last_activity_at
+        ...(user.last_login_at !== undefined && { lastLoginAt: user.last_login_at }),
+        ...(user.last_activity_at !== undefined && { lastActivityAt: user.last_activity_at })
       },
       resumeSessions,
       feedbackSessions,
