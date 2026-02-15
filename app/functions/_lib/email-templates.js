@@ -31,7 +31,7 @@ function emailWrapper(bodyContent) {
           <!-- Footer -->
           <tr>
             <td style="padding:24px 32px;border-top:1px solid #e5e7eb;text-align:center;">
-              <p style="margin:0;font-size:12px;color:#9ca3af;">&copy; 2025 JobHackAI LLC &middot; <a href="mailto:privacy@jobhackai.io" style="color:#9ca3af;text-decoration:underline;">privacy@jobhackai.io</a></p>
+              <p style="margin:0;font-size:12px;color:#9ca3af;">&copy; 2026 JobHackAI LLC &middot; <a href="mailto:privacy@jobhackai.io" style="color:#9ca3af;text-decoration:underline;">privacy@jobhackai.io</a></p>
             </td>
           </tr>
         </table>
