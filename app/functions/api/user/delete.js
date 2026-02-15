@@ -207,7 +207,6 @@ export async function onRequest(context) {
         { table: 'interview_question_sets', sql: "DELETE FROM interview_question_sets WHERE user_id = ?", bind: userId },
         { table: 'mock_interview_sessions', sql: "DELETE FROM mock_interview_sessions WHERE user_id = ?", bind: userId },
         { table: 'mock_interview_usage', sql: "DELETE FROM mock_interview_usage WHERE user_id = ?", bind: userId },
-        { table: 'plan_change_history', sql: "DELETE FROM plan_change_history WHERE user_id = ?", bind: userId },
       );
     }
 
