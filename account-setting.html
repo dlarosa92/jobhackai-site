@@ -349,6 +349,16 @@
       color: #fff;
       border-color: #1976D2;
     }
+    .btn-outline.btn-danger {
+      color: #dc2626;
+      border-color: #dc2626;
+    }
+    .btn-outline.btn-danger:hover,
+    .btn-outline.btn-danger:focus {
+      background: #dc2626;
+      color: #fff;
+      border-color: #dc2626;
+    }
     .btn-outline-grey {
       background: #fff;
       color: #232B36;
@@ -534,11 +544,9 @@
             View Cookie Policy
           </a>
         </div>
-        <div class="settings-note" style="margin-top:1rem;">
-          <a href="#" id="delete-account-link" style="color:#6B7280;text-decoration:none;font-size:0.85rem;transition:color 0.15s;" onmouseover="this.style.color='#dc2626'" onmouseout="this.style.color='#6B7280'">
-            Delete Account
-          </a>
-        </div>
+        <button class="btn-outline btn-danger" type="button" id="delete-account-link" style="margin-top:1rem;">
+          Delete Account
+        </button>
         <div class="settings-note" style="margin-top:0.8rem;font-size:0.8rem;color:#9ca3af;">
           Your tool history is automatically deleted after 90 days per our data retention policy.
         </div>
