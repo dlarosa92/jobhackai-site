@@ -47,7 +47,7 @@ async function sendWarningEmails(db, env) {
   try {
     // Users inactive for 23+ months with no active subscription and no warning sent yet
     const warningUsers = await db.prepare(`
-      SELECT id, auth_id, email FROM users
+      SELECT id, auth_id, email, stripe_customer_id FROM users
       WHERE deletion_warning_sent_at IS NULL
         AND (plan IS NULL OR plan = 'free')
         AND (
@@ -68,6 +68,34 @@ async function sendWarningEmails(db, env) {
 
     for (const user of users) {
       try {
+        // Verify against Stripe before warning — D1 plan state may be stale
+        if (env.STRIPE_SECRET_KEY) {
+          let stripeCustomerId = user.stripe_customer_id || null;
+          if (!stripeCustomerId && user.email) {
+            try {
+              stripeCustomerId = await findStripeCustomerByEmail(env, user.email, user.auth_id);
+            } catch (_) {}
+          }
+          if (stripeCustomerId) {
+            try {
+              const subCheck = await hasActiveStripeSubscriptions(env, stripeCustomerId);
+              if (subCheck.hasActive) {
+                console.warn(`[inactive-cleaner] User ${user.auth_id} has active Stripe subscriptions — skipping warning and repairing D1 plan`);
+                try {
+                  await db.prepare(
+                    "UPDATE users SET plan = 'paid' WHERE id = ?"
+                  ).bind(user.id).run();
+                } catch (_) {}
+                continue;
+              }
+            } catch (_) {
+              // Can't verify Stripe — skip this user to be safe
+              console.warn(`[inactive-cleaner] Stripe check failed for ${user.auth_id}, skipping warning`);
+              continue;
+            }
+          }
+        }
+
         if (user.email) {
           const userName = user.email.split('@')[0];
           const { subject, html } = inactivityWarningEmail(userName);
@@ -252,6 +280,29 @@ async function findStripeCustomerByEmail(env, email, uid) {
   return customers.sort((a, b) => (b.created || 0) - (a.created || 0))[0]?.id || null;
 }
 
+async function hasActiveStripeSubscriptions(env, customerId) {
+  const apiBase = 'https://api.stripe.com/v1';
+  const headers = {
+    'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`
+  };
+
+  const listRes = await fetch(
+    `${apiBase}/subscriptions?customer=${encodeURIComponent(customerId)}&status=all&limit=100`,
+    { headers }
+  );
+  if (!listRes.ok) {
+    // If we can't verify, assume subscriptions may exist to avoid deleting paying users
+    return { hasActive: true, error: `List subscriptions failed (${listRes.status})` };
+  }
+
+  const listData = await listRes.json();
+  const activeSubs = (listData?.data || []).filter(s =>
+    s && ['active', 'trialing', 'past_due'].includes(s.status)
+  );
+
+  return { hasActive: activeSubs.length > 0, subscriptions: activeSubs };
+}
+
 async function cancelStripeSubscriptions(env, customerId) {
   const apiBase = 'https://api.stripe.com/v1';
   const headers = {
@@ -309,9 +360,9 @@ async function deleteUserData(db, env, user) {
   const userId = user.id;
   const uid = user.auth_id;
 
-  // Cancel any active Stripe subscriptions before deleting data.
-  // The deletion query filters to plan = 'free', but billing state can be out
-  // of sync — a stale plan column shouldn't let a charging subscription survive.
+  // Verify against Stripe (source of truth) before deleting. The SQL query
+  // filters on plan IS NULL OR plan = 'free', but D1 can be stale. If Stripe
+  // shows active subscriptions the user is actually paying — fix D1 and skip.
   if (env.STRIPE_SECRET_KEY) {
     let stripeCustomerId = user.stripe_customer_id || null;
 
@@ -328,14 +379,27 @@ async function deleteUserData(db, env, user) {
     }
 
     if (stripeCustomerId) {
-      let cancelResult;
+      // Check for active subscriptions BEFORE cancelling anything
+      let subCheck;
       try {
-        cancelResult = await cancelStripeSubscriptions(env, stripeCustomerId);
-      } catch (stripeErr) {
-        cancelResult = { ok: false, error: stripeErr.message };
+        subCheck = await hasActiveStripeSubscriptions(env, stripeCustomerId);
+      } catch (err) {
+        // If we can't reach Stripe, err on the side of caution — don't delete
+        throw new Error(`Stripe check failed for ${uid}, aborting deletion: ${err.message}`);
       }
-      if (cancelResult && !cancelResult.ok) {
-        throw new Error(`Stripe cancellation failed for ${uid}, aborting deletion to avoid orphaned billing: ${cancelResult.error}`);
+
+      if (subCheck.hasActive) {
+        // User has live Stripe subscriptions — D1 plan state was stale.
+        // Repair D1 and abort deletion so a paying user is never removed.
+        console.warn(`[inactive-cleaner] User ${uid} has active Stripe subscriptions — skipping deletion and repairing D1 plan`);
+        try {
+          await db.prepare(
+            "UPDATE users SET plan = 'paid', deletion_warning_sent_at = NULL WHERE id = ?"
+          ).bind(userId).run();
+        } catch (repairErr) {
+          console.error(`[inactive-cleaner] D1 plan repair failed for ${uid}:`, repairErr.message);
+        }
+        throw new Error(`SKIP: user ${uid} has active Stripe subscriptions (stale D1 plan)`);
       }
     }
   }
