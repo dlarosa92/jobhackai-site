@@ -71,9 +71,11 @@ export async function onRequest(context) {
         if (searchRes.ok) {
           const searchData = await searchRes.json();
           const customers = (searchData?.data || []).filter(c => c && c.deleted !== true);
-          const uidMatches = customers.filter(c => c?.metadata?.firebaseUid === uid);
-          const candidates = uidMatches.length > 0 ? uidMatches : customers;
-          // Prefer customer with active subscription
+          const candidates = customers.filter(c => c?.metadata?.firebaseUid === uid);
+          if (candidates.length === 0 && customers.length > 0) {
+            console.warn('[DELETE-USER] Stripe email search found customers but none matched firebaseUid — skipping to avoid cancelling wrong subscription');
+          }
+          // Prefer candidate with active subscription
           for (const candidate of candidates) {
             const subsRes = await stripe(env, `/subscriptions?customer=${candidate.id}&status=all&limit=10`);
             if (subsRes.ok) {
