@@ -29,6 +29,10 @@ async function runInactiveAccountCleanup(env) {
 
   // Phase 2: Delete users at 24+ months who were already warned
   await deleteInactiveUsers(db, env);
+
+  // Phase 3: Purge expired tombstones (> 90 days) to prevent unbounded growth.
+  // 90 days covers Stripe's retry window (72 h) with wide margin.
+  await purgeExpiredTombstones(db);
 }
 
 async function checkActivityColumns(db) {
@@ -40,6 +44,21 @@ async function checkActivityColumns(db) {
   } catch (err) {
     console.error('[inactive-cleaner] Failed to inspect users table:', err.message);
     return false;
+  }
+}
+
+async function purgeExpiredTombstones(db) {
+  try {
+    const result = await db.prepare(
+      "DELETE FROM deleted_auth_ids WHERE deleted_at < datetime('now', '-90 days')"
+    ).run();
+    const purged = result?.meta?.changes || 0;
+    if (purged > 0) {
+      console.log(`[inactive-cleaner] Purged ${purged} expired tombstones (> 90 days old)`);
+    }
+  } catch (err) {
+    // Non-critical: table may not exist yet in older schemas
+    console.warn('[inactive-cleaner] Tombstone purge error:', err.message);
   }
 }
 
@@ -80,11 +99,12 @@ async function sendWarningEmails(db, env) {
             try {
               const subCheck = await hasActiveStripeSubscriptions(env, stripeCustomerId);
               if (subCheck.hasActive) {
-                console.warn(`[inactive-cleaner] User ${user.auth_id} has active Stripe subscriptions — skipping warning and repairing D1 plan`);
+                const repairedPlan = planFromSubscription(env, subCheck.subscriptions) || 'essential';
+                console.warn(`[inactive-cleaner] User ${user.auth_id} has active Stripe subscriptions — skipping warning and repairing D1 plan to '${repairedPlan}'`);
                 try {
                   await db.prepare(
-                    "UPDATE users SET plan = 'paid' WHERE id = ?"
-                  ).bind(user.id).run();
+                    "UPDATE users SET plan = ? WHERE id = ?"
+                  ).bind(repairedPlan, user.id).run();
                 } catch (_) {}
                 continue;
               }
@@ -303,6 +323,33 @@ async function hasActiveStripeSubscriptions(env, customerId) {
   return { hasActive: activeSubs.length > 0, subscriptions: activeSubs };
 }
 
+// Derive a valid plan name from Stripe subscription price IDs.
+// Uses the same env-based price mapping as the Stripe webhook handler.
+// Falls back to null so callers can default to 'essential' (lowest paid tier).
+function planFromSubscription(env, subscriptions) {
+  if (!subscriptions || subscriptions.length === 0) return null;
+
+  const essential = env.STRIPE_PRICE_ESSENTIAL_MONTHLY || env.PRICE_ESSENTIAL_MONTHLY || env.STRIPE_PRICE_ESSENTIAL || env.PRICE_ESSENTIAL;
+  const pro = env.STRIPE_PRICE_PRO_MONTHLY || env.PRICE_PRO_MONTHLY || env.STRIPE_PRICE_PRO || env.PRICE_PRO;
+  const premium = env.STRIPE_PRICE_PREMIUM_MONTHLY || env.PRICE_PREMIUM_MONTHLY || env.STRIPE_PRICE_PREMIUM || env.PRICE_PREMIUM;
+
+  // Check each active subscription's price ID against known plans.
+  // Return the highest tier found (premium > pro > essential).
+  const planRank = { essential: 1, pro: 2, premium: 3 };
+  let best = null;
+  for (const sub of subscriptions) {
+    const priceId = sub?.items?.data?.[0]?.price?.id || sub?.plan?.id || '';
+    let matched = null;
+    if (priceId && priceId === premium) matched = 'premium';
+    else if (priceId && priceId === pro) matched = 'pro';
+    else if (priceId && priceId === essential) matched = 'essential';
+    if (matched && (!best || planRank[matched] > planRank[best])) {
+      best = matched;
+    }
+  }
+  return best;
+}
+
 async function cancelStripeSubscriptions(env, customerId) {
   const apiBase = 'https://api.stripe.com/v1';
   const headers = {
@@ -391,11 +438,12 @@ async function deleteUserData(db, env, user) {
       if (subCheck.hasActive) {
         // User has live Stripe subscriptions — D1 plan state was stale.
         // Repair D1 and abort deletion so a paying user is never removed.
-        console.warn(`[inactive-cleaner] User ${uid} has active Stripe subscriptions — skipping deletion and repairing D1 plan`);
+        const repairedPlan = planFromSubscription(env, subCheck.subscriptions) || 'essential';
+        console.warn(`[inactive-cleaner] User ${uid} has active Stripe subscriptions — skipping deletion and repairing D1 plan to '${repairedPlan}'`);
         try {
           await db.prepare(
-            "UPDATE users SET plan = 'paid', deletion_warning_sent_at = NULL WHERE id = ?"
-          ).bind(userId).run();
+            "UPDATE users SET plan = ?, deletion_warning_sent_at = NULL WHERE id = ?"
+          ).bind(repairedPlan, userId).run();
         } catch (repairErr) {
           console.error(`[inactive-cleaner] D1 plan repair failed for ${uid}:`, repairErr.message);
         }
