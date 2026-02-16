@@ -440,6 +440,7 @@ async function deleteUserData(db, env, user) {
     { sql: "DELETE FROM interview_question_sets WHERE user_id = ?", bind: userId },
     { sql: "DELETE FROM mock_interview_sessions WHERE user_id = ?", bind: userId },
     { sql: "DELETE FROM mock_interview_usage WHERE user_id = ?", bind: userId },
+    { sql: "DELETE FROM first_resume_snapshots WHERE user_id = ?", bind: userId },
   ];
 
   for (const { sql, bind } of deletions) {
@@ -462,7 +463,7 @@ async function deleteUserData(db, env, user) {
   }
   if (env.JOBHACKAI_KV) {
     try {
-      await env.JOBHACKAI_KV.put(`deleted:${uid}`, '1', { expirationTtl: 2592000 });
+      await env.JOBHACKAI_KV.put(`deleted:${uid}`, '1', { expirationTtl: 7776000 });
     } catch (_) {}
   }
 

@@ -73,7 +73,10 @@ export async function onRequest(context) {
       coverLetterHistory,
       usageEvents,
       cookieConsentRows,
-      firstResumeSnapshotRows
+      firstResumeSnapshotRows,
+      roleUsageLogRows,
+      featureDailyUsageRows,
+      mockInterviewUsageRows
     ] = await Promise.all([
       queryAll(db, 'SELECT id, title, role, ats_score, ats_ready, created_at FROM resume_sessions WHERE user_id = ?', userId),
       queryAll(db, 'SELECT fs.id, fs.resume_session_id, fs.feedback_json, fs.created_at FROM feedback_sessions fs INNER JOIN resume_sessions rs ON fs.resume_session_id = rs.id WHERE rs.user_id = ?', userId),
@@ -83,7 +86,10 @@ export async function onRequest(context) {
       queryAll(db, 'SELECT id, title, role, company, seniority, tone, job_description, resume_text, cover_letter_text, created_at FROM cover_letter_history WHERE user_id = ?', uid),
       queryAll(db, 'SELECT id, feature, tokens_used, created_at FROM usage_events WHERE user_id = ?', userId),
       queryAll(db, 'SELECT consent_json, updated_at FROM cookie_consents WHERE user_id = ?', userId),
-      queryAll(db, 'SELECT resume_session_id, snapshot_json, created_at FROM first_resume_snapshots WHERE user_id = ?', userId)
+      queryAll(db, 'SELECT resume_session_id, snapshot_json, created_at FROM first_resume_snapshots WHERE user_id = ?', userId),
+      queryAll(db, 'SELECT id, role_label, role_family, keyword_score, created_at FROM role_usage_log WHERE user_id = ?', uid),
+      queryAll(db, 'SELECT id, feature, usage_date, count, created_at FROM feature_daily_usage WHERE user_id = ?', userId),
+      queryAll(db, 'SELECT id, month, sessions_used, last_reset_at FROM mock_interview_usage WHERE user_id = ?', userId)
     ]);
 
     const cookieConsent = cookieConsentRows.length > 0 ? cookieConsentRows[0] : null;
@@ -108,7 +114,10 @@ export async function onRequest(context) {
       coverLetterHistory,
       usageEvents,
       cookieConsent,
-      firstResumeSnapshot
+      firstResumeSnapshot,
+      roleUsageLog: roleUsageLogRows,
+      featureDailyUsage: featureDailyUsageRows,
+      mockInterviewUsage: mockInterviewUsageRows
     };
 
     const headers = {

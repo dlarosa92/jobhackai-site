@@ -187,3 +187,19 @@ CREATE TABLE IF NOT EXISTS deleted_auth_ids (
 );
 
 CREATE INDEX IF NOT EXISTS idx_deleted_auth_ids_deleted_at ON deleted_auth_ids(deleted_at);
+
+-- ============================================================
+-- FIRST_RESUME_SNAPSHOTS TABLE
+-- Stores the initial resume snapshot per user for progress tracking
+-- ============================================================
+CREATE TABLE IF NOT EXISTS first_resume_snapshots (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  resume_session_id INTEGER NOT NULL,
+  snapshot_json TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(user_id),
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_first_snapshot_user_id ON first_resume_snapshots(user_id);
