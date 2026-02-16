@@ -352,59 +352,6 @@ function planFromSubscription(env, subscriptions) {
   return best;
 }
 
-async function cancelStripeSubscriptions(env, customerId) {
-  const apiBase = 'https://api.stripe.com/v1';
-  const headers = {
-    'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`,
-    'Content-Type': 'application/x-www-form-urlencoded'
-  };
-
-  // List active/trialing/past_due subscriptions for this customer
-  const listRes = await fetch(
-    `${apiBase}/subscriptions?customer=${encodeURIComponent(customerId)}&status=all&limit=100`,
-    { headers }
-  );
-  if (!listRes.ok) {
-    const errText = await listRes.text().catch(() => '');
-    console.warn(`[inactive-cleaner] Stripe list subscriptions failed (${listRes.status}):`, errText);
-    return { ok: false, error: `List subscriptions failed (${listRes.status}): ${errText}` };
-  }
-
-  const listData = await listRes.json();
-  const activeSubs = (listData?.data || []).filter(s =>
-    s && ['active', 'trialing', 'past_due'].includes(s.status)
-  );
-
-  if (activeSubs.length === 0) {
-    return { ok: true, cancelled: 0 };
-  }
-
-  const failures = [];
-  for (const sub of activeSubs) {
-    try {
-      const cancelRes = await fetch(`${apiBase}/subscriptions/${sub.id}`, {
-        method: 'DELETE',
-        headers
-      });
-      if (cancelRes.ok) {
-        console.log(`[inactive-cleaner] Cancelled Stripe subscription: ${sub.id}`);
-      } else {
-        const errText = await cancelRes.text().catch(() => '');
-        console.warn(`[inactive-cleaner] Failed to cancel subscription ${sub.id} (${cancelRes.status}):`, errText);
-        failures.push(sub.id);
-      }
-    } catch (err) {
-      console.warn(`[inactive-cleaner] Stripe cancel error for ${sub.id}:`, err.message);
-      failures.push(sub.id);
-    }
-  }
-
-  if (failures.length > 0) {
-    return { ok: false, error: `Failed to cancel subscriptions: ${failures.join(', ')}` };
-  }
-  return { ok: true, cancelled: activeSubs.length };
-}
-
 async function deleteUserData(db, env, user) {
   const userId = user.id;
   const uid = user.auth_id;

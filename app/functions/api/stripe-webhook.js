@@ -162,7 +162,7 @@ export async function onRequest(context) {
             return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
           }
           try {
-            await getOrCreateUserByAuthId(env, uid, customerEmail || '');
+            await getOrCreateUserByAuthId(env, uid, customerEmail || '', { updateActivity: false });
             console.log(`✅ [WEBHOOK] Created missing user row for first-time subscriber: ${uid}`);
           } catch (createErr) {
             console.error(`❌ [WEBHOOK] Failed to create user row for ${uid}:`, createErr?.message || createErr);
@@ -246,8 +246,8 @@ export async function onRequest(context) {
             return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
           }
           try {
-            await getOrCreateUserByAuthId(env, uid, customerEmail || '');
-            console.log(`✅ [WEBHOOK] Created missing user row for first-time subscriber: ${uid}`);
+            await getOrCreateUserByAuthId(env, uid, customerEmail || '', { updateActivity: false });
+            console.log(`✅ [WEBHOOK] Ensured user row exists for subscriber: ${uid}`);
           } catch (createErr) {
             console.error(`❌ [WEBHOOK] Failed to create user row for ${uid}:`, createErr?.message || createErr);
             return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
@@ -300,8 +300,8 @@ export async function onRequest(context) {
             return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
           }
           try {
-            await getOrCreateUserByAuthId(env, uid, customerEmail || '');
-            console.log(`✅ [WEBHOOK] Created missing user row for first-time subscriber: ${uid}`);
+            await getOrCreateUserByAuthId(env, uid, customerEmail || '', { updateActivity: false });
+            console.log(`✅ [WEBHOOK] Ensured user row exists for subscriber: ${uid}`);
           } catch (createErr) {
             console.error(`❌ [WEBHOOK] Failed to create user row for ${uid}:`, createErr?.message || createErr);
             return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
