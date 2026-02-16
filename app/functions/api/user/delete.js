@@ -209,6 +209,7 @@ export async function onRequest(context) {
         { table: 'interview_question_sets', sql: "DELETE FROM interview_question_sets WHERE user_id = ?", bind: userId },
         { table: 'mock_interview_sessions', sql: "DELETE FROM mock_interview_sessions WHERE user_id = ?", bind: userId },
         { table: 'mock_interview_usage', sql: "DELETE FROM mock_interview_usage WHERE user_id = ?", bind: userId },
+        { table: 'first_resume_snapshots', sql: "DELETE FROM first_resume_snapshots WHERE user_id = ?", bind: userId },
       );
     }
 
@@ -291,7 +292,7 @@ export async function onRequest(context) {
     }
     if (env.JOBHACKAI_KV) {
       try {
-        await env.JOBHACKAI_KV.put(`deleted:${uid}`, '1', { expirationTtl: 2592000 });
+        await env.JOBHACKAI_KV.put(`deleted:${uid}`, '1', { expirationTtl: 7776000 });
       } catch (kvTombErr) {
         errors.push(`KV tombstone write failed: ${kvTombErr.message}`);
         console.warn('[DELETE-USER] KV tombstone write failed (D1 tombstone is authoritative):', kvTombErr?.message || kvTombErr);
