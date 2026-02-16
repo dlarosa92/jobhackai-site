@@ -65,6 +65,7 @@ async function purgeExpiredTombstones(db) {
 async function sendWarningEmails(db, env) {
   try {
     // Users inactive for 23+ months with no active subscription and no warning sent yet
+    // Exclude legacy users (both activity fields NULL) until they have at least one activity recorded
     const warningUsers = await db.prepare(`
       SELECT id, auth_id, email, stripe_customer_id FROM users
       WHERE deletion_warning_sent_at IS NULL
@@ -75,9 +76,6 @@ async function sendWarningEmails(db, env) {
           OR
           (last_login_at IS NULL AND last_activity_at IS NOT NULL
            AND last_activity_at < datetime('now', '-23 months'))
-          OR
-          (last_login_at IS NULL AND last_activity_at IS NULL
-           AND created_at < datetime('now', '-23 months'))
         )
       LIMIT 100
     `).all();
@@ -148,6 +146,7 @@ async function sendWarningEmails(db, env) {
 async function deleteInactiveUsers(db, env) {
   try {
     // Users inactive for 24+ months who were already warned at least 30 days ago
+    // Exclude legacy users (both activity fields NULL) until they have at least one activity recorded
     const deletionUsers = await db.prepare(`
       SELECT id, auth_id, email, stripe_customer_id FROM users
       WHERE deletion_warning_sent_at IS NOT NULL
@@ -159,9 +158,6 @@ async function deleteInactiveUsers(db, env) {
           OR
           (last_login_at IS NULL AND last_activity_at IS NOT NULL
            AND last_activity_at < datetime('now', '-24 months'))
-          OR
-          (last_login_at IS NULL AND last_activity_at IS NULL
-           AND created_at < datetime('now', '-24 months'))
         )
       LIMIT 50
     `).all();
