@@ -44,7 +44,7 @@ export function getDb(env) {
  * @param {string|null} email - User email (optional)
  * @returns {Promise<Object>} User record { id, auth_id, email, created_at, updated_at }
  */
-export async function getOrCreateUserByAuthId(env, authId, email = null) {
+export async function getOrCreateUserByAuthId(env, authId, email = null, { updateActivity = true } = {}) {
   const db = getDb(env);
   if (!db) {
     console.warn('[DB] D1 binding not available');
@@ -76,15 +76,20 @@ export async function getOrCreateUserByAuthId(env, authId, email = null) {
     }
 
     if (existing) {
-      // Always refresh last_login_at and clear any pending deletion warning.
-      // All remaining callers of getOrCreateUserByAuthId are user-initiated
-      // API requests (webhook/background paths were decoupled in updateUserPlan,
-      // resetFeatureDailyUsage, and resetUsageEvents).
+      // Refresh last_login_at and clear any pending deletion warning for
+      // user-initiated requests. Background callers (webhooks, cron) pass
+      // updateActivity: false to avoid falsely resetting inactivity timers.
       if (email && email !== existing.email) {
         try {
-          await db.prepare(
-            'UPDATE users SET email = ?, last_login_at = datetime(\'now\'), deletion_warning_sent_at = NULL, updated_at = datetime(\'now\') WHERE id = ?'
-          ).bind(email, existing.id).run();
+          if (updateActivity) {
+            await db.prepare(
+              'UPDATE users SET email = ?, last_login_at = datetime(\'now\'), deletion_warning_sent_at = NULL, updated_at = datetime(\'now\') WHERE id = ?'
+            ).bind(email, existing.id).run();
+          } else {
+            await db.prepare(
+              'UPDATE users SET email = ?, updated_at = datetime(\'now\') WHERE id = ?'
+            ).bind(email, existing.id).run();
+          }
         } catch (colErr) {
           if (colErr.message && colErr.message.includes('no such column')) {
             console.warn('[DB] Activity columns not yet migrated, falling back');
@@ -97,7 +102,7 @@ export async function getOrCreateUserByAuthId(env, authId, email = null) {
         }
         existing.email = email;
         existing.updated_at = new Date().toISOString();
-      } else {
+      } else if (updateActivity) {
         try {
           await db.prepare(
             'UPDATE users SET last_login_at = datetime(\'now\'), deletion_warning_sent_at = NULL WHERE id = ?'

@@ -36,7 +36,7 @@ export async function onRequest(context) {
           
           // Attempt to mirror into D1
           if (!isD1Available(env)) continue;
-          const d1User = await getOrCreateUserByAuthId(env, record.uid, null);
+          const d1User = await getOrCreateUserByAuthId(env, record.uid, null, { updateActivity: false });
           if (!d1User) continue;
           // Upsert session with scores
           const session = await upsertResumeSessionWithScores(env, d1User.id, {
