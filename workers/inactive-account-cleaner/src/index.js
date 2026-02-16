@@ -311,8 +311,10 @@ async function hasActiveStripeSubscriptions(env, customerId) {
     { headers }
   );
   if (!listRes.ok) {
-    // If we can't verify, assume subscriptions may exist to avoid deleting paying users
-    return { hasActive: true, error: `List subscriptions failed (${listRes.status})` };
+    // Can't verify — throw so callers skip this user without repairing D1.
+    // We must NOT return hasActive: true here because callers would repair
+    // the plan to a paid tier without actual Stripe verification.
+    throw new Error(`Stripe list subscriptions failed (${listRes.status})`);
   }
 
   const listData = await listRes.json();
