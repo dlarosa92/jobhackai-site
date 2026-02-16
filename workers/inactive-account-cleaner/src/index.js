@@ -268,6 +268,12 @@ async function deleteFirebaseAuthUser(env, uid) {
     );
     if (!deleteRes.ok) {
       const errText = await deleteRes.text().catch(() => '');
+      // Treat "user not found" as success — the user was already deleted
+      // (e.g., prior run succeeded at Firebase but failed during D1 cleanup).
+      // Firebase Identity Toolkit returns USER_NOT_FOUND for missing accounts.
+      if (errText.includes('USER_NOT_FOUND')) {
+        return { ok: true, alreadyDeleted: true };
+      }
       return { ok: false, error: `Firebase Auth delete failed (${deleteRes.status}): ${errText}` };
     }
     return { ok: true };
@@ -407,7 +413,7 @@ async function deleteUserData(db, env, user) {
   // and be re-provisioned after retention deletion).
   const fbResult = await deleteFirebaseAuthUser(env, uid);
   if (fbResult.ok) {
-    console.log(`[inactive-cleaner] Firebase Auth user deleted: ${uid}`);
+    console.log(`[inactive-cleaner] Firebase Auth user ${fbResult.alreadyDeleted ? 'already deleted' : 'deleted'}: ${uid}`);
   } else {
     throw new Error(`Firebase Auth deletion failed for ${uid}, aborting data deletion: ${fbResult.error}`);
   }
