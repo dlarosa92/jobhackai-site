@@ -64,7 +64,7 @@ export async function onRequest(context) {
     const userId = user.id;
 
     // Aggregate all user data (run queries in parallel where possible)
-    const [
+    let [
       resumeSessions,
       feedbackSessions,
       linkedinRuns,

@@ -78,7 +78,13 @@ export async function onRequest(context) {
       return json({ ok: false, code: 'CUSTOMER_NOT_FOUND' }, 500, origin, env);
     }
 
-    const subs = await listSubscriptions(env, customerId);
+    let subs = [];
+    try {
+      subs = await listSubscriptions(env, customerId);
+    } catch (subsErr) {
+      console.log('[BILLING-UPGRADE] Failed to list subscriptions (non-fatal)', subsErr?.message || subsErr);
+      // Treat Stripe errors as "no subscriptions found" to allow upgrade to proceed
+    }
     const activeSubs = subs.filter((sub) =>
       sub && ['active', 'trialing', 'past_due'].includes(sub.status)
     );

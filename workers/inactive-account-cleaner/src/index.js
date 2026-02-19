@@ -294,12 +294,13 @@ async function findStripeCustomerByEmail(env, email, uid) {
   const customers = (searchData?.data || []).filter(c => c && c.deleted !== true);
   if (customers.length === 0) return null;
 
-  // Prefer customer whose metadata matches this Firebase UID
+  // Only return customer whose metadata matches this Firebase UID
+  // Skip entirely when no UID match is found to avoid matching wrong customer
   const uidMatch = customers.find(c => c?.metadata?.firebaseUid === uid);
   if (uidMatch) return uidMatch.id;
 
-  // Otherwise return the most recently created customer
-  return customers.sort((a, b) => (b.created || 0) - (a.created || 0))[0]?.id || null;
+  // No UID match found — skip to avoid matching wrong customer
+  return null;
 }
 
 async function hasActiveStripeSubscriptions(env, customerId) {

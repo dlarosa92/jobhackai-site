@@ -272,7 +272,13 @@ export async function onRequest(context) {
     }
 
     // Guard against duplicate subscriptions for paid plans.
-    const subs = await listSubscriptions(env, customerId);
+    let subs = [];
+    try {
+      subs = await listSubscriptions(env, customerId);
+    } catch (subsErr) {
+      console.log('🟡 [CHECKOUT] Failed to list subscriptions (non-fatal)', subsErr?.message || subsErr);
+      // Treat Stripe errors as "no subscriptions found" to allow checkout to proceed
+    }
     const activeSubs = subs.filter((sub) =>
       sub && ['active', 'trialing', 'past_due'].includes(sub.status)
     );
