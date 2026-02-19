@@ -78,7 +78,7 @@ export async function onRequest(context) {
       featureDailyUsageRows,
       mockInterviewUsageRows
     ] = await Promise.all([
-      queryAll(db, 'SELECT id, title, role, ats_score, ats_ready, created_at FROM resume_sessions WHERE user_id = ?', userId),
+      queryAll(db, 'SELECT id, title, role, ats_score, ats_ready, created_at, raw_text_location FROM resume_sessions WHERE user_id = ?', userId),
       queryAll(db, 'SELECT fs.id, fs.resume_session_id, fs.feedback_json, fs.created_at FROM feedback_sessions fs INNER JOIN resume_sessions rs ON fs.resume_session_id = rs.id WHERE rs.user_id = ?', userId),
       queryAll(db, 'SELECT id, role, status, overall_score, input_json, output_json, created_at FROM linkedin_runs WHERE user_id = ?', uid),
       queryAll(db, 'SELECT id, role, seniority, types_json, questions_json, selected_ids_json, jd, created_at FROM interview_question_sets WHERE user_id = ?', userId),
@@ -94,6 +94,24 @@ export async function onRequest(context) {
 
     const cookieConsent = cookieConsentRows.length > 0 ? cookieConsentRows[0] : null;
     const firstResumeSnapshot = firstResumeSnapshotRows.length > 0 ? firstResumeSnapshotRows[0] : null;
+
+    // Fetch resume text from KV storage for sessions that have raw_text_location
+    if (env.JOBHACKAI_KV && resumeSessions.length > 0) {
+      const kvFetches = resumeSessions.map(async (session) => {
+        if (session.raw_text_location) {
+          try {
+            const resumeText = await env.JOBHACKAI_KV.get(session.raw_text_location);
+            if (resumeText) {
+              session.resumeText = resumeText;
+            }
+          } catch (kvErr) {
+            console.warn('[EXPORT] Failed to fetch resume text from KV:', session.raw_text_location, kvErr.message);
+          }
+        }
+        return session;
+      });
+      resumeSessions = await Promise.all(kvFetches);
+    }
 
     // Build export object (exclude internal IDs)
     const exportData = {
@@ -157,7 +175,7 @@ async function queryAll(db, sql, bind) {
 }
 
 function corsHeaders(origin, env) {
-  const fallbackOrigins = ['https://dev.jobhackai.io', 'https://qa.jobhackai.io'];
+  const fallbackOrigins = ['https://dev.jobhackai.io', 'https://qa.jobhackai.io', 'https://app.jobhackai.io'];
   const configured = env?.FRONTEND_URL || null;
   const allowedList = configured ? [configured, ...fallbackOrigins] : fallbackOrigins;
   const allowed = origin && allowedList.includes(origin) ? origin : (configured || 'https://dev.jobhackai.io');

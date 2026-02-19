@@ -42,9 +42,12 @@ export function getDb(env) {
  * @param {Object} env - Cloudflare environment with DB binding
  * @param {string} authId - Firebase UID
  * @param {string|null} email - User email (optional)
+ * @param {Object} options - Options object
+ * @param {boolean} options.updateActivity - Whether to update activity timestamps (default: true)
+ * @param {Object} options.context - Cloudflare execution context (optional, for waitUntil)
  * @returns {Promise<Object>} User record { id, auth_id, email, created_at, updated_at }
  */
-export async function getOrCreateUserByAuthId(env, authId, email = null, { updateActivity = true } = {}) {
+export async function getOrCreateUserByAuthId(env, authId, email = null, { updateActivity = true, context = null } = {}) {
   const db = getDb(env);
   if (!db) {
     console.warn('[DB] D1 binding not available');
@@ -148,9 +151,13 @@ export async function getOrCreateUserByAuthId(env, authId, email = null, { updat
     if (email) {
       const userName = email.split('@')[0];
       const { subject, html } = welcomeEmail(userName);
-      sendEmail(env, { to: email, subject, html }).catch((err) => {
+      const emailPromise = sendEmail(env, { to: email, subject, html }).catch((err) => {
         console.warn('[DB] Failed to send welcome email (non-blocking):', err.message);
       });
+      // Use context.waitUntil() if available to ensure email sends reliably in Cloudflare Workers
+      if (context && typeof context.waitUntil === 'function') {
+        context.waitUntil(emailPromise);
+      }
     }
 
     console.log('[DB] Created new user:', { id: result.id, authId });

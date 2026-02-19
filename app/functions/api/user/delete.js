@@ -319,7 +319,7 @@ export async function onRequest(context) {
 }
 
 function corsHeaders(origin, env) {
-  const fallbackOrigins = ['https://dev.jobhackai.io', 'https://qa.jobhackai.io'];
+  const fallbackOrigins = ['https://dev.jobhackai.io', 'https://qa.jobhackai.io', 'https://app.jobhackai.io'];
   const configured = env?.FRONTEND_URL || null;
   const allowedList = configured ? [configured, ...fallbackOrigins] : fallbackOrigins;
   const allowed = origin && allowedList.includes(origin) ? origin : (configured || 'https://dev.jobhackai.io');
