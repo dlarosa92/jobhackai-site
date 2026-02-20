@@ -7,6 +7,9 @@ compatibility_date = "2024-12-11"
 [ai]
 binding = "AI"
 
+# TODO: Add RESEND_API_KEY as a Worker secret for email sending:
+# wrangler secret put RESEND_API_KEY --env <environment>
+
 [env.dev]
 name = "jobhackai-site-dev"
 d1_databases = [

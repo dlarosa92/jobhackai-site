@@ -22,7 +22,13 @@ export async function onRequest(context) {
     return new Response(JSON.stringify({ ok: false, error: 'customer_not_found' }), { status: 404, headers: corsHeaders(origin, env) });
   }
 
-  const subs = await listSubscriptions(env, customerId);
+  let subs;
+  try {
+    subs = await listSubscriptions(env, customerId);
+  } catch (listErr) {
+    console.error('[CANCEL] Failed to list subscriptions:', listErr.message);
+    return new Response(JSON.stringify({ ok: false, error: 'Failed to retrieve subscriptions from Stripe' }), { status: 502, headers: corsHeaders(origin, env) });
+  }
   const activeSubs = subs.filter((sub) =>
     sub && ['active', 'trialing', 'past_due'].includes(sub.status)
   );

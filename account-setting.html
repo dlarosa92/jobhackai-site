@@ -349,6 +349,16 @@
       color: #fff;
       border-color: #1976D2;
     }
+    .btn-outline.btn-danger {
+      color: #dc2626;
+      border-color: #dc2626;
+    }
+    .btn-outline.btn-danger:hover,
+    .btn-outline.btn-danger:focus {
+      background: #dc2626;
+      color: #fff;
+      border-color: #dc2626;
+    }
     .btn-outline-grey {
       background: #fff;
       color: #232B36;
@@ -506,23 +516,26 @@
       <div class="settings-block" style="margin-bottom:2.2rem;">
         <div class="settings-label" style="margin-bottom:0.5rem;">Security</div>
         <button class="btn-outline" type="button" style="margin-bottom:0.2rem;" onclick="resetPassword()">Reset My Password</button>
+      </div>
+      <!-- Privacy & Data Section -->
+      <div class="settings-block" style="margin-bottom:2.2rem;">
+        <div class="settings-label" style="margin-bottom:0.5rem;">Privacy & Data</div>
+        <button class="btn-outline" type="button" id="open-cookie-preferences" style="margin-bottom:0.5rem;">
+          Cookie Preferences
+        </button>
+        <button class="btn-outline" type="button" id="download-my-data-btn" style="margin-bottom:0.5rem;">
+          Download My Data
+        </button>
         <div class="settings-note" style="margin-top:0.8rem;">
           <a href="privacy.html" class="settings-support-link" style="display:inline-flex;align-items:center;gap:0.3rem;">
             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="flex-shrink:0;">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
               <path d="M9 12l2 2 4-4"/>
             </svg>
-            Privacy Policy & Data Retention
+            View Privacy Policy
           </a>
         </div>
-      </div>
-      <!-- Privacy & Cookies Section -->
-      <div class="settings-block" style="margin-bottom:2.2rem;">
-        <div class="settings-label" style="margin-bottom:0.5rem;">Privacy & Cookies</div>
-        <button class="btn-outline" type="button" id="open-cookie-preferences" style="margin-bottom:0.2rem;">
-          Cookie Preferences
-        </button>
-        <div class="settings-note" style="margin-top:0.8rem;">
+        <div class="settings-note" style="margin-top:0.4rem;">
           <a href="/cookies.html" class="settings-support-link" style="display:inline-flex;align-items:center;gap:0.3rem;">
             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="flex-shrink:0;">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
@@ -531,8 +544,11 @@
             View Cookie Policy
           </a>
         </div>
-        <div class="settings-note" style="margin-top:0.8rem;">
-          Manage your cookie preferences and learn how we use cookies.
+        <button class="btn-outline btn-danger" type="button" id="delete-account-link" style="margin-top:1rem;">
+          Delete Account
+        </button>
+        <div class="settings-note" style="margin-top:0.8rem;font-size:0.8rem;color:#9ca3af;">
+          Your tool history is automatically deleted after 90 days per our data retention policy.
         </div>
       </div>
       <!-- Dynamic Billing Section -->
@@ -1207,34 +1223,15 @@
       // Don't await - let it run in background, page is already visible
       loadDataPromise.catch(() => {});
       
-      // Add delete account functionality
-      const dangerZone = document.createElement('div');
-      dangerZone.className = 'settings-block';
-      dangerZone.style.cssText = 'margin-top: 3rem; border-top: 2px solid #fee; padding-top: 2rem;';
-      dangerZone.innerHTML = `
-        <div class="settings-label" style="color: #dc2626; margin-bottom: 0.5rem;">Danger Zone</div>
-        <p style="color: #6b7280; margin-bottom: 1rem;">Once you delete your account, there is no going back. Please be certain.</p>
-        <button class="btn-outline-grey" onclick="deleteAccount()" style="background: #fee; border-color: #dc2626; color: #dc2626;">Delete Account</button>
-      `;
-      
-      // Add to the end of the settings card
-      const settingsCard = document.querySelector('.account-settings-card');
-      if (settingsCard) {
-        settingsCard.appendChild(dangerZone);
-      }
     });
     
-    async function deleteAccount() {
-      const confirmed = confirm(
-        'Are you sure you want to delete your account? This will:\\n\\n' +
-        '• Cancel your subscription\\n' +
-        '• Delete all your data\\n' +
-        '• Remove your saved resumes\\n\\n' +
-        'This action cannot be undone!'
-      );
-      
-      if (!confirmed) return;
-      
+    // Download My Data
+    document.getElementById('download-my-data-btn')?.addEventListener('click', async function() {
+      const btn = this;
+      const originalText = btn.textContent;
+      btn.textContent = 'Preparing your data...';
+      btn.disabled = true;
+
       try {
         const user = window.FirebaseAuthManager?.getCurrentUser?.();
         if (!user) {
@@ -1244,28 +1241,126 @@
         }
 
         const idToken = await user.getIdToken();
-        if (!idToken) {
-          alert('Unable to get authentication token. Please log in again.');
-          window.location.href = '/login.html';
-          return;
-        }
-        
-        // Cancel subscription
-        await fetch('/api/cancel-subscription', {
-          method: 'POST',
+        const res = await fetch('/api/user/export', {
+          method: 'GET',
           headers: { 'Authorization': `Bearer ${idToken}` }
         });
-        
-        // Delete account
-        await user.delete();
-        localStorage.clear();
-        
-        alert('Your account has been deleted.');
-        window.location.href = 'index.html';
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || 'Export failed');
+        }
+
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'jobhackai-data-export.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
       } catch (error) {
-        console.error('❌ [ACCOUNT-SETTINGS] Delete account error:', error);
-        alert('Failed to delete account: ' + (error.message || 'Unknown error'));
+        console.error('[ACCOUNT-SETTINGS] Export error:', error);
+        alert('Failed to export data: ' + (error.message || 'Unknown error'));
+      } finally {
+        btn.textContent = originalText;
+        btn.disabled = false;
       }
+    });
+
+    // Delete Account
+    document.getElementById('delete-account-link')?.addEventListener('click', function(e) {
+      e.preventDefault();
+      showDeleteModal();
+    });
+
+    function showDeleteModal() {
+      // Remove existing modal if any
+      const existing = document.getElementById('delete-account-modal');
+      if (existing) existing.remove();
+
+      const overlay = document.createElement('div');
+      overlay.id = 'delete-account-modal';
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);';
+      overlay.innerHTML = `
+        <div style="background:#fff;border-radius:12px;padding:2rem;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.15);">
+          <h3 style="margin:0 0 0.75rem;font-size:1.1rem;color:#1F2937;">Delete your account?</h3>
+          <p style="margin:0 0 1.5rem;font-size:0.9rem;color:#6B7280;line-height:1.5;">
+            This will permanently delete your account, cancel any active subscription, and remove all personal data. Tool history is already auto-deleted after 90 days.
+          </p>
+          <div style="display:flex;gap:0.75rem;justify-content:flex-end;">
+            <button id="delete-modal-cancel" class="btn-outline" style="padding:0.5rem 1.25rem;font-size:0.9rem;">Cancel</button>
+            <button id="delete-modal-confirm" style="padding:0.5rem 1.25rem;font-size:0.9rem;background:#dc2626;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:500;">Delete My Account</button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(overlay);
+
+      // Close on overlay click
+      overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) overlay.remove();
+      });
+
+      document.getElementById('delete-modal-cancel').addEventListener('click', function() {
+        overlay.remove();
+      });
+
+      document.getElementById('delete-modal-confirm').addEventListener('click', async function() {
+        const btn = this;
+        btn.textContent = 'Deleting...';
+        btn.disabled = true;
+
+        try {
+          const user = window.FirebaseAuthManager?.getCurrentUser?.();
+          if (!user) {
+            alert('Your session has expired. Please log in again.');
+            window.location.href = '/login.html';
+            return;
+          }
+
+          const idToken = await user.getIdToken();
+          const res = await fetch('/api/user/delete', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${idToken}` }
+          });
+
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            throw new Error(data.error || 'Deletion failed');
+          }
+
+          // Firebase Auth user is deleted server-side by /api/user/delete.
+          // Sign out locally to clear the session.
+          try {
+            if (window.FirebaseAuthManager?.signOut) {
+              await window.FirebaseAuthManager.signOut();
+            }
+          } catch (_) {}
+
+          localStorage.clear();
+
+          // Surface any partial-cleanup warnings from the API before redirecting.
+          // The API returns { ok: true, warnings: [...] } when Firebase Auth was
+          // deleted but some cleanup steps (Stripe, D1 tables, KV) had issues.
+          if (data.warnings && data.warnings.length > 0) {
+            console.warn('[ACCOUNT-SETTINGS] Deletion warnings:', data.warnings);
+            alert(
+              'Your account has been deleted, but some cleanup steps encountered issues:\n\n' +
+              data.warnings.map(w => '- ' + w).join('\n') +
+              '\n\nIf billing continues, please contact support at privacy@jobhackai.io.'
+            );
+          }
+
+          window.location.href = 'index.html';
+        } catch (error) {
+          console.error('[ACCOUNT-SETTINGS] Delete account error:', error);
+          btn.textContent = 'Delete My Account';
+          btn.disabled = false;
+          alert('Failed to delete account: ' + (error.message || 'Unknown error'));
+        }
+      });
     }
   </script>
   

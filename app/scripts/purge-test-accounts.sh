@@ -134,31 +134,35 @@ delete_d1_user_by_auth_id() {
     echo -e "    ${GREEN}✅ Deleted user and related records from ${db_name} (${rows_deleted} rows)${NC}"
     
     # Also clean up any additional tables that might not cascade
-    # linkedin_runs, cover_letter_history, feature_daily_usage, cookie_consents
+    # Tables keyed by auth_id (TEXT): linkedin_runs, cover_letter_history, role_usage_log
+    # Tables keyed by integer user_id: feature_daily_usage, cookie_consents
     local user_id=$(echo "$check_result" | jq -r '.results[0].id // empty' 2>/dev/null || echo "")
+
+    # Auth_id-keyed tables (use auth_id string, not integer user_id)
+    wrangler d1 execute "$db_id" \
+      --command="DELETE FROM linkedin_runs WHERE user_id = '${auth_id}';" \
+      --json >/dev/null 2>&1 || true
+
+    wrangler d1 execute "$db_id" \
+      --command="DELETE FROM cover_letter_history WHERE user_id = '${auth_id}';" \
+      --json >/dev/null 2>&1 || true
+
+    wrangler d1 execute "$db_id" \
+      --command="DELETE FROM role_usage_log WHERE user_id = '${auth_id}';" \
+      --json >/dev/null 2>&1 || true
+
+    # Integer user_id-keyed tables
     if [ -n "$user_id" ] && [ "$user_id" != "null" ]; then
-      # Delete from linkedin_runs
-      wrangler d1 execute "$db_id" \
-        --command="DELETE FROM linkedin_runs WHERE user_id = ${user_id};" \
-        --json >/dev/null 2>&1 || true
-      
-      # Delete from cover_letter_history
-      wrangler d1 execute "$db_id" \
-        --command="DELETE FROM cover_letter_history WHERE user_id = ${user_id};" \
-        --json >/dev/null 2>&1 || true
-      
-      # Delete from feature_daily_usage
       wrangler d1 execute "$db_id" \
         --command="DELETE FROM feature_daily_usage WHERE user_id = ${user_id};" \
         --json >/dev/null 2>&1 || true
-      
-      # Delete from cookie_consents
+
       wrangler d1 execute "$db_id" \
         --command="DELETE FROM cookie_consents WHERE user_id = ${user_id};" \
         --json >/dev/null 2>&1 || true
-      
-      echo -e "    ${GREEN}✅ Cleaned up additional tables${NC}"
     fi
+
+    echo -e "    ${GREEN}✅ Cleaned up additional tables${NC}"
     
     return 0
   else

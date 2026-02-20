@@ -1,5 +1,5 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
-import { isTrialEligible, getUserPlanData } from '../_lib/db.js';
+import { isTrialEligible, getUserPlanData, getOrCreateUserByAuthId } from '../_lib/db.js';
 import {
   stripe,
   planToPrice,
@@ -245,6 +245,16 @@ export async function onRequest(context) {
       }
     }
 
+    // Ensure user row exists in D1 BEFORE cacheCustomerId. updateUserPlan does not
+    // auto-create users; first-time subscribers need a row so stripe_customer_id
+    // is persisted. Otherwise checkout depends on webhooks for linkage, making
+    // billing state recovery fragile when webhooks are delayed or missed.
+    try {
+      await getOrCreateUserByAuthId(env, uid, email);
+    } catch (ensureErr) {
+      console.warn('⚠️ [CHECKOUT] Failed to ensure user row in D1 (non-fatal):', ensureErr?.message || ensureErr);
+    }
+
     if (customerId) {
       await cacheCustomerId(env, uid, customerId);
 
@@ -262,7 +272,14 @@ export async function onRequest(context) {
     }
 
     // Guard against duplicate subscriptions for paid plans.
-    const subs = await listSubscriptions(env, customerId);
+    let subs = [];
+    try {
+      subs = await listSubscriptions(env, customerId);
+    } catch (listErr) {
+      console.warn('[CHECKOUT] Failed to list subscriptions (non-fatal, proceeding with checkout):', listErr?.message || listErr);
+      // Gracefully degrade: proceed with checkout if subscription listing fails
+      // This prevents transient Stripe API issues from blocking checkout
+    }
     const activeSubs = subs.filter((sub) =>
       sub && ['active', 'trialing', 'past_due'].includes(sub.status)
     );
