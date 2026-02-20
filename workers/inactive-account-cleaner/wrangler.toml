@@ -18,6 +18,11 @@ d1_databases = [
 kv_namespaces = [
   { binding = "JOBHACKAI_KV", id = "5237372648c34aa6880f91e1a0c9708a" }
 ]
+# Stripe monthly price IDs (from Stripe Dashboard → Products → each plan → Price ID)
+[env.dev.vars]
+STRIPE_PRICE_ESSENTIAL_MONTHLY = "price_REPLACE_ESSENTIAL"
+STRIPE_PRICE_PRO_MONTHLY = "price_REPLACE_PRO"
+STRIPE_PRICE_PREMIUM_MONTHLY = "price_REPLACE_PREMIUM"
 
 [env.qa]
 name = "jobhackai-inactive-account-cleaner-qa"
@@ -27,6 +32,10 @@ d1_databases = [
 kv_namespaces = [
   { binding = "JOBHACKAI_KV", id = "5237372648c34aa6880f91e1a0c9708a" }
 ]
+[env.qa.vars]
+STRIPE_PRICE_ESSENTIAL_MONTHLY = "price_REPLACE_ESSENTIAL"
+STRIPE_PRICE_PRO_MONTHLY = "price_REPLACE_PRO"
+STRIPE_PRICE_PREMIUM_MONTHLY = "price_REPLACE_PREMIUM"
 
 [env.production]
 name = "jobhackai-inactive-account-cleaner-prod"
@@ -36,3 +45,7 @@ d1_databases = [
 kv_namespaces = [
   { binding = "JOBHACKAI_KV", id = "339c38b128ce4ddc9a3c0f4d407e0e2d" }
 ]
+[env.production.vars]
+STRIPE_PRICE_ESSENTIAL_MONTHLY = "price_REPLACE_ESSENTIAL"
+STRIPE_PRICE_PRO_MONTHLY = "price_REPLACE_PRO"
+STRIPE_PRICE_PREMIUM_MONTHLY = "price_REPLACE_PREMIUM"
