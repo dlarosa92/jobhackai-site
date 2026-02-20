@@ -1073,9 +1073,11 @@ async function _upsertResumeSession(db, { userId, rawTextLocation, atsScore, rul
   }
 
   const insertAtsReady = atsReadyValue !== null ? 1 : 0;
+  const insertUpdatedAtCol = withUpdatedAt ? ', updated_at' : '';
+  const insertUpdatedAtVal = withUpdatedAt ? ", datetime('now')" : '';
   const insertResult = await db.prepare(
-    `INSERT INTO resume_sessions (user_id, title, role, raw_text_location, ats_score, rule_based_scores_json, ats_ready)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO resume_sessions (user_id, title, role, raw_text_location, ats_score, rule_based_scores_json, ats_ready${insertUpdatedAtCol})
+     VALUES (?, ?, ?, ?, ?, ?, ?${insertUpdatedAtVal})
      RETURNING id, user_id, title, role, created_at${returningUpdatedAt}, raw_text_location, ats_score, rule_based_scores_json, ats_ready`
   ).bind(userId, role, role, rawTextLocation, atsScore, ruleBasedScoresJson, insertAtsReady).first();
 
