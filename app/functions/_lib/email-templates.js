@@ -106,13 +106,14 @@ export function accountDeletedEmail(userEmail) {
  */
 export function subscriptionCancelledEmail(userName, planName, accessEndDate) {
   const name = escapeHtml(userName || 'there');
+  const plan = escapeHtml(planName || '');
   const formattedDate = accessEndDate
     ? new Date(accessEndDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
     : 'the end of your current billing period';
   const body = `
     <h2 style="margin:0 0 16px;font-size:20px;color:#1F2937;">Your subscription has been cancelled</h2>
     <p style="margin:0 0 16px;font-size:15px;color:#374151;line-height:1.6;">
-      Hi ${name}, your ${planName || ''} subscription has been cancelled. You'll continue to have access to your plan features until <strong>${formattedDate}</strong>.
+      Hi ${name}, your ${plan} subscription has been cancelled. You'll continue to have access to your plan features until <strong>${formattedDate}</strong>.
     </p>
     <p style="margin:0 0 16px;font-size:15px;color:#374151;line-height:1.6;">
       After that, your account will revert to the free tier. Your tool history is automatically deleted after 90 days per our data retention policy, and inactive accounts are removed after 24 months.
