@@ -290,6 +290,7 @@ export async function onRequest(context) {
         // User-scoped data keys
         await env.JOBHACKAI_KV.delete(`user:${uid}:lastResume`);
         await env.JOBHACKAI_KV.delete(`atsUsage:${uid}:lifetime`);
+        await env.JOBHACKAI_KV.delete(`usage:${uid}`);
         console.log('[DELETE-USER] KV cleanup complete');
       } catch (kvErr) {
         errors.push(`KV cleanup error: ${kvErr.message}`);

@@ -1,5 +1,7 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
-import { isTrialEligible, getUserPlanData, getOrCreateUserByAuthId } from '../_lib/db.js';
+import { isTrialEligible, getUserPlanData, getOrCreateUserByAuthId, getDb } from '../_lib/db.js';
+import { sendEmail } from '../_lib/email.js';
+import { welcomeEmail } from '../_lib/email-templates.js';
 import {
   stripe,
   planToPrice,
@@ -250,7 +252,22 @@ export async function onRequest(context) {
     // is persisted. Otherwise checkout depends on webhooks for linkage, making
     // billing state recovery fragile when webhooks are delayed or missed.
     try {
+      // Check if user exists before creating to determine if welcome email should be sent
+      const db = getDb(env);
+      const existingUser = db ? await db.prepare('SELECT id FROM users WHERE auth_id = ?').bind(uid).first() : null;
+      const wasNewUser = !existingUser;
+      
       await getOrCreateUserByAuthId(env, uid, email);
+      
+      // Send welcome email for new users (non-blocking)
+      if (wasNewUser && email) {
+        const userName = email.split('@')[0];
+        const { subject, html } = welcomeEmail(userName);
+        const emailPromise = sendEmail(env, { to: email, subject, html }).catch((err) => {
+          console.warn('[CHECKOUT] Failed to send welcome email (non-blocking):', err.message);
+        });
+        context.waitUntil(emailPromise);
+      }
     } catch (ensureErr) {
       console.warn('⚠️ [CHECKOUT] Failed to ensure user row in D1 (non-fatal):', ensureErr?.message || ensureErr);
     }
@@ -276,9 +293,14 @@ export async function onRequest(context) {
     try {
       subs = await listSubscriptions(env, customerId);
     } catch (listErr) {
-      console.warn('[CHECKOUT] Failed to list subscriptions (non-fatal, proceeding with checkout):', listErr?.message || listErr);
-      // Gracefully degrade: proceed with checkout if subscription listing fails
-      // This prevents transient Stripe API issues from blocking checkout
+      console.error('[CHECKOUT] Failed to list subscriptions, blocking checkout to prevent duplicates:', listErr?.message || listErr);
+      // Fail closed: cannot verify duplicate subscriptions, so block checkout
+      // This prevents double-billing when Stripe API is unavailable
+      return json({
+        ok: false,
+        error: 'Unable to verify subscription status. Please try again or contact support.',
+        code: 'SUBSCRIPTION_CHECK_FAILED'
+      }, 503, origin, env);
     }
     const activeSubs = subs.filter((sub) =>
       sub && ['active', 'trialing', 'past_due'].includes(sub.status)
