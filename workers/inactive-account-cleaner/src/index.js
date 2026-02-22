@@ -3,6 +3,8 @@
 // - At 23 months inactive: sends 30-day warning email
 // - At 24+ months inactive (already warned): deletes account and all data
 
+import { deleteFirebaseAuthUserAdmin } from '../../../shared/firebase-auth-admin.js';
+
 export default {
   async scheduled(event, env, ctx) {
     ctx.waitUntil(runInactiveAccountCleanup(env));
@@ -183,99 +185,8 @@ async function deleteFirebaseAuthUser(env, uid) {
   if (!saJson) {
     return { ok: false, error: 'FIREBASE_SERVICE_ACCOUNT_JSON not configured' };
   }
-
-  let sa;
-  try {
-    sa = JSON.parse(saJson);
-  } catch (e) {
-    return { ok: false, error: `Invalid service account JSON: ${e.message}` };
-  }
-
-  // Build a JWT to exchange for a Google OAuth2 access token
-  const now = Math.floor(Date.now() / 1000);
-  const header = { alg: 'RS256', typ: 'JWT' };
-  const projectId = sa.project_id;
-  if (!projectId) {
-    return { ok: false, error: 'Service account JSON missing project_id' };
-  }
-
-  const payload = {
-    iss: sa.client_email,
-    scope: 'https://www.googleapis.com/auth/cloud-platform',
-    aud: 'https://oauth2.googleapis.com/token',
-    iat: now,
-    exp: now + 3600
-  };
-
-  const b64url = (obj) => btoa(JSON.stringify(obj)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  const signingInput = `${b64url(header)}.${b64url(payload)}`;
-
-  let accessToken;
-  try {
-    // Import the RSA private key for signing
-    const pemBody = sa.private_key
-      .replace(/-----BEGIN PRIVATE KEY-----/, '')
-      .replace(/-----END PRIVATE KEY-----/, '')
-      .replace(/\s/g, '');
-    const keyBuffer = Uint8Array.from(atob(pemBody), c => c.charCodeAt(0));
-    const cryptoKey = await crypto.subtle.importKey(
-      'pkcs8', keyBuffer, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']
-    );
-
-    const sig = await crypto.subtle.sign(
-      'RSASSA-PKCS1-v1_5', cryptoKey,
-      new TextEncoder().encode(signingInput)
-    );
-    const b64sig = btoa(String.fromCharCode(...new Uint8Array(sig)))
-      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-
-    const jwt = `${signingInput}.${b64sig}`;
-
-    // Exchange JWT for access token
-    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`
-    });
-    if (!tokenRes.ok) {
-      const errText = await tokenRes.text().catch(() => '');
-      return { ok: false, error: `OAuth2 token exchange failed (${tokenRes.status}): ${errText}` };
-    }
-    const tokenData = await tokenRes.json();
-    accessToken = tokenData.access_token;
-  } catch (e) {
-    return { ok: false, error: `Service account auth failed: ${e.message}` };
-  }
-
-  // Delete the Firebase Auth user using the Admin API (project-scoped endpoint).
-  // The project-scoped URL is required when authenticating with a service
-  // account Bearer token and specifying localId instead of idToken.
-  try {
-    const deleteRes = await fetch(
-      `https://identitytoolkit.googleapis.com/v1/projects/${projectId}/accounts:delete`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`
-        },
-        body: JSON.stringify({ localId: uid, targetProjectId: projectId })
-      }
-    );
-    if (!deleteRes.ok) {
-      const errText = await deleteRes.text().catch(() => '');
-      // Treat "user not found" as success — the user was already deleted
-      // (e.g., prior run succeeded at Firebase but failed during D1 cleanup).
-      // Firebase Identity Toolkit returns USER_NOT_FOUND for missing accounts.
-      if (errText.includes('USER_NOT_FOUND')) {
-        return { ok: true, alreadyDeleted: true };
-      }
-      return { ok: false, error: `Firebase Auth delete failed (${deleteRes.status}): ${errText}` };
-    }
-    return { ok: true };
-  } catch (e) {
-    return { ok: false, error: `Firebase Auth delete request failed: ${e.message}` };
-  }
+  // Use shared implementation from shared/firebase-auth-admin.js
+  return await deleteFirebaseAuthUserAdmin(saJson, uid);
 }
 
 async function findStripeCustomerByEmail(env, email, uid) {
@@ -429,24 +340,30 @@ async function deleteUserData(db, env, user) {
 
   // Delete from all related tables (same order as /api/user/delete)
   const deletions = [
-    { sql: "DELETE FROM linkedin_runs WHERE user_id = ?", bind: uid },
-    { sql: "DELETE FROM role_usage_log WHERE user_id = ?", bind: uid },
-    { sql: "DELETE FROM cover_letter_history WHERE user_id = ?", bind: uid },
-    { sql: "DELETE FROM feature_daily_usage WHERE user_id = ?", bind: userId },
-    { sql: "DELETE FROM cookie_consents WHERE user_id = ?", bind: userId },
-    { sql: "DELETE FROM feedback_sessions WHERE resume_session_id IN (SELECT id FROM resume_sessions WHERE user_id = ?)", bind: userId },
-    { sql: "DELETE FROM resume_sessions WHERE user_id = ?", bind: userId },
-    { sql: "DELETE FROM usage_events WHERE user_id = ?", bind: userId },
-    { sql: "DELETE FROM interview_question_sets WHERE user_id = ?", bind: userId },
-    { sql: "DELETE FROM mock_interview_sessions WHERE user_id = ?", bind: userId },
-    { sql: "DELETE FROM mock_interview_usage WHERE user_id = ?", bind: userId },
-    { sql: "DELETE FROM first_resume_snapshots WHERE user_id = ?", bind: userId },
+    { table: 'linkedin_runs', sql: "DELETE FROM linkedin_runs WHERE user_id = ?", bind: uid },
+    { table: 'role_usage_log', sql: "DELETE FROM role_usage_log WHERE user_id = ?", bind: uid },
+    { table: 'cover_letter_history', sql: "DELETE FROM cover_letter_history WHERE user_id = ?", bind: uid },
+    { table: 'feature_daily_usage', sql: "DELETE FROM feature_daily_usage WHERE user_id = ?", bind: userId },
+    { table: 'cookie_consents', sql: "DELETE FROM cookie_consents WHERE user_id = ?", bind: userId },
+    { table: 'feedback_sessions', sql: "DELETE FROM feedback_sessions WHERE resume_session_id IN (SELECT id FROM resume_sessions WHERE user_id = ?)", bind: userId },
+    { table: 'resume_sessions', sql: "DELETE FROM resume_sessions WHERE user_id = ?", bind: userId },
+    { table: 'usage_events', sql: "DELETE FROM usage_events WHERE user_id = ?", bind: userId },
+    { table: 'interview_question_sets', sql: "DELETE FROM interview_question_sets WHERE user_id = ?", bind: userId },
+    { table: 'mock_interview_sessions', sql: "DELETE FROM mock_interview_sessions WHERE user_id = ?", bind: userId },
+    { table: 'mock_interview_usage', sql: "DELETE FROM mock_interview_usage WHERE user_id = ?", bind: userId },
+    { table: 'first_resume_snapshots', sql: "DELETE FROM first_resume_snapshots WHERE user_id = ?", bind: userId },
   ];
 
-  for (const { sql, bind } of deletions) {
+  for (const { table, sql, bind } of deletions) {
     try {
-      await db.prepare(sql).bind(bind).run();
-    } catch (_) {}
+      const res = await db.prepare(sql).bind(bind).run();
+      const changes = res?.meta?.changes ?? res?.changes ?? 0;
+      if (changes > 0) {
+        console.log(`[inactive-cleaner] Deleted ${changes} rows from ${table} for user ${uid}`);
+      }
+    } catch (delErr) {
+      console.error(`[inactive-cleaner] Error deleting from ${table} for user ${uid}:`, delErr.message);
+    }
   }
 
   // Delete user record
