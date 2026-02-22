@@ -1,5 +1,7 @@
-import { updateUserPlan, getUserPlanData, resetFeatureDailyUsage, resetUsageEvents } from '../_lib/db.js';
+import { updateUserPlan, getUserPlanData, resetFeatureDailyUsage, resetUsageEvents, getDb, getOrCreateUserByAuthId, isDeletedUser } from '../_lib/db.js';
 import { stripe, pickBestSubscription } from '../_lib/billing-utils.js';
+import { sendEmail } from '../_lib/email.js';
+import { subscriptionCancelledEmail } from '../_lib/email-templates.js';
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -103,14 +105,19 @@ export async function onRequest(context) {
     }
   };
 
-  // Resolve uid from customer metadata when possible
-  const fetchUidFromCustomer = async (customerId) => {
-    if (!customerId) return null;
+  // Resolve uid (and email) from customer metadata when possible
+  const fetchCustomerInfo = async (customerId) => {
+    if (!customerId) return { uid: null, email: null };
     const res = await fetch(`https://api.stripe.com/v1/customers/${customerId}`, {
       headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}` }
     });
     const c = await res.json();
-    return c?.metadata?.firebaseUid || null;
+    return { uid: c?.metadata?.firebaseUid || null, email: c?.email || null };
+  };
+  // Backward-compat helper used by event handlers
+  const fetchUidFromCustomer = async (customerId) => {
+    const { uid } = await fetchCustomerInfo(customerId);
+    return uid;
   };
 
   try {
@@ -127,7 +134,7 @@ export async function onRequest(context) {
       const sess = await r.json();
       const priceId = sess?.line_items?.data?.[0]?.price?.id || '';
       const customerId = sess?.customer || event.data?.object?.customer || null;
-      const uid = await fetchUidFromCustomer(customerId);
+      const { uid, email: customerEmail } = await fetchCustomerInfo(customerId);
       
       // Determine effective plan based on original plan and subscription status
       let effectivePlan = 'free';
@@ -141,6 +148,27 @@ export async function onRequest(context) {
       
       console.log(`📝 CHECKOUT DATA: originalPlan=${originalPlan}, priceId=${priceId}, effectivePlan=${effectivePlan}, customerId=${customerId}, uid=${uid}`);
       if (effectivePlan && uid) {
+        // Ensure user row exists in D1. First-time subscribers may not have a row yet
+        // (checkout.session.completed is the first webhook after payment).
+        // However, skip if a tombstone exists — the account was intentionally deleted.
+        const db = getDb(env);
+        const existingUser = db ? await db.prepare('SELECT id FROM users WHERE auth_id = ?').bind(uid).first() : null;
+        if (!existingUser) {
+          // Check D1 tombstone first (authoritative); KV as fallback when D1 unavailable
+          const d1Tombstone = await isDeletedUser(env, uid);
+          const kvTombstone = await env.JOBHACKAI_KV?.get(`deleted:${uid}`);
+          if (d1Tombstone || kvTombstone) {
+            console.log(`⏭️ [WEBHOOK] Skipping checkout plan update: user ${uid} was deleted (tombstone found)`);
+            return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
+          }
+          try {
+            await getOrCreateUserByAuthId(env, uid, customerEmail, { updateActivity: false });
+            console.log(`✅ [WEBHOOK] Created missing user row for first-time subscriber: ${uid}`);
+          } catch (createErr) {
+            console.error(`❌ [WEBHOOK] Failed to create user row for ${uid}:`, createErr?.message || createErr);
+            return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
+          }
+        }
         // Get subscription details if available
         const subscriptionId = sess?.subscription || null;
         let subscription = null;
@@ -192,8 +220,8 @@ export async function onRequest(context) {
       const pId = items[0]?.price?.id || '';
       const plan = priceToPlan(env, pId);
       const customerId = event.data.object.customer || null;
-      const uid = await fetchUidFromCustomer(customerId);
-      
+      const { uid, email: customerEmail } = await fetchCustomerInfo(customerId);
+
       let effectivePlan = 'free';
       if (status === 'trialing' && originalPlan === 'trial') {
         effectivePlan = 'trial'; // User is in trial period
@@ -201,10 +229,32 @@ export async function onRequest(context) {
         // Extract plan from price ID (auto-converts trial to essential)
         effectivePlan = plan || 'essential';
       }
-      
+
       const sub = event.data.object;
       const trialEndsAtISO = sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null;
-      
+
+      // Ensure user row exists in D1 for first-time subscribers.
+      // Skip if a tombstone exists — the account was intentionally deleted.
+      if (uid) {
+        const db = getDb(env);
+        const existingUser = db ? await db.prepare('SELECT id FROM users WHERE auth_id = ?').bind(uid).first() : null;
+        if (!existingUser) {
+          const d1Tombstone = await isDeletedUser(env, uid);
+          const kvTombstone = await env.JOBHACKAI_KV?.get(`deleted:${uid}`);
+          if (d1Tombstone || kvTombstone) {
+            console.log(`⏭️ [WEBHOOK] Skipping subscription.created plan update: user ${uid} was deleted (tombstone found)`);
+            return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
+          }
+          try {
+            await getOrCreateUserByAuthId(env, uid, customerEmail, { updateActivity: false });
+            console.log(`✅ [WEBHOOK] Ensured user row exists for subscriber: ${uid}`);
+          } catch (createErr) {
+            console.error(`❌ [WEBHOOK] Failed to create user row for ${uid}:`, createErr?.message || createErr);
+            return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
+          }
+        }
+      }
+
       console.log(`📝 SUBSCRIPTION DATA: status=${status}, priceId=${pId}, basePlan=${plan}, effectivePlan=${effectivePlan}, uid=${uid}`);
       console.log(`🔄 TRIAL CONVERSION CHECK:`, {
         eventType: event.type,
@@ -235,8 +285,30 @@ export async function onRequest(context) {
       console.log('🎯 WEBHOOK: customer.subscription.updated received');
       const sub = event.data.object;
       const customerId = sub.customer || null;
-      const uid = await fetchUidFromCustomer(customerId);
-      
+      const { uid, email: customerEmail } = await fetchCustomerInfo(customerId);
+
+      // Ensure user row exists in D1 for first-time subscribers.
+      // Skip if a tombstone exists — the account was intentionally deleted.
+      if (uid) {
+        const db = getDb(env);
+        const existingUser = db ? await db.prepare('SELECT id FROM users WHERE auth_id = ?').bind(uid).first() : null;
+        if (!existingUser) {
+          const d1Tombstone = await isDeletedUser(env, uid);
+          const kvTombstone = await env.JOBHACKAI_KV?.get(`deleted:${uid}`);
+          if (d1Tombstone || kvTombstone) {
+            console.log(`⏭️ [WEBHOOK] Skipping subscription.updated plan update: user ${uid} was deleted (tombstone found)`);
+            return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
+          }
+          try {
+            await getOrCreateUserByAuthId(env, uid, customerEmail, { updateActivity: false });
+            console.log(`✅ [WEBHOOK] Ensured user row exists for subscriber: ${uid}`);
+          } catch (createErr) {
+            console.error(`❌ [WEBHOOK] Failed to create user row for ${uid}:`, createErr?.message || createErr);
+            return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
+          }
+        }
+      }
+
       // Handle scheduled cancellation
       let cancelAt = null;
       if (sub.cancel_at_period_end === true && sub.cancel_at) {
@@ -411,11 +483,34 @@ export async function onRequest(context) {
           scheduledAt: null, // Clear scheduled date
           hasEverPaid: isPaidPlan(deletedPlan) ? 1 : undefined
         }, event.created);
-        
+
         // Clean up resume data when subscription is deleted (KV cleanup)
         await env.JOBHACKAI_KV?.delete(`user:${uid}:lastResume`);
         await env.JOBHACKAI_KV?.delete(`usage:${uid}`);
         console.log(`✅ D1 WRITE SUCCESS: ${uid} → free (resume data cleaned up)`);
+
+        // Send subscription cancelled email (non-blocking)
+        // Note: Stripe may also send its own cancellation email; we send ours for consistency
+        if (uid) {
+          try {
+            // getUserPlanData does not return email, so query users table directly
+            const db = getDb(env);
+            const userRow = db ? await db.prepare('SELECT email FROM users WHERE auth_id = ?').bind(uid).first() : null;
+            if (userRow?.email) {
+              const userName = userRow.email.split('@')[0];
+              const periodEnd = deletedSub.current_period_end
+                ? new Date(deletedSub.current_period_end * 1000).toISOString()
+                : null;
+              const { subject, html } = subscriptionCancelledEmail(userName, deletedPlan, periodEnd);
+              const emailPromise = sendEmail(env, { to: userRow.email, subject, html }).catch((e) => {
+                console.warn('[WEBHOOK] Failed to send cancellation email (non-blocking):', e.message);
+              });
+              context.waitUntil(emailPromise);
+            }
+          } catch (emailErr) {
+            console.warn('[WEBHOOK] Error sending cancellation email (non-blocking):', emailErr.message);
+          }
+        }
       }
     }
 
