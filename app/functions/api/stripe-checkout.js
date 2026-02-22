@@ -263,9 +263,10 @@ export async function onRequest(context) {
       if (wasNewUser && email) {
         const userName = email.split('@')[0];
         const { subject, html } = welcomeEmail(userName);
-        sendEmail(env, { to: email, subject, html }).catch((err) => {
+        const emailPromise = sendEmail(env, { to: email, subject, html }).catch((err) => {
           console.warn('[CHECKOUT] Failed to send welcome email (non-blocking):', err.message);
         });
+        context.waitUntil(emailPromise);
       }
     } catch (ensureErr) {
       console.warn('⚠️ [CHECKOUT] Failed to ensure user row in D1 (non-fatal):', ensureErr?.message || ensureErr);
