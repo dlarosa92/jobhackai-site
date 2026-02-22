@@ -543,11 +543,28 @@ export async function createResumeSession(env, userId, { title = null, role = nu
   }
 
   try {
-    const result = await db.prepare(
-      `INSERT INTO resume_sessions (user_id, title, role, raw_text_location) 
-       VALUES (?, ?, ?, ?) 
-       RETURNING id, user_id, title, role, created_at, raw_text_location`
-    ).bind(userId, title, role, rawTextLocation).first();
+    // Try with updated_at first (migration 016 adds the column via ALTER TABLE
+    // which can't set an expression default in SQLite, so we set it explicitly)
+    let result;
+    try {
+      result = await db.prepare(
+        `INSERT INTO resume_sessions (user_id, title, role, raw_text_location, updated_at)
+         VALUES (?, ?, ?, ?, datetime('now'))
+         RETURNING id, user_id, title, role, created_at, updated_at, raw_text_location`
+      ).bind(userId, title, role, rawTextLocation).first();
+    } catch (colErr) {
+      const msg = colErr?.message || '';
+      if (msg.includes('no such column')) {
+        console.warn('[DB] createResumeSession: updated_at column not found (migration 016 not applied), inserting without it');
+        result = await db.prepare(
+          `INSERT INTO resume_sessions (user_id, title, role, raw_text_location)
+           VALUES (?, ?, ?, ?)
+           RETURNING id, user_id, title, role, created_at, raw_text_location`
+        ).bind(userId, title, role, rawTextLocation).first();
+      } else {
+        throw colErr;
+      }
+    }
 
     console.log('[DB] Created resume session:', { id: result.id, userId, role });
     return result;
