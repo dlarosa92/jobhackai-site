@@ -492,6 +492,7 @@ async function deleteUserData(db, env, user) {
     // User-scoped data keys
     await env.JOBHACKAI_KV.delete(`user:${uid}:lastResume`).catch(() => {});
     await env.JOBHACKAI_KV.delete(`atsUsage:${uid}:lifetime`).catch(() => {});
+    await env.JOBHACKAI_KV.delete(`usage:${uid}`).catch(() => {});
   }
 }
 
@@ -550,14 +551,24 @@ function emailWrapper(bodyContent) {
 </body></html>`;
 }
 
+function escapeHtml(text) {
+  if (!text) return '';
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 function inactivityWarningEmail(userName) {
-  const name = userName || 'there';
+  const name = escapeHtml(userName || 'there');
   return {
     subject: 'Your JobHackAI account will be deleted in 30 days',
     html: emailWrapper(`
       <h2 style="margin:0 0 16px;font-size:20px;color:#1F2937;">Your account will be deleted in 30 days</h2>
       <p style="margin:0 0 16px;font-size:15px;color:#374151;line-height:1.6;">
-        Hi ${name}, we noticed you haven't used JobHackAI in over 24 months. Per our data retention policy, inactive accounts are automatically deleted after this period.
+        Hi ${name}, we noticed you haven't used JobHackAI in nearly 24 months. Per our data retention policy, inactive accounts are automatically deleted after this period.
       </p>
       <p style="margin:0 0 16px;font-size:15px;color:#374151;line-height:1.6;">
         If you'd like to keep your account, simply log in within the next 30 days.

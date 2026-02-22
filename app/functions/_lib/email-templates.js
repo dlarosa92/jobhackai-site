@@ -3,6 +3,16 @@
  * All templates share a consistent wrapper with minimal, clean design.
  */
 
+function escapeHtml(text) {
+  if (!text) return '';
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 function emailWrapper(bodyContent) {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -58,7 +68,7 @@ function actionButton(text, url) {
  * Welcome email sent on first account creation
  */
 export function welcomeEmail(userName) {
-  const name = userName || 'there';
+  const name = escapeHtml(userName || 'there');
   const body = `
     <h2 style="margin:0 0 16px;font-size:20px;color:#1F2937;">Welcome to JobHackAI, ${name}!</h2>
     <p style="margin:0 0 16px;font-size:15px;color:#374151;line-height:1.6;">
@@ -95,7 +105,7 @@ export function accountDeletedEmail(userEmail) {
  * Confirmation email when a subscription is cancelled
  */
 export function subscriptionCancelledEmail(userName, planName, accessEndDate) {
-  const name = userName || 'there';
+  const name = escapeHtml(userName || 'there');
   const formattedDate = accessEndDate
     ? new Date(accessEndDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
     : 'the end of your current billing period';

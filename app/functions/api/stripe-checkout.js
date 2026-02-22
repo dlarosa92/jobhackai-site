@@ -276,9 +276,14 @@ export async function onRequest(context) {
     try {
       subs = await listSubscriptions(env, customerId);
     } catch (listErr) {
-      console.warn('[CHECKOUT] Failed to list subscriptions (non-fatal, proceeding with checkout):', listErr?.message || listErr);
-      // Gracefully degrade: proceed with checkout if subscription listing fails
-      // This prevents transient Stripe API issues from blocking checkout
+      console.error('[CHECKOUT] Failed to list subscriptions, blocking checkout to prevent duplicates:', listErr?.message || listErr);
+      // Fail closed: cannot verify duplicate subscriptions, so block checkout
+      // This prevents double-billing when Stripe API is unavailable
+      return json({
+        ok: false,
+        error: 'Unable to verify subscription status. Please try again or contact support.',
+        code: 'SUBSCRIPTION_CHECK_FAILED'
+      }, 503, origin, env);
     }
     const activeSubs = subs.filter((sub) =>
       sub && ['active', 'trialing', 'past_due'].includes(sub.status)
