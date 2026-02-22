@@ -15,8 +15,6 @@
  */
 
 import { sanitizeRoleSpecificFeedback } from './feedback-validator.js';
-import { sendEmail } from './email.js';
-import { welcomeEmail } from './email-templates.js';
 
 /**
  * Resolve the D1 binding from the environment.
@@ -142,15 +140,6 @@ export async function getOrCreateUserByAuthId(env, authId, email = null, { updat
     // Add plan property if it wasn't returned (pre-migration state)
     if (!result.plan) {
       result.plan = 'free';
-    }
-
-    // Send welcome email for new users (non-blocking)
-    if (email) {
-      const userName = email.split('@')[0];
-      const { subject, html } = welcomeEmail(userName);
-      sendEmail(env, { to: email, subject, html }).catch((err) => {
-        console.warn('[DB] Failed to send welcome email (non-blocking):', err.message);
-      });
     }
 
     console.log('[DB] Created new user:', { id: result.id, authId });

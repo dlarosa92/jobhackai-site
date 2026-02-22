@@ -1,5 +1,7 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
-import { isTrialEligible, getUserPlanData, getOrCreateUserByAuthId } from '../_lib/db.js';
+import { isTrialEligible, getUserPlanData, getOrCreateUserByAuthId, getDb } from '../_lib/db.js';
+import { sendEmail } from '../_lib/email.js';
+import { welcomeEmail } from '../_lib/email-templates.js';
 import {
   stripe,
   planToPrice,
@@ -250,7 +252,21 @@ export async function onRequest(context) {
     // is persisted. Otherwise checkout depends on webhooks for linkage, making
     // billing state recovery fragile when webhooks are delayed or missed.
     try {
+      // Check if user exists before creating to determine if welcome email should be sent
+      const db = getDb(env);
+      const existingUser = db ? await db.prepare('SELECT id FROM users WHERE auth_id = ?').bind(uid).first() : null;
+      const wasNewUser = !existingUser;
+      
       await getOrCreateUserByAuthId(env, uid, email);
+      
+      // Send welcome email for new users (non-blocking)
+      if (wasNewUser && email) {
+        const userName = email.split('@')[0];
+        const { subject, html } = welcomeEmail(userName);
+        sendEmail(env, { to: email, subject, html }).catch((err) => {
+          console.warn('[CHECKOUT] Failed to send welcome email (non-blocking):', err.message);
+        });
+      }
     } catch (ensureErr) {
       console.warn('⚠️ [CHECKOUT] Failed to ensure user row in D1 (non-fatal):', ensureErr?.message || ensureErr);
     }
