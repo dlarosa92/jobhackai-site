@@ -262,7 +262,7 @@ export async function onRequest(context) {
       // Send welcome email for new users (non-blocking)
       if (wasNewUser && email) {
         const userName = email.split('@')[0];
-        const { subject, html } = welcomeEmail(userName);
+        const { subject, html } = welcomeEmail(userName, env.FRONTEND_URL);
         const emailPromise = sendEmail(env, { to: email, subject, html }).catch((err) => {
           console.warn('[CHECKOUT] Failed to send welcome email (non-blocking):', err.message);
         });

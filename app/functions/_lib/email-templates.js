@@ -64,11 +64,18 @@ function actionButton(text, url) {
   </table>`;
 }
 
+function normalizeAppOrigin(appOrigin) {
+  const fallback = 'https://app.jobhackai.io';
+  const raw = String(appOrigin || fallback).trim();
+  return raw.replace(/\/+$/, '') || fallback;
+}
+
 /**
  * Welcome email sent on first account creation
  */
-export function welcomeEmail(userName) {
+export function welcomeEmail(userName, appOrigin) {
   const name = escapeHtml(userName || 'there');
+  const loginUrl = `${normalizeAppOrigin(appOrigin)}/login`;
   const body = `
     <h2 style="margin:0 0 16px;font-size:20px;color:#1F2937;">Welcome to JobHackAI, ${name}!</h2>
     <p style="margin:0 0 16px;font-size:15px;color:#374151;line-height:1.6;">
@@ -77,7 +84,7 @@ export function welcomeEmail(userName) {
     <p style="margin:0 0 8px;font-size:15px;color:#374151;line-height:1.6;">
       Head to your dashboard to get started.
     </p>
-    ${actionButton('Get Started', 'https://app.jobhackai.io')}
+    ${actionButton('Get Started', loginUrl)}
   `;
   return { subject: 'Welcome to JobHackAI', html: emailWrapper(body) };
 }
