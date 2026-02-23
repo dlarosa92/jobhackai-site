@@ -245,7 +245,7 @@ class HelpCenterSearch {
     this.resultsContainer.innerHTML = `
       <div class="help-search-no-results">
         <p>No results found for "<strong>${this.escapeHtml(query)}</strong>"</p>
-        <p class="help-search-suggestion">Try different keywords or <a href="support.html">contact support</a></p>
+        <p class="help-search-suggestion">Try different keywords or <a href="mailto:support@jobhackai.io">contact support</a></p>
       </div>
     `;
     this.resultsContainer.hidden = false;
