@@ -20,7 +20,7 @@
 ### Marketing/Public Pages
 - **`features.html`** - Feature showcase page
 - **`about.html`** - Company/about page
-- **`support.html`** - Customer support page
+- **Support** - Contact via email at support@jobhackai.io
 - **`privacy.html`** - Privacy policy
 
 ### Placeholder/In Progress
