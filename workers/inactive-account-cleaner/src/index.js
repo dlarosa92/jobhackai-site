@@ -373,8 +373,8 @@ async function deleteUserData(db, env, user) {
   // D1 is authoritative; KV is best-effort cache.
   try {
     await db.prepare(
-      'INSERT OR REPLACE INTO deleted_auth_ids (auth_id, deleted_at) VALUES (?, datetime(\'now\'))'
-    ).bind(uid).run();
+      'INSERT OR REPLACE INTO deleted_auth_ids (auth_id, email, deleted_at) VALUES (?, ?, datetime(\'now\'))'
+    ).bind(uid, user.email || null).run();
   } catch (d1Err) {
     console.error('[inactive-cleaner] D1 tombstone write failed for', uid, ':', d1Err?.message || d1Err);
   }

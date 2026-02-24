@@ -305,7 +305,7 @@ export async function onRequest(context) {
     // Write tombstones so delayed Stripe webhooks don't recreate this user.
     // D1 is authoritative; KV is best-effort cache. If D1 tombstone fails,
     // delayed webhooks may recreate the account — surface as error for monitoring.
-    const tombstoneWritten = await writeDeletedTombstone(env, uid);
+    const tombstoneWritten = await writeDeletedTombstone(env, uid, userEmail);
     if (!tombstoneWritten) {
       errors.push('Failed to write deletion tombstone to database — delayed Stripe webhooks may recreate this account');
       console.error('[DELETE-USER] Critical: D1 tombstone write failed for:', uid);
