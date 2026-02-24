@@ -440,8 +440,11 @@ export async function getUserPlanData(env, authId) {
  * Check if user is eligible for a trial (D1 is source of truth)
  * A user is eligible if they are on the free plan, have never had a trial (trial_ends_at IS NULL),
  * and have not previously paid (has_ever_paid = 0).
+ * When no user row exists, checks deleted_auth_ids by email to prevent trial re-use
+ * for returning users who register under a new Firebase UID after account deletion.
  * @param {Object} env - Cloudflare environment with DB binding
  * @param {string} authId - Firebase UID
+ * @param {string} email - Optional email address to check against deleted_auth_ids
  * @returns {Promise<boolean>}
  */
 export async function isTrialEligible(env, authId, email = null) {
@@ -457,10 +460,18 @@ export async function isTrialEligible(env, authId, email = null) {
       'SELECT plan, trial_ends_at FROM users WHERE auth_id = ?'
     ).bind(authId).first();
     if (!user) {
-      // No user row — new user is eligible for trial.
-      // Note: We don't check deleted_auth_ids here because the tombstone table
-      // doesn't store trial/payment history, so we can't distinguish users who
-      // had a trial/paid subscription from free-only users who were deleted.
+      // No user row — check if this email was previously deleted (migration 018)
+      // to prevent trial re-use when a returning user registers under a new Firebase UID.
+      if (email) {
+        const deletedRow = await db.prepare(
+          'SELECT 1 FROM deleted_auth_ids WHERE email = ?'
+        ).bind(email).first();
+        if (deletedRow) {
+          // Email exists in deleted_auth_ids — user previously deleted account, not eligible for trial
+          return false;
+        }
+      }
+      // New user (or no email provided) is eligible for trial
       return true;
     }
     const isOnFreePlan = (user.plan || 'free') === 'free';
