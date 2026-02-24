@@ -14,11 +14,12 @@ export async function onRequest(context) {
       });
     }
     
-    const { uid } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
+    const { uid, payload } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
+    const email = payload?.email || null;
 
     // Fetch plan data from D1 (source of truth)
     const planData = await getUserPlanData(env, uid);
-    const trialEligible = await isTrialEligible(env, uid);
+    const trialEligible = await isTrialEligible(env, uid, email);
 
     return new Response(JSON.stringify({ 
       plan: planData?.plan || 'free',

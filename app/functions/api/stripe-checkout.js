@@ -79,7 +79,7 @@ export async function onRequest(context) {
     // Prevent multiple trials per user - check D1 (source of truth)
     if (plan === 'trial') {
       try {
-        const eligible = await isTrialEligible(env, uid);
+        const eligible = await isTrialEligible(env, uid, email);
         if (!eligible) {
           console.log('🔴 [CHECKOUT] Trial not eligible for user', uid);
           return json({

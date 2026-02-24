@@ -339,18 +339,33 @@ export async function updateUserPlan(env, authId, {
  * @param {string} authId - Firebase UID
  * @returns {Promise<boolean>} True if tombstone was written, false on error
  */
-export async function writeDeletedTombstone(env, authId) {
+export async function writeDeletedTombstone(env, authId, email = null) {
   const db = getDb(env);
   if (!db) {
     console.warn('[DB] D1 binding not available for tombstone write');
     return false;
   }
   try {
+    // Try with email column (migration 018)
     await db.prepare(
-      'INSERT OR REPLACE INTO deleted_auth_ids (auth_id, deleted_at) VALUES (?, datetime(\'now\'))'
-    ).bind(authId).run();
+      'INSERT OR REPLACE INTO deleted_auth_ids (auth_id, email, deleted_at) VALUES (?, ?, datetime(\'now\'))'
+    ).bind(authId, email || null).run();
     return true;
   } catch (error) {
+    // Fallback for pre-migration 018 environments where email column doesn't exist
+    const msg = String(error?.message || '').toLowerCase();
+    if (msg.includes('no such column') || msg.includes('unknown column') || msg.includes('no such')) {
+      try {
+        console.warn('[DB] Email column not found in deleted_auth_ids, using fallback query. Migration 018 may need to be run.');
+        await db.prepare(
+          'INSERT OR REPLACE INTO deleted_auth_ids (auth_id, deleted_at) VALUES (?, datetime(\'now\'))'
+        ).bind(authId).run();
+        return true;
+      } catch (fallbackErr) {
+        console.error('[DB] Error writing deleted tombstone (fallback):', fallbackErr);
+        return false;
+      }
+    }
     console.error('[DB] Error writing deleted tombstone:', error);
     return false;
   }
@@ -440,11 +455,14 @@ export async function getUserPlanData(env, authId) {
  * Check if user is eligible for a trial (D1 is source of truth)
  * A user is eligible if they are on the free plan, have never had a trial (trial_ends_at IS NULL),
  * and have not previously paid (has_ever_paid = 0).
+ * When no user row exists, checks deleted_auth_ids by email to prevent trial re-use
+ * for returning users who register under a new Firebase UID after account deletion.
  * @param {Object} env - Cloudflare environment with DB binding
  * @param {string} authId - Firebase UID
+ * @param {string} email - Optional email address to check against deleted_auth_ids
  * @returns {Promise<boolean>}
  */
-export async function isTrialEligible(env, authId) {
+export async function isTrialEligible(env, authId, email = null) {
   const db = getDb(env);
   if (!db) {
     console.warn('[DB] D1 binding not available');
@@ -452,12 +470,37 @@ export async function isTrialEligible(env, authId) {
     throw new Error('D1 binding not available');
   }
   try {
+    // Check email tombstone first (migration 018) - this must run regardless of whether
+    // a user row exists, since getOrCreateUserByAuthId may have already created a user
+    // row from other API endpoints before checkout is reached.
+    if (email) {
+      try {
+        const deletedRow = await db.prepare(
+          'SELECT 1 FROM deleted_auth_ids WHERE email = ?'
+        ).bind(email).first();
+        if (deletedRow) {
+          // Email exists in deleted_auth_ids — user previously deleted account, not eligible for trial
+          return false;
+        }
+      } catch (emailColErr) {
+        // Gracefully handle pre-migration 018 environments where email column doesn't exist
+        const msg = String(emailColErr?.message || '').toLowerCase();
+        if (msg.includes('no such column') || msg.includes('unknown column') || msg.includes('no such')) {
+          // Column doesn't exist yet - skip email tombstone check (migration 018 not applied)
+          console.warn('[DB] Email column not found in deleted_auth_ids, skipping email tombstone check. Migration 018 may need to be run.');
+        } else {
+          // Re-throw unexpected errors
+          throw emailColErr;
+        }
+      }
+    }
+
     // Read core columns first (present in migration 007)
     const user = await db.prepare(
       'SELECT plan, trial_ends_at FROM users WHERE auth_id = ?'
     ).bind(authId).first();
     if (!user) {
-      // New user = eligible
+      // No user row — new user is eligible for trial (email check already passed above)
       return true;
     }
     const isOnFreePlan = (user.plan || 'free') === 'free';
