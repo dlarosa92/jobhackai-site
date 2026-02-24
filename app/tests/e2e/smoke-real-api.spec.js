@@ -121,6 +121,15 @@ test.describe('Real API Smoke', () => {
     await page.waitForLoadState('domcontentloaded');
     await waitForAuthReady(page, 15000);
 
+    // Mock the cancel-subscription endpoint to avoid destructively canceling real subscriptions
+    await page.route('**/api/cancel-subscription', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, status: 'no_active_subscription' }),
+      });
+    });
+
     const token = await getAuthToken(page);
     expect(token).toBeTruthy();
 
