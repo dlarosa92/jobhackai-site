@@ -42,7 +42,7 @@ export function getDb(env) {
  * @param {string|null} email - User email (optional)
  * @returns {Promise<Object>} User record { id, auth_id, email, created_at, updated_at }
  */
-export async function getOrCreateUserByAuthId(env, authId, email = null) {
+export async function getOrCreateUserByAuthId(env, authId, email = null, { updateActivity = true } = {}) {
   const db = getDb(env);
   if (!db) {
     console.warn('[DB] D1 binding not available');
@@ -74,21 +74,64 @@ export async function getOrCreateUserByAuthId(env, authId, email = null) {
     }
 
     if (existing) {
-      // Update email if provided and different
+      // Refresh last_login_at and clear any pending deletion warning for
+      // user-initiated requests. Background callers (webhooks, cron) pass
+      // updateActivity: false to avoid falsely resetting inactivity timers.
       if (email && email !== existing.email) {
-        await db.prepare(
-          'UPDATE users SET email = ?, updated_at = datetime(\'now\') WHERE id = ?'
-        ).bind(email, existing.id).run();
+        try {
+          if (updateActivity) {
+            await db.prepare(
+              'UPDATE users SET email = ?, last_login_at = datetime(\'now\'), deletion_warning_sent_at = NULL, updated_at = datetime(\'now\') WHERE id = ?'
+            ).bind(email, existing.id).run();
+          } else {
+            await db.prepare(
+              'UPDATE users SET email = ?, updated_at = datetime(\'now\') WHERE id = ?'
+            ).bind(email, existing.id).run();
+          }
+        } catch (colErr) {
+          if (colErr.message && colErr.message.includes('no such column')) {
+            console.warn('[DB] Activity columns not yet migrated, falling back');
+            await db.prepare(
+              'UPDATE users SET email = ?, updated_at = datetime(\'now\') WHERE id = ?'
+            ).bind(email, existing.id).run();
+          } else {
+            throw colErr;
+          }
+        }
         existing.email = email;
         existing.updated_at = new Date().toISOString();
+      } else if (updateActivity) {
+        try {
+          await db.prepare(
+            'UPDATE users SET last_login_at = datetime(\'now\'), deletion_warning_sent_at = NULL WHERE id = ?'
+          ).bind(existing.id).run();
+        } catch (colErr) {
+          if (colErr.message && colErr.message.includes('no such column')) {
+            console.warn('[DB] Activity columns not yet migrated, skipping last_login_at update');
+          } else {
+            throw colErr;
+          }
+        }
       }
       return existing;
     }
 
     // Create new user
-    const result = await db.prepare(
-      'INSERT INTO users (auth_id, email) VALUES (?, ?) RETURNING id, auth_id, email, created_at, updated_at'
-    ).bind(authId, email).first();
+    let result;
+    try {
+      result = await db.prepare(
+        'INSERT INTO users (auth_id, email, last_login_at) VALUES (?, ?, datetime(\'now\')) RETURNING id, auth_id, email, created_at, updated_at'
+      ).bind(authId, email).first();
+    } catch (insertErr) {
+      if (insertErr.message && insertErr.message.includes('no such column')) {
+        console.warn('[DB] last_login_at column not yet migrated, inserting without it');
+        result = await db.prepare(
+          'INSERT INTO users (auth_id, email) VALUES (?, ?) RETURNING id, auth_id, email, created_at, updated_at'
+        ).bind(authId, email).first();
+      } else {
+        throw insertErr;
+      }
+    }
 
     if (!result) {
       throw new Error('Failed to create user: INSERT returned null');
@@ -185,8 +228,16 @@ export async function updateUserPlan(env, authId, {
   }
 
   try {
-    // Ensure user exists first
-    await getOrCreateUserByAuthId(env, authId);
+    // Look up user — do NOT auto-create. Auto-creating here would resurrect
+    // users deleted by /api/user/delete when a follow-on Stripe webhook
+    // (customer.subscription.deleted) fires after the users row is removed.
+    const existingUser = await db.prepare(
+      'SELECT id FROM users WHERE auth_id = ?'
+    ).bind(authId).first();
+    if (!existingUser) {
+      console.warn('[DB] updateUserPlan: user not found, skipping plan update for:', authId);
+      return false;
+    }
 
     // Build UPDATE query dynamically to only set provided fields
     const updates = [];
@@ -282,6 +333,66 @@ export async function updateUserPlan(env, authId, {
 }
 
 /**
+ * Write a tombstone for a deleted user so delayed Stripe webhooks don't recreate the row.
+ * D1 is authoritative; callers should also write to KV (deleted:${uid}) as best-effort cache.
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {string} authId - Firebase UID
+ * @returns {Promise<boolean>} True if tombstone was written, false on error
+ */
+export async function writeDeletedTombstone(env, authId, email = null) {
+  const db = getDb(env);
+  if (!db) {
+    console.warn('[DB] D1 binding not available for tombstone write');
+    return false;
+  }
+  try {
+    // Try with email column (migration 018)
+    await db.prepare(
+      'INSERT OR REPLACE INTO deleted_auth_ids (auth_id, email, deleted_at) VALUES (?, ?, datetime(\'now\'))'
+    ).bind(authId, email || null).run();
+    return true;
+  } catch (error) {
+    // Fallback for pre-migration 018 environments where email column doesn't exist
+    const msg = String(error?.message || '').toLowerCase();
+    if (msg.includes('no such column') || msg.includes('unknown column') || msg.includes('no such')) {
+      try {
+        console.warn('[DB] Email column not found in deleted_auth_ids, using fallback query. Migration 018 may need to be run.');
+        await db.prepare(
+          'INSERT OR REPLACE INTO deleted_auth_ids (auth_id, deleted_at) VALUES (?, datetime(\'now\'))'
+        ).bind(authId).run();
+        return true;
+      } catch (fallbackErr) {
+        console.error('[DB] Error writing deleted tombstone (fallback):', fallbackErr);
+        return false;
+      }
+    }
+    console.error('[DB] Error writing deleted tombstone:', error);
+    return false;
+  }
+}
+
+/**
+ * Check if a user was intentionally deleted (tombstone exists in D1).
+ * Used by Stripe webhook to avoid recreating users when KV tombstone is unavailable.
+ * @param {Object} env - Cloudflare environment with DB binding
+ * @param {string} authId - Firebase UID
+ * @returns {Promise<boolean>} True if tombstone exists
+ */
+export async function isDeletedUser(env, authId) {
+  const db = getDb(env);
+  if (!db) return false;
+  try {
+    const row = await db.prepare(
+      'SELECT 1 FROM deleted_auth_ids WHERE auth_id = ?'
+    ).bind(authId).first();
+    return !!row;
+  } catch (error) {
+    console.warn('[DB] Error checking deleted tombstone:', error?.message || error);
+    return false;
+  }
+}
+
+/**
  * Get full user plan data including subscription metadata
  * @param {Object} env - Cloudflare environment with DB binding
  * @param {string} authId - Firebase UID
@@ -344,11 +455,14 @@ export async function getUserPlanData(env, authId) {
  * Check if user is eligible for a trial (D1 is source of truth)
  * A user is eligible if they are on the free plan, have never had a trial (trial_ends_at IS NULL),
  * and have not previously paid (has_ever_paid = 0).
+ * When no user row exists, checks deleted_auth_ids by email to prevent trial re-use
+ * for returning users who register under a new Firebase UID after account deletion.
  * @param {Object} env - Cloudflare environment with DB binding
  * @param {string} authId - Firebase UID
+ * @param {string} email - Optional email address to check against deleted_auth_ids
  * @returns {Promise<boolean>}
  */
-export async function isTrialEligible(env, authId) {
+export async function isTrialEligible(env, authId, email = null) {
   const db = getDb(env);
   if (!db) {
     console.warn('[DB] D1 binding not available');
@@ -356,12 +470,37 @@ export async function isTrialEligible(env, authId) {
     throw new Error('D1 binding not available');
   }
   try {
+    // Check email tombstone first (migration 018) - this must run regardless of whether
+    // a user row exists, since getOrCreateUserByAuthId may have already created a user
+    // row from other API endpoints before checkout is reached.
+    if (email) {
+      try {
+        const deletedRow = await db.prepare(
+          'SELECT 1 FROM deleted_auth_ids WHERE email = ?'
+        ).bind(email).first();
+        if (deletedRow) {
+          // Email exists in deleted_auth_ids — user previously deleted account, not eligible for trial
+          return false;
+        }
+      } catch (emailColErr) {
+        // Gracefully handle pre-migration 018 environments where email column doesn't exist
+        const msg = String(emailColErr?.message || '').toLowerCase();
+        if (msg.includes('no such column') || msg.includes('unknown column') || msg.includes('no such')) {
+          // Column doesn't exist yet - skip email tombstone check (migration 018 not applied)
+          console.warn('[DB] Email column not found in deleted_auth_ids, skipping email tombstone check. Migration 018 may need to be run.');
+        } else {
+          // Re-throw unexpected errors
+          throw emailColErr;
+        }
+      }
+    }
+
     // Read core columns first (present in migration 007)
     const user = await db.prepare(
       'SELECT plan, trial_ends_at FROM users WHERE auth_id = ?'
     ).bind(authId).first();
     if (!user) {
-      // New user = eligible
+      // No user row — new user is eligible for trial (email check already passed above)
       return true;
     }
     const isOnFreePlan = (user.plan || 'free') === 'free';
@@ -436,11 +575,28 @@ export async function createResumeSession(env, userId, { title = null, role = nu
   }
 
   try {
-    const result = await db.prepare(
-      `INSERT INTO resume_sessions (user_id, title, role, raw_text_location) 
-       VALUES (?, ?, ?, ?) 
-       RETURNING id, user_id, title, role, created_at, raw_text_location`
-    ).bind(userId, title, role, rawTextLocation).first();
+    // Try with updated_at first (migration 016 adds the column via ALTER TABLE
+    // which can't set an expression default in SQLite, so we set it explicitly)
+    let result;
+    try {
+      result = await db.prepare(
+        `INSERT INTO resume_sessions (user_id, title, role, raw_text_location, updated_at)
+         VALUES (?, ?, ?, ?, datetime('now'))
+         RETURNING id, user_id, title, role, created_at, updated_at, raw_text_location`
+      ).bind(userId, title, role, rawTextLocation).first();
+    } catch (colErr) {
+      const msg = colErr?.message || '';
+      if (msg.includes('no such column')) {
+        console.warn('[DB] createResumeSession: updated_at column not found (migration 016 not applied), inserting without it');
+        result = await db.prepare(
+          `INSERT INTO resume_sessions (user_id, title, role, raw_text_location)
+           VALUES (?, ?, ?, ?)
+           RETURNING id, user_id, title, role, created_at, raw_text_location`
+        ).bind(userId, title, role, rawTextLocation).first();
+      } else {
+        throw colErr;
+      }
+    }
 
     console.log('[DB] Created resume session:', { id: result.id, userId, role });
     return result;
@@ -503,10 +659,24 @@ export async function logUsageEvent(env, userId, feature, tokensUsed = null, met
     const metaStr = meta ? JSON.stringify(meta) : null;
 
     const result = await db.prepare(
-      `INSERT INTO usage_events (user_id, feature, tokens_used, meta_json) 
-       VALUES (?, ?, ?, ?) 
+      `INSERT INTO usage_events (user_id, feature, tokens_used, meta_json)
+       VALUES (?, ?, ?, ?)
        RETURNING id, user_id, feature, tokens_used, meta_json, created_at`
     ).bind(userId, feature, tokensUsed, metaStr).first();
+
+    // Update last_activity_at for the user and clear any deletion warning
+    try {
+      await db.prepare(
+        'UPDATE users SET last_activity_at = datetime(\'now\'), deletion_warning_sent_at = NULL WHERE id = ?'
+      ).bind(userId).run();
+    } catch (activityErr) {
+      // Gracefully handle pre-migration environments where columns don't exist yet
+      if (activityErr.message && activityErr.message.includes('no such column')) {
+        console.warn('[DB] Activity columns not yet migrated, skipping last_activity_at update');
+      } else {
+        console.warn('[DB] Failed to update last_activity_at (non-blocking):', activityErr.message);
+      }
+    }
 
     console.log('[DB] Logged usage event:', { id: result.id, userId, feature, tokensUsed });
     return result;
@@ -818,12 +988,26 @@ export async function updateResumeSessionAtsScore(env, sessionId, atsScore) {
 
   try {
     await db.prepare(
-      'UPDATE resume_sessions SET ats_score = ? WHERE id = ?'
+      'UPDATE resume_sessions SET ats_score = ?, updated_at = datetime(\'now\') WHERE id = ?'
     ).bind(atsScore, sessionId).run();
 
     console.log('[DB] Updated ats_score:', { sessionId, atsScore });
     return true;
   } catch (error) {
+    // Fallback for pre-migration environments where updated_at column doesn't exist yet
+    const msg = error?.message || '';
+    if (msg.includes('no such column')) {
+      try {
+        await db.prepare(
+          'UPDATE resume_sessions SET ats_score = ? WHERE id = ?'
+        ).bind(atsScore, sessionId).run();
+        console.warn('[DB] Updated ats_score without updated_at (migration 016 not applied):', { sessionId, atsScore });
+        return true;
+      } catch (fallbackErr) {
+        console.error('[DB] Fallback updateResumeSessionAtsScore error:', fallbackErr);
+        return false;
+      }
+    }
     console.error('[DB] Error in updateResumeSessionAtsScore:', error);
     return false;
   }
@@ -886,46 +1070,67 @@ export async function upsertResumeSessionWithScores(env, userId, {
   try {
     const rawTextLocation = `resume:${resumeId}`;
     const ruleBasedScoresJson = ruleBasedScores ? JSON.stringify(ruleBasedScores) : null;
-    
+
     // Set ats_ready = 1 when ATS data is provided (never reset to 0)
     const atsReadyValue = (atsScore !== null || ruleBasedScoresJson !== null) ? 1 : null;
 
-    // OPTIMIZATION: Use single query with UPDATE + INSERT fallback
-    // This reduces database round trips from 2 to 1 (or 2 if UPDATE affects 0 rows)
-    // First, try to update the most recent session for this resumeId
-    const updateResult = await db.prepare(
-      `UPDATE resume_sessions 
-       SET ats_score = COALESCE(?, ats_score),
-           rule_based_scores_json = COALESCE(?, rule_based_scores_json),
-           role = COALESCE(?, role),
-           ats_ready = COALESCE(?, ats_ready)
-       WHERE id = (
-         SELECT id FROM resume_sessions
-         WHERE user_id = ? AND raw_text_location = ?
-         ORDER BY created_at DESC
-         LIMIT 1
-       )
-       RETURNING id, user_id, title, role, created_at, raw_text_location, ats_score, rule_based_scores_json, ats_ready`
-    ).bind(atsScore, ruleBasedScoresJson, role, atsReadyValue, userId, rawTextLocation).first();
-
-    if (updateResult) {
-      // Update succeeded - return updated session
-      return updateResult;
-    }
-
-    // No existing session found - insert new one
-    const insertAtsReady = atsReadyValue !== null ? 1 : 0;
-    const insertResult = await db.prepare(
-      `INSERT INTO resume_sessions (user_id, title, role, raw_text_location, ats_score, rule_based_scores_json, ats_ready)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
-       RETURNING id, user_id, title, role, created_at, raw_text_location, ats_score, rule_based_scores_json, ats_ready`
-    ).bind(userId, role, role, rawTextLocation, atsScore, ruleBasedScoresJson, insertAtsReady).first();
-
-    return insertResult || null;
+    return await _upsertResumeSession(db, { userId, rawTextLocation, atsScore, ruleBasedScoresJson, role, atsReadyValue, withUpdatedAt: true });
   } catch (error) {
+    // Fallback for pre-migration environments where updated_at column doesn't exist yet
+    const msg = error?.message || '';
+    if (msg.includes('no such column')) {
+      try {
+        console.warn('[DB] upsertResumeSessionWithScores: retrying without updated_at (migration 016 not applied)');
+        const rawTextLocation = `resume:${resumeId}`;
+        const ruleBasedScoresJson = ruleBasedScores ? JSON.stringify(ruleBasedScores) : null;
+        const atsReadyValue = (atsScore !== null || ruleBasedScoresJson !== null) ? 1 : null;
+        return await _upsertResumeSession(db, { userId, rawTextLocation, atsScore, ruleBasedScoresJson, role, atsReadyValue, withUpdatedAt: false });
+      } catch (fallbackErr) {
+        console.error('[DB] Fallback upsertResumeSessionWithScores error:', fallbackErr);
+        return null;
+      }
+    }
     console.error('[DB] Error in upsertResumeSessionWithScores:', error);
     return null;
   }
+}
+
+/** Internal helper for upsertResumeSessionWithScores to allow retry without updated_at. */
+async function _upsertResumeSession(db, { userId, rawTextLocation, atsScore, ruleBasedScoresJson, role, atsReadyValue, withUpdatedAt }) {
+  const updatedAtClause = withUpdatedAt ? "updated_at = datetime('now')," : '';
+  const returningUpdatedAt = withUpdatedAt ? ', updated_at' : '';
+
+  const updateResult = await db.prepare(
+    `UPDATE resume_sessions
+     SET ats_score = COALESCE(?, ats_score),
+         rule_based_scores_json = COALESCE(?, rule_based_scores_json),
+         role = COALESCE(?, role),
+         ats_ready = COALESCE(?, ats_ready),
+         ${updatedAtClause}
+         id = id
+     WHERE id = (
+       SELECT id FROM resume_sessions
+       WHERE user_id = ? AND raw_text_location = ?
+       ORDER BY created_at DESC
+       LIMIT 1
+     )
+     RETURNING id, user_id, title, role, created_at${returningUpdatedAt}, raw_text_location, ats_score, rule_based_scores_json, ats_ready`
+  ).bind(atsScore, ruleBasedScoresJson, role, atsReadyValue, userId, rawTextLocation).first();
+
+  if (updateResult) {
+    return updateResult;
+  }
+
+  const insertAtsReady = atsReadyValue !== null ? 1 : 0;
+  const insertUpdatedAtCol = withUpdatedAt ? ', updated_at' : '';
+  const insertUpdatedAtVal = withUpdatedAt ? ", datetime('now')" : '';
+  const insertResult = await db.prepare(
+    `INSERT INTO resume_sessions (user_id, title, role, raw_text_location, ats_score, rule_based_scores_json, ats_ready${insertUpdatedAtCol})
+     VALUES (?, ?, ?, ?, ?, ?, ?${insertUpdatedAtVal})
+     RETURNING id, user_id, title, role, created_at${returningUpdatedAt}, raw_text_location, ats_score, rule_based_scores_json, ats_ready`
+  ).bind(userId, role, role, rawTextLocation, atsScore, ruleBasedScoresJson, insertAtsReady).first();
+
+  return insertResult || null;
 }
 
 /**
@@ -1462,8 +1667,10 @@ export async function resetFeatureDailyUsage(env, authId, feature) {
   }
 
   try {
-    // Get user ID from auth ID
-    const d1User = await getOrCreateUserByAuthId(env, authId);
+    // Look up user — do NOT auto-create (webhook paths could resurrect deleted users)
+    const d1User = await db.prepare(
+      'SELECT id FROM users WHERE auth_id = ?'
+    ).bind(authId).first();
     if (!d1User || !d1User.id) {
       console.warn('[DB] User not found for resetFeatureDailyUsage:', authId);
       return false;
@@ -1505,8 +1712,10 @@ export async function resetUsageEvents(env, authId, feature) {
   }
 
   try {
-    // Get user ID from auth ID
-    const d1User = await getOrCreateUserByAuthId(env, authId);
+    // Look up user — do NOT auto-create (webhook paths could resurrect deleted users)
+    const d1User = await db.prepare(
+      'SELECT id FROM users WHERE auth_id = ?'
+    ).bind(authId).first();
     if (!d1User || !d1User.id) {
       console.warn('[DB] User not found for resetUsageEvents:', authId);
       return false;

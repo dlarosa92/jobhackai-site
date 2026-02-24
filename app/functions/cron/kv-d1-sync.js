@@ -1,5 +1,5 @@
 // Lightweight cron worker to sync KV-cached resume states into D1 when possible.
-import { getDb, getOrCreateUserByAuthId, upsertResumeSessionWithScores, setFirstResumeSnapshot, getFirstResumeSnapshot, isD1Available } from '../_lib/db.js';
+import { getDb, getOrCreateUserByAuthId, upsertResumeSessionWithScores, setFirstResumeSnapshot, getFirstResumeSnapshot, isD1Available, isDeletedUser } from '../_lib/db.js';
 import { sanitizeResumeId } from '../_lib/input-sanitizer.js';
 
 export async function onRequest(context) {
@@ -36,7 +36,12 @@ export async function onRequest(context) {
           
           // Attempt to mirror into D1
           if (!isD1Available(env)) continue;
-          const d1User = await getOrCreateUserByAuthId(env, record.uid, null);
+          // Skip if user was intentionally deleted (tombstone exists)
+          if (await isDeletedUser(env, record.uid)) {
+            console.log(`⏭️ [KV-D1-SYNC] Skipping sync: user ${record.uid} was deleted (tombstone found)`);
+            continue;
+          }
+          const d1User = await getOrCreateUserByAuthId(env, record.uid, null, { updateActivity: false });
           if (!d1User) continue;
           // Upsert session with scores
           const session = await upsertResumeSessionWithScores(env, d1User.id, {

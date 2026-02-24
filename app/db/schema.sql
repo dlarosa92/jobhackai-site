@@ -14,8 +14,26 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT,                            -- User email (from Firebase)
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now')),
-  has_seen_welcome_modal INTEGER NOT NULL DEFAULT 0,  -- Tracks if user has seen welcome modal (0 = not seen, 1 = seen)
-  has_seen_upgrade_popup INTEGER NOT NULL DEFAULT 0   -- Tracks if user has seen free→paid upgrade popup (0 = not seen, 1 = seen)
+  -- Plan & billing (migration 007)
+  plan TEXT DEFAULT 'free',
+  stripe_customer_id TEXT,
+  stripe_subscription_id TEXT,
+  subscription_status TEXT,
+  trial_ends_at TEXT,
+  current_period_end TEXT,
+  cancel_at TEXT,                        -- Set when cancel_at_period_end is true
+  scheduled_plan TEXT,                   -- Plan that will activate at scheduled_at
+  scheduled_at TEXT,                     -- ISO 8601 datetime
+  plan_updated_at TEXT,
+  -- UI flags
+  has_seen_welcome_modal INTEGER NOT NULL DEFAULT 0,
+  has_seen_upgrade_popup INTEGER NOT NULL DEFAULT 0,
+  -- Billing history (migration 014)
+  has_ever_paid INTEGER NOT NULL DEFAULT 0,
+  -- Activity tracking for retention policy (migration 015)
+  last_login_at TEXT,
+  last_activity_at TEXT,
+  deletion_warning_sent_at TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_auth_id ON users(auth_id);
@@ -30,6 +48,7 @@ CREATE TABLE IF NOT EXISTS resume_sessions (
   title TEXT,                            -- User-friendly label (e.g., "Senior Data Engineer Resume")
   role TEXT,                             -- Target role (jobTitle from request)
   created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),  -- Refreshed on ATS upserts so retention cleaner sees activity
   raw_text_location TEXT,                -- Pointer to KV key (e.g., "resume:${resumeId}") or null
   ats_score INTEGER,                     -- Overall ATS score (0-100) for quick history display
   ats_ready INTEGER NOT NULL DEFAULT 0,  -- Explicit ATS readiness flag (1 = ready, 0 = not ready)
@@ -156,3 +175,35 @@ CREATE TABLE IF NOT EXISTS mock_interview_usage (
 );
 
 CREATE INDEX IF NOT EXISTS idx_mock_interview_usage_user_month ON mock_interview_usage(user_id, month);
+
+-- ============================================================
+-- DELETED_AUTH_IDS TABLE (migration 017, extended in 018)
+-- Tombstone for deleted users; prevents Stripe webhooks from
+-- recreating rows when KV tombstone is unavailable.
+-- email column (migration 018) enables isTrialEligible to block
+-- trial re-use when a returning user registers under a new Firebase UID.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS deleted_auth_ids (
+  auth_id TEXT PRIMARY KEY,
+  email TEXT,
+  deleted_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_deleted_auth_ids_deleted_at ON deleted_auth_ids(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_deleted_auth_ids_email ON deleted_auth_ids(email);
+
+-- ============================================================
+-- FIRST_RESUME_SNAPSHOTS TABLE
+-- Stores the initial resume snapshot per user for progress tracking
+-- ============================================================
+CREATE TABLE IF NOT EXISTS first_resume_snapshots (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  resume_session_id INTEGER NOT NULL,
+  snapshot_json TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(user_id),
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_first_snapshot_user_id ON first_resume_snapshots(user_id);

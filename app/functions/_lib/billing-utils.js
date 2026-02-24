@@ -299,8 +299,8 @@ export function getPlanFromSubscription(sub, env) {
 export async function listSubscriptions(env, customerId) {
   const res = await stripe(env, `/subscriptions?customer=${customerId}&status=all&limit=25`);
   if (!res.ok) {
-    console.log('🟡 [BILLING-UTILS] Subscription list failed', res.status);
-    return [];
+    const errText = await res.text().catch(() => '');
+    throw new Error(`Stripe list subscriptions failed (${res.status}): ${errText}`);
   }
   const data = await res.json();
   return data?.data || [];
