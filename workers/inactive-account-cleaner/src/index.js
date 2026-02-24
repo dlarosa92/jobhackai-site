@@ -376,11 +376,25 @@ async function deleteUserData(db, env, user) {
   // Write tombstones so delayed Stripe webhooks don't recreate this user.
   // D1 is authoritative; KV is best-effort cache.
   try {
+    // Try with email column (migration 018)
     await db.prepare(
       'INSERT OR REPLACE INTO deleted_auth_ids (auth_id, email, deleted_at) VALUES (?, ?, datetime(\'now\'))'
     ).bind(uid, user.email || null).run();
   } catch (d1Err) {
-    console.error('[inactive-cleaner] D1 tombstone write failed for', uid, ':', d1Err?.message || d1Err);
+    // Fallback for pre-migration 018 environments where email column doesn't exist
+    const msg = String(d1Err?.message || '').toLowerCase();
+    if (msg.includes('no such column') || msg.includes('unknown column') || msg.includes('no such')) {
+      try {
+        console.warn('[inactive-cleaner] Email column not found in deleted_auth_ids, using fallback query. Migration 018 may need to be run.');
+        await db.prepare(
+          'INSERT OR REPLACE INTO deleted_auth_ids (auth_id, deleted_at) VALUES (?, datetime(\'now\'))'
+        ).bind(uid).run();
+      } catch (fallbackErr) {
+        console.error('[inactive-cleaner] D1 tombstone write failed (fallback) for', uid, ':', fallbackErr?.message || fallbackErr);
+      }
+    } else {
+      console.error('[inactive-cleaner] D1 tombstone write failed for', uid, ':', d1Err?.message || d1Err);
+    }
   }
   if (env.JOBHACKAI_KV) {
     try {

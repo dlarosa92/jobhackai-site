@@ -346,11 +346,26 @@ export async function writeDeletedTombstone(env, authId, email = null) {
     return false;
   }
   try {
+    // Try with email column (migration 018)
     await db.prepare(
       'INSERT OR REPLACE INTO deleted_auth_ids (auth_id, email, deleted_at) VALUES (?, ?, datetime(\'now\'))'
     ).bind(authId, email || null).run();
     return true;
   } catch (error) {
+    // Fallback for pre-migration 018 environments where email column doesn't exist
+    const msg = String(error?.message || '').toLowerCase();
+    if (msg.includes('no such column') || msg.includes('unknown column') || msg.includes('no such')) {
+      try {
+        console.warn('[DB] Email column not found in deleted_auth_ids, using fallback query. Migration 018 may need to be run.');
+        await db.prepare(
+          'INSERT OR REPLACE INTO deleted_auth_ids (auth_id, deleted_at) VALUES (?, datetime(\'now\'))'
+        ).bind(authId).run();
+        return true;
+      } catch (fallbackErr) {
+        console.error('[DB] Error writing deleted tombstone (fallback):', fallbackErr);
+        return false;
+      }
+    }
     console.error('[DB] Error writing deleted tombstone:', error);
     return false;
   }
@@ -459,12 +474,24 @@ export async function isTrialEligible(env, authId, email = null) {
     // a user row exists, since getOrCreateUserByAuthId may have already created a user
     // row from other API endpoints before checkout is reached.
     if (email) {
-      const deletedRow = await db.prepare(
-        'SELECT 1 FROM deleted_auth_ids WHERE email = ?'
-      ).bind(email).first();
-      if (deletedRow) {
-        // Email exists in deleted_auth_ids — user previously deleted account, not eligible for trial
-        return false;
+      try {
+        const deletedRow = await db.prepare(
+          'SELECT 1 FROM deleted_auth_ids WHERE email = ?'
+        ).bind(email).first();
+        if (deletedRow) {
+          // Email exists in deleted_auth_ids — user previously deleted account, not eligible for trial
+          return false;
+        }
+      } catch (emailColErr) {
+        // Gracefully handle pre-migration 018 environments where email column doesn't exist
+        const msg = String(emailColErr?.message || '').toLowerCase();
+        if (msg.includes('no such column') || msg.includes('unknown column') || msg.includes('no such')) {
+          // Column doesn't exist yet - skip email tombstone check (migration 018 not applied)
+          console.warn('[DB] Email column not found in deleted_auth_ids, skipping email tombstone check. Migration 018 may need to be run.');
+        } else {
+          // Re-throw unexpected errors
+          throw emailColErr;
+        }
       }
     }
 
