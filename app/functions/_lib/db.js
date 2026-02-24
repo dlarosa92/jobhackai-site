@@ -455,23 +455,25 @@ export async function isTrialEligible(env, authId, email = null) {
     throw new Error('D1 binding not available');
   }
   try {
+    // Check email tombstone first (migration 018) - this must run regardless of whether
+    // a user row exists, since getOrCreateUserByAuthId may have already created a user
+    // row from other API endpoints before checkout is reached.
+    if (email) {
+      const deletedRow = await db.prepare(
+        'SELECT 1 FROM deleted_auth_ids WHERE email = ?'
+      ).bind(email).first();
+      if (deletedRow) {
+        // Email exists in deleted_auth_ids — user previously deleted account, not eligible for trial
+        return false;
+      }
+    }
+
     // Read core columns first (present in migration 007)
     const user = await db.prepare(
       'SELECT plan, trial_ends_at FROM users WHERE auth_id = ?'
     ).bind(authId).first();
     if (!user) {
-      // No user row — check if this email was previously deleted (migration 018)
-      // to prevent trial re-use when a returning user registers under a new Firebase UID.
-      if (email) {
-        const deletedRow = await db.prepare(
-          'SELECT 1 FROM deleted_auth_ids WHERE email = ?'
-        ).bind(email).first();
-        if (deletedRow) {
-          // Email exists in deleted_auth_ids — user previously deleted account, not eligible for trial
-          return false;
-        }
-      }
-      // New user (or no email provided) is eligible for trial
+      // No user row — new user is eligible for trial (email check already passed above)
       return true;
     }
     const isOnFreePlan = (user.plan || 'free') === 'free';

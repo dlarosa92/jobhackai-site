@@ -51,12 +51,16 @@ async function checkActivityColumns(db) {
 
 async function purgeExpiredTombstones(db) {
   try {
+    // Only purge tombstones without emails (email IS NULL) - these are used for
+    // Stripe webhook prevention and can be safely deleted after 90 days.
+    // Tombstones with emails are used for trial prevention and must persist
+    // indefinitely to prevent trial re-use by returning users.
     const result = await db.prepare(
-      "DELETE FROM deleted_auth_ids WHERE deleted_at < datetime('now', '-90 days')"
+      "DELETE FROM deleted_auth_ids WHERE email IS NULL AND deleted_at < datetime('now', '-90 days')"
     ).run();
     const purged = result?.meta?.changes || 0;
     if (purged > 0) {
-      console.log(`[inactive-cleaner] Purged ${purged} expired tombstones (> 90 days old)`);
+      console.log(`[inactive-cleaner] Purged ${purged} expired tombstones without emails (> 90 days old)`);
     }
   } catch (err) {
     // Non-critical: table may not exist yet in older schemas
