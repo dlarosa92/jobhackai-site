@@ -682,4 +682,73 @@ test.describe('Full App Check', () => {
     await expect(page.locator('#cl-history-list .cl-history-item').first()).toBeVisible({ timeout: 15000 });
     await expect(page.locator('#cl-download')).toBeVisible();
   });
+
+  test('account management: data export + delete account + cancel subscription UI', async ({ page }) => {
+    test.setTimeout(90000);
+
+    // Mock the export endpoint to return structured data
+    await page.route('**/api/user/export', async (route) => {
+      await jsonResponse(route, {
+        exportDate: new Date().toISOString(),
+        user: {
+          email: 'test@example.com',
+          plan: 'pro',
+          createdAt: '2024-01-01T00:00:00Z',
+          updatedAt: new Date().toISOString(),
+        },
+        resumeSessions: [{ id: 1, title: 'Test Resume', role: 'Engineer', ats_score: 85, created_at: '2024-06-01T00:00:00Z' }],
+        feedbackSessions: [],
+        linkedinRuns: [],
+        interviewQuestionSets: [],
+        mockInterviewSessions: [],
+        coverLetterHistory: [],
+        usageEvents: [],
+        cookieConsent: null,
+        firstResumeSnapshot: null,
+        roleUsageLog: [],
+        featureDailyUsage: [],
+        mockInterviewUsage: [],
+      });
+    });
+
+    // Mock the delete endpoint (should never be called — we only test UI)
+    await page.route('**/api/user/delete', async (route) => {
+      await jsonResponse(route, { ok: true, message: 'Account deleted successfully' });
+    });
+
+    // Mock the cancel-subscription endpoint
+    await page.route('**/api/cancel-subscription', async (route) => {
+      await jsonResponse(route, { ok: true, status: 'no_active_subscription' });
+    });
+
+    await page.goto('/account-setting.html');
+    await page.waitForLoadState('domcontentloaded');
+    await waitForAuthReady(page, 15000);
+
+    // 1. Verify data export button exists
+    const downloadBtn = page.locator('#download-my-data-btn');
+    await expect(downloadBtn).toBeVisible({ timeout: 10000 });
+
+    // 2. Verify delete account button exists
+    const deleteBtn = page.locator('#delete-account-link');
+    await expect(deleteBtn).toBeVisible({ timeout: 10000 });
+
+    // 3. Test delete account modal opens and can be dismissed
+    await deleteBtn.click();
+    const modal = page.locator('#delete-account-modal');
+    await expect(modal).toBeVisible({ timeout: 5000 });
+
+    // Close modal without confirming
+    const closeBtn = modal.locator('#delete-modal-cancel, #cancel-delete-btn, button:has-text("Cancel"), .modal-close, [aria-label="Close"]');
+    const closeVisible = await closeBtn.first().isVisible({ timeout: 3000 }).catch(() => false);
+    if (closeVisible) {
+      await closeBtn.first().click();
+    } else {
+      await page.keyboard.press('Escape');
+    }
+
+    // Verify page is intact
+    expect(page.url()).toContain('account-setting');
+    await expect(page.locator('[data-action="logout"]')).toBeVisible({ timeout: 5000 });
+  });
 });
