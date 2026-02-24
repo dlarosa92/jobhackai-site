@@ -339,7 +339,7 @@ export async function updateUserPlan(env, authId, {
  * @param {string} authId - Firebase UID
  * @returns {Promise<boolean>} True if tombstone was written, false on error
  */
-export async function writeDeletedTombstone(env, authId) {
+export async function writeDeletedTombstone(env, authId, email = null) {
   const db = getDb(env);
   if (!db) {
     console.warn('[DB] D1 binding not available for tombstone write');
@@ -347,8 +347,8 @@ export async function writeDeletedTombstone(env, authId) {
   }
   try {
     await db.prepare(
-      'INSERT OR REPLACE INTO deleted_auth_ids (auth_id, deleted_at) VALUES (?, datetime(\'now\'))'
-    ).bind(authId).run();
+      'INSERT OR REPLACE INTO deleted_auth_ids (auth_id, email, deleted_at) VALUES (?, ?, datetime(\'now\'))'
+    ).bind(authId, email || null).run();
     return true;
   } catch (error) {
     console.error('[DB] Error writing deleted tombstone:', error);
@@ -444,7 +444,7 @@ export async function getUserPlanData(env, authId) {
  * @param {string} authId - Firebase UID
  * @returns {Promise<boolean>}
  */
-export async function isTrialEligible(env, authId) {
+export async function isTrialEligible(env, authId, email = null) {
   const db = getDb(env);
   if (!db) {
     console.warn('[DB] D1 binding not available');
@@ -457,7 +457,23 @@ export async function isTrialEligible(env, authId) {
       'SELECT plan, trial_ends_at FROM users WHERE auth_id = ?'
     ).bind(authId).first();
     if (!user) {
-      // New user = eligible
+      // No user row — but check whether this email was previously deleted.
+      // A returning user may have re-registered under a new Firebase UID after
+      // account deletion, which would otherwise give them a fresh trial.
+      if (email) {
+        try {
+          const deleted = await db.prepare(
+            'SELECT 1 FROM deleted_auth_ids WHERE email = ?'
+          ).bind(email).first();
+          if (deleted) return false;
+        } catch (emailCheckErr) {
+          // email column absent on pre-migration 018 DBs — skip check gracefully
+          const msg = String(emailCheckErr?.message || '').toLowerCase();
+          if (!msg.includes('no such column') && !msg.includes('unknown column') && !msg.includes('no such')) {
+            throw emailCheckErr;
+          }
+        }
+      }
       return true;
     }
     const isOnFreePlan = (user.plan || 'free') === 'free';
