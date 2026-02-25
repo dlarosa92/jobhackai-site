@@ -148,18 +148,13 @@ test.describe('Real API Smoke', () => {
       return { status: res.status, body: await res.json() };
     }, token);
 
-    // Valid outcomes: 200 (canceled or no active sub), 404 (no customer found), 502 (Stripe unavailable)
-    expect([200, 404, 502]).toContain(result.status);
+    // Mock always returns 200 with no_active_subscription status
+    expect(result.status).toBe(200);
     expect(typeof result.body).toBe('object');
-
-    if (result.status === 200) {
-      expect(result.body).toHaveProperty('ok', true);
-      expect(result.body).toHaveProperty('status');
-      // Valid statuses: no_active_subscription, canceled_immediately, cancel_scheduled
-      expect(['no_active_subscription', 'canceled_immediately', 'cancel_scheduled']).toContain(result.body.status);
-    } else if (result.status === 404) {
-      expect(result.body).toHaveProperty('error');
-    }
+    expect(result.body).toHaveProperty('ok', true);
+    expect(result.body).toHaveProperty('status');
+    // Valid statuses: no_active_subscription, canceled_immediately, cancel_scheduled
+    expect(['no_active_subscription', 'canceled_immediately', 'cancel_scheduled']).toContain(result.body.status);
   });
 
   test('POST /api/user/delete requires authentication', async ({ browser, baseURL }) => {
