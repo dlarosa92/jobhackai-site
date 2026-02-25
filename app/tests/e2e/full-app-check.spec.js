@@ -683,7 +683,7 @@ test.describe('Full App Check', () => {
     await expect(page.locator('#cl-download')).toBeVisible();
   });
 
-  test('account management: data export + delete account + cancel subscription UI', async ({ page }) => {
+  test('account management: data export + delete account UI', async ({ page }) => {
     test.setTimeout(90000);
 
     // Mock the export endpoint to return structured data
@@ -714,11 +714,6 @@ test.describe('Full App Check', () => {
     // Mock the delete endpoint (should never be called — we only test UI)
     await page.route('**/api/user/delete', async (route) => {
       await jsonResponse(route, { ok: true, message: 'Account deleted successfully' });
-    });
-
-    // Mock the cancel-subscription endpoint
-    await page.route('**/api/cancel-subscription', async (route) => {
-      await jsonResponse(route, { ok: true, status: 'no_active_subscription' });
     });
 
     await page.goto('/account-setting.html');

@@ -133,25 +133,32 @@ test.describe('Real API Smoke', () => {
     const token = await getAuthToken(page);
     expect(token).toBeTruthy();
 
-    const response = await page.request.post('/api/cancel-subscription', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
+    // Use page.evaluate(fetch()) so the request goes through the page context
+    // where page.route() interceptors are active. page.request.post() uses
+    // Playwright's APIRequestContext which bypasses page.route() entirely and
+    // would hit the real endpoint, potentially canceling a real subscription.
+    const result = await page.evaluate(async (bearerToken) => {
+      const res = await fetch('/api/cancel-subscription', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${bearerToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      return { status: res.status, body: await res.json() };
+    }, token);
 
     // Valid outcomes: 200 (canceled or no active sub), 404 (no customer found), 502 (Stripe unavailable)
-    expect([200, 404, 502]).toContain(response.status());
-    const data = await response.json();
-    expect(typeof data).toBe('object');
+    expect([200, 404, 502]).toContain(result.status);
+    expect(typeof result.body).toBe('object');
 
-    if (response.status() === 200) {
-      expect(data).toHaveProperty('ok', true);
-      expect(data).toHaveProperty('status');
+    if (result.status === 200) {
+      expect(result.body).toHaveProperty('ok', true);
+      expect(result.body).toHaveProperty('status');
       // Valid statuses: no_active_subscription, canceled_immediately, cancel_scheduled
-      expect(['no_active_subscription', 'canceled_immediately', 'cancel_scheduled']).toContain(data.status);
-    } else if (response.status() === 404) {
-      expect(data).toHaveProperty('error');
+      expect(['no_active_subscription', 'canceled_immediately', 'cancel_scheduled']).toContain(result.body.status);
+    } else if (result.status === 404) {
+      expect(result.body).toHaveProperty('error');
     }
   });
 
