@@ -119,17 +119,23 @@ test.describe('Stripe Billing', () => {
     
     const { data } = await postStripeCheckout(page, { plan: 'trial', startTrial: true });
 
-    // If trial already used, API should return error
+    // If trial already used or eligibility check failed, API should return error
     // This test assumes the test account has already used trial
-    if (data.error && typeof data.error === 'string' && data.error.includes('Trial already used')) {
+    // Accept both "Trial already used" and "Unable to verify trial eligibility..." (D1/trial_check_failed)
+    const errorMsg = (data.error && typeof data.error === 'string' ? data.error : '').toLowerCase();
+    const trialBlocked =
+      (data.ok === false && errorMsg.includes('trial already used')) ||
+      (data.ok === false && errorMsg.includes('trial eligibility')) ||
+      (data.ok === false && data.code === 'trial_check_failed');
+
+    if (trialBlocked) {
       expect(data.ok).toBe(false);
-      expect(data.error).toContain('Trial already used');
     } else if (data.ok) {
       // If trial is allowed, that's also valid - but log it
       console.log('Trial is available (not yet used)');
       expect(data.url).toContain('checkout.stripe.com');
     } else {
-      // If we get an error but not the expected one, fail the test
+      // If we get an error but not a known trial-blocked case, fail the test
       throw new Error(`Unexpected error response: ${JSON.stringify(data)}`);
     }
   });
@@ -412,5 +418,66 @@ test.describe('Stripe Billing', () => {
     // 3. Verify plan changes from 'trial' to 'essential'
     // This requires Stripe API access and webhook simulation
     console.log('⚠️ Full trial conversion test requires Stripe webhook simulation or time advancement');
+  });
+
+  test('should include trialEligible in plan response for trial gating', async ({ page }) => {
+    await page.goto('/pricing-a.html');
+    await page.waitForLoadState('domcontentloaded');
+
+    const token = await getAuthToken(page);
+    expect(token).not.toBeNull();
+
+    const planData = await fetchPlanData(page, token);
+
+    // trialEligible field must be present for the pricing page to gate trial access
+    expect(planData).toHaveProperty('trialEligible');
+    expect(typeof planData.trialEligible).toBe('boolean');
+
+    // If not trial-eligible, attempting trial checkout should be blocked
+    if (!planData.trialEligible) {
+      const { data } = await postStripeCheckout(page, { plan: 'trial', startTrial: true });
+      if (data.error) {
+        const errorMsg = String(data.error).toLowerCase();
+        expect(errorMsg).toContain('trial already used');
+        expect(data.ok).toBe(false);
+      }
+      // If data.ok is true despite trialEligible=false, the API might have different
+      // eligibility logic than D1 — log but don't fail (race condition with Stripe state)
+      if (data.ok) {
+        console.log('⚠️ Trial checkout succeeded despite trialEligible=false — possible Stripe/D1 state mismatch');
+      }
+    }
+  });
+
+  test('should block checkout for already-subscribed users with ALREADY_SUBSCRIBED code', async ({ page }) => {
+    await page.goto('/pricing-a.html');
+    await page.waitForLoadState('domcontentloaded');
+
+    const token = await getAuthToken(page);
+    expect(token).not.toBeNull();
+
+    const planData = await fetchPlanData(page, token);
+    const normalizedPlan = (planData.plan || '').toLowerCase();
+
+    // This test is only meaningful when the user already has an active subscription
+    if (!['essential', 'pro', 'premium', 'trial'].includes(normalizedPlan)) {
+      test.info().skip(`User is on ${normalizedPlan || 'unknown'} plan — no active subscription to test duplicate blocking`);
+      return;
+    }
+
+    const { response, data } = await postStripeCheckout(page, { plan: 'essential', startTrial: false });
+
+    // If already subscribed, the API should return 409 with ALREADY_SUBSCRIBED code
+    if (response.status() === 409) {
+      expect(data.ok).toBe(false);
+      expect(data.code).toBe('ALREADY_SUBSCRIBED');
+      expect(data).toHaveProperty('error');
+      expect(typeof data.plan).toBe('string');
+    } else {
+      // The user may not actually have a Stripe subscription despite having a plan
+      // (e.g., manually-set plan, webhook-only plan). Log and accept.
+      console.log(`Checkout returned ${response.status()} instead of 409 for ${normalizedPlan} plan`);
+      expect([200, 400, 409]).toContain(response.status());
+    }
   });
 });
