@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!--
+    ============================================================
+    ADMIN CHECKLIST — update all fields marked [EDIT] before publishing
+    ============================================================
+    1. <title>          [EDIT] - "Article Title | JobHackAI Blog"
+    2. meta description [EDIT] - unique 140-160 char summary
+    3. canonical URL    [EDIT] - must match the slug/filename
+    4. og:title         [EDIT] - same as <title> or slightly shorter
+    5. og:description   [EDIT] - same as meta description
+    6. og:url           [EDIT] - same as canonical
+    7. datePublished    [EDIT] - YYYY-MM-DD
+    8. dateModified     [EDIT] - YYYY-MM-DD (same as published on first publish)
+    9. Article headline [EDIT] - in JSON-LD below
+    10. Article description [EDIT] - in JSON-LD below
+    11. post-category-badge  [EDIT] - e.g. "Resume", "LinkedIn", "Interview Prep"
+    12. post-title           [EDIT]
+    13. post-subtitle (intro) [EDIT]
+    14. post-meta date/readtime [EDIT]
+    15. Article body content [EDIT]
+    16. post-cta (optional tweak)
+    17. Add to blog-data.js
+    18. Add to sitemap.xml
+    ============================================================
+  -->
+
+  <!-- [EDIT] --> <title>Article Title Goes Here | JobHackAI Blog</title>
+  <!-- [EDIT] --> <meta name="description" content="Write a unique 140-160 character description of this article here. It will appear in Google search results.">
+  <!-- [EDIT] --> <link rel="canonical" href="https://jobhackai.io/blog/your-slug-here">
+
+  <!-- Open Graph -->
+  <!-- [EDIT] --> <meta property="og:title" content="Article Title Goes Here | JobHackAI Blog">
+  <!-- [EDIT] --> <meta property="og:description" content="Write a unique 140-160 character description here.">
+  <meta property="og:type" content="article">
+  <!-- [EDIT] --> <meta property="og:url" content="https://jobhackai.io/blog/your-slug-here">
+  <meta property="og:site_name" content="JobHackAI">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <!-- [EDIT] --> <meta name="twitter:title" content="Article Title Goes Here">
+  <!-- [EDIT] --> <meta name="twitter:description" content="Write a unique description here.">
+
+  <!-- Article Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "headline": "Article Title Goes Here",
+    "description": "Article description here.",
+    "author": {
+      "@type": "Organization",
+      "name": "JobHackAI",
+      "url": "https://jobhackai.io"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "JobHackAI",
+      "url": "https://jobhackai.io"
+    },
+    "datePublished": "2026-01-01",
+    "dateModified": "2026-01-01",
+    "mainEntityOfPage": {
+      "@type": "WebPage",
+      "@id": "https://jobhackai.io/blog/your-slug-here"
+    }
+  }
+  </script>
+
+  <!-- Breadcrumb Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://jobhackai.io/" },
+      { "@type": "ListItem", "position": 2, "name": "Blog", "item": "https://jobhackai.io/blog" },
+      { "@type": "ListItem", "position": 3, "name": "Article Title Goes Here", "item": "https://jobhackai.io/blog/your-slug-here" }
+    ]
+  }
+  </script>
+
+  <link rel="icon" type="image/png" href="../assets/jobhackai_icon_only_128.png">
+  <link rel="apple-touch-icon" href="../assets/jobhackai_icon_only_128.png">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="../css/reset.css">
+  <link rel="stylesheet" href="../css/tokens.css">
+  <link rel="stylesheet" href="../css/main.css">
+  <link rel="stylesheet" href="../css/header.css">
+  <link rel="stylesheet" href="../css/footer.css">
+  <link rel="stylesheet" href="../css/marketing.css">
+  <link rel="stylesheet" href="../css/blog.css">
+  <script src="https://app.jobhackai.io/js/cookie-consent.js?v=20260206-1" defer></script>
+</head>
+<body>
+  <!-- Component: components/header.html -->
+  <header class="site-header" id="top">
+    <div class="container">
+      <a href="https://jobhackai.io/" class="nav-logo" aria-label="Go to homepage">
+        <svg width="24" height="24" fill="none" stroke="#1F2937" stroke-width="2" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="7" width="18" height="13" rx="2"/>
+          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/>
+        </svg>
+        <span>JOBHACKAI</span>
+      </a>
+      <div class="nav-group">
+        <nav class="nav-links" role="navigation">
+          <!-- Navigation will be dynamically populated by navigation.js -->
+        </nav>
+      </div>
+      <button class="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <nav class="mobile-nav" id="mobileNav">
+    <!-- Mobile navigation will be dynamically populated by navigation.js -->
+  </nav>
+  <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
+  <script src="../js/mobile-menu.js?v=20250115-1"></script>
+
+  <main>
+    <div class="container">
+
+      <!-- Post Header -->
+      <header class="post-header">
+
+        <!-- Breadcrumb -->
+        <nav class="post-breadcrumb" aria-label="Breadcrumb">
+          <a href="https://jobhackai.io/">Home</a>
+          <span aria-hidden="true">/</span>
+          <a href="https://jobhackai.io/blog">Blog</a>
+          <span aria-hidden="true">/</span>
+          <span aria-current="page">Article Title Goes Here</span><!-- [EDIT] -->
+        </nav>
+
+        <!-- [EDIT] category -->
+        <span class="post-category-badge">Resume</span>
+
+        <!-- [EDIT] title -->
+        <h1 class="post-title">Article Title Goes Here</h1>
+
+        <!-- [EDIT] subtitle/intro -->
+        <p class="post-subtitle">One sentence that summarizes the key promise of this article and why a job seeker should read it.</p>
+
+        <!-- [EDIT] date and read time -->
+        <div class="post-meta">
+          <span>January 1, 2026</span>
+          <span class="separator">·</span>
+          <span>7 min read</span>
+          <span class="separator">·</span>
+          <span>JobHackAI Team</span>
+        </div>
+
+      </header>
+
+      <!-- Post Body -->
+      <article class="post-body">
+        <div class="prose">
+
+          <!-- INTRO PARAGRAPH -->
+          <p>Write the opening paragraph here. Hook the reader immediately — state the problem clearly and tell them what they will walk away with after reading this article.</p>
+
+          <!-- SECTION 1 -->
+          <h2>First Major Section Heading</h2>
+          <p>Write your first section content here. Use concrete, specific information. Avoid vague advice — give readers something they can act on immediately.</p>
+
+          <ul>
+            <li>Bullet point one with specific detail</li>
+            <li>Bullet point two with specific detail</li>
+            <li>Bullet point three with specific detail</li>
+          </ul>
+
+          <!-- CALLOUT BOX (use for key tips) -->
+          <div class="callout">
+            <div class="callout-label">Key Takeaway</div>
+            <p>Write a punchy, memorable summary of the most important insight from this section.</p>
+          </div>
+
+          <!-- SECTION 2 -->
+          <h2>Second Major Section Heading</h2>
+          <p>Continue the article here. Each section should deliver clear, actionable value.</p>
+
+          <!-- BLOCKQUOTE (use sparingly for emphasis) -->
+          <blockquote>
+            <p>"A strong quote or key insight that reinforces your main point."</p>
+          </blockquote>
+
+          <!-- SECTION 3 -->
+          <h2>Third Major Section Heading</h2>
+          <p>Third section content here.</p>
+
+          <h3>A sub-point within this section</h3>
+          <p>More detailed content for this specific point.</p>
+
+          <!-- CLOSING -->
+          <h2>The Bottom Line</h2>
+          <p>Summarize the key points and give a clear, direct next step the reader can take right now.</p>
+
+        </div>
+
+        <!-- CTA Band -->
+        <div class="post-cta">
+          <h3>Put this into practice with JobHackAI.</h3>
+          <p>Get instant AI feedback on your resume, LinkedIn profile, and interview answers. Try it free.</p>
+          <a class="btn btn-primary" href="https://app.jobhackai.io/login?plan=trial">Start Free Trial</a>
+        </div>
+
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Component: components/footer.html -->
+  <div data-component-src="../components/footer.html"></div>
+
+  <script src="../js/component-loader.js?v=20260206-1"></script>
+  <script type="module" src="../js/firebase-auth.js?v=20260207-2"></script>
+  <script src="../js/navigation.js?v=20260208-1"></script>
+  <script src="../js/universal-logout.js?v=20260208-1"></script>
+  <script>
+    if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
+      window.JobHackAINavigation.initializeNavigation();
+    } else {
+      window.addEventListener('DOMContentLoaded', function() {
+        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
+          window.JobHackAINavigation.initializeNavigation();
+        }
+      });
+    }
+  </script>
+
+</body>
+</html>

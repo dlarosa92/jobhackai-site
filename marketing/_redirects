@@ -14,3 +14,8 @@
 /features.html  /features  301
 /pricing.html https://app.jobhackai.io/pricing-a  301
 /pricing      https://app.jobhackai.io/pricing-a  301
+
+# Blog post clean URLs (add a line here for each new post)
+/blog/ats-optimization-playbook       /blog/ats-optimization-playbook.html  200
+/blog/linkedin-profile-optimization   /blog/linkedin-profile-optimization.html  200
+/blog/7-day-interview-prep-routine    /blog/7-day-interview-prep-routine.html  200

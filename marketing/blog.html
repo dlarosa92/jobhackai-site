@@ -3,13 +3,62 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>JobHackAI Blog | Career Strategy & Resume Insights</title>
-  <meta name="description" content="JobHackAI blog: insights on resumes, ATS optimization, LinkedIn strategy, and interview prep.">
+  <title>JobHackAI Blog | Job Search Tips, Resume & LinkedIn Guides</title>
+  <meta name="description" content="Actionable job search tips, resume optimization guides, LinkedIn strategies, and interview prep from the JobHackAI team. Published weekly.">
   <link rel="canonical" href="https://jobhackai.io/blog">
-  <meta property="og:title" content="JobHackAI Blog">
-  <meta property="og:description" content="Career strategy, resume insights, and job search guidance from JobHackAI.">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="JobHackAI Blog | Job Search Tips & Career Guides">
+  <meta property="og:description" content="Actionable guides on resumes, ATS optimization, LinkedIn strategy, and interview prep. Published weekly.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://jobhackai.io/blog">
+  <meta property="og:site_name" content="JobHackAI">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="JobHackAI Blog">
+  <meta name="twitter:description" content="Weekly job search tips, resume guides, and career insights from JobHackAI.">
+
+  <!-- Structured Data: BreadcrumbList -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Home",
+        "item": "https://jobhackai.io/"
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": "Blog",
+        "item": "https://jobhackai.io/blog"
+      }
+    ]
+  }
+  </script>
+
+  <!-- Structured Data: Blog -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Blog",
+    "name": "JobHackAI Blog",
+    "description": "Actionable job search tips, resume optimization guides, LinkedIn strategies, and interview prep.",
+    "url": "https://jobhackai.io/blog",
+    "publisher": {
+      "@type": "Organization",
+      "name": "JobHackAI",
+      "url": "https://jobhackai.io"
+    }
+  }
+  </script>
+
+  <link rel="icon" type="image/png" href="assets/jobhackai_icon_only_128.png">
+  <link rel="apple-touch-icon" href="assets/jobhackai_icon_only_128.png">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
   <link rel="stylesheet" href="css/reset.css">
   <link rel="stylesheet" href="css/tokens.css">
@@ -17,6 +66,7 @@
   <link rel="stylesheet" href="css/header.css">
   <link rel="stylesheet" href="css/footer.css">
   <link rel="stylesheet" href="css/marketing.css">
+  <link rel="stylesheet" href="css/blog.css">
   <script src="https://app.jobhackai.io/js/cookie-consent.js?v=20260206-1" defer></script>
 </head>
 <body>
@@ -53,44 +103,34 @@
 
   <main>
     <div class="container">
-      <section class="hero">
-        <div class="hero-grid">
-          <div class="hero-content">
-            <span class="eyebrow">Blog</span>
-            <h1 class="hero-title">Job search guidance is coming soon.</h1>
-            <p class="hero-subtitle">We are building a library of actionable insights on resumes, LinkedIn optimization, and interview prep.</p>
-            <div class="hero-actions">
-              <a class="btn btn-primary" href="https://app.jobhackai.io/login?plan=trial">Start Free Trial</a>
-              <a class="btn btn-ghost" href="https://jobhackai.io/features">Explore Features</a>
-            </div>
-          </div>
-          <div class="hero-card">
-            <h3>Blog stub</h3>
-            <p>This page is a placeholder. New articles will be published at jobhackai.io/blog.</p>
-          </div>
-        </div>
+
+      <!-- Page Header -->
+      <section class="hero" style="padding-bottom: var(--space-lg);">
+        <span class="eyebrow">Blog</span>
+        <h1 class="hero-title" style="max-width: 640px;">Job search tips that actually work.</h1>
+        <p class="hero-subtitle" style="max-width: 560px;">Practical guides on resumes, LinkedIn, and interview prep — published weekly by the JobHackAI team.</p>
       </section>
 
-      <section class="section">
-        <div class="section-header">
-          <h2 class="section-title">Upcoming topics</h2>
-          <p class="section-lead">Here is a preview of what we will cover soon.</p>
+      <!-- Blog Content -->
+      <section class="section" style="padding-top: 0;">
+
+        <!-- Category Filter -->
+        <div class="blog-filters" id="blogFilters" role="group" aria-label="Filter posts by category">
+          <button class="blog-filter-btn active" data-filter="all">All</button>
+          <button class="blog-filter-btn" data-filter="Resume">Resume</button>
+          <button class="blog-filter-btn" data-filter="LinkedIn">LinkedIn</button>
+          <button class="blog-filter-btn" data-filter="Interview Prep">Interview Prep</button>
+          <button class="blog-filter-btn" data-filter="Job Search">Job Search</button>
         </div>
-        <div class="card-grid">
-          <article class="card">
-            <h3>ATS optimization playbook</h3>
-            <p>How to align your resume with the roles you want without losing your voice.</p>
-          </article>
-          <article class="card">
-            <h3>LinkedIn that converts</h3>
-            <p>Turn your profile into a magnet for recruiters with clear positioning.</p>
-          </article>
-          <article class="card">
-            <h3>Interview prep routines</h3>
-            <p>Build a 7-day prep plan that improves confidence and consistency.</p>
-          </article>
-        </div>
+
+        <!-- Featured Post (rendered by JS) -->
+        <div id="blogFeatured"></div>
+
+        <!-- Post Grid (rendered by JS) -->
+        <div class="blog-grid" id="blogGrid" aria-live="polite"></div>
+
       </section>
+
     </div>
   </main>
 
@@ -101,6 +141,7 @@
   <script type="module" src="js/firebase-auth.js?v=20260207-2"></script>
   <script src="js/navigation.js?v=20260208-1"></script>
   <script src="js/universal-logout.js?v=20260208-1"></script>
+  <script src="js/blog-data.js?v=20260224-1"></script>
   <script>
     if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
       window.JobHackAINavigation.initializeNavigation();
@@ -111,6 +152,109 @@
         }
       });
     }
+
+    (function () {
+      'use strict';
+
+      var posts = window.BLOG_POSTS || [];
+      var activeFilter = 'all';
+
+      function formatDate(dateStr) {
+        var d = new Date(dateStr + 'T00:00:00');
+        return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+      }
+
+      function getPostUrl(slug) {
+        return '/blog/' + slug;
+      }
+
+      function renderFeatured(post) {
+        var el = document.getElementById('blogFeatured');
+        if (!post) { el.innerHTML = ''; return; }
+        el.innerHTML =
+          '<a href="' + getPostUrl(post.slug) + '" class="blog-featured" aria-label="Read featured article: ' + post.title + '">' +
+            '<div>' +
+              '<span class="blog-featured-label">Featured</span>' +
+              '<h2 class="blog-featured-title">' + post.title + '</h2>' +
+              '<p class="blog-featured-excerpt">' + post.excerpt + '</p>' +
+              '<div class="blog-featured-meta">' +
+                '<span>' + formatDate(post.date) + '</span>' +
+                '<span class="separator">·</span>' +
+                '<span>' + post.readTime + ' min read</span>' +
+                '<span class="separator">·</span>' +
+                '<span>' + post.category + '</span>' +
+              '</div>' +
+            '</div>' +
+            '<div class="blog-featured-visual" aria-hidden="true">' +
+              '<svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#007A30" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg">' +
+                '<rect x="3" y="7" width="18" height="13" rx="2"/>' +
+                '<path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/>' +
+                '<line x1="8" y1="12" x2="16" y2="12"/>' +
+                '<line x1="8" y1="15" x2="13" y2="15"/>' +
+              '</svg>' +
+            '</div>' +
+          '</a>';
+      }
+
+      function renderCard(post) {
+        return '<a href="' + getPostUrl(post.slug) + '" class="blog-card">' +
+          '<div class="blog-card-body">' +
+            '<span class="blog-card-category">' + post.category + '</span>' +
+            '<h3 class="blog-card-title">' + post.title + '</h3>' +
+            '<p class="blog-card-excerpt">' + post.excerpt + '</p>' +
+            '<div class="blog-card-meta">' +
+              '<span>' + formatDate(post.date) + '</span>' +
+              '<span class="separator">·</span>' +
+              '<span>' + post.readTime + ' min read</span>' +
+            '</div>' +
+          '</div>' +
+        '</a>';
+      }
+
+      function renderGrid(filteredPosts) {
+        var grid = document.getElementById('blogGrid');
+        var nonFeatured = filteredPosts.filter(function(p) { return !p.featured; });
+
+        if (nonFeatured.length === 0) {
+          grid.innerHTML = '<p class="blog-empty">No articles in this category yet. Check back soon.</p>';
+          return;
+        }
+
+        grid.innerHTML = nonFeatured.map(renderCard).join('');
+      }
+
+      function applyFilter(filter) {
+        activeFilter = filter;
+        var filtered = filter === 'all' ? posts : posts.filter(function(p) { return p.category === filter; });
+        var featured = filtered.find(function(p) { return p.featured; }) || null;
+
+        // If filtering by category and no featured post in that category, don't show featured
+        if (filter !== 'all') {
+          renderFeatured(null);
+          var grid = document.getElementById('blogGrid');
+          if (filtered.length === 0) {
+            grid.innerHTML = '<p class="blog-empty">No articles in this category yet. Check back soon.</p>';
+          } else {
+            var el = document.getElementById('blogGrid');
+            el.innerHTML = filtered.map(renderCard).join('');
+          }
+        } else {
+          renderFeatured(featured);
+          renderGrid(filtered);
+        }
+      }
+
+      document.getElementById('blogFilters').addEventListener('click', function(e) {
+        var btn = e.target.closest('.blog-filter-btn');
+        if (!btn) return;
+        document.querySelectorAll('.blog-filter-btn').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        applyFilter(btn.dataset.filter);
+      });
+
+      // Initial render
+      applyFilter('all');
+    })();
   </script>
 
 </body>
