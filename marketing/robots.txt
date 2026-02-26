@@ -1,4 +1,5 @@
 User-agent: *
 Allow: /
+Disallow: /blog/post-template
 
 Sitemap: https://jobhackai.io/sitemap.xml

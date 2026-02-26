@@ -159,6 +159,12 @@
       var posts = window.BLOG_POSTS || [];
       var activeFilter = 'all';
 
+      function escapeHtml(str) {
+        var div = document.createElement('div');
+        div.appendChild(document.createTextNode(str));
+        return div.innerHTML;
+      }
+
       function formatDate(dateStr) {
         var d = new Date(dateStr + 'T00:00:00');
         return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
@@ -172,11 +178,11 @@
         var el = document.getElementById('blogFeatured');
         if (!post) { el.innerHTML = ''; return; }
         el.innerHTML =
-          '<a href="' + getPostUrl(post.slug) + '" class="blog-featured" aria-label="Read featured article: ' + post.title + '">' +
+          '<a href="' + getPostUrl(post.slug) + '" class="blog-featured" aria-label="Read featured article: ' + escapeHtml(post.title) + '">' +
             '<div>' +
               '<span class="blog-featured-label">Featured</span>' +
-              '<h2 class="blog-featured-title">' + post.title + '</h2>' +
-              '<p class="blog-featured-excerpt">' + post.excerpt + '</p>' +
+              '<h2 class="blog-featured-title">' + escapeHtml(post.title) + '</h2>' +
+              '<p class="blog-featured-excerpt">' + escapeHtml(post.excerpt) + '</p>' +
               '<div class="blog-featured-meta">' +
                 '<span>' + formatDate(post.date) + '</span>' +
                 '<span class="separator">·</span>' +
@@ -199,9 +205,9 @@
       function renderCard(post) {
         return '<a href="' + getPostUrl(post.slug) + '" class="blog-card">' +
           '<div class="blog-card-body">' +
-            '<span class="blog-card-category">' + post.category + '</span>' +
-            '<h3 class="blog-card-title">' + post.title + '</h3>' +
-            '<p class="blog-card-excerpt">' + post.excerpt + '</p>' +
+            '<span class="blog-card-category">' + escapeHtml(post.category) + '</span>' +
+            '<h3 class="blog-card-title">' + escapeHtml(post.title) + '</h3>' +
+            '<p class="blog-card-excerpt">' + escapeHtml(post.excerpt) + '</p>' +
             '<div class="blog-card-meta">' +
               '<span>' + formatDate(post.date) + '</span>' +
               '<span class="separator">·</span>' +
