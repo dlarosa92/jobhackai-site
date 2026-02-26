@@ -196,6 +196,21 @@
           '</a>';
       }
 
+      function renderCard(post) {
+        return '<a href="' + getPostUrl(post.slug) + '" class="blog-card">' +
+          '<div class="blog-card-body">' +
+            '<span class="blog-card-category">' + post.category + '</span>' +
+            '<h3 class="blog-card-title">' + post.title + '</h3>' +
+            '<p class="blog-card-excerpt">' + post.excerpt + '</p>' +
+            '<div class="blog-card-meta">' +
+              '<span>' + formatDate(post.date) + '</span>' +
+              '<span class="separator">·</span>' +
+              '<span>' + post.readTime + ' min read</span>' +
+            '</div>' +
+          '</div>' +
+        '</a>';
+      }
+
       function renderGrid(filteredPosts) {
         var grid = document.getElementById('blogGrid');
         var nonFeatured = filteredPosts.filter(function(p) { return !p.featured; });
@@ -205,20 +220,7 @@
           return;
         }
 
-        grid.innerHTML = nonFeatured.map(function(post) {
-          return '<a href="' + getPostUrl(post.slug) + '" class="blog-card">' +
-            '<div class="blog-card-body">' +
-              '<span class="blog-card-category">' + post.category + '</span>' +
-              '<h3 class="blog-card-title">' + post.title + '</h3>' +
-              '<p class="blog-card-excerpt">' + post.excerpt + '</p>' +
-              '<div class="blog-card-meta">' +
-                '<span>' + formatDate(post.date) + '</span>' +
-                '<span class="separator">·</span>' +
-                '<span>' + post.readTime + ' min read</span>' +
-              '</div>' +
-            '</div>' +
-          '</a>';
-        }).join('');
+        grid.innerHTML = nonFeatured.map(renderCard).join('');
       }
 
       function applyFilter(filter) {
@@ -234,20 +236,7 @@
             grid.innerHTML = '<p class="blog-empty">No articles in this category yet. Check back soon.</p>';
           } else {
             var el = document.getElementById('blogGrid');
-            el.innerHTML = filtered.map(function(post) {
-              return '<a href="' + getPostUrl(post.slug) + '" class="blog-card">' +
-                '<div class="blog-card-body">' +
-                  '<span class="blog-card-category">' + post.category + '</span>' +
-                  '<h3 class="blog-card-title">' + post.title + '</h3>' +
-                  '<p class="blog-card-excerpt">' + post.excerpt + '</p>' +
-                  '<div class="blog-card-meta">' +
-                    '<span>' + formatDate(post.date) + '</span>' +
-                    '<span class="separator">·</span>' +
-                    '<span>' + post.readTime + ' min read</span>' +
-                  '</div>' +
-                '</div>' +
-              '</a>';
-            }).join('');
+            el.innerHTML = filtered.map(renderCard).join('');
           }
         } else {
           renderFeatured(featured);
