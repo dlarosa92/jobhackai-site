@@ -5,8 +5,8 @@ html {
 body {
   font-family: var(--font-family-base);
   color: var(--color-text-main);
-  background: radial-gradient(circle at top, rgba(0, 122, 48, 0.08) 0%, rgba(0, 122, 48, 0) 45%),
-    linear-gradient(180deg, var(--color-bg-light) 0%, #ffffff 60%);
+  background: radial-gradient(ellipse 120% 60% at 50% 0%, rgba(0, 122, 48, 0.05) 0%, rgba(0, 122, 48, 0) 100%),
+    linear-gradient(180deg, var(--color-bg-light) 0%, #ffffff 70%);
   min-height: 100vh;
 }
 
