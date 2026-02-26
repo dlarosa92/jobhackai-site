@@ -165,6 +165,15 @@
         return div.innerHTML;
       }
 
+      function escapeHtmlAttr(str) {
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
       function formatDate(dateStr) {
         var d = new Date(dateStr + 'T00:00:00');
         return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
@@ -178,7 +187,7 @@
         var el = document.getElementById('blogFeatured');
         if (!post) { el.innerHTML = ''; return; }
         el.innerHTML =
-          '<a href="' + getPostUrl(post.slug) + '" class="blog-featured" aria-label="Read featured article: ' + escapeHtml(post.title) + '">' +
+          '<a href="' + getPostUrl(post.slug) + '" class="blog-featured" aria-label="Read featured article: ' + escapeHtmlAttr(post.title) + '">' +
             '<div>' +
               '<span class="blog-featured-label">Featured</span>' +
               '<h2 class="blog-featured-title">' + escapeHtml(post.title) + '</h2>' +
@@ -188,7 +197,7 @@
                 '<span class="separator">·</span>' +
                 '<span>' + post.readTime + ' min read</span>' +
                 '<span class="separator">·</span>' +
-                '<span>' + post.category + '</span>' +
+                '<span>' + escapeHtml(post.category) + '</span>' +
               '</div>' +
             '</div>' +
             '<div class="blog-featured-visual" aria-hidden="true">' +

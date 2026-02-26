@@ -124,10 +124,10 @@
   color: inherit;
   overflow: hidden;
   transition: box-shadow var(--transition-fast), transform var(--transition-fast);
-  padding: 0;
-  max-width: none;
-  min-width: 0;
-  margin-bottom: 0;
+  padding: 0 !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  margin-bottom: 0 !important;
 }
 
 .blog-grid .blog-card:hover {
@@ -363,9 +363,11 @@
   border-radius: var(--radius-card);
   padding: var(--space-md);
   margin: var(--space-lg) 0;
-  max-width: none;
-  text-align: left;
-  box-shadow: none;
+  margin-left: 0;
+  margin-right: 0;
+  max-width: none !important;
+  text-align: left !important;
+  box-shadow: none !important;
 }
 
 .callout-label {
