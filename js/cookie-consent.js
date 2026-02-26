@@ -163,9 +163,10 @@
   }
 
   // Helper: Set consent (local + server)
-  async function setConsent(consent) {
+  function setConsent(consent) {
     setConsentLocal(consent);
-    await syncConsentToServer(consent);
+    // Fire-and-forget: don't await server sync so the UI updates instantly
+    syncConsentToServer(consent);
   }
 
   // Helper: Check if analytics consent granted
@@ -272,14 +273,14 @@
     document.body.appendChild(bannerElement);
 
     // Event handlers
-    document.getElementById('jha-accept-all').onclick = async () => {
-      await setConsent({ version: 1, analytics: true, updatedAt: new Date().toISOString() });
+    document.getElementById('jha-accept-all').onclick = () => {
+      setConsent({ version: 1, analytics: true, updatedAt: new Date().toISOString() });
       removeBanner();
       loadGAScript(); // Load GA now
     };
 
-    document.getElementById('jha-reject-all').onclick = async () => {
-      await setConsent({ version: 1, analytics: false, updatedAt: new Date().toISOString() });
+    document.getElementById('jha-reject-all').onclick = () => {
+      setConsent({ version: 1, analytics: false, updatedAt: new Date().toISOString() });
       removeBanner();
       preventGALoading(); // Ensure GA doesn't load
       // Notify other modules (firebase-config) that consent was revoked
@@ -337,9 +338,9 @@
 
     // Event handlers
     document.getElementById('jha-modal-close').onclick = closeModal;
-    document.getElementById('jha-save-preferences').onclick = async () => {
+    document.getElementById('jha-save-preferences').onclick = () => {
       const analytics = document.getElementById('jha-toggle-analytics').checked;
-      await setConsent({ version: 1, analytics, updatedAt: new Date().toISOString() });
+      setConsent({ version: 1, analytics, updatedAt: new Date().toISOString() });
       removeBanner(); // Remove banner after saving preferences
       closeModal();
       if (analytics) {
