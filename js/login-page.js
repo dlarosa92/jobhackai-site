@@ -433,12 +433,10 @@ document.addEventListener('DOMContentLoaded', async function() {
         clearTimeout(fallbackRedirectTimeout);
 
         // Record Terms acceptance for OAuth (implicit via notice) before redirecting
-        try {
-          await recordTermsAcceptance();
-        } catch (err) {
+        // Fire-and-forget: don't block redirect on slow network calls
+        recordTermsAcceptance().catch(err => {
           console.warn('Terms acceptance recording failed:', err);
-          // Continue with redirect even if recording fails to avoid blocking auth flow
-        }
+        });
         
         // Route based on selected plan (only if freshly selected from pricing page)
         let storedPlan = null;
@@ -541,12 +539,10 @@ document.addEventListener('DOMContentLoaded', async function() {
         clearTimeout(fallbackRedirectTimeout);
 
         // Record Terms acceptance for OAuth (implicit via notice) before redirecting
-        try {
-          await recordTermsAcceptance();
-        } catch (err) {
+        // Fire-and-forget: don't block redirect on slow network calls
+        recordTermsAcceptance().catch(err => {
           console.warn('Terms acceptance recording failed:', err);
-          // Continue with redirect even if recording fails to avoid blocking auth flow
-        }
+        });
         
         // Route based on selected plan (only if freshly selected from pricing page)
         let storedPlan = null;
@@ -737,12 +733,10 @@ document.addEventListener('DOMContentLoaded', async function() {
       
       if (result.success) {
         // Record Terms acceptance before redirecting
-        try {
-          await recordTermsAcceptance();
-        } catch (err) {
+        // Fire-and-forget: don't block redirect on slow network calls
+        recordTermsAcceptance().catch(err => {
           console.warn('Terms acceptance recording failed:', err);
-          // Continue with redirect even if recording fails to avoid blocking signup
-        }
+        });
 
         const newUser = result.user || authManager.getCurrentUser();
         const emailForVerify = newUser?.email || email;
