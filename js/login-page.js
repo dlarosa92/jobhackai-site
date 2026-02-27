@@ -965,6 +965,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     signupLinks.style.display = 'block';
     hideError(loginError);
     hideError(signupError);
+    const termsError = document.getElementById('termsError');
+    if (termsError) { termsError.style.display = 'none'; }
     // Show OAuth terms notice for signup context
     const oauthNotice = document.getElementById('oauthTermsNotice');
     if (oauthNotice) oauthNotice.style.display = 'block';

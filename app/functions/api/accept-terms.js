@@ -45,10 +45,10 @@ export async function onRequest(context) {
     try {
       const result = await db.prepare(
         `UPDATE users
-         SET terms_accepted_at = COALESCE(terms_accepted_at, ?),
-             terms_version = COALESCE(terms_version, ?),
-             privacy_accepted_at = COALESCE(privacy_accepted_at, ?),
-             privacy_version = COALESCE(privacy_version, ?),
+         SET terms_accepted_at = ?,
+             terms_version = ?,
+             privacy_accepted_at = ?,
+             privacy_version = ?,
              updated_at = datetime('now')
          WHERE auth_id = ?`
       ).bind(now, termsVersion, now, privacyVersion, uid).run();
