@@ -673,6 +673,8 @@ document.addEventListener('DOMContentLoaded', async function() {
   signupForm?.addEventListener('submit', async function(e) {
     e.preventDefault();
     hideError(signupError);
+    const termsError = document.getElementById('termsError');
+    if (termsError) { termsError.style.display = 'none'; }
     
     const firstName = document.getElementById('firstName').value.trim();
     const lastName = document.getElementById('lastName').value.trim();
