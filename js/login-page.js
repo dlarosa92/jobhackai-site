@@ -720,7 +720,6 @@ document.addEventListener('DOMContentLoaded', async function() {
       return;
     }
     // Clear terms error if previously shown
-    const termsError = document.getElementById('termsError');
     if (termsError) { termsError.style.display = 'none'; }
     
     // Show loading state
