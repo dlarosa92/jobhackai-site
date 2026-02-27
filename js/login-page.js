@@ -432,8 +432,13 @@ document.addEventListener('DOMContentLoaded', async function() {
         redirected = true;
         clearTimeout(fallbackRedirectTimeout);
 
-        // Record Terms acceptance for OAuth (implicit via notice, non-blocking)
-        recordTermsAcceptance().catch(err => console.warn('Terms acceptance recording failed:', err));
+        // Record Terms acceptance for OAuth (implicit via notice) before redirecting
+        try {
+          await recordTermsAcceptance();
+        } catch (err) {
+          console.warn('Terms acceptance recording failed:', err);
+          // Continue with redirect even if recording fails to avoid blocking auth flow
+        }
         
         // Route based on selected plan (only if freshly selected from pricing page)
         let storedPlan = null;
@@ -535,8 +540,13 @@ document.addEventListener('DOMContentLoaded', async function() {
         redirected = true;
         clearTimeout(fallbackRedirectTimeout);
 
-        // Record Terms acceptance for OAuth (implicit via notice, non-blocking)
-        recordTermsAcceptance().catch(err => console.warn('Terms acceptance recording failed:', err));
+        // Record Terms acceptance for OAuth (implicit via notice) before redirecting
+        try {
+          await recordTermsAcceptance();
+        } catch (err) {
+          console.warn('Terms acceptance recording failed:', err);
+          // Continue with redirect even if recording fails to avoid blocking auth flow
+        }
         
         // Route based on selected plan (only if freshly selected from pricing page)
         let storedPlan = null;
@@ -724,8 +734,13 @@ document.addEventListener('DOMContentLoaded', async function() {
       const result = await authManager.signUp(email, password, firstName, lastName);
       
       if (result.success) {
-        // Record Terms acceptance (non-blocking)
-        recordTermsAcceptance().catch(err => console.warn('Terms acceptance recording failed:', err));
+        // Record Terms acceptance before redirecting
+        try {
+          await recordTermsAcceptance();
+        } catch (err) {
+          console.warn('Terms acceptance recording failed:', err);
+          // Continue with redirect even if recording fails to avoid blocking signup
+        }
 
         const newUser = result.user || authManager.getCurrentUser();
         const emailForVerify = newUser?.email || email;

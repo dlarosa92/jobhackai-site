@@ -1,5 +1,5 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
-import { getDb } from '../_lib/db.js';
+import { getDb, getOrCreateUserByAuthId } from '../_lib/db.js';
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -34,9 +34,16 @@ export async function onRequest(context) {
       return json({ ok: true, message: 'Terms acceptance acknowledged (DB unavailable)' }, 200, origin, env);
     }
 
+    // Ensure user row exists before UPDATE (D1 user records are created on-demand)
+    const d1User = await getOrCreateUserByAuthId(env, uid, null);
+    if (!d1User) {
+      console.warn('[ACCEPT-TERMS] Could not get or create user record');
+      return json({ ok: true, message: 'Terms acceptance acknowledged (DB unavailable)' }, 200, origin, env);
+    }
+
     const now = new Date().toISOString();
     try {
-      await db.prepare(
+      const result = await db.prepare(
         `UPDATE users
          SET terms_accepted_at = ?,
              terms_version = ?,
@@ -46,17 +53,24 @@ export async function onRequest(context) {
          WHERE auth_id = ?`
       ).bind(now, termsVersion, now, privacyVersion, uid).run();
 
+      // Check if UPDATE actually affected a row
+      if (result.meta.changes === 0) {
+        console.warn('[ACCEPT-TERMS] UPDATE affected 0 rows for uid:', uid);
+        return json({ ok: false, error: 'Failed to record terms acceptance' }, 500, origin, env);
+      }
+
       console.log('[ACCEPT-TERMS] Recorded acceptance:', { uid, termsVersion, privacyVersion });
+      return json({ ok: true, message: 'Terms acceptance recorded', acceptedAt: now }, 200, origin, env);
     } catch (dbErr) {
       const msg = String(dbErr?.message || '').toLowerCase();
       if (msg.includes('no such column')) {
         console.warn('[ACCEPT-TERMS] Terms columns not found. Migration 019 may need to be run.');
+        return json({ ok: false, error: 'Database schema not ready. Migration 019 may need to be run.' }, 500, origin, env);
       } else {
+        console.error('[ACCEPT-TERMS] Database error:', dbErr);
         throw dbErr;
       }
     }
-
-    return json({ ok: true, message: 'Terms acceptance recorded', acceptedAt: now }, 200, origin, env);
   } catch (error) {
     console.error('[ACCEPT-TERMS] Error:', error);
     return json({ ok: false, error: 'Internal server error' }, 500, origin, env);
