@@ -431,6 +431,12 @@ document.addEventListener('DOMContentLoaded', async function() {
       if (result.success) {
         redirected = true;
         clearTimeout(fallbackRedirectTimeout);
+
+        // Record Terms acceptance for OAuth (implicit via notice) before redirecting
+        // Fire-and-forget: don't block redirect on slow network calls
+        recordTermsAcceptance().catch(err => {
+          console.warn('Terms acceptance recording failed:', err);
+        });
         
         // Route based on selected plan (only if freshly selected from pricing page)
         let storedPlan = null;
@@ -531,6 +537,12 @@ document.addEventListener('DOMContentLoaded', async function() {
       if (result.success) {
         redirected = true;
         clearTimeout(fallbackRedirectTimeout);
+
+        // Record Terms acceptance for OAuth (implicit via notice) before redirecting
+        // Fire-and-forget: don't block redirect on slow network calls
+        recordTermsAcceptance().catch(err => {
+          console.warn('Terms acceptance recording failed:', err);
+        });
         
         // Route based on selected plan (only if freshly selected from pricing page)
         let storedPlan = null;
@@ -657,6 +669,8 @@ document.addEventListener('DOMContentLoaded', async function() {
   signupForm?.addEventListener('submit', async function(e) {
     e.preventDefault();
     hideError(signupError);
+    const termsError = document.getElementById('termsError');
+    if (termsError) { termsError.style.display = 'none'; }
     
     const firstName = document.getElementById('firstName').value.trim();
     const lastName = document.getElementById('lastName').value.trim();
@@ -692,6 +706,22 @@ document.addEventListener('DOMContentLoaded', async function() {
       return;
     }
     
+    // Terms of Service acceptance validation
+    const acceptTerms = document.getElementById('acceptTerms');
+    if (acceptTerms && !acceptTerms.checked) {
+      const termsError = document.getElementById('termsError');
+      if (termsError) {
+        termsError.textContent = 'You must agree to the Terms of Service and Privacy Policy to create an account.';
+        termsError.style.display = 'block';
+        termsError.setAttribute('role', 'alert');
+      }
+      acceptTerms.focus();
+      acceptTerms.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    // Clear terms error if previously shown
+    if (termsError) { termsError.style.display = 'none'; }
+    
     // Show loading state
     const originalText = submitBtn.textContent;
     submitBtn.textContent = 'Creating account...';
@@ -701,6 +731,12 @@ document.addEventListener('DOMContentLoaded', async function() {
       const result = await authManager.signUp(email, password, firstName, lastName);
       
       if (result.success) {
+        // Record Terms acceptance before redirecting
+        // Fire-and-forget: don't block redirect on slow network calls
+        recordTermsAcceptance().catch(err => {
+          console.warn('Terms acceptance recording failed:', err);
+        });
+
         const newUser = result.user || authManager.getCurrentUser();
         const emailForVerify = newUser?.email || email;
         const verifyUrl = new URL('verify-email.html', window.location.href);
@@ -929,6 +965,11 @@ document.addEventListener('DOMContentLoaded', async function() {
     signupLinks.style.display = 'block';
     hideError(loginError);
     hideError(signupError);
+    const termsError = document.getElementById('termsError');
+    if (termsError) { termsError.style.display = 'none'; }
+    // Show OAuth terms notice for signup context
+    const oauthNotice = document.getElementById('oauthTermsNotice');
+    if (oauthNotice) oauthNotice.style.display = 'block';
     
     // Make auth title visible for signup (it may be hidden from login form)
     authTitle.style.display = 'block';
@@ -991,6 +1032,9 @@ document.addEventListener('DOMContentLoaded', async function() {
     authTitle.style.display = 'none';
     hideError(loginError);
     hideError(signupError);
+    // Hide OAuth terms notice in login context
+    const oauthNotice = document.getElementById('oauthTermsNotice');
+    if (oauthNotice) oauthNotice.style.display = 'none';
     
     // Login never shows a plan banner
     hideSelectedPlanBanner();
@@ -1102,6 +1146,33 @@ document.addEventListener('DOMContentLoaded', async function() {
     const hasNumber = /[0-9]/.test(password);
     
     return hasUppercase && hasLowercase && hasNumber;
+  }
+
+  async function recordTermsAcceptance() {
+    try {
+      const user = authManager.getCurrentUser();
+      if (!user) return;
+      const idToken = typeof user.getIdToken === 'function' ? await user.getIdToken(true) : null;
+      if (!idToken) return;
+      const res = await fetch('/api/accept-terms', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({
+          termsVersion: '1.0',
+          privacyVersion: '2025-12-16'
+        })
+      });
+      if (res.ok) {
+        console.log('✅ Terms acceptance recorded');
+      } else {
+        console.warn('Could not record terms acceptance:', await res.text());
+      }
+    } catch (err) {
+      console.warn('Error recording terms acceptance:', err);
+    }
   }
   
   // ===== PASSWORD TOGGLE FUNCTIONALITY =====
