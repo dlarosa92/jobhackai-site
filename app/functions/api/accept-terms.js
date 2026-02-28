@@ -43,11 +43,13 @@ export async function onRequest(context) {
 
     const now = new Date().toISOString();
     try {
+      // Only set acceptance timestamps if not already recorded (preserve original acceptance date).
+      // Always update the version columns so re-acceptance of newer terms is tracked.
       const result = await db.prepare(
         `UPDATE users
-         SET terms_accepted_at = ?,
+         SET terms_accepted_at = COALESCE(terms_accepted_at, ?),
              terms_version = ?,
-             privacy_accepted_at = ?,
+             privacy_accepted_at = COALESCE(privacy_accepted_at, ?),
              privacy_version = ?,
              updated_at = datetime('now')
          WHERE auth_id = ?`
@@ -59,8 +61,14 @@ export async function onRequest(context) {
         return json({ ok: false, error: 'Failed to record terms acceptance' }, 500, origin, env);
       }
 
-      console.log('[ACCEPT-TERMS] Recorded acceptance:', { uid, termsVersion, privacyVersion });
-      return json({ ok: true, message: 'Terms acceptance recorded', acceptedAt: now }, 200, origin, env);
+      // Read back the actual stored timestamp (may be the original, not `now`)
+      const row = await db.prepare(
+        `SELECT terms_accepted_at FROM users WHERE auth_id = ?`
+      ).bind(uid).first();
+
+      const acceptedAt = row?.terms_accepted_at || now;
+      console.log('[ACCEPT-TERMS] Recorded acceptance:', { uid, termsVersion, privacyVersion, acceptedAt });
+      return json({ ok: true, message: 'Terms acceptance recorded', acceptedAt }, 200, origin, env);
     } catch (dbErr) {
       const msg = String(dbErr?.message || '').toLowerCase();
       if (msg.includes('no such column')) {
