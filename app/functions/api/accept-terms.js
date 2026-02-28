@@ -61,8 +61,14 @@ export async function onRequest(context) {
         return json({ ok: false, error: 'Failed to record terms acceptance' }, 500, origin, env);
       }
 
-      console.log('[ACCEPT-TERMS] Recorded acceptance:', { uid, termsVersion, privacyVersion });
-      return json({ ok: true, message: 'Terms acceptance recorded', acceptedAt: now }, 200, origin, env);
+      // Read back the actual stored timestamp (may be the original, not `now`)
+      const row = await db.prepare(
+        `SELECT terms_accepted_at FROM users WHERE auth_id = ?`
+      ).bind(uid).first();
+
+      const acceptedAt = row?.terms_accepted_at || now;
+      console.log('[ACCEPT-TERMS] Recorded acceptance:', { uid, termsVersion, privacyVersion, acceptedAt });
+      return json({ ok: true, message: 'Terms acceptance recorded', acceptedAt }, 200, origin, env);
     } catch (dbErr) {
       const msg = String(dbErr?.message || '').toLowerCase();
       if (msg.includes('no such column')) {
