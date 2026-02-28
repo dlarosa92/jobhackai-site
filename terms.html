@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Terms of Service - JobHackAI</title>
+  <link rel="icon" type="image/png" href="assets/jobhackai_icon_only_128.png">
+  <link rel="apple-touch-icon" href="assets/jobhackai_icon_only_128.png">
+  <script src="js/dynamic-favicon.js?v=20250111-1"></script>
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/header.css">
+  <link rel="stylesheet" href="css/footer.css">
+  <style>
+    .terms-container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: var(--space-2xl) var(--space-lg);
+      background: var(--color-card-bg);
+    }
+
+    .terms-header {
+      margin-bottom: var(--space-2xl);
+      padding-bottom: var(--space-md);
+      border-bottom: 2px solid var(--color-divider);
+    }
+
+    .terms-header h1 {
+      font-size: 2.5rem;
+      font-weight: var(--font-weight-extrabold);
+      color: var(--color-text-main);
+      margin-bottom: 0.5rem;
+      line-height: 1.2;
+    }
+
+    .terms-header .effective-date {
+      color: var(--color-text-muted);
+      font-size: var(--font-size-base);
+      margin-top: 0.5rem;
+    }
+
+    .terms-header .version-info {
+      color: var(--color-text-muted);
+      font-size: var(--font-size-sm);
+      margin-top: 0.25rem;
+    }
+
+    .terms-intro {
+      font-size: var(--font-size-lg);
+      line-height: 1.75;
+      color: var(--color-text-secondary);
+      margin-bottom: var(--space-xl);
+    }
+
+    .terms-intro strong {
+      color: var(--color-text-main);
+      font-weight: var(--font-weight-semibold);
+    }
+
+    .terms-section {
+      margin-bottom: var(--space-2xl);
+    }
+
+    .terms-section h2 {
+      font-size: 1.8rem;
+      font-weight: var(--font-weight-bold);
+      color: var(--color-text-main);
+      margin-bottom: var(--space-md);
+      margin-top: 0;
+      line-height: 1.3;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--color-divider);
+    }
+
+    .terms-section h3 {
+      font-size: 1.3rem;
+      font-weight: var(--font-weight-semibold);
+      color: var(--color-text-main);
+      margin-top: var(--space-lg);
+      margin-bottom: var(--space-sm);
+      line-height: 1.4;
+    }
+
+    .terms-section p {
+      font-size: var(--font-size-lg);
+      line-height: 1.75;
+      color: var(--color-text-secondary);
+      margin-bottom: var(--space-md);
+    }
+
+    .terms-section ul,
+    .terms-section ol {
+      font-size: var(--font-size-lg);
+      line-height: 1.75;
+      color: var(--color-text-secondary);
+      margin-bottom: var(--space-md);
+      padding-left: var(--space-md);
+    }
+
+    .terms-section li {
+      margin-bottom: 0.75rem;
+    }
+
+    .terms-section strong {
+      color: var(--color-text-main);
+      font-weight: var(--font-weight-semibold);
+    }
+
+    .terms-section a {
+      color: var(--color-accent-blue);
+      text-decoration: underline;
+      transition: color var(--transition-fast);
+    }
+
+    .terms-section a:hover {
+      color: #0056b3;
+    }
+
+    .terms-highlight {
+      background: #F0F9FF;
+      border-left: 4px solid var(--color-accent-blue);
+      padding: var(--space-sm) var(--space-md);
+      margin: var(--space-md) 0;
+      border-radius: var(--radius-sm);
+    }
+
+    .terms-highlight p {
+      margin-bottom: 0;
+    }
+
+    .terms-warning {
+      background: #FEF3C7;
+      border-left: 4px solid var(--color-warning);
+      padding: var(--space-sm) var(--space-md);
+      margin: var(--space-md) 0;
+      border-radius: var(--radius-sm);
+    }
+
+    .terms-warning p {
+      margin-bottom: 0;
+    }
+
+    .terms-caps {
+      text-transform: uppercase;
+      font-size: var(--font-size-sm);
+      letter-spacing: 0.01em;
+    }
+
+    @media (max-width: 768px) {
+      .terms-container {
+        padding: var(--space-md) var(--space-sm);
+      }
+
+      .terms-header h1 {
+        font-size: 2rem;
+      }
+
+      .terms-section h2 {
+        font-size: 1.5rem;
+      }
+
+      .terms-section h3 {
+        font-size: 1.2rem;
+      }
+
+      .terms-section p,
+      .terms-section ul,
+      .terms-section ol {
+        font-size: var(--font-size-base);
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Header (canonical) -->
+  <header class="site-header">
+    <div class="container">
+      <a href="https://jobhackai.io/" class="nav-logo" aria-label="Go to homepage">
+        <svg width="24" height="24" fill="none" stroke="#1F2937" stroke-width="2" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="7" width="18" height="13" rx="2"/>
+          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/>
+        </svg>
+        <span>JOBHACKAI</span>
+      </a>
+      <div class="nav-group">
+        <nav class="nav-links" role="navigation">
+          <!-- Navigation will be dynamically populated by navigation.js -->
+        </nav>
+      </div>
+      <button class="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+  </header>
+  <nav class="mobile-nav" id="mobileNav">
+    <!-- Mobile navigation will be dynamically populated by navigation.js -->
+  </nav>
+  <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
+  <script src="js/mobile-menu.js?v=20250115-1"></script>
+
+  <main>
+    <div class="terms-container">
+      <div class="terms-header">
+        <h1>JobHackAI Terms of Service</h1>
+        <p class="version-info">Version 1.0</p>
+        <p class="effective-date"><strong>Effective Date:</strong> February 28, 2026</p>
+        <p class="effective-date"><strong>Last Updated:</strong> February 28, 2026</p>
+      </div>
+
+      <div class="terms-intro">
+        <p>These Terms of Service (&ldquo;Terms&rdquo;) govern your access to and use of the JobHackAI website, apps, and services (collectively, the &ldquo;Service&rdquo;). By creating an account, starting a trial, purchasing a subscription, clicking &ldquo;I Agree,&rdquo; or otherwise using the Service, you agree to these Terms.</p>
+        <p><strong>If you do not agree, do not use the Service.</strong></p>
+      </div>
+
+      <!-- Section 1 -->
+      <section class="terms-section">
+        <h2>1) Definitions</h2>
+        <p>The following terms have specific meanings throughout these Terms:</p>
+        <ul>
+          <li><strong>&ldquo;Service&rdquo;</strong> means the JobHackAI website, applications, APIs, and all related tools and features.</li>
+          <li><strong>&ldquo;User Content&rdquo;</strong> means anything you submit to the Service, including resume text, job descriptions, interview responses, LinkedIn content, and any other inputs.</li>
+          <li><strong>&ldquo;Output&rdquo;</strong> means any content generated by the Service&rsquo;s AI features in response to your User Content or prompts.</li>
+          <li><strong>&ldquo;Account&rdquo;</strong> means your registered account on the Service, including your login credentials, subscription, settings, and stored data.</li>
+          <li><strong>&ldquo;Plan&rdquo;</strong> means the subscription tier you have selected (e.g., Essential, Pro, Premium), including associated features, usage limits, and pricing.</li>
+          <li><strong>&ldquo;Trial&rdquo;</strong> means the free trial period offered to new users before conversion to a paid Plan.</li>
+        </ul>
+      </section>
+
+      <!-- Section 2 -->
+      <section class="terms-section">
+        <h2>2) Who We Are</h2>
+        <p>The Service is operated by JobHackAI LLC (&ldquo;JobHackAI,&rdquo; &ldquo;we,&rdquo; &ldquo;us,&rdquo; or &ldquo;our&rdquo;).</p>
+        <h3>Contact</h3>
+        <ul>
+          <li><strong>Support:</strong> <a href="mailto:support@jobhackai.io">support@jobhackai.io</a></li>
+          <li><strong>Privacy Requests:</strong> <a href="mailto:privacy@jobhackai.io">privacy@jobhackai.io</a></li>
+          <li><strong>Legal Notices / Terms / Disputes:</strong> <a href="mailto:legal@jobhackai.io">legal@jobhackai.io</a></li>
+        </ul>
+      </section>
+
+      <!-- Section 3 -->
+      <section class="terms-section">
+        <h2>3) Acceptance of These Terms</h2>
+        <p>You agree to these Terms by:</p>
+        <ul>
+          <li><strong>Clickwrap acceptance (recommended):</strong> clicking &ldquo;I Agree,&rdquo; checking an &ldquo;I agree to the Terms&rdquo; box, or completing checkout where the Terms are presented; and/or</li>
+          <li><strong>Using the Service</strong> after the Terms are made available to you.</li>
+        </ul>
+        <div class="terms-highlight">
+          <p><strong>Important:</strong> You must be able to prove acceptance. We recommend requiring clickwrap acceptance (checkbox + button) at first account creation / first login, and again at checkout.</p>
+        </div>
+      </section>
+
+      <!-- Section 4 -->
+      <section class="terms-section">
+        <h2>4) Eligibility</h2>
+        <p>You must be at least 18 years old (or the age of majority where you live) to use the Service.</p>
+      </section>
+
+      <!-- Section 5 -->
+      <section class="terms-section">
+        <h2>5) The Service</h2>
+        <p>JobHackAI provides AI-powered tools for job preparation (for example: resume scoring, resume feedback, interview question generation, resume rewriting, cover letter generation, LinkedIn optimization, and related features).</p>
+        <div class="terms-highlight">
+          <p><strong>JobHackAI is not an employment agency, recruiter, or staffing firm.</strong> We do not guarantee interviews, job offers, compensation outcomes, or hiring results.</p>
+        </div>
+      </section>
+
+      <!-- Section 6 -->
+      <section class="terms-section">
+        <h2>6) Accounts and Security</h2>
+        <p>You are responsible for your Account, your login credentials, and all activity under your Account.</p>
+        <p>You must provide accurate information and keep it current.</p>
+        <p>If you suspect unauthorized access, contact <a href="mailto:support@jobhackai.io">support@jobhackai.io</a> promptly.</p>
+        <p>We may suspend or terminate Accounts for suspected fraud, abuse, or violations of these Terms.</p>
+        <h3>One Account Per Person</h3>
+        <p>Each Account is for a single individual. You may not share your login credentials with others, create multiple Accounts, or allow others to access the Service through your Account. We may suspend or terminate Accounts we reasonably believe are being shared or used by multiple individuals.</p>
+      </section>
+
+      <!-- Section 7 -->
+      <section class="terms-section">
+        <h2>7) Plans, Billing, and Subscriptions</h2>
+
+        <h3>a) Subscription Plans</h3>
+        <p>JobHackAI offers paid subscription Plans (for example: Essential, Pro, Premium). Plan features, limits, and pricing are shown on our website/app and may change over time.</p>
+
+        <h3>b) Trial and Auto-Conversion (3-Day Trial &rarr; Essential)</h3>
+        <p>If you start a 3-day Trial, you authorize JobHackAI (through our payment processor) to automatically convert your Trial to Essential ($29/month) when the Trial ends unless you cancel before the Trial ends.</p>
+        <p>We may send Trial/billing communications, but we do not guarantee a reminder email before billing starts.</p>
+        <p><strong>Trial limits / abuse prevention:</strong> Trials are limited to one per person/household. We may use reasonable measures to prevent Trial abuse (including blocking, throttling, or suspending Accounts suspected of abuse).</p>
+
+        <h3>c) Recurring Billing Authorization</h3>
+        <p>By starting a Trial or paid subscription, you authorize us (and our payment processor) to charge your payment method on a recurring basis at the then-current rate until you cancel.</p>
+
+        <h3>d) Managing or Cancelling Your Subscription (Stripe Portal)</h3>
+        <p>You manage billing and cancellation through the Stripe-hosted customer portal, accessible from your JobHackAI Account via the &ldquo;Manage Subscription&rdquo; button. Cancellation takes effect at the end of your then-current billing period unless otherwise stated at checkout.</p>
+
+        <h3>e) Upgrades, Downgrades, and Proration</h3>
+        <p>If you upgrade, the change may take effect immediately and may be prorated. If you downgrade, it may take effect at the end of the current billing cycle, depending on Stripe settings and the Plan rules shown at the time you make the change.</p>
+
+        <h3>f) Taxes</h3>
+        <p>Prices may not include taxes. You are responsible for applicable taxes unless we state otherwise.</p>
+      </section>
+
+      <!-- Section 8 -->
+      <section class="terms-section">
+        <h2>8) Usage Limits and Fair Use</h2>
+        <p>Your use of the Service is subject to the usage limits, feature access, and cooldown periods associated with your Plan, as displayed on our website or within the app.</p>
+        <p>We reserve the right to modify usage limits at any time. If we reduce limits on your current Plan, changes will take effect at the start of your next billing cycle.</p>
+        <p>If you exceed your Plan&rsquo;s usage limits, we may throttle, queue, or temporarily restrict your access to affected features until your limits reset or you upgrade to a higher Plan.</p>
+        <p>Automated, scripted, or programmatic access to the Service is not permitted unless we have provided a documented API and you are using it in accordance with its terms.</p>
+      </section>
+
+      <!-- Section 9 -->
+      <section class="terms-section">
+        <h2>9) Refunds and Credits</h2>
+        <p>All fees are non-refundable except where required by law. We do not provide credits or prorated refunds for partial periods, unused time, or unused features.</p>
+        <p><strong>Trial cancellation:</strong> If you cancel before the Trial ends, your subscription will not renew and you will not be charged the recurring subscription fee.</p>
+      </section>
+
+      <!-- Section 10 -->
+      <section class="terms-section">
+        <h2>10) Chargebacks and Payment Disputes</h2>
+        <p>If you initiate a chargeback or payment dispute, we may suspend your Account while we investigate. We reserve the right to provide Stripe and your bank with relevant Account information, logs, and proof of acceptance/usage to respond to disputes.</p>
+      </section>
+
+      <!-- Section 11 -->
+      <section class="terms-section">
+        <h2>11) User Content (Your Inputs)</h2>
+
+        <h3>a) Ownership</h3>
+        <p>You retain ownership of your User Content.</p>
+
+        <h3>b) License You Grant Us</h3>
+        <p>You grant JobHackAI a worldwide, non-exclusive, royalty-free license to host, store, process, transmit, display, and use your User Content only to provide, maintain, and improve the Service, enforce these Terms, prevent abuse, and comply with law.</p>
+
+        <h3>c) Your Responsibilities</h3>
+        <p>You represent that:</p>
+        <ul>
+          <li>you have the rights to submit your User Content;</li>
+          <li>your User Content does not violate law or third-party rights (including IP or confidentiality); and</li>
+          <li>you will not submit sensitive data you are not authorized to share.</li>
+        </ul>
+      </section>
+
+      <!-- Section 12 -->
+      <section class="terms-section">
+        <h2>12) AI Output Disclaimer</h2>
+        <div class="terms-warning">
+          <p><strong>&#9888;&#65039; Read this section carefully.</strong></p>
+        </div>
+        <p>The Service may generate Output using AI. Output can be inaccurate, incomplete, misleading, or inappropriate.</p>
+        <p>You agree that:</p>
+        <ul>
+          <li>Output is for informational and drafting assistance only;</li>
+          <li>you are responsible for reviewing, verifying, and editing Output before using it; and</li>
+          <li>you will not rely on Output as legal, financial, medical, or professional advice.</li>
+        </ul>
+        <p><strong>No guarantees:</strong> JobHackAI does not guarantee that Output will be ATS-compliant, error-free, or successful in any hiring process.</p>
+      </section>
+
+      <!-- Section 13 -->
+      <section class="terms-section">
+        <h2>13) AI Data and Training</h2>
+        <p>We do not use your User Content to train our own AI models.</p>
+        <p>When you use AI-powered features, your inputs may be sent to a third-party AI processing provider (such as OpenAI) to generate the Output you request. We use API-based integrations that, under the provider&rsquo;s terms, do not use your API-submitted content to train their general-purpose models.</p>
+        <p>We may use anonymized, aggregated, and de-identified data derived from Service usage to improve the Service, develop new features, and conduct internal analytics. This data cannot reasonably be used to identify you.</p>
+      </section>
+
+      <!-- Section 14 -->
+      <section class="terms-section">
+        <h2>14) Acceptable Use</h2>
+        <p>You agree not to:</p>
+        <ul>
+          <li>reverse engineer, copy, scrape, or attempt to extract prompts, models, or system logic;</li>
+          <li>bypass feature locks, usage limits, cooldowns, or Plan enforcement;</li>
+          <li>use the Service to harass, discriminate, or generate unlawful content;</li>
+          <li>upload malware or attempt to probe or breach security;</li>
+          <li>use automated tools, bots, or scripts to access or interact with the Service, except through a documented API we provide; or</li>
+          <li>use the Service for high-risk decisions where errors could cause harm.</li>
+        </ul>
+        <p>We can throttle, block, or suspend usage to prevent abuse and protect system stability.</p>
+      </section>
+
+      <!-- Section 15 -->
+      <section class="terms-section">
+        <h2>15) Electronic Communications Consent</h2>
+        <p>By creating an Account, you consent to receive electronic communications from JobHackAI, including:</p>
+        <ul>
+          <li>Trial and subscription billing notifications;</li>
+          <li>Service-related announcements (e.g., maintenance, outages, feature changes);</li>
+          <li>Account security alerts; and</li>
+          <li>Changes to these Terms or the Privacy Policy.</li>
+        </ul>
+        <p>You agree that these electronic communications satisfy any legal requirement that such communications be in writing. You may opt out of promotional or marketing emails at any time using the unsubscribe link, but you cannot opt out of transactional or legal notices while you maintain an Account.</p>
+      </section>
+
+      <!-- Section 16 -->
+      <section class="terms-section">
+        <h2>16) Privacy, Data Retention, and Data on Termination</h2>
+        <p>Your use of the Service is also governed by our <a href="privacy.html">Privacy Policy</a> and Retention &amp; Deletion Notice, which are incorporated by reference.</p>
+        <p>You understand that:</p>
+        <ul>
+          <li>some tool usage may be stored in your in-app History to provide the Service;</li>
+          <li>History data (your inputs and AI-generated outputs) is automatically deleted after 90 days;</li>
+          <li>you can delete History data sooner using the in-app Clear History / Delete controls; and</li>
+          <li>certain records may be retained for billing, tax, security, and fraud prevention purposes.</li>
+        </ul>
+
+        <h3>Data on Cancellation or Termination</h3>
+        <p>If you cancel your subscription, your Account will remain available so you can return and renew later. If your Account has no active subscription and no login or tool activity for 24 consecutive months, we will delete or de-identify personal data associated with the Account, including profile information and stored content.</p>
+        <p>If you choose to delete your Account, we will remove your personal data in accordance with our Privacy Policy, subject to records we are required or permitted to retain for legal, tax, security, or fraud-prevention purposes.</p>
+        <p>For full details on data retention timelines and your deletion rights, see our <a href="privacy.html">Privacy Policy</a> and Retention &amp; Deletion Notice.</p>
+        <p>If there is a conflict between these Terms and the Privacy Policy, the Privacy Policy controls for privacy/data handling topics.</p>
+      </section>
+
+      <!-- Section 17 -->
+      <section class="terms-section">
+        <h2>17) Intellectual Property</h2>
+        <p>The Service (including software, design, text, graphics, branding, and underlying systems) is owned by JobHackAI and protected by IP laws.</p>
+        <p>You receive a limited, non-transferable, revocable license to use the Service for your personal, non-commercial use (unless we agree otherwise in writing). You may not copy, distribute, or resell the Service or any portion of it.</p>
+      </section>
+
+      <!-- Section 18 -->
+      <section class="terms-section">
+        <h2>18) Copyright and Intellectual Property Complaints</h2>
+        <p>JobHackAI respects the intellectual property rights of others. If you believe that content available through the Service infringes your copyright or other intellectual property rights, you may send a notice to our designated agent:</p>
+        <p><strong>Email:</strong> <a href="mailto:legal@jobhackai.io">legal@jobhackai.io</a><br />
+        <strong>Subject line:</strong> &ldquo;IP Complaint&rdquo;</p>
+        <p>Your notice should include:</p>
+        <ul>
+          <li>identification of the copyrighted work or IP you claim is infringed;</li>
+          <li>identification of the material you claim is infringing and information sufficient for us to locate it;</li>
+          <li>your contact information (name, email, mailing address);</li>
+          <li>a statement that you have a good faith belief the use is not authorized by the rights owner, its agent, or the law; and</li>
+          <li>a statement under penalty of perjury that the information in your notice is accurate and that you are the rights owner or authorized to act on the owner&rsquo;s behalf.</li>
+        </ul>
+        <p>We will respond to valid notices in accordance with applicable law and may remove or disable access to the allegedly infringing material.</p>
+      </section>
+
+      <!-- Section 19 -->
+      <section class="terms-section">
+        <h2>19) Beta and Experimental Features</h2>
+        <p>We may offer features labeled as &ldquo;Beta,&rdquo; &ldquo;Preview,&rdquo; &ldquo;Experimental,&rdquo; or similar designations. These features:</p>
+        <ul>
+          <li>are provided &ldquo;as is&rdquo; without any warranties, including warranties of reliability, accuracy, or availability;</li>
+          <li>may be modified, limited, or discontinued at any time without notice;</li>
+          <li>may not be covered by customer support; and</li>
+          <li>are subject to these Terms.</li>
+        </ul>
+        <p>Your use of Beta features is at your own risk. We are not liable for any issues arising from Beta features, including data loss, Output inaccuracies, or service interruptions.</p>
+      </section>
+
+      <!-- Section 20 -->
+      <section class="terms-section">
+        <h2>20) Third-Party Services</h2>
+        <p>The Service may integrate third-party services (for example, payment processing and AI providers). Third-party services are governed by their own terms, and we are not responsible for third-party outages or acts/omissions.</p>
+      </section>
+
+      <!-- Section 21 -->
+      <section class="terms-section">
+        <h2>21) Feedback</h2>
+        <p>If you submit feedback or suggestions, you grant JobHackAI the right to use them without restriction or compensation.</p>
+      </section>
+
+      <!-- Section 22 -->
+      <section class="terms-section">
+        <h2>22) Suspension and Termination</h2>
+
+        <h3>a) By You</h3>
+        <p>You may stop using the Service at any time. You can cancel subscriptions through the Stripe portal.</p>
+
+        <h3>b) By Us</h3>
+        <p>We may suspend or terminate your access immediately if you violate these Terms, pose a security risk, or use the Service in a way that could create legal exposure for JobHackAI.</p>
+        <p>Termination does not eliminate your obligation to pay outstanding fees.</p>
+      </section>
+
+      <!-- Section 23 -->
+      <section class="terms-section">
+        <h2>23) Disclaimer of Warranties</h2>
+        <p class="terms-caps"><strong>THE SERVICE IS PROVIDED &ldquo;AS IS&rdquo; AND &ldquo;AS AVAILABLE.&rdquo; TO THE MAXIMUM EXTENT PERMITTED BY LAW, JOBHACKAI DISCLAIMS ALL WARRANTIES, EXPRESS OR IMPLIED, INCLUDING IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND ACCURACY.</strong></p>
+        <p class="terms-caps"><strong>WE DO NOT WARRANT THAT THE SERVICE WILL BE UNINTERRUPTED, ERROR-FREE, OR THAT OUTPUT WILL PRODUCE ANY PARTICULAR RESULT.</strong></p>
+      </section>
+
+      <!-- Section 24 -->
+      <section class="terms-section">
+        <h2>24) Limitation of Liability</h2>
+        <p class="terms-caps"><strong>TO THE MAXIMUM EXTENT PERMITTED BY LAW:</strong></p>
+        <p class="terms-caps"><strong>JOBHACKAI WILL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, OR ANY LOSS OF PROFITS, REVENUE, DATA, OR GOODWILL, EVEN IF WE WERE ADVISED OF THE POSSIBILITY.</strong></p>
+        <p class="terms-caps"><strong>JOBHACKAI&rsquo;S TOTAL LIABILITY FOR ANY CLAIM ARISING OUT OF OR RELATING TO THE SERVICE OR THESE TERMS WILL NOT EXCEED THE GREATER OF: (i) THE AMOUNT YOU PAID TO JOBHACKAI FOR THE SERVICE IN THE 12 MONTHS IMMEDIATELY BEFORE THE EVENT GIVING RISE TO THE CLAIM; OR (ii) $100.</strong></p>
+        <p>Some jurisdictions do not allow certain limitations, so some of the above may not apply to you.</p>
+      </section>
+
+      <!-- Section 25 -->
+      <section class="terms-section">
+        <h2>25) Indemnification</h2>
+        <p>You agree to indemnify, defend, and hold harmless JobHackAI and its officers, directors, employees, contractors, and agents from and against any claims, liabilities, damages, losses, and expenses (including reasonable attorneys&rsquo; fees) arising from:</p>
+        <ul>
+          <li>your User Content;</li>
+          <li>your use of the Service; or</li>
+          <li>your violation of these Terms or applicable law.</li>
+        </ul>
+      </section>
+
+      <!-- Section 26 -->
+      <section class="terms-section">
+        <h2>26) Dispute Resolution (Fast Path Before Lawyers)</h2>
+        <p>Before filing a claim, you agree to contact us at <a href="mailto:legal@jobhackai.io">legal@jobhackai.io</a> and provide a brief written description of the dispute. We&rsquo;ll try to resolve it informally within 30 days.</p>
+      </section>
+
+      <!-- Section 27 -->
+      <section class="terms-section">
+        <h2>27) Arbitration and Class Action Waiver</h2>
+        <div class="terms-warning">
+          <p><strong>PLEASE READ THIS SECTION CAREFULLY. IT AFFECTS YOUR RIGHTS.</strong></p>
+        </div>
+
+        <h3>a) Binding Arbitration</h3>
+        <p>Except for (i) small claims court matters and (ii) requests for injunctive relief for misuse of the Service or IP infringement, any dispute arising out of or relating to these Terms or the Service will be resolved by binding arbitration rather than in court.</p>
+        <p>Arbitration will be administered by AAA (American Arbitration Association) under its Consumer Arbitration Rules, unless the parties agree otherwise. Arbitration may be conducted remotely (video/phone) where permitted.</p>
+
+        <h3>b) No Class Actions</h3>
+        <p>You and JobHackAI agree that disputes will be brought only in an individual capacity, and not as a class, collective, or representative action.</p>
+
+        <h3>c) Opt-Out</h3>
+        <p>You may opt out of this arbitration provision within 30 days of first accepting these Terms by emailing <a href="mailto:legal@jobhackai.io">legal@jobhackai.io</a> with: your name, account email, and a clear statement that you are opting out of arbitration.</p>
+        <p>If you opt out, disputes will be resolved in court as described in Section 28.</p>
+      </section>
+
+      <!-- Section 28 -->
+      <section class="terms-section">
+        <h2>28) Governing Law and Venue</h2>
+        <p>These Terms are governed by the laws of the Commonwealth of Kentucky, without regard to conflict-of-law principles.</p>
+        <p>If arbitration does not apply, you agree to exclusive jurisdiction and venue in the state or federal courts located in Kentucky, unless applicable law requires otherwise.</p>
+      </section>
+
+      <!-- Section 29 -->
+      <section class="terms-section">
+        <h2>29) California Auto-Renewal Disclosure</h2>
+        <p>If you are a California resident, the following disclosures apply under the California Automatic Renewal Law (Business and Professions Code &sect;17600 et seq.):</p>
+        <ul>
+          <li>Your Trial will automatically convert to a paid Essential subscription ($29/month) at the end of the Trial period unless you cancel before the Trial ends.</li>
+          <li>Your subscription will renew automatically at the then-current rate on a recurring monthly basis until you cancel.</li>
+          <li>You may cancel at any time through the Stripe-hosted customer portal accessible from your Account. Cancellation takes effect at the end of the current billing period.</li>
+          <li>You will receive a confirmation of your subscription (including pricing and renewal terms) at the time of purchase or Trial sign-up.</li>
+        </ul>
+      </section>
+
+      <!-- Section 30 -->
+      <section class="terms-section">
+        <h2>30) Changes to These Terms</h2>
+        <p>We may update these Terms from time to time. If we make material changes, we will provide notice (for example, via the Service or email). Continued use after changes become effective means you accept the updated Terms.</p>
+      </section>
+
+      <!-- Section 31 -->
+      <section class="terms-section">
+        <h2>31) Miscellaneous</h2>
+        <ul>
+          <li><strong>Entire Agreement:</strong> These Terms plus the Privacy Policy and Retention &amp; Deletion Notice are the entire agreement between you and JobHackAI regarding the Service.</li>
+          <li><strong>Severability:</strong> If any provision is unenforceable, the rest remains in effect.</li>
+          <li><strong>Assignment:</strong> You may not assign these Terms without our consent; we may assign them as part of a merger, acquisition, or asset sale.</li>
+          <li><strong>No Waiver:</strong> Failure to enforce a provision is not a waiver.</li>
+          <li><strong>Force Majeure:</strong> We are not liable for delays or failures caused by events beyond our reasonable control.</li>
+          <li><strong>Headings:</strong> Section headings are for convenience only and do not affect interpretation.</li>
+        </ul>
+      </section>
+
+      <!-- Section 32 -->
+      <section class="terms-section">
+        <h2>32) Contact</h2>
+        <ul>
+          <li><strong>Support:</strong> <a href="mailto:support@jobhackai.io">support@jobhackai.io</a></li>
+          <li><strong>Privacy Requests:</strong> <a href="mailto:privacy@jobhackai.io">privacy@jobhackai.io</a></li>
+          <li><strong>Legal Notices / Terms / Disputes:</strong> <a href="mailto:legal@jobhackai.io">legal@jobhackai.io</a></li>
+        </ul>
+      </section>
+
+      <hr style="border: none; border-top: 2px solid var(--color-divider); margin: var(--space-2xl) 0; opacity: 0.5;" />
+      <p style="text-align: center; color: var(--color-text-muted); font-size: var(--font-size-sm);">
+        <strong>End of Terms of Service &mdash; Version 1.0</strong>
+      </p>
+    </div>
+  </main>
+
+  <!-- Footer (canonical) -->
+  <footer class="site-footer">
+    <div class="footer-container">
+      <div class="footer-brand">
+        <svg class="footer-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="7" width="18" height="13" rx="2" stroke="#1F2937" stroke-width="2"/>
+          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2" stroke="#1F2937" stroke-width="2"/>
+        </svg>
+        <span class="footer-name">JOBHACKAI</span>
+      </div>
+      <div class="footer-legal">
+        <p>&copy; 2026 JobHackAI. All rights reserved.</p>
+      </div>
+      <div class="footer-links">
+        <a href="https://jobhackai.io/">Home</a>
+        <a href="help.html">Help</a>
+        <a href="privacy.html">Privacy</a>
+        <a href="terms.html">Terms</a>
+        <a href="cookies.html">Cookies</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Load Firebase auth (ensures logged-in nav renders) -->
+  <script type="module" src="js/firebase-auth.js?v=20260207-2"></script>
+  <!-- Load navigation system -->
+  <script src="js/navigation.js?v=20260208-1"></script>
+  <script>
+    if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
+      window.JobHackAINavigation.initializeNavigation();
+    } else {
+      window.addEventListener('DOMContentLoaded', function() {
+        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
+          window.JobHackAINavigation.initializeNavigation();
+        }
+      });
+    }
+  </script>
+</body>
+</html>

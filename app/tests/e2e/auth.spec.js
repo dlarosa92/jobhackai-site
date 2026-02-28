@@ -124,6 +124,9 @@ test.describe('Authentication', () => {
       await page.fill('#signupPassword', signupPassword);
       await page.fill('#confirmPassword', signupPassword);
 
+      // Accept Terms of Service
+      await page.check('#acceptTerms');
+
       const signupContinueBtn = page.locator('#signupContinueBtn');
       await expect(signupContinueBtn).toBeVisible();
       await expect(signupContinueBtn).toBeEnabled();

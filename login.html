@@ -317,6 +317,12 @@
         <h3 id="selectedPlanName">Selected Plan</h3>
         <p>You're signing up for: <span class="plan-price" id="selectedPlanPrice">$0/mo</span></p>
       </div>
+      <p class="oauth-terms-notice" id="oauthTermsNotice" style="font-size:0.85rem; color:#6B7280; text-align:center; margin-bottom:0.8rem; line-height:1.4; display:none;">
+        By continuing, you agree to our
+        <a href="terms.html" target="_blank" rel="noopener noreferrer" style="color:#0077B5; text-decoration:underline; font-weight:500;">Terms of Service</a>
+        and
+        <a href="privacy.html" target="_blank" rel="noopener noreferrer" style="color:#0077B5; text-decoration:underline; font-weight:500;">Privacy Policy</a>.
+      </p>
       <a class="auth-social-btn google" id="googleSignIn" aria-label="Continue with Google" href="#">
         <svg width="22" height="22" viewBox="0 0 48 48" aria-hidden="true" style="vertical-align:middle;"><g><path fill="#4285F4" d="M24 9.5c3.54 0 6.7 1.22 9.19 3.23l6.85-6.85C35.93 2.68 30.34 0 24 0 14.82 0 6.73 5.48 2.69 13.44l7.98 6.2C12.13 13.13 17.62 9.5 24 9.5z"/><path fill="#34A853" d="M46.1 24.55c0-1.64-.15-3.22-.42-4.74H24v9.01h12.42c-.54 2.9-2.18 5.36-4.65 7.02l7.19 5.6C43.93 37.13 46.1 31.3 46.1 24.55z"/><path fill="#FBBC05" d="M9.67 28.09a14.5 14.5 0 010-8.18l-7.98-6.2A23.94 23.94 0 000 24c0 3.77.9 7.34 2.69 10.56l7.98-6.47z"/><path fill="#EA4335" d="M24 48c6.34 0 11.66-2.1 15.54-5.73l-7.19-5.6c-2.01 1.35-4.6 2.15-8.35 2.15-6.38 0-11.87-3.63-14.33-8.89l-7.98 6.47C6.73 42.52 14.82 48 24 48z"/></g></svg>
         Continue with Google
@@ -350,7 +356,7 @@
         <a href="#" id="forgotPasswordLink">Forgot your password?</a>
       </div>
       <!-- Signup Form (hidden by default; JS may toggle) -->
-      <form class="auth-form" id="signupForm" autocomplete="on" aria-label="Sign up form" style="display:none;">
+      <form class="auth-form" id="signupForm" autocomplete="on" aria-label="Sign up form" novalidate style="display:none;">
         <div class="auth-error" id="signupError" aria-live="polite"></div>
         <label for="firstName" class="sr-only">First Name</label>
         <input type="text" id="firstName" class="auth-input" name="firstName" placeholder="First Name" required autocomplete="given-name" />
@@ -377,6 +383,26 @@
               <circle cx="12" cy="12" r="3"/>
             </svg>
           </button>
+        </div>
+        <!-- Terms of Service Acceptance -->
+        <div class="terms-acceptance" style="margin-top:0.4rem; margin-bottom:0.2rem; width:100%;">
+          <label style="display:flex; align-items:flex-start; gap:0.6rem; cursor:pointer; font-size:0.9rem; line-height:1.45; color:#4B5563;">
+            <input
+              type="checkbox"
+              id="acceptTerms"
+              name="acceptTerms"
+              style="margin-top:0.2rem; flex-shrink:0; width:18px; height:18px; cursor:pointer; accent-color:#007A30;"
+              aria-required="true"
+              aria-describedby="termsError"
+            />
+            <span>
+              I agree to the
+              <a href="terms.html" target="_blank" rel="noopener noreferrer" style="color:#0077B5; text-decoration:underline; font-weight:600;">Terms of Service</a>
+              and
+              <a href="privacy.html" target="_blank" rel="noopener noreferrer" style="color:#0077B5; text-decoration:underline; font-weight:600;">Privacy Policy</a>
+            </span>
+          </label>
+          <div id="termsError" class="auth-error" style="display:none; margin-top:0.4rem; font-size:0.9rem;" aria-live="polite"></div>
         </div>
         <button type="submit" class="auth-continue-btn" id="signupContinueBtn">Sign Up</button>
       </form>
@@ -407,6 +433,7 @@
         <a href="https://jobhackai.io/">Home</a>
         <a href="help.html">Help</a>
         <a href="privacy.html">Privacy</a>
+        <a href="terms.html">Terms</a>
         <a href="cookies.html">Cookies</a>
       </div>
     </div>
