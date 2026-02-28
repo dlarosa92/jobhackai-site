@@ -43,17 +43,29 @@ export async function onRequest(context) {
 
     const now = new Date().toISOString();
     try {
-      // Only set acceptance timestamps if not already recorded (preserve original acceptance date).
-      // Always update the version columns so re-acceptance of newer terms is tracked.
+      // Preserve the original acceptance timestamp when the version hasn't changed
+      // (repeated OAuth logins on the same terms). Reset the timestamp when the
+      // version changes so the record accurately reflects when the user agreed to
+      // the new version.
       const result = await db.prepare(
         `UPDATE users
-         SET terms_accepted_at = COALESCE(terms_accepted_at, ?),
+         SET terms_accepted_at = CASE
+               WHEN terms_version IS NULL OR terms_version != ? THEN ?
+               ELSE COALESCE(terms_accepted_at, ?)
+             END,
              terms_version = ?,
-             privacy_accepted_at = COALESCE(privacy_accepted_at, ?),
+             privacy_accepted_at = CASE
+               WHEN privacy_version IS NULL OR privacy_version != ? THEN ?
+               ELSE COALESCE(privacy_accepted_at, ?)
+             END,
              privacy_version = ?,
              updated_at = datetime('now')
          WHERE auth_id = ?`
-      ).bind(now, termsVersion, now, privacyVersion, uid).run();
+      ).bind(
+        termsVersion, now, now, termsVersion,
+        privacyVersion, now, now, privacyVersion,
+        uid
+      ).run();
 
       // Check if UPDATE actually affected a row
       if (result.meta.changes === 0) {
