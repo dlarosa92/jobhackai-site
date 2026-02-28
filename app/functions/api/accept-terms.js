@@ -43,11 +43,13 @@ export async function onRequest(context) {
 
     const now = new Date().toISOString();
     try {
+      // Only set acceptance timestamps if not already recorded (preserve original acceptance date).
+      // Always update the version columns so re-acceptance of newer terms is tracked.
       const result = await db.prepare(
         `UPDATE users
-         SET terms_accepted_at = ?,
+         SET terms_accepted_at = COALESCE(terms_accepted_at, ?),
              terms_version = ?,
-             privacy_accepted_at = ?,
+             privacy_accepted_at = COALESCE(privacy_accepted_at, ?),
              privacy_version = ?,
              updated_at = datetime('now')
          WHERE auth_id = ?`
