@@ -427,7 +427,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     try {
       const result = await authManager.signInWithGoogle();
-      
+
       if (result.success) {
         redirected = true;
         clearTimeout(fallbackRedirectTimeout);
@@ -437,7 +437,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         recordTermsAcceptance().catch(err => {
           console.warn('Terms acceptance recording failed:', err);
         });
-        
+
         // Route based on selected plan (only if freshly selected from pricing page)
         let storedPlan = null;
         let isFreshSelection = false;
@@ -450,18 +450,18 @@ document.addEventListener('DOMContentLoaded', async function() {
             isFreshSelection = Date.now() - timestamp < 5 * 60 * 1000; // 5 minutes
           }
         } catch (e) {}
-        
+
         // Only use the plan if it was freshly selected
         const plan = isFreshSelection ? (selectedPlan || storedPlan || 'free') : 'free';
-        
+
         // Show loading state with smooth transition
         document.body.style.opacity = '0.7';
         document.body.style.transition = 'opacity 0.3s ease';
         this.textContent = 'Redirecting...';
-        
+
         // Longer delay to ensure auth state is fully persisted
         await new Promise(resolve => setTimeout(resolve, 500));
-        
+
         if (planRequiresPayment(plan)) {
           // Start server-driven checkout; trial requires card
           try {
@@ -533,7 +533,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     try {
       // Call server-side start endpoint which handles state generation and LinkedIn redirect
       const result = await authManager.signInWithLinkedIn();
-      
+
       if (result.success) {
         redirected = true;
         clearTimeout(fallbackRedirectTimeout);
@@ -543,7 +543,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         recordTermsAcceptance().catch(err => {
           console.warn('Terms acceptance recording failed:', err);
         });
-        
+
         // Route based on selected plan (only if freshly selected from pricing page)
         let storedPlan = null;
         let isFreshSelection = false;
@@ -556,18 +556,18 @@ document.addEventListener('DOMContentLoaded', async function() {
             isFreshSelection = Date.now() - timestamp < 5 * 60 * 1000; // 5 minutes
           }
         } catch (e) {}
-        
+
         // Only use the plan if it was freshly selected
         const plan = isFreshSelection ? (selectedPlan || storedPlan || 'free') : 'free';
-        
+
         // Show loading state with smooth transition
         document.body.style.opacity = '0.7';
         document.body.style.transition = 'opacity 0.3s ease';
         this.textContent = 'Redirecting...';
-        
+
         // Longer delay to ensure auth state is fully persisted
         await new Promise(resolve => setTimeout(resolve, 500));
-        
+
         if (planRequiresPayment(plan)) {
           // Start server-driven checkout; trial requires card
           try {

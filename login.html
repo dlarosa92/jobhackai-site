@@ -356,7 +356,7 @@
         <a href="#" id="forgotPasswordLink">Forgot your password?</a>
       </div>
       <!-- Signup Form (hidden by default; JS may toggle) -->
-      <form class="auth-form" id="signupForm" autocomplete="on" aria-label="Sign up form" style="display:none;">
+      <form class="auth-form" id="signupForm" autocomplete="on" aria-label="Sign up form" novalidate style="display:none;">
         <div class="auth-error" id="signupError" aria-live="polite"></div>
         <label for="firstName" class="sr-only">First Name</label>
         <input type="text" id="firstName" class="auth-input" name="firstName" placeholder="First Name" required autocomplete="given-name" />
@@ -391,7 +391,6 @@
               type="checkbox"
               id="acceptTerms"
               name="acceptTerms"
-              required
               style="margin-top:0.2rem; flex-shrink:0; width:18px; height:18px; cursor:pointer; accent-color:#007A30;"
               aria-required="true"
               aria-describedby="termsError"
