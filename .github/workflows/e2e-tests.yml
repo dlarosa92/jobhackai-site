@@ -64,7 +64,7 @@ jobs:
           TEST_ENV: prod
           TEST_EMAIL: ${{ secrets.TEST_EMAIL_PROD || secrets.TEST_EMAIL }}
           TEST_PASSWORD: ${{ secrets.TEST_PASSWORD_PROD || secrets.TEST_PASSWORD }}
-        run: npm run test:e2e:full-app-check:prod
+        run: npx playwright test --config tests/playwright.config.js tests/e2e/full-app-check.spec.js tests/e2e/terms-checkpoints.spec.js
 
       - name: Run E2E tests (dev/qa full suite)
         if: github.base_ref != 'main'
