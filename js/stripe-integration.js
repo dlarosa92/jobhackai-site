@@ -913,7 +913,7 @@ function showUpgradeConfirmation(plan, options = {}) {
 
         <div style="display:flex;gap:0.75rem;">
           <button id="jh-upgrade-cancel" style="flex:1;border:1px solid #E2E8F0;background:#fff;color:#475569;border-radius:10px;padding:0.85rem;font-weight:700;cursor:pointer;">Cancel</button>
-          <button id="jh-upgrade-confirm" style="flex:1;border:none;background:#0EA5E9;color:#fff;border-radius:10px;padding:0.9rem;font-weight:800;cursor:pointer;box-shadow:0 10px 30px rgba(14,165,233,0.35);">Continue</button>
+          <button id="jh-upgrade-confirm" style="flex:1;border:none;background:#007A30;color:#fff;border-radius:10px;padding:0.9rem;font-weight:800;cursor:pointer;box-shadow:0 10px 30px rgba(0,122,48,0.35);">Continue</button>
         </div>
       </div>
     `;
