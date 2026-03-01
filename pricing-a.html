@@ -430,6 +430,7 @@
       button.style.opacity = '0.6';
       button.style.cursor = 'not-allowed';
       setTrialSubtext(button, 'One trial per account.');
+      showMobileCard(button);
     }
 
     function setTrialEverPaidState(button) {
@@ -443,6 +444,7 @@
       button.style.opacity = '0.6';
       button.style.cursor = 'not-allowed';
       setTrialSubtext(button, message || 'Available on the free plan only.');
+      showMobileCard(button);
     }
 
     function inferTrialIneligibleReason(state) {
@@ -451,11 +453,20 @@
       return null;
     }
 
+    function showMobileCard(button) {
+      if (!button) return;
+      const mobileCard = button.closest('.pricing-mobile-card');
+      if (mobileCard) {
+        mobileCard.style.display = '';
+      }
+    }
+
     function enableButton(button) {
       button.style.display = '';
       button.disabled = false;
       button.style.opacity = '1';
       button.style.cursor = 'pointer';
+      showMobileCard(button);
     }
 
     function hideTrialCTA(button) {
@@ -1077,6 +1088,7 @@
           }
           if (normalizedPlan === 'trial') {
             button.style.display = '';
+            showMobileCard(button);
             button.textContent = 'Current Plan';
             button.disabled = true;
             button.style.opacity = '0.6';
