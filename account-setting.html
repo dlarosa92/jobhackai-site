@@ -428,6 +428,7 @@
       text-decoration: underline;
       cursor: pointer;
       padding: 0.6rem 0.7rem;
+      min-height: 44px;
       border-radius: 6px;
       transition: background 0.18s, color 0.18s;
       display: inline-flex;
@@ -437,6 +438,10 @@
     .btn-link:focus {
       background: #1976D2;
       color: #fff;
+    }
+    .btn-link:focus-visible {
+      outline: 2px solid #0F4FA8;
+      outline-offset: 2px;
     }
   </style>
 </head>
@@ -558,8 +563,8 @@
       </div>
       <!-- Actions Row -->
       <div class="settings-actions-row" style="display:flex; gap:1rem; margin-bottom:2.2rem; flex-wrap:wrap;">
-        <a href="pricing-a.html" class="btn-link">Compare Plans</a>
-        <a href="#" class="btn-link">Contact Support</a>
+        <a href="pricing-a.html" class="btn-link" aria-label="Compare subscription plans">Compare Plans</a>
+        <a href="mailto:support@jobhackai.io?subject=Account%20Settings%20Support" class="btn-link" aria-label="Contact support via email">Contact Support</a>
         <button class="btn-outline-grey" type="button" data-action="logout">Log Out</button>
       </div>
     </div>
