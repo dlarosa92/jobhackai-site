@@ -75,11 +75,6 @@ export async function onRequest(context) {
         );
       }
     }
-    
-    // Update rate limit timestamp
-    await env.JOBHACKAI_KV.put(rateLimitKey, String(Date.now()), {
-      expirationTtl: 60 // 60 seconds
-    });
   }
 
   let body;
@@ -126,6 +121,15 @@ export async function onRequest(context) {
   if (!result.ok) {
     console.error('[FEEDBACK] Email send failed:', result.error);
     return json({ error: 'Failed to send feedback' }, 502, origin, env);
+  }
+
+  // Update rate limit timestamp only after successful email send
+  if (env.JOBHACKAI_KV) {
+    const clientIp = request.headers.get('CF-Connecting-IP') || 'unknown';
+    const rateLimitKey = `feedbackRateLimit:${clientIp}`;
+    await env.JOBHACKAI_KV.put(rateLimitKey, String(Date.now()), {
+      expirationTtl: 60 // 60 seconds
+    });
   }
 
   return json({ ok: true }, 200, origin, env);
