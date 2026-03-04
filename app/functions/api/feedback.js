@@ -2,7 +2,7 @@
  * POST /api/feedback
  * Accepts { message, page } and emails it to feedback@jobhackai.io via Resend.
  */
-import { sendEmail } from '../../app/functions/_lib/email.js';
+import { sendEmail } from '../_lib/email.js';
 
 const FEEDBACK_TO = 'feedback@jobhackai.io';
 
@@ -16,11 +16,11 @@ function corsHeaders(origin, env) {
     'http://localhost:3003',
     'http://localhost:8788'
   ];
-  
+
   const configured = (env && env.FRONTEND_URL) ? env.FRONTEND_URL : null;
   const allowedList = configured ? [configured, ...fallbackOrigins] : fallbackOrigins;
   const allowed = origin && allowedList.includes(origin) ? origin : (configured || fallbackOrigins[0]);
-  
+
   return {
     'Access-Control-Allow-Origin': allowed,
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -54,13 +54,13 @@ export async function onRequest(context) {
     const clientIp = request.headers.get('CF-Connecting-IP') || 'unknown';
     const rateLimitKey = `feedbackRateLimit:${clientIp}`;
     const lastRequest = await env.JOBHACKAI_KV.get(rateLimitKey);
-    
+
     if (lastRequest) {
       const lastRequestTime = parseInt(lastRequest, 10);
       const now = Date.now();
       const timeSinceLastRequest = now - lastRequestTime;
-      
-      if (timeSinceLastRequest < 60000) { // 60 seconds
+
+      if (timeSinceLastRequest < 60000) {
         const retryAfter = Math.ceil((60000 - timeSinceLastRequest) / 1000);
         return new Response(
           JSON.stringify({ error: 'Rate limit exceeded. Please wait before sending another feedback (1 request per minute).' }),
@@ -92,7 +92,7 @@ export async function onRequest(context) {
   const page = (body.page || 'unknown').trim();
   const timestamp = new Date().toISOString();
 
-  // Sanitize page field to prevent HTML injection (same as message)
+  // Sanitize to prevent HTML injection
   const sanitizedPage = page.replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
   const html = `
@@ -128,7 +128,7 @@ export async function onRequest(context) {
     const clientIp = request.headers.get('CF-Connecting-IP') || 'unknown';
     const rateLimitKey = `feedbackRateLimit:${clientIp}`;
     await env.JOBHACKAI_KV.put(rateLimitKey, String(Date.now()), {
-      expirationTtl: 60 // 60 seconds
+      expirationTtl: 60
     });
   }
 
