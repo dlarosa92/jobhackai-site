@@ -197,6 +197,7 @@
   // Interaction logic
   var textarea = document.getElementById('jh-feedback-text');
   var sendBtn = document.getElementById('jh-feedback-send');
+  var successTimeoutId = null;
 
   function openPopup() {
     popup.classList.add('open');
@@ -209,6 +210,10 @@
     popup.classList.remove('open');
     backdrop.classList.remove('open');
     btn.style.display = '';
+    if (successTimeoutId !== null) {
+      clearTimeout(successTimeoutId);
+      successTimeoutId = null;
+    }
   }
 
   function resetForm() {
@@ -231,13 +236,17 @@
         '<p><strong>Thank you!</strong></p>' +
         '<p>Your feedback has been sent.</p>' +
       '</div>';
-    setTimeout(function () {
+    if (successTimeoutId !== null) {
+      clearTimeout(successTimeoutId);
+    }
+    successTimeoutId = setTimeout(function () {
       closePopup();
       setTimeout(resetForm, 300);
+      successTimeoutId = null;
     }, 2000);
   }
 
-  function handleSend() {
+  async function handleSend() {
     var text = textarea.value.trim();
     if (!text) { textarea.focus(); return; }
 
@@ -246,9 +255,25 @@
 
     var page = window.location.pathname;
 
+    // Get auth token if available
+    var headers = { 'Content-Type': 'application/json' };
+    try {
+      if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
+        var user = window.FirebaseAuthManager.getCurrentUser();
+        if (user && typeof user.getIdToken === 'function') {
+          var idToken = await user.getIdToken();
+          if (idToken) {
+            headers['Authorization'] = 'Bearer ' + idToken;
+          }
+        }
+      }
+    } catch (e) {
+      // If token fetch fails, proceed without auth (will get 401 from server)
+    }
+
     fetch('/api/feedback', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: headers,
       body: JSON.stringify({ message: text, page: page })
     })
       .then(function (res) {

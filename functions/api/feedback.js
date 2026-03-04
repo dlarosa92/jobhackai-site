@@ -2,7 +2,8 @@
  * POST /api/feedback
  * Accepts { message, page } and emails it to feedback@jobhackai.io via Resend.
  */
-import { sendEmail } from '../_lib/email.js';
+import { sendEmail } from '../../app/functions/_lib/email.js';
+import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 
 const FEEDBACK_TO = 'feedback@jobhackai.io';
 
@@ -24,7 +25,7 @@ function corsHeaders(origin, env) {
   return {
     'Access-Control-Allow-Origin': allowed,
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin'
   };
@@ -47,6 +48,16 @@ export async function onRequest(context) {
 
   if (request.method !== 'POST') {
     return json({ error: 'Method not allowed' }, 405, origin, env);
+  }
+
+  try {
+    const token = getBearer(request);
+    if (!token) {
+      return json({ error: 'Unauthorized' }, 401, origin, env);
+    }
+    await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
+  } catch (e) {
+    return json({ error: 'Unauthorized' }, 401, origin, env);
   }
 
   let body;
