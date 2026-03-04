@@ -3,7 +3,6 @@
  * Accepts { message, page } and emails it to feedback@jobhackai.io via Resend.
  */
 import { sendEmail } from '../../app/functions/_lib/email.js';
-import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 
 const FEEDBACK_TO = 'feedback@jobhackai.io';
 
@@ -48,16 +47,6 @@ export async function onRequest(context) {
 
   if (request.method !== 'POST') {
     return json({ error: 'Method not allowed' }, 405, origin, env);
-  }
-
-  try {
-    const token = getBearer(request);
-    if (!token) {
-      return json({ error: 'Unauthorized' }, 401, origin, env);
-    }
-    await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
-  } catch (e) {
-    return json({ error: 'Unauthorized' }, 401, origin, env);
   }
 
   let body;
