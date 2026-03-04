@@ -56,8 +56,11 @@ export async function onRequest(context) {
     return json({ error: 'Message is required' }, 400, origin);
   }
 
-  const page = body.page || 'unknown';
+  const page = (body.page || 'unknown').trim();
   const timestamp = new Date().toISOString();
+
+  // Sanitize page field to prevent HTML injection (same as message)
+  const sanitizedPage = page.replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
   const html = `
     <div style="font-family: sans-serif; max-width: 560px;">
@@ -65,7 +68,7 @@ export async function onRequest(context) {
       <table style="border-collapse:collapse; width:100%; font-size:14px; color:#4B5563;">
         <tr>
           <td style="padding:8px 12px; border:1px solid #E5E7EB; font-weight:600; width:100px;">Page</td>
-          <td style="padding:8px 12px; border:1px solid #E5E7EB;">${page}</td>
+          <td style="padding:8px 12px; border:1px solid #E5E7EB;">${sanitizedPage}</td>
         </tr>
         <tr>
           <td style="padding:8px 12px; border:1px solid #E5E7EB; font-weight:600;">Time</td>
@@ -78,7 +81,7 @@ export async function onRequest(context) {
 
   const result = await sendEmail(env, {
     to: FEEDBACK_TO,
-    subject: `Feedback from ${page}`,
+    subject: `Feedback from ${sanitizedPage}`,
     html
   });
 
