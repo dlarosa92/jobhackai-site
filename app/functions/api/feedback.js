@@ -49,6 +49,34 @@ export async function onRequest(context) {
     return json({ error: 'Method not allowed' }, 405, origin, env);
   }
 
+  // Rate limiting: 1 request per minute per IP
+  if (env.JOBHACKAI_KV) {
+    const clientIp = request.headers.get('CF-Connecting-IP') || 'unknown';
+    const rateLimitKey = `feedbackRateLimit:${clientIp}`;
+    const lastRequest = await env.JOBHACKAI_KV.get(rateLimitKey);
+
+    if (lastRequest) {
+      const lastRequestTime = parseInt(lastRequest, 10);
+      const now = Date.now();
+      const timeSinceLastRequest = now - lastRequestTime;
+
+      if (timeSinceLastRequest < 60000) {
+        const retryAfter = Math.ceil((60000 - timeSinceLastRequest) / 1000);
+        return new Response(
+          JSON.stringify({ error: 'Rate limit exceeded. Please wait before sending another feedback (1 request per minute).' }),
+          {
+            status: 429,
+            headers: {
+              'Content-Type': 'application/json',
+              'Retry-After': String(retryAfter),
+              ...corsHeaders(origin, env)
+            }
+          }
+        );
+      }
+    }
+  }
+
   let body;
   try {
     body = await request.json();
@@ -93,6 +121,15 @@ export async function onRequest(context) {
   if (!result.ok) {
     console.error('[FEEDBACK] Email send failed:', result.error);
     return json({ error: 'Failed to send feedback' }, 502, origin, env);
+  }
+
+  // Update rate limit timestamp only after successful email send
+  if (env.JOBHACKAI_KV) {
+    const clientIp = request.headers.get('CF-Connecting-IP') || 'unknown';
+    const rateLimitKey = `feedbackRateLimit:${clientIp}`;
+    await env.JOBHACKAI_KV.put(rateLimitKey, String(Date.now()), {
+      expirationTtl: 60
+    });
   }
 
   return json({ ok: true }, 200, origin, env);
