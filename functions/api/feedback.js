@@ -6,8 +6,8 @@ import { sendEmail } from '../_lib/email.js';
 
 const FEEDBACK_TO = 'feedback@jobhackai.io';
 
-function corsHeaders(origin) {
-  const allowed = [
+function corsHeaders(origin, env) {
+  const fallbackOrigins = [
     'https://jobhackai.io',
     'https://www.jobhackai.io',
     'https://dev.jobhackai.io',
@@ -16,8 +16,13 @@ function corsHeaders(origin) {
     'http://localhost:3003',
     'http://localhost:8788'
   ];
+  
+  const configured = (env && env.FRONTEND_URL) ? env.FRONTEND_URL : null;
+  const allowedList = configured ? [configured, ...fallbackOrigins] : fallbackOrigins;
+  const allowed = origin && allowedList.includes(origin) ? origin : (configured || fallbackOrigins[0]);
+  
   return {
-    'Access-Control-Allow-Origin': allowed.includes(origin) ? origin : allowed[0],
+    'Access-Control-Allow-Origin': allowed,
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Max-Age': '86400',
@@ -25,10 +30,10 @@ function corsHeaders(origin) {
   };
 }
 
-function json(data, status, origin) {
+function json(data, status, origin, env) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) }
+    headers: { 'Content-Type': 'application/json', ...corsHeaders(origin, env) }
   });
 }
 
@@ -37,23 +42,23 @@ export async function onRequest(context) {
   const origin = request.headers.get('Origin') || '';
 
   if (request.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders(origin) });
+    return new Response(null, { headers: corsHeaders(origin, env) });
   }
 
   if (request.method !== 'POST') {
-    return json({ error: 'Method not allowed' }, 405, origin);
+    return json({ error: 'Method not allowed' }, 405, origin, env);
   }
 
   let body;
   try {
     body = await request.json();
   } catch {
-    return json({ error: 'Invalid JSON' }, 400, origin);
+    return json({ error: 'Invalid JSON' }, 400, origin, env);
   }
 
   const message = (body.message || '').trim();
   if (!message) {
-    return json({ error: 'Message is required' }, 400, origin);
+    return json({ error: 'Message is required' }, 400, origin, env);
   }
 
   const page = (body.page || 'unknown').trim();
@@ -81,14 +86,14 @@ export async function onRequest(context) {
 
   const result = await sendEmail(env, {
     to: FEEDBACK_TO,
-    subject: `Feedback from ${sanitizedPage}`,
+    subject: `Feedback from ${page}`,
     html
   });
 
   if (!result.ok) {
     console.error('[FEEDBACK] Email send failed:', result.error);
-    return json({ error: 'Failed to send feedback' }, 502, origin);
+    return json({ error: 'Failed to send feedback' }, 502, origin, env);
   }
 
-  return json({ ok: true }, 200, origin);
+  return json({ ok: true }, 200, origin, env);
 }
