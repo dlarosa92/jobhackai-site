@@ -151,6 +151,12 @@
     .jh-feedback-success svg { margin-bottom: 8px; }
     .jh-feedback-success p { margin: 0; }
 
+    .jh-feedback-error {
+      margin: 8px 0 0;
+      font-size: 0.8rem;
+      color: var(--color-error, #DC2626);
+    }
+
     /* Mobile adjustments */
     @media (max-width: 480px) {
       .jh-feedback-btn { bottom: 16px; right: 16px; padding: 8px 14px; font-size: 0.8rem; }
@@ -281,12 +287,16 @@
         showSuccess();
       })
       .catch(function () {
-        // Fallback: open mailto link so feedback is never lost
-        var subject = encodeURIComponent('Feedback from ' + page);
-        var body = encodeURIComponent(text);
-        window.location.href = 'mailto:feedback@jobhackai.io?subject=' + subject + '&body=' + body;
+        // Show inline error — keep the user's text so they can retry
         sendBtn.disabled = false;
         sendBtn.textContent = 'Send Feedback';
+        var errEl = popup.querySelector('.jh-feedback-error');
+        if (!errEl) {
+          errEl = document.createElement('p');
+          errEl.className = 'jh-feedback-error';
+          errEl.textContent = 'Something went wrong. Please try again.';
+          popup.querySelector('.jh-feedback-body').insertBefore(errEl, sendBtn);
+        }
       });
   }
 
