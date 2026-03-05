@@ -25,7 +25,7 @@ function corsHeaders(origin, env) {
   const allowed = origin && allowedList.includes(origin) ? origin : (configured || fallbackOrigins[0]);
   return {
     'Access-Control-Allow-Origin': allowed,
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin'
@@ -176,7 +176,7 @@ export async function onRequest(context) {
 
     if (!result.ok) {
       console.error('[FEEDBACK] Email send failed:', result.error);
-      return json({ error: 'Failed to send feedback', detail: result.error }, 500, origin, env);
+      return json({ error: 'Failed to send feedback' }, 500, origin, env);
     }
 
     if (env.JOBHACKAI_KV) {
