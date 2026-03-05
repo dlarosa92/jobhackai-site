@@ -37,12 +37,19 @@ export async function sendEmail(env, { to, subject, html }) {
       })
     });
 
-    const data = await res.json();
-
     if (!res.ok) {
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        // Response is not JSON (e.g., HTML error page from proxy)
+        return { ok: false, error: `HTTP ${res.status}` };
+      }
       console.error('[EMAIL] Resend API error:', data);
       return { ok: false, error: data.message || `HTTP ${res.status}` };
     }
+
+    const data = await res.json();
 
     console.log('[EMAIL] Sent successfully:', { to, subject, id: data?.id });
     return { ok: true };
