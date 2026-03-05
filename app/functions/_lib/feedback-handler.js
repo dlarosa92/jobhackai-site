@@ -46,17 +46,6 @@ export async function handleFeedbackRequest(context, sendEmail) {
       return new Response(null, { headers: corsHeaders(origin, env) });
     }
 
-    // Diagnostic endpoint: GET /api/feedback shows config status
-    if (request.method === 'GET') {
-      return json({
-        ok: true,
-        hasResendKey: !!env.RESEND_API_KEY,
-        keyPrefix: env.RESEND_API_KEY ? env.RESEND_API_KEY.substring(0, 6) + '...' : null,
-        environment: env.ENVIRONMENT || 'unknown',
-        timestamp: new Date().toISOString()
-      }, 200, origin, env);
-    }
-
     if (request.method !== 'POST') {
       return json({ error: 'Method not allowed' }, 405, origin, env);
     }
