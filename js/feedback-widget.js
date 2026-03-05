@@ -219,6 +219,7 @@
     if (successTimeoutId !== null) {
       clearTimeout(successTimeoutId);
       successTimeoutId = null;
+      setTimeout(resetForm, 300);
     }
   }
 
@@ -246,9 +247,9 @@
       clearTimeout(successTimeoutId);
     }
     successTimeoutId = setTimeout(function () {
+      successTimeoutId = null;
       closePopup();
       setTimeout(resetForm, 300);
-      successTimeoutId = null;
     }, 2000);
   }
 
