@@ -58,11 +58,29 @@ async function sendEmail(env, { to, subject, html }) {
         html
       })
     });
-    const data = await res.json();
+
     if (!res.ok) {
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        // Response is not JSON (e.g., HTML error page from proxy)
+        return { ok: false, error: `HTTP ${res.status}` };
+      }
       console.error('[EMAIL] Resend API error:', data);
       return { ok: false, error: data.message || `HTTP ${res.status}` };
     }
+
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      // Response is not JSON, but email was sent successfully (res.ok was true)
+      console.log('[EMAIL] Sent successfully:', { to, subject });
+      return { ok: true };
+    }
+
+    console.log('[EMAIL] Sent successfully:', { to, subject, id: data?.id });
     return { ok: true };
   } catch (error) {
     console.error('[EMAIL] Failed to send:', error.message);
