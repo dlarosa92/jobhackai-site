@@ -5,7 +5,19 @@
  * (Use your Resend API key, e.g. re_xxxxxxxxx, when prompted—do not commit it.)
  */
 
-import { Resend } from 'resend';
+let _Resend = null;
+
+async function getResend() {
+  if (_Resend) return _Resend;
+  try {
+    const mod = await import('resend');
+    _Resend = mod.Resend;
+    return _Resend;
+  } catch (e) {
+    console.error('[EMAIL] Failed to load resend package:', e.message);
+    return null;
+  }
+}
 
 /**
  * Send an email via Resend
@@ -20,6 +32,11 @@ export async function sendEmail(env, { to, subject, html }) {
   if (!env.RESEND_API_KEY) {
     console.warn('[EMAIL] RESEND_API_KEY not configured, skipping email');
     return { ok: false, error: 'RESEND_API_KEY not configured' };
+  }
+
+  const Resend = await getResend();
+  if (!Resend) {
+    return { ok: false, error: 'Resend SDK not available' };
   }
 
   const resend = new Resend(env.RESEND_API_KEY);

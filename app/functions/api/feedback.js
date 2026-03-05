@@ -6,5 +6,5 @@ import { sendEmail } from '../_lib/email.js';
 import { handleFeedbackRequest } from '../_lib/feedback-handler.js';
 
 export async function onRequest(context) {
-  return handleFeedbackRequest(context, sendEmail);
+  return await handleFeedbackRequest(context, sendEmail);
 }

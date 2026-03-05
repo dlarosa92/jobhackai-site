@@ -41,62 +41,63 @@ export async function handleFeedbackRequest(context, sendEmail) {
   const { request, env } = context;
   const origin = request.headers.get('Origin') || '';
 
-  if (request.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders(origin, env) });
-  }
+  try {
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { headers: corsHeaders(origin, env) });
+    }
 
-  if (request.method !== 'POST') {
-    return json({ error: 'Method not allowed' }, 405, origin, env);
-  }
+    if (request.method !== 'POST') {
+      return json({ error: 'Method not allowed' }, 405, origin, env);
+    }
 
-  // Rate limiting: 1 request per minute per IP
-  if (env.JOBHACKAI_KV) {
-    const clientIp = request.headers.get('CF-Connecting-IP') || 'unknown';
-    const rateLimitKey = `feedbackRateLimit:${clientIp}`;
-    const lastRequest = await env.JOBHACKAI_KV.get(rateLimitKey);
+    // Rate limiting: 1 request per minute per IP
+    if (env.JOBHACKAI_KV) {
+      const clientIp = request.headers.get('CF-Connecting-IP') || 'unknown';
+      const rateLimitKey = `feedbackRateLimit:${clientIp}`;
+      const lastRequest = await env.JOBHACKAI_KV.get(rateLimitKey);
 
-    if (lastRequest) {
-      const lastRequestTime = parseInt(lastRequest, 10);
-      const now = Date.now();
-      const timeSinceLastRequest = now - lastRequestTime;
+      if (lastRequest) {
+        const lastRequestTime = parseInt(lastRequest, 10);
+        const now = Date.now();
+        const timeSinceLastRequest = now - lastRequestTime;
 
-      if (timeSinceLastRequest < 60000) {
-        const retryAfter = Math.ceil((60000 - timeSinceLastRequest) / 1000);
-        return new Response(
-          JSON.stringify({ error: 'Rate limit exceeded. Please wait before sending another feedback (1 request per minute).' }),
-          {
-            status: 429,
-            headers: {
-              'Content-Type': 'application/json',
-              'Retry-After': String(retryAfter),
-              ...corsHeaders(origin, env)
+        if (timeSinceLastRequest < 60000) {
+          const retryAfter = Math.ceil((60000 - timeSinceLastRequest) / 1000);
+          return new Response(
+            JSON.stringify({ error: 'Rate limit exceeded. Please wait before sending another feedback (1 request per minute).' }),
+            {
+              status: 429,
+              headers: {
+                'Content-Type': 'application/json',
+                'Retry-After': String(retryAfter),
+                ...corsHeaders(origin, env)
+              }
             }
-          }
-        );
+          );
+        }
       }
     }
-  }
 
-  let body;
-  try {
-    body = await request.json();
-  } catch {
-    return json({ error: 'Invalid JSON' }, 400, origin, env);
-  }
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return json({ error: 'Invalid JSON' }, 400, origin, env);
+    }
 
-  const message = (body.message || '').trim();
-  if (!message) {
-    return json({ error: 'Message is required' }, 400, origin, env);
-  }
+    const message = (body.message || '').trim();
+    if (!message) {
+      return json({ error: 'Message is required' }, 400, origin, env);
+    }
 
-  const page = (body.page || 'unknown').trim();
-  const timestamp = new Date().toISOString();
+    const page = (body.page || 'unknown').trim();
+    const timestamp = new Date().toISOString();
 
-  // Sanitize to prevent HTML injection and email header injection
-  const sanitizedPage = page.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const subjectPage = page.replace(/[\r\n\t]/g, ' ').slice(0, 100);
+    // Sanitize to prevent HTML injection and email header injection
+    const sanitizedPage = page.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const subjectPage = page.replace(/[\r\n\t]/g, ' ').slice(0, 100);
 
-  const html = `
+    const html = `
     <div style="font-family: sans-serif; max-width: 560px;">
       <h2 style="margin:0 0 16px; font-size:18px; color:#1F2937;">New Feedback</h2>
       <table style="border-collapse:collapse; width:100%; font-size:14px; color:#4B5563;">
@@ -113,25 +114,29 @@ export async function handleFeedbackRequest(context, sendEmail) {
     </div>
   `;
 
-  const result = await sendEmail(env, {
-    to: FEEDBACK_TO,
-    subject: `Feedback from ${subjectPage}`,
-    html
-  });
-
-  if (!result.ok) {
-    console.error('[FEEDBACK] Email send failed:', result.error);
-    return json({ error: 'Failed to send feedback' }, 502, origin, env);
-  }
-
-  // Update rate limit timestamp only after successful email send
-  if (env.JOBHACKAI_KV) {
-    const clientIp = request.headers.get('CF-Connecting-IP') || 'unknown';
-    const rateLimitKey = `feedbackRateLimit:${clientIp}`;
-    await env.JOBHACKAI_KV.put(rateLimitKey, String(Date.now()), {
-      expirationTtl: 60
+    const result = await sendEmail(env, {
+      to: FEEDBACK_TO,
+      subject: `Feedback from ${subjectPage}`,
+      html
     });
-  }
 
-  return json({ ok: true }, 200, origin, env);
+    if (!result.ok) {
+      console.error('[FEEDBACK] Email send failed:', result.error);
+      return json({ error: 'Failed to send feedback' }, 502, origin, env);
+    }
+
+    // Update rate limit timestamp only after successful email send
+    if (env.JOBHACKAI_KV) {
+      const clientIp = request.headers.get('CF-Connecting-IP') || 'unknown';
+      const rateLimitKey = `feedbackRateLimit:${clientIp}`;
+      await env.JOBHACKAI_KV.put(rateLimitKey, String(Date.now()), {
+        expirationTtl: 60
+      });
+    }
+
+    return json({ ok: true }, 200, origin, env);
+  } catch (err) {
+    console.error('[FEEDBACK] Unhandled error in feedback handler:', err);
+    return json({ error: 'Internal server error' }, 500, origin, env);
+  }
 }
