@@ -247,9 +247,9 @@
       clearTimeout(successTimeoutId);
     }
     successTimeoutId = setTimeout(function () {
+      successTimeoutId = null;
       closePopup();
       setTimeout(resetForm, 300);
-      successTimeoutId = null;
     }, 2000);
   }
 
