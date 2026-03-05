@@ -284,20 +284,30 @@
       body: JSON.stringify({ message: text, page: page })
     })
       .then(function (res) {
-        if (!res.ok) throw new Error('Request failed');
+        if (!res.ok) {
+          return res.json().catch(function () { return {}; }).then(function (data) {
+            var err = new Error(data.error || 'Request failed');
+            err.status = res.status;
+            throw err;
+          });
+        }
         showSuccess();
       })
-      .catch(function () {
+      .catch(function (err) {
         // Show inline error — keep the user's text so they can retry
         sendBtn.disabled = false;
         sendBtn.textContent = 'Send Feedback';
+        var msg = 'Something went wrong. Please try again.';
+        if (err.status === 429) {
+          msg = 'Too many requests. Please wait a minute before trying again.';
+        }
         var errEl = popup.querySelector('.jh-feedback-error');
         if (!errEl) {
           errEl = document.createElement('p');
           errEl.className = 'jh-feedback-error';
-          errEl.textContent = 'Something went wrong. Please try again.';
           popup.querySelector('.jh-feedback-body').insertBefore(errEl, sendBtn);
         }
+        errEl.textContent = msg;
       });
   }
 
