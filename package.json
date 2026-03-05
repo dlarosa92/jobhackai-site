@@ -2,7 +2,6 @@
   "name": "jobhackai-site",
   "private": true,
   "dependencies": {
-    "jose": "^5.0.0",
-    "resend": "^6.9.2"
+    "jose": "^5.0.0"
   }
 }
