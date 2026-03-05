@@ -208,4 +208,18 @@ _Update this file when a snippet is improved or the design system changes._
 
 ---
 
+## <!-- FEEDBACK WIDGET -->
+
+```html
+<!--
+  JobHackAI FEEDBACK WIDGET (canonical)
+  Self-contained: injects its own CSS and HTML.
+  Add this single script tag before </body> on every page.
+  Sends feedback to feedback@jobhackai.io via POST /api/feedback.
+-->
+<script src="js/feedback-widget.js?v=20260303-1" defer></script>
+```
+
+---
+
 Let me know if you want additional snippets (usage meter, feature lock, testimonial card, etc.) or want to further customize anything above!
