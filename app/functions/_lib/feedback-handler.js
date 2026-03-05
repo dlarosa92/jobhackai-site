@@ -6,7 +6,7 @@
 
 const FEEDBACK_TO = 'feedback@jobhackai.io';
 
-function corsHeaders(origin, env) {
+export function corsHeaders(origin, env) {
   const fallbackOrigins = [
     'https://jobhackai.io',
     'https://www.jobhackai.io',
