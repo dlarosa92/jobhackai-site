@@ -97,6 +97,14 @@ export async function onRequest(context) {
       return new Response(null, { headers: corsHeaders(origin, env) });
     }
 
+    if (request.method === 'GET') {
+      return json({
+        apiKeyPresent: !!env.RESEND_API_KEY,
+        environment: env.ENVIRONMENT || 'unknown',
+        timestamp: new Date().toISOString()
+      }, 200, origin, env);
+    }
+
     if (request.method !== 'POST') {
       return json({ error: 'Method not allowed' }, 405, origin, env);
     }
@@ -165,7 +173,7 @@ export async function onRequest(context) {
 
     if (!result.ok) {
       console.error('[FEEDBACK] Email send failed:', result.error);
-      return json({ error: 'Failed to send feedback' }, 500, origin, env);
+      return json({ error: 'Failed to send feedback', detail: result.error }, 500, origin, env);
     }
 
     if (env.JOBHACKAI_KV) {
