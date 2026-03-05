@@ -1,26 +1,14 @@
 /**
- * Shared email utility using Resend SDK
+ * Shared email utility using Resend HTTP API (no SDK dependency).
  * Requires env.RESEND_API_KEY (Worker secret).
  * Set your real API key: wrangler secret put RESEND_API_KEY --env <env>
  * (Use your Resend API key, e.g. re_xxxxxxxxx, when prompted—do not commit it.)
  */
 
-let _Resend = null;
-
-async function getResend() {
-  if (_Resend) return _Resend;
-  try {
-    const mod = await import('resend');
-    _Resend = mod.Resend;
-    return _Resend;
-  } catch (e) {
-    console.error('[EMAIL] Failed to load resend package:', e.message);
-    return null;
-  }
-}
+const RESEND_API_URL = 'https://api.resend.com/emails';
 
 /**
- * Send an email via Resend
+ * Send an email via Resend HTTP API
  * @param {Object} env - Cloudflare environment with RESEND_API_KEY
  * @param {Object} options
  * @param {string} options.to - Recipient email
@@ -34,24 +22,40 @@ export async function sendEmail(env, { to, subject, html }) {
     return { ok: false, error: 'RESEND_API_KEY not configured' };
   }
 
-  const Resend = await getResend();
-  if (!Resend) {
-    return { ok: false, error: 'Resend SDK not available' };
-  }
-
-  const resend = new Resend(env.RESEND_API_KEY);
-
   try {
-    const { data, error } = await resend.emails.send({
-      from: 'JobHackAI <noreply@jobhackai.io>',
-      to: [to],
-      subject,
-      html
+    const res = await fetch(RESEND_API_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${env.RESEND_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from: 'JobHackAI <noreply@jobhackai.io>',
+        to: [to],
+        subject,
+        html
+      })
     });
 
-    if (error) {
-      console.error('[EMAIL] Resend API error:', error);
-      return { ok: false, error: error.message || String(error) };
+    if (!res.ok) {
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        // Response is not JSON (e.g., HTML error page from proxy)
+        return { ok: false, error: `HTTP ${res.status}` };
+      }
+      console.error('[EMAIL] Resend API error:', data);
+      return { ok: false, error: data.message || `HTTP ${res.status}` };
+    }
+
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      // Response is not JSON, but email was sent successfully (res.ok was true)
+      console.log('[EMAIL] Sent successfully:', { to, subject });
+      return { ok: true };
     }
 
     console.log('[EMAIL] Sent successfully:', { to, subject, id: data?.id });
