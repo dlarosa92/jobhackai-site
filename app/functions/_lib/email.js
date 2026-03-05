@@ -49,7 +49,14 @@ export async function sendEmail(env, { to, subject, html }) {
       return { ok: false, error: data.message || `HTTP ${res.status}` };
     }
 
-    const data = await res.json();
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      // Response is not JSON, but email was sent successfully (res.ok was true)
+      console.log('[EMAIL] Sent successfully:', { to, subject });
+      return { ok: true };
+    }
 
     console.log('[EMAIL] Sent successfully:', { to, subject, id: data?.id });
     return { ok: true };
