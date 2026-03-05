@@ -92,8 +92,9 @@ export async function handleFeedbackRequest(context, sendEmail) {
   const page = (body.page || 'unknown').trim();
   const timestamp = new Date().toISOString();
 
-  // Sanitize to prevent HTML injection
+  // Sanitize to prevent HTML injection and email header injection
   const sanitizedPage = page.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const subjectPage = page.replace(/[\r\n\t]/g, ' ').slice(0, 100);
 
   const html = `
     <div style="font-family: sans-serif; max-width: 560px;">
@@ -114,7 +115,7 @@ export async function handleFeedbackRequest(context, sendEmail) {
 
   const result = await sendEmail(env, {
     to: FEEDBACK_TO,
-    subject: `Feedback from ${page}`,
+    subject: `Feedback from ${subjectPage}`,
     html
   });
 
