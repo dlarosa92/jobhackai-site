@@ -219,6 +219,7 @@
     if (successTimeoutId !== null) {
       clearTimeout(successTimeoutId);
       successTimeoutId = null;
+      setTimeout(resetForm, 300);
     }
   }
 
