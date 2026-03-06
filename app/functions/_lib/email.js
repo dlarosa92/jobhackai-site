@@ -1,8 +1,6 @@
 /**
  * Shared email utility using Resend HTTP API (no SDK dependency).
  * Requires env.RESEND_API_KEY (Worker secret).
- * Set your real API key: wrangler secret put RESEND_API_KEY --env <env>
- * (Use your Resend API key, e.g. re_xxxxxxxxx, when prompted—do not commit it.)
  */
 
 const RESEND_API_URL = 'https://api.resend.com/emails';
@@ -38,26 +36,15 @@ export async function sendEmail(env, { to, subject, html }) {
     });
 
     if (!res.ok) {
-      let data;
-      try {
-        data = await res.json();
-      } catch {
-        // Response is not JSON (e.g., HTML error page from proxy)
-        return { ok: false, error: `HTTP ${res.status}` };
-      }
-      console.error('[EMAIL] Resend API error:', data);
-      return { ok: false, error: data.message || `HTTP ${res.status}` };
+      const text = await res.text().catch(() => '');
+      let parsed;
+      try { parsed = JSON.parse(text); } catch (_e) { /* not JSON */ }
+      const detail = (parsed && (parsed.message || parsed.error)) || `HTTP ${res.status}: ${text.slice(0, 200)}`;
+      console.error('[EMAIL] Resend API error:', res.status, detail);
+      return { ok: false, error: detail };
     }
 
-    let data;
-    try {
-      data = await res.json();
-    } catch {
-      // Response is not JSON, but email was sent successfully (res.ok was true)
-      console.log('[EMAIL] Sent successfully:', { to, subject });
-      return { ok: true };
-    }
-
+    const data = await res.json().catch(() => null);
     console.log('[EMAIL] Sent successfully:', { to, subject, id: data?.id });
     return { ok: true };
   } catch (error) {

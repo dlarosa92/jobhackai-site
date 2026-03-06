@@ -5,6 +5,8 @@
  * Self-contained handler — no cross-directory imports so that the Cloudflare
  * Pages bundler can compile this file regardless of which functions/ directory
  * the build picks up.
+ *
+ * Feedback is always saved to KV for reliability. Email via Resend is best-effort.
  */
 
 const FEEDBACK_TO = 'feedback@jobhackai.io';
@@ -25,7 +27,7 @@ function corsHeaders(origin, env) {
   const allowed = origin && allowedList.includes(origin) ? origin : (configured || fallbackOrigins[0]);
   return {
     'Access-Control-Allow-Origin': allowed,
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin'
@@ -41,7 +43,6 @@ function json(data, status, origin, env) {
 
 async function sendEmail(env, { to, subject, html }) {
   if (!env.RESEND_API_KEY) {
-    console.warn('[EMAIL] RESEND_API_KEY not configured');
     return { ok: false, error: 'RESEND_API_KEY not configured' };
   }
   try {
@@ -60,33 +61,48 @@ async function sendEmail(env, { to, subject, html }) {
     });
 
     if (!res.ok) {
-      let data;
-      try {
-        data = await res.json();
-      } catch {
-        // Response is not JSON (e.g., HTML error page from proxy)
-        const text = await res.text().catch(() => '');
-        console.error('[EMAIL] Resend API non-JSON error:', res.status, text.slice(0, 200));
-        return { ok: false, error: `HTTP ${res.status}: ${text.slice(0, 200)}` };
-      }
-      console.error('[EMAIL] Resend API error:', JSON.stringify(data));
-      return { ok: false, error: data.message || data.error || `HTTP ${res.status}` };
+      const text = await res.text().catch(() => '');
+      let parsed;
+      try { parsed = JSON.parse(text); } catch (_e) { /* not JSON */ }
+      const detail = (parsed && (parsed.message || parsed.error)) || `HTTP ${res.status}: ${text.slice(0, 200)}`;
+      console.error('[EMAIL] Resend API error:', res.status, detail);
+      return { ok: false, error: detail };
     }
 
-    let data;
-    try {
-      data = await res.json();
-    } catch {
-      // Response is not JSON, but email was sent successfully (res.ok was true)
-      console.log('[EMAIL] Sent successfully:', { to, subject });
-      return { ok: true };
-    }
-
+    const data = await res.json().catch(() => null);
     console.log('[EMAIL] Sent successfully:', { to, subject, id: data?.id });
     return { ok: true };
   } catch (error) {
     console.error('[EMAIL] Failed to send:', error.message);
     return { ok: false, error: error.message };
+  }
+}
+
+/**
+ * Save feedback to KV as a reliable fallback.
+ * Key: feedback:<timestamp>:<random>
+ * Value: JSON with message, page, timestamp, emailStatus
+ */
+async function saveFeedbackToKV(env, { message, page, timestamp, emailResult }) {
+  if (!env.JOBHACKAI_KV) {
+    console.warn('[FEEDBACK] JOBHACKAI_KV not available, cannot save fallback');
+    return false;
+  }
+  try {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const key = `feedback:${id}`;
+    await env.JOBHACKAI_KV.put(key, JSON.stringify({
+      message,
+      page,
+      timestamp,
+      emailSent: emailResult.ok,
+      emailError: emailResult.error || null,
+    }), { expirationTtl: 60 * 60 * 24 * 90 }); // keep for 90 days
+    console.log('[FEEDBACK] Saved to KV:', key);
+    return true;
+  } catch (err) {
+    console.error('[FEEDBACK] Failed to save to KV:', err.message);
+    return false;
   }
 }
 
@@ -103,16 +119,13 @@ export async function onRequest(context) {
     if (request.method === 'GET') {
       const url = new URL(request.url);
       if (url.searchParams.get('debug') === 'env') {
-        const envKeys = env ? Object.keys(env) : [];
         const hasResendKey = !!(env && env.RESEND_API_KEY);
-        const resendKeyPrefix = (env && env.RESEND_API_KEY) ? env.RESEND_API_KEY.slice(0, 6) + '...' : 'N/A';
         const resendKeyLen = (env && env.RESEND_API_KEY) ? env.RESEND_API_KEY.length : 0;
+        const hasKV = !!(env && env.JOBHACKAI_KV);
         return json({
-          envKeys,
           hasResendKey,
-          resendKeyPrefix,
           resendKeyLen,
-          envType: typeof env,
+          hasKV,
           hasEnv: !!env
         }, 200, origin, env);
       }
@@ -149,7 +162,7 @@ export async function onRequest(context) {
     let body;
     try {
       body = await request.json();
-    } catch {
+    } catch (_e) {
       return json({ error: 'Invalid JSON' }, 400, origin, env);
     }
 
@@ -179,17 +192,17 @@ export async function onRequest(context) {
       <div style="margin-top:16px; padding:16px; background:#F9FAFB; border-radius:8px; font-size:14px; color:#1F2937; white-space:pre-wrap;">${message.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
     </div>`;
 
-    const result = await sendEmail(env, {
+    // Try sending email via Resend (best-effort)
+    const emailResult = await sendEmail(env, {
       to: FEEDBACK_TO,
       subject: `Feedback from ${subjectPage}`,
       html
     });
 
-    if (!result.ok) {
-      console.error('[FEEDBACK] Email send failed:', result.error);
-      return json({ error: 'Failed to send feedback', detail: result.error }, 500, origin, env);
-    }
+    // Always save feedback to KV for reliability
+    const kvSaved = await saveFeedbackToKV(env, { message, page, timestamp, emailResult });
 
+    // Update rate limit timestamp
     if (env.JOBHACKAI_KV) {
       const clientIp = request.headers.get('CF-Connecting-IP') || 'unknown';
       await env.JOBHACKAI_KV.put(`feedbackRateLimit:${clientIp}`, String(Date.now()), {
@@ -197,7 +210,16 @@ export async function onRequest(context) {
       });
     }
 
-    return json({ ok: true }, 200, origin, env);
+    // Succeed if either email was sent OR feedback was saved to KV
+    if (emailResult.ok || kvSaved) {
+      return json({ ok: true }, 200, origin, env);
+    }
+
+    // Both failed — return error with detail
+    return json({
+      error: 'Failed to send feedback',
+      detail: emailResult.error
+    }, 500, origin, env);
   } catch (err) {
     console.error('[FEEDBACK] Unhandled error:', err);
     return json({ error: 'Internal server error' }, 500, origin, env);

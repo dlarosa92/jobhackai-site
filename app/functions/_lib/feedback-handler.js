@@ -2,6 +2,8 @@
  * Shared feedback handler logic.
  * Both functions/api/feedback.js and app/functions/api/feedback.js
  * delegate to this module to avoid duplication.
+ *
+ * Feedback is always saved to KV for reliability. Email via Resend is best-effort.
  */
 
 const FEEDBACK_TO = 'feedback@jobhackai.io';
@@ -37,6 +39,32 @@ function json(data, status, origin, env) {
   });
 }
 
+/**
+ * Save feedback to KV as a reliable fallback.
+ */
+async function saveFeedbackToKV(env, { message, page, timestamp, emailResult }) {
+  if (!env.JOBHACKAI_KV) {
+    console.warn('[FEEDBACK] JOBHACKAI_KV not available, cannot save fallback');
+    return false;
+  }
+  try {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const key = `feedback:${id}`;
+    await env.JOBHACKAI_KV.put(key, JSON.stringify({
+      message,
+      page,
+      timestamp,
+      emailSent: emailResult.ok,
+      emailError: emailResult.error || null,
+    }), { expirationTtl: 60 * 60 * 24 * 90 });
+    console.log('[FEEDBACK] Saved to KV:', key);
+    return true;
+  } catch (err) {
+    console.error('[FEEDBACK] Failed to save to KV:', err.message);
+    return false;
+  }
+}
+
 export async function handleFeedbackRequest(context, sendEmail) {
   const { request, env } = context;
   const origin = request.headers.get('Origin') || '';
@@ -50,16 +78,13 @@ export async function handleFeedbackRequest(context, sendEmail) {
     if (request.method === 'GET') {
       const url = new URL(request.url);
       if (url.searchParams.get('debug') === 'env') {
-        const envKeys = env ? Object.keys(env) : [];
         const hasResendKey = !!(env && env.RESEND_API_KEY);
-        const resendKeyType = env ? typeof env.RESEND_API_KEY : 'no-env';
         const resendKeyLen = (env && env.RESEND_API_KEY) ? env.RESEND_API_KEY.length : 0;
+        const hasKV = !!(env && env.JOBHACKAI_KV);
         return json({
-          envKeys,
           hasResendKey,
-          resendKeyType,
           resendKeyLen,
-          envType: typeof env,
+          hasKV,
           hasEnv: !!env
         }, 200, origin, env);
       }
@@ -101,7 +126,7 @@ export async function handleFeedbackRequest(context, sendEmail) {
     let body;
     try {
       body = await request.json();
-    } catch {
+    } catch (_e) {
       return json({ error: 'Invalid JSON' }, 400, origin, env);
     }
 
@@ -134,18 +159,17 @@ export async function handleFeedbackRequest(context, sendEmail) {
     </div>
   `;
 
-    const result = await sendEmail(env, {
+    // Try sending email via Resend (best-effort)
+    const emailResult = await sendEmail(env, {
       to: FEEDBACK_TO,
       subject: `Feedback from ${subjectPage}`,
       html
     });
 
-    if (!result.ok) {
-      console.error('[FEEDBACK] Email send failed:', result.error);
-      return json({ error: 'Failed to send feedback' }, 500, origin, env);
-    }
+    // Always save feedback to KV for reliability
+    const kvSaved = await saveFeedbackToKV(env, { message, page, timestamp, emailResult });
 
-    // Update rate limit timestamp only after successful email send
+    // Update rate limit timestamp
     if (env.JOBHACKAI_KV) {
       const clientIp = request.headers.get('CF-Connecting-IP') || 'unknown';
       const rateLimitKey = `feedbackRateLimit:${clientIp}`;
@@ -154,7 +178,16 @@ export async function handleFeedbackRequest(context, sendEmail) {
       });
     }
 
-    return json({ ok: true }, 200, origin, env);
+    // Succeed if either email was sent OR feedback was saved to KV
+    if (emailResult.ok || kvSaved) {
+      return json({ ok: true }, 200, origin, env);
+    }
+
+    // Both failed — return error with detail
+    return json({
+      error: 'Failed to send feedback',
+      detail: emailResult.error
+    }, 500, origin, env);
   } catch (err) {
     console.error('[FEEDBACK] Unhandled error in feedback handler:', err);
     return json({ error: 'Internal server error' }, 500, origin, env);
