@@ -165,10 +165,13 @@ export async function handleFeedbackRequest(context, sendEmail) {
       return json({ ok: true }, 200, origin, env);
     }
 
-    // Both failed — return error with detail
+    // Both failed — log error details server-side and return generic error
+    console.error('[FEEDBACK] Both email and KV save failed:', {
+      emailError: emailResult.error,
+      kvSaved
+    });
     return json({
-      error: 'Failed to send feedback',
-      detail: emailResult.error
+      error: 'Failed to send feedback'
     }, 500, origin, env);
   } catch (err) {
     console.error('[FEEDBACK] Unhandled error in feedback handler:', err);
