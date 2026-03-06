@@ -23,7 +23,7 @@ function corsHeaders(origin, env) {
 
   return {
     'Access-Control-Allow-Origin': allowed,
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin'
@@ -44,6 +44,14 @@ export async function handleFeedbackRequest(context, sendEmail) {
   try {
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders(origin, env) });
+    }
+
+    if (request.method === 'GET') {
+      return json({
+        apiKeyPresent: !!env.RESEND_API_KEY,
+        environment: env.ENVIRONMENT || 'unknown',
+        timestamp: new Date().toISOString()
+      }, 200, origin, env);
     }
 
     if (request.method !== 'POST') {
@@ -122,7 +130,7 @@ export async function handleFeedbackRequest(context, sendEmail) {
 
     if (!result.ok) {
       console.error('[FEEDBACK] Email send failed:', result.error);
-      return json({ error: 'Failed to send feedback' }, 502, origin, env);
+      return json({ error: 'Failed to send feedback', detail: result.error }, 500, origin, env);
     }
 
     // Update rate limit timestamp only after successful email send
