@@ -47,9 +47,12 @@ export async function handleFeedbackRequest(context, sendEmail) {
     }
 
     if (request.method === 'GET') {
+      const envKeys = [];
+      try { for (const k in env) envKeys.push(k); } catch { /* ignore */ }
       return json({
         apiKeyPresent: !!env.RESEND_API_KEY,
         environment: env.ENVIRONMENT || 'unknown',
+        envKeys,
         timestamp: new Date().toISOString()
       }, 200, origin, env);
     }
@@ -129,8 +132,10 @@ export async function handleFeedbackRequest(context, sendEmail) {
     });
 
     if (!result.ok) {
-      console.error('[FEEDBACK] Email send failed:', result.error);
-      return json({ error: 'Failed to send feedback', detail: result.error }, 500, origin, env);
+      const envKeys = [];
+      try { for (const k in env) envKeys.push(k); } catch { /* ignore */ }
+      console.error('[FEEDBACK] Email send failed:', result.error, 'envKeys:', envKeys);
+      return json({ error: 'Failed to send feedback', detail: result.error, envKeys }, 500, origin, env);
     }
 
     // Update rate limit timestamp only after successful email send
