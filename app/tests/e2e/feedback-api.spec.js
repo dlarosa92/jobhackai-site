@@ -9,7 +9,7 @@ const { waitForAuthReady, getAuthToken } = require('../helpers/auth-helpers');
  * - Validation errors (empty message, invalid JSON)
  * - Method enforcement (non-POST returns 405)
  * - Security: error responses never leak internal details
- * - KV fallback resilience (feedback succeeds even when email fails)
+ * - Error handling (feedback returns 500 when email fails)
  */
 
 test.describe('Feedback API', () => {
@@ -27,7 +27,7 @@ test.describe('Feedback API', () => {
           status: 204,
           headers: {
             'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
             'Access-Control-Allow-Headers': 'Content-Type, Authorization',
           },
         });
@@ -188,14 +188,14 @@ test.describe('Feedback API', () => {
     expect(errorMsg).toBe('Failed to send feedback');
   });
 
-  test('feedback succeeds when email fails but KV save works (resilience)', async ({ page }) => {
+  test('feedback returns 500 when email fails', async ({ page }) => {
     test.setTimeout(30000);
     await page.goto('/dashboard');
     await page.waitForLoadState('domcontentloaded');
     await waitForAuthReady(page, 15000);
 
-    // Mock the feedback endpoint to simulate email failure + KV success
-    // In the new handler, success means: emailResult.ok || kvSaved
+    // Mock the feedback endpoint to simulate email failure
+    // The real API returns 500 when email fails (no KV fallback exists)
     await page.route('**/api/feedback', async (route) => {
       if (route.request().method() !== 'POST') {
         await route.fulfill({ status: 405, contentType: 'application/json', body: JSON.stringify({ error: 'Method not allowed' }) });
@@ -208,11 +208,11 @@ test.describe('Feedback API', () => {
         await route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ error: 'Message is required' }) });
         return;
       }
-      // Simulate: email failed but KV saved — should still return ok
+      // Simulate: email failed — API returns 500
       await route.fulfill({
-        status: 200,
+        status: 500,
         contentType: 'application/json',
-        body: JSON.stringify({ ok: true }),
+        body: JSON.stringify({ error: 'Failed to send feedback' }),
       });
     });
 
@@ -220,17 +220,17 @@ test.describe('Feedback API', () => {
       const res = await fetch('/api/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: 'Feedback with KV fallback', page: '/dashboard' }),
+        body: JSON.stringify({ message: 'Feedback with email failure', page: '/dashboard' }),
       });
       return { status: res.status, body: await res.json() };
     });
 
-    // Even though email failed, feedback should succeed via KV fallback
-    expect(result.status).toBe(200);
-    expect(result.body).toHaveProperty('ok', true);
+    // When email fails, API returns 500 (no KV fallback)
+    expect(result.status).toBe(500);
+    expect(result.body).toHaveProperty('error', 'Failed to send feedback');
   });
 
-  test('CORS headers include GET in allowed methods', async ({ page }) => {
+  test('CORS headers only include POST and OPTIONS in allowed methods', async ({ page }) => {
     test.setTimeout(30000);
     await page.goto('/dashboard');
     await page.waitForLoadState('domcontentloaded');
@@ -243,7 +243,7 @@ test.describe('Feedback API', () => {
         contentType: 'application/json',
         headers: {
           'Access-Control-Allow-Origin': page.url().split('/').slice(0, 3).join('/'),
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Methods': 'POST, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type, Authorization',
           'Access-Control-Max-Age': '86400',
           'Vary': 'Origin',
@@ -263,8 +263,8 @@ test.describe('Feedback API', () => {
     });
 
     expect(result.status).toBe(200);
-    expect(result.allowMethods).toContain('GET');
     expect(result.allowMethods).toContain('POST');
     expect(result.allowMethods).toContain('OPTIONS');
+    expect(result.allowMethods).not.toContain('GET');
   });
 });

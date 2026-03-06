@@ -187,7 +187,7 @@ test.describe('Real API Smoke', () => {
     await page.waitForLoadState('domcontentloaded');
     await waitForAuthReady(page, 15000);
 
-    // Test 1: Empty message should return 400
+    // Test 1: Empty message should return 400 (or 429 if rate limited)
     const emptyResult = await page.evaluate(async () => {
       const res = await fetch('/api/feedback', {
         method: 'POST',
@@ -196,7 +196,8 @@ test.describe('Real API Smoke', () => {
       });
       return { status: res.status, body: await res.json() };
     });
-    expect(emptyResult.status).toBe(400);
+    // 400 = validation error, 429 = rate limited (rate limit check happens before validation)
+    expect([400, 429]).toContain(emptyResult.status);
     expect(emptyResult.body).toHaveProperty('error');
 
     // Test 2: Valid feedback (may succeed or hit rate limit — both are acceptable)
