@@ -74,23 +74,6 @@ export async function handleFeedbackRequest(context, sendEmail) {
       return new Response(null, { headers: corsHeaders(origin, env) });
     }
 
-    // Diagnostic endpoint: GET /api/feedback?debug=env
-    if (request.method === 'GET') {
-      const url = new URL(request.url);
-      if (url.searchParams.get('debug') === 'env') {
-        const hasResendKey = !!(env && env.RESEND_API_KEY);
-        const resendKeyLen = (env && env.RESEND_API_KEY) ? env.RESEND_API_KEY.length : 0;
-        const hasKV = !!(env && env.JOBHACKAI_KV);
-        return json({
-          hasResendKey,
-          resendKeyLen,
-          hasKV,
-          hasEnv: !!env
-        }, 200, origin, env);
-      }
-      return json({ error: 'Method not allowed' }, 405, origin, env);
-    }
-
     if (request.method !== 'POST') {
       return json({ error: 'Method not allowed' }, 405, origin, env);
     }
@@ -169,17 +152,16 @@ export async function handleFeedbackRequest(context, sendEmail) {
     // Always save feedback to KV for reliability
     const kvSaved = await saveFeedbackToKV(env, { message, page, timestamp, emailResult });
 
-    // Update rate limit timestamp
-    if (env.JOBHACKAI_KV) {
-      const clientIp = request.headers.get('CF-Connecting-IP') || 'unknown';
-      const rateLimitKey = `feedbackRateLimit:${clientIp}`;
-      await env.JOBHACKAI_KV.put(rateLimitKey, String(Date.now()), {
-        expirationTtl: 60
-      });
-    }
-
     // Succeed if either email was sent OR feedback was saved to KV
     if (emailResult.ok || kvSaved) {
+      // Update rate limit timestamp only after successful submission
+      if (env.JOBHACKAI_KV) {
+        const clientIp = request.headers.get('CF-Connecting-IP') || 'unknown';
+        const rateLimitKey = `feedbackRateLimit:${clientIp}`;
+        await env.JOBHACKAI_KV.put(rateLimitKey, String(Date.now()), {
+          expirationTtl: 60
+        });
+      }
       return json({ ok: true }, 200, origin, env);
     }
 
