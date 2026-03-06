@@ -46,7 +46,6 @@ export async function handleFeedbackRequest(context, sendEmail) {
       return new Response(null, { headers: corsHeaders(origin, env) });
     }
 
-<<<<<<< HEAD
     if (request.method !== 'POST') {
       return json({ error: 'Method not allowed' }, 405, origin, env);
     }
