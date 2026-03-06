@@ -25,7 +25,7 @@ function corsHeaders(origin, env) {
   const allowed = origin && allowedList.includes(origin) ? origin : (configured || fallbackOrigins[0]);
   return {
     'Access-Control-Allow-Origin': allowed,
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin'
@@ -95,14 +95,6 @@ export async function onRequest(context) {
   try {
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders(origin, env) });
-    }
-
-    if (request.method === 'GET') {
-      return json({
-        apiKeyPresent: !!env.RESEND_API_KEY,
-        environment: env.ENVIRONMENT || 'unknown',
-        timestamp: new Date().toISOString()
-      }, 200, origin, env);
     }
 
     if (request.method !== 'POST') {

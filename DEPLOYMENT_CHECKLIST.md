@@ -220,10 +220,10 @@ curl -X POST https://dev.jobhackai.io/api/billing-portal \
 - [ ] Test Stripe keys with Stripe CLI
 
 ### If Feedback returns 502:
-- [ ] Visit `GET /api/feedback` in browser to check if `RESEND_API_KEY` is loaded
 - [ ] Verify `RESEND_API_KEY` is set in Cloudflare Pages dashboard for **Production** (not just Preview)
 - [ ] Ensure API key starts with `re_` (Resend key prefix)
 - [ ] Check that `jobhackai.io` domain is verified in the Resend dashboard
+- [ ] Check server logs for email send errors
 
 ### If CORS errors:
 - [ ] Check origin is in `allowedOrigins` array
