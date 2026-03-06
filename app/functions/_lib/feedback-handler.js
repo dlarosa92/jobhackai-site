@@ -122,7 +122,7 @@ export async function handleFeedbackRequest(context, sendEmail) {
 
     if (!result.ok) {
       console.error('[FEEDBACK] Email send failed:', result.error);
-      return json({ error: 'Failed to send feedback' }, 502, origin, env);
+      return json({ error: 'Failed to send feedback' }, 500, origin, env);
     }
 
     // Update rate limit timestamp only after successful email send

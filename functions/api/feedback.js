@@ -165,7 +165,7 @@ export async function onRequest(context) {
 
     if (!result.ok) {
       console.error('[FEEDBACK] Email send failed:', result.error);
-      return json({ error: 'Failed to send feedback' }, 502, origin, env);
+      return json({ error: 'Failed to send feedback' }, 500, origin, env);
     }
 
     if (env.JOBHACKAI_KV) {
