@@ -9,6 +9,7 @@ export async function onRequest({ request, env }) {
     'STRIPE_PRICE_PRO_MONTHLY',
     'STRIPE_PRICE_PREMIUM_MONTHLY',
     'FRONTEND_URL',
+    'RESEND_API_KEY',
     'JOBHACKAI_KV'
   ];
 

@@ -1,4 +1,7 @@
 /**
+ * NOTE: This file is NOT deployed to production. The Cloudflare Pages project
+ * root directory is /app, so the deployed handler is app/functions/api/feedback.js.
+ *
  * POST /api/feedback
  * Accepts { message, page } and emails it to feedback@jobhackai.io via Resend HTTP API.
  *
