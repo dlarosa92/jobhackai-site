@@ -98,12 +98,9 @@ export async function onRequest(context) {
     }
 
     if (request.method === 'GET') {
-      const envKeys = [];
-      try { for (const k in env) envKeys.push(k); } catch { /* ignore */ }
       return json({
         apiKeyPresent: !!env.RESEND_API_KEY,
         environment: env.ENVIRONMENT || 'unknown',
-        envKeys,
         timestamp: new Date().toISOString()
       }, 200, origin, env);
     }
@@ -178,7 +175,7 @@ export async function onRequest(context) {
       const envKeys = [];
       try { for (const k in env) envKeys.push(k); } catch { /* ignore */ }
       console.error('[FEEDBACK] Email send failed:', result.error, 'envKeys:', envKeys);
-      return json({ error: 'Failed to send feedback', detail: result.error, envKeys }, 500, origin, env);
+      return json({ error: 'Failed to send feedback', detail: result.error }, 500, origin, env);
     }
 
     if (env.JOBHACKAI_KV) {
