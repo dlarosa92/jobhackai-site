@@ -65,10 +65,12 @@ async function sendEmail(env, { to, subject, html }) {
         data = await res.json();
       } catch {
         // Response is not JSON (e.g., HTML error page from proxy)
-        return { ok: false, error: `HTTP ${res.status}` };
+        const text = await res.text().catch(() => '');
+        console.error('[EMAIL] Resend API non-JSON error:', res.status, text.slice(0, 200));
+        return { ok: false, error: `HTTP ${res.status}: ${text.slice(0, 200)}` };
       }
-      console.error('[EMAIL] Resend API error:', data);
-      return { ok: false, error: data.message || `HTTP ${res.status}` };
+      console.error('[EMAIL] Resend API error:', JSON.stringify(data));
+      return { ok: false, error: data.message || data.error || `HTTP ${res.status}` };
     }
 
     let data;
@@ -95,6 +97,26 @@ export async function onRequest(context) {
   try {
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders(origin, env) });
+    }
+
+    // Diagnostic endpoint: GET /api/feedback?debug=env
+    if (request.method === 'GET') {
+      const url = new URL(request.url);
+      if (url.searchParams.get('debug') === 'env') {
+        const envKeys = env ? Object.keys(env) : [];
+        const hasResendKey = !!(env && env.RESEND_API_KEY);
+        const resendKeyPrefix = (env && env.RESEND_API_KEY) ? env.RESEND_API_KEY.slice(0, 6) + '...' : 'N/A';
+        const resendKeyLen = (env && env.RESEND_API_KEY) ? env.RESEND_API_KEY.length : 0;
+        return json({
+          envKeys,
+          hasResendKey,
+          resendKeyPrefix,
+          resendKeyLen,
+          envType: typeof env,
+          hasEnv: !!env
+        }, 200, origin, env);
+      }
+      return json({ error: 'Method not allowed' }, 405, origin, env);
     }
 
     if (request.method !== 'POST') {
@@ -165,7 +187,7 @@ export async function onRequest(context) {
 
     if (!result.ok) {
       console.error('[FEEDBACK] Email send failed:', result.error);
-      return json({ error: 'Failed to send feedback' }, 500, origin, env);
+      return json({ error: 'Failed to send feedback', detail: result.error }, 500, origin, env);
     }
 
     if (env.JOBHACKAI_KV) {
