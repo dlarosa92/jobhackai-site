@@ -91,12 +91,12 @@ test.describe('Feedback API', () => {
     // May succeed (200), hit rate limit (429), or fail if email service unavailable (500)
     // For security testing, we need a 500 response, but rate limiting may occur first
     expect([200, 429, 500]).toContain(result.status);
-    expect(result.body).toHaveProperty('error');
 
     // Security: error should NOT contain internal details like stack traces,
     // API keys, KV errors, or Resend-specific error messages
     // Only check security assertions if we got an error response
-    if (result.status === 500 || (result.status === 429 && result.body.error)) {
+    if (result.status === 500 || result.status === 429) {
+      expect(result.body).toHaveProperty('error');
       const errorMsg = JSON.stringify(result.body);
       expect(errorMsg).not.toMatch(/RESEND_API_KEY/i);
       expect(errorMsg).not.toMatch(/stack|trace|at\s+\w+/i);
