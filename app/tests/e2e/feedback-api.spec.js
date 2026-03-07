@@ -128,7 +128,7 @@ test.describe('Feedback API', () => {
     }
   });
 
-  test('CORS headers only include POST and OPTIONS in allowed methods', async ({ page }) => {
+  test('CORS headers include GET, POST, and OPTIONS in allowed methods', async ({ page }) => {
     test.setTimeout(30000);
     await page.goto('/dashboard');
     await page.waitForLoadState('domcontentloaded');
@@ -147,9 +147,9 @@ test.describe('Feedback API', () => {
     // May succeed (200), hit rate limit (429), or fail if email service unavailable (500)
     expect([200, 429, 500]).toContain(result.status);
     if (result.status === 200 || result.status === 500) {
+      expect(result.allowMethods).toContain('GET');
       expect(result.allowMethods).toContain('POST');
       expect(result.allowMethods).toContain('OPTIONS');
-      expect(result.allowMethods).not.toContain('GET');
     }
   });
 });
