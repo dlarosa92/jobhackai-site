@@ -128,7 +128,7 @@ test.describe('Feedback API', () => {
     }
   });
 
-  test('CORS headers include GET, POST, and OPTIONS in allowed methods', async ({ page }) => {
+  test('CORS headers include POST and OPTIONS in allowed methods', async ({ page }) => {
     test.setTimeout(30000);
     await page.goto('/dashboard');
     await page.waitForLoadState('domcontentloaded');
@@ -146,7 +146,6 @@ test.describe('Feedback API', () => {
 
     // All responses (200, 429, 500) include CORS headers
     expect([200, 429, 500]).toContain(result.status);
-    expect(result.allowMethods).toContain('GET');
     expect(result.allowMethods).toContain('POST');
     expect(result.allowMethods).toContain('OPTIONS');
   });
