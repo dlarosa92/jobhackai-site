@@ -8,55 +8,77 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MARKETING_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 FOOTER_FILE="$MARKETING_DIR/components/footer.html"
 
-# Extract footer content (skip header comments, get the actual footer HTML)
-# Indent with 2 spaces to match HTML structure
-FOOTER_CONTENT=$(sed -n '/^<footer/,/^<\/footer>/p' "$FOOTER_FILE" | sed 's/^/  /')
+# Use Python for reliable text processing
+python3 << PYTHON_SCRIPT
+import os
+import re
+import sys
 
-# Files that contain inline footers (with their relative paths to components)
-declare -A FILE_PATHS=(
-  ["$MARKETING_DIR/index.html"]="components/footer.html"
-  ["$MARKETING_DIR/features.html"]="components/footer.html"
-  ["$MARKETING_DIR/blog.html"]="components/footer.html"
-  ["$MARKETING_DIR/blog/post-template.html"]="../components/footer.html"
-  ["$MARKETING_DIR/blog/ats-optimization-playbook.html"]="../components/footer.html"
-  ["$MARKETING_DIR/blog/linkedin-profile-optimization.html"]="../components/footer.html"
-  ["$MARKETING_DIR/blog/7-day-interview-prep-routine.html"]="../components/footer.html"
-)
+marketing_dir = "$MARKETING_DIR"
+footer_file = "$FOOTER_FILE"
 
-for file in "${!FILE_PATHS[@]}"; do
-  if [ ! -f "$file" ]; then
-    echo "Warning: $file not found, skipping"
-    continue
-  fi
-  
-  REL_PATH="${FILE_PATHS[$file]}"
-  
-  # Create temp file
-  TEMP_FILE=$(mktemp)
-  
-  # Determine sync script path based on file location
-  if [[ "$file" == *"/blog/"* ]]; then
-    SYNC_SCRIPT_PATH="../scripts/sync-footer.sh"
-  else
-    SYNC_SCRIPT_PATH="scripts/sync-footer.sh"
-  fi
-  
-  # Replace footer section (from comment to closing footer tag)
-  awk -v footer="$FOOTER_CONTENT" -v rel_path="$REL_PATH" -v sync_script="$SYNC_SCRIPT_PATH" '
-    /<!-- Footer \(inline for crawler visibility\) -->/ {
-      print "  <!-- Footer (inline for crawler visibility) -->"
-      print "  <!-- Source: " rel_path " - update there and run " sync_script " -->"
-      print footer
-      # Skip until closing footer tag
-      while (getline > 0 && !/^  <\/footer>/) {}
-      print "  </footer>"
-      next
-    }
-    { print }
-  ' "$file" > "$TEMP_FILE"
-  
-  mv "$TEMP_FILE" "$file"
-  echo "Updated: $file"
-done
+# Read footer content (skip header comments)
+with open(footer_file, 'r') as f:
+    lines = f.readlines()
 
-echo "Footer sync complete!"
+# Extract footer HTML (from <footer> to </footer>)
+footer_start = None
+footer_end = None
+for i, line in enumerate(lines):
+    if line.strip().startswith('<footer'):
+        footer_start = i
+    if footer_start is not None and line.strip() == '</footer>':
+        footer_end = i
+        break
+
+if footer_start is None or footer_end is None:
+    print("Error: Could not find footer tags in footer.html", file=sys.stderr)
+    sys.exit(1)
+
+# Extract footer content and indent with 2 spaces
+footer_lines = [('  ' + line.rstrip('\n')) for line in lines[footer_start:footer_end+1]]
+footer_content = '\n'.join(footer_lines)
+
+# Files to update
+files = {
+    'index.html': 'components/footer.html',
+    'features.html': 'components/footer.html',
+    'blog.html': 'components/footer.html',
+    'blog/post-template.html': '../components/footer.html',
+    'blog/ats-optimization-playbook.html': '../components/footer.html',
+    'blog/linkedin-profile-optimization.html': '../components/footer.html',
+    'blog/7-day-interview-prep-routine.html': '../components/footer.html',
+}
+
+for filename, rel_path in files.items():
+    filepath = os.path.join(marketing_dir, filename)
+    if not os.path.exists(filepath):
+        print(f"Warning: {filepath} not found, skipping")
+        continue
+    
+    # Determine sync script path
+    if 'blog/' in filename:
+        sync_script = '../scripts/sync-footer.sh'
+    else:
+        sync_script = 'scripts/sync-footer.sh'
+    
+    # Read file
+    with open(filepath, 'r') as f:
+        content = f.read()
+    
+    # Replace footer section
+    pattern = r'  <!-- Footer \(inline for crawler visibility\) -->.*?  </footer>'
+    replacement = f'''  <!-- Footer (inline for crawler visibility) -->
+  <!-- Source: {rel_path} - update there and run {sync_script} -->
+{footer_content}'''
+    
+    new_content = re.sub(pattern, replacement, content, flags=re.DOTALL)
+    
+    # Write back
+    with open(filepath, 'w') as f:
+        f.write(new_content)
+    
+    print(f"Updated: {filepath}")
+
+print("Footer sync complete!")
+PYTHON_SCRIPT
