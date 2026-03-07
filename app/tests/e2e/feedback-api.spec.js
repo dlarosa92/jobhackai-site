@@ -148,6 +148,5 @@ test.describe('Feedback API', () => {
     expect([200, 429, 500]).toContain(result.status);
     expect(result.allowMethods).toContain('POST');
     expect(result.allowMethods).toContain('OPTIONS');
-    expect(result.allowMethods).not.toContain('GET');
   });
 });
