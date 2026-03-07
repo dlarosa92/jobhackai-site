@@ -41,6 +41,9 @@
     for (var i = 0; i < targets.length; i += 1) {
       await loadComponent(targets[i]);
     }
+    // Apply environment-aware footer links even if no components were loaded
+    // (e.g., when footer is inline instead of loaded via data-component-src)
+    applyEnvironmentAwareFooterLinks(document);
   }
 
   if (document.readyState === 'loading') {
