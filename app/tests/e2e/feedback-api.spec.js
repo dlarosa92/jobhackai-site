@@ -144,12 +144,10 @@ test.describe('Feedback API', () => {
       return { status: res.status, allowMethods };
     });
 
-    // May succeed (200), hit rate limit (429), or fail if email service unavailable (500)
+    // All responses (200, 429, 500) include CORS headers
     expect([200, 429, 500]).toContain(result.status);
-    if (result.status === 200 || result.status === 500) {
-      expect(result.allowMethods).toContain('GET');
-      expect(result.allowMethods).toContain('POST');
-      expect(result.allowMethods).toContain('OPTIONS');
-    }
+    expect(result.allowMethods).toContain('GET');
+    expect(result.allowMethods).toContain('POST');
+    expect(result.allowMethods).toContain('OPTIONS');
   });
 });
