@@ -181,6 +181,45 @@ test.describe('Real API Smoke', () => {
     }
   });
 
+  test('POST /api/feedback validates input and returns generic errors', async ({ page }) => {
+    test.setTimeout(30000);
+    await page.goto('/dashboard');
+    await page.waitForLoadState('domcontentloaded');
+    await waitForAuthReady(page, 15000);
+
+    // Test 1: Empty message should return 400 (or 429 if rate limited)
+    const emptyResult = await page.evaluate(async () => {
+      const res = await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: '', page: '/smoke-test' }),
+      });
+      return { status: res.status, body: await res.json() };
+    });
+    // 400 = validation error, 429 = rate limited (rate limit check happens before validation)
+    expect([400, 429]).toContain(emptyResult.status);
+    expect(emptyResult.body).toHaveProperty('error');
+
+    // Test 2: Valid feedback (may succeed or hit rate limit — both are acceptable)
+    const validResult = await page.evaluate(async () => {
+      const res = await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: 'E2E smoke test feedback', page: '/smoke-test' }),
+      });
+      return { status: res.status, body: await res.json() };
+    });
+    // 200 = success, 429 = rate limited, 500 = email+KV both unavailable
+    expect([200, 429, 500]).toContain(validResult.status);
+    if (validResult.status === 200) {
+      expect(validResult.body).toHaveProperty('ok', true);
+    }
+    if (validResult.status === 500) {
+      // Security: error response must not leak internal details
+      expect(validResult.body.error).not.toMatch(/RESEND_API_KEY|JOBHACKAI_KV|stack|env\./i);
+    }
+  });
+
   test('GET /api/user/export requires authentication', async ({ browser, baseURL }) => {
     test.setTimeout(30000);
 
