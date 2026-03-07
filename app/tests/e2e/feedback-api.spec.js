@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { waitForAuthReady, getAuthToken } = require('../helpers/auth-helpers');
+const { waitForAuthReady } = require('../helpers/auth-helpers');
 
 /**
  * E2E tests for the feedback API endpoint.
