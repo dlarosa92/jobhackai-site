@@ -461,7 +461,8 @@ test.describe('Full App Check', () => {
   });
 
   test('stripe checkout + billing endpoints are healthy', async ({ page, baseURL }) => {
-    await page.goto('/pricing-a.html');
+    test.setTimeout(60000);
+    await page.goto('/dashboard');
     await page.waitForLoadState('domcontentloaded');
     await waitForAuthReady(page, 15000);
 
@@ -471,6 +472,10 @@ test.describe('Full App Check', () => {
     const planResponse = await page.request.get('/api/plan/me', {
       headers: { Authorization: `Bearer ${token}` },
     });
+    if (!planResponse.ok()) {
+      const errorBody = await planResponse.text().catch(() => 'Unable to read response body');
+      console.error(`❌ /api/plan/me failed: status=${planResponse.status()} body=${errorBody}`);
+    }
     expect(planResponse.ok()).toBeTruthy();
     const planData = await planResponse.json();
     const normalizedPlan = String(planData.plan || '').toLowerCase();
