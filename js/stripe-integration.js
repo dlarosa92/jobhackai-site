@@ -580,11 +580,9 @@ class JobHackAIStripe {
       }));
       localStorage.setItem('plan-amount', amount);
       
-      if (plan === 'trial') {
-        window.location.href = 'account-setting.html';
-      } else {
-        window.location.href = 'pricing-a.html';
-      }
+      // In demo mode, redirect all plans to account settings
+      // (no real Stripe checkout is available)
+      window.location.href = 'account-setting.html';
       return;
     }
 
