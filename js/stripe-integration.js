@@ -583,7 +583,7 @@ class JobHackAIStripe {
       if (plan === 'trial') {
         window.location.href = 'account-setting.html';
       } else {
-        window.location.href = 'checkout.html';
+        window.location.href = 'pricing-a.html';
       }
       return;
     }
@@ -646,8 +646,7 @@ class JobHackAIStripe {
       window.location.href = url;
     } catch (error) {
       console.error('Failed to create checkout session:', error);
-      // Fallback to checkout page
-      window.location.href = 'checkout.html';
+      alert('Something went wrong starting checkout. Please try again.');
     }
   }
 
