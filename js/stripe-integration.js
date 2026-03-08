@@ -580,11 +580,9 @@ class JobHackAIStripe {
       }));
       localStorage.setItem('plan-amount', amount);
       
-      if (plan === 'trial') {
-        window.location.href = 'account-setting.html';
-      } else {
-        window.location.href = 'checkout.html';
-      }
+      // In demo mode, redirect all plans to account settings
+      // (no real Stripe checkout is available)
+      window.location.href = 'account-setting.html';
       return;
     }
 
@@ -646,8 +644,7 @@ class JobHackAIStripe {
       window.location.href = url;
     } catch (error) {
       console.error('Failed to create checkout session:', error);
-      // Fallback to checkout page
-      window.location.href = 'checkout.html';
+      alert('Something went wrong starting checkout. Please try again.');
     }
   }
 
