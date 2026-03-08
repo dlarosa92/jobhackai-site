@@ -469,9 +469,19 @@ test.describe('Full App Check', () => {
     const token = await getAuthToken(page);
     expect(token).toBeTruthy();
 
-    const planResponse = await page.request.get('/api/plan/me', {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    // Retry with backoff to handle Cloudflare rate limiting (429)
+    let planResponse;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) {
+        const delay = attempt * 5000;
+        console.log(`⏳ Rate limited, waiting ${delay / 1000}s before retry ${attempt + 1}...`);
+        await page.waitForTimeout(delay);
+      }
+      planResponse = await page.request.get('/api/plan/me', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (planResponse.ok() || planResponse.status() !== 429) break;
+    }
     if (!planResponse.ok()) {
       const errorBody = await planResponse.text().catch(() => 'Unable to read response body');
       console.error(`❌ /api/plan/me failed: status=${planResponse.status()} body=${errorBody}`);

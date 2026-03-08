@@ -580,11 +580,7 @@ class JobHackAIStripe {
       }));
       localStorage.setItem('plan-amount', amount);
       
-      if (plan === 'trial') {
-        window.location.href = 'account-setting.html';
-      } else {
-        window.location.href = 'pricing-a.html';
-      }
+      window.location.href = 'account-setting.html';
       return;
     }
 
