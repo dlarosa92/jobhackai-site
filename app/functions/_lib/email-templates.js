@@ -109,6 +109,29 @@ export function accountDeletedEmail(userEmail) {
 }
 
 /**
+ * Payment failure notification
+ */
+export function paymentFailedEmail(userName, planName, appOrigin) {
+  const name = escapeHtml(userName || 'there');
+  const plan = escapeHtml(planName || 'your');
+  const settingsUrl = `${normalizeAppOrigin(appOrigin)}/account-setting.html`;
+  const body = `
+    <h2 style="margin:0 0 16px;font-size:20px;color:#1F2937;">Your payment could not be processed</h2>
+    <p style="margin:0 0 16px;font-size:15px;color:#374151;line-height:1.6;">
+      Hi ${name}, we were unable to process the latest payment for your ${plan} plan. Your subscription is now past due.
+    </p>
+    <p style="margin:0 0 16px;font-size:15px;color:#374151;line-height:1.6;">
+      Please update your payment method to avoid losing access to your plan features. Stripe will automatically retry the charge, but if it continues to fail your subscription will be cancelled.
+    </p>
+    ${actionButton('Update Payment Method', settingsUrl)}
+    <p style="margin:0;font-size:13px;color:#9ca3af;line-height:1.6;">
+      If you believe this is an error, please contact <a href="mailto:support@jobhackai.io" style="color:#1976D2;text-decoration:underline;">support@jobhackai.io</a>.
+    </p>
+  `;
+  return { subject: 'Action required: payment failed for your JobHackAI subscription', html: emailWrapper(body) };
+}
+
+/**
  * Confirmation email when a subscription is cancelled
  */
 export function subscriptionCancelledEmail(userName, planName, accessEndDate) {

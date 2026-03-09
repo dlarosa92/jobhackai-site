@@ -1,7 +1,7 @@
 import { updateUserPlan, getUserPlanData, resetFeatureDailyUsage, resetUsageEvents, getDb, getOrCreateUserByAuthId, isDeletedUser } from '../_lib/db.js';
 import { stripe, pickBestSubscription } from '../_lib/billing-utils.js';
 import { sendEmail } from '../_lib/email.js';
-import { subscriptionCancelledEmail } from '../_lib/email-templates.js';
+import { subscriptionCancelledEmail, paymentFailedEmail } from '../_lib/email-templates.js';
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -511,6 +511,42 @@ export async function onRequest(context) {
             console.warn('[WEBHOOK] Error sending cancellation email (non-blocking):', emailErr.message);
           }
         }
+      }
+    }
+
+    // ─── Payment failure: mark subscription past_due, notify user ───
+    if (event.type === 'invoice.payment_failed') {
+      console.log('🎯 WEBHOOK: invoice.payment_failed received');
+      const invoice = event.data?.object || {};
+      const customerId = invoice.customer || null;
+      const subscriptionId = invoice.subscription || null;
+      const { uid, email: customerEmail } = await fetchCustomerInfo(customerId);
+
+      if (uid) {
+        // Update subscription status to past_due so the app reflects reality
+        await updatePlanInD1(uid, {
+          subscriptionStatus: 'past_due'
+        }, event.created);
+        console.log(`⚠️ [WEBHOOK] Marked subscription past_due for uid=${uid} (invoice ${invoice.id})`);
+
+        // Send payment failure email (non-blocking)
+        try {
+          const db = getDb(env);
+          const userRow = db ? await db.prepare('SELECT email, plan FROM users WHERE auth_id = ?').bind(uid).first() : null;
+          if (userRow?.email) {
+            const userName = userRow.email.split('@')[0];
+            const planName = userRow.plan || 'current';
+            const { subject, html } = paymentFailedEmail(userName, planName, env.FRONTEND_URL);
+            const emailPromise = sendEmail(env, { to: userRow.email, subject, html }).catch((e) => {
+              console.warn('[WEBHOOK] Failed to send payment failure email (non-blocking):', e.message);
+            });
+            context.waitUntil(emailPromise);
+          }
+        } catch (emailErr) {
+          console.warn('[WEBHOOK] Error sending payment failure email (non-blocking):', emailErr.message);
+        }
+      } else {
+        console.warn(`⚠️ [WEBHOOK] invoice.payment_failed: could not resolve uid for customer ${customerId}`);
       }
     }
 
