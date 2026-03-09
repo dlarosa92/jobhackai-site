@@ -527,27 +527,47 @@ export async function onRequest(context) {
       if (!subscriptionId) {
         console.log(`⏭️ [WEBHOOK] invoice.payment_failed: skipping non-subscription invoice ${invoice.id}`);
       } else if (uid) {
-        // Update subscription status to past_due so the app reflects reality
-        await updatePlanInD1(uid, {
-          subscriptionStatus: 'past_due'
-        }, event.created);
-        console.log(`⚠️ [WEBHOOK] Marked subscription past_due for uid=${uid} (invoice ${invoice.id})`);
-
-        // Send payment failure email (non-blocking)
+        // Fetch the actual subscription status from Stripe before writing to D1.
+        // Stripe fires invoice.payment_failed on every retry attempt, but the
+        // subscription may still be 'active' while smart retries are pending.
+        // Only update D1 if Stripe has actually transitioned the subscription.
+        let subStatus = 'past_due';
         try {
-          const db = getDb(env);
-          const userRow = db ? await db.prepare('SELECT email, plan FROM users WHERE auth_id = ?').bind(uid).first() : null;
-          if (userRow?.email) {
-            const userName = userRow.email.split('@')[0];
-            const planName = userRow.plan || 'current';
-            const { subject, html } = paymentFailedEmail(userName, planName, env.FRONTEND_URL);
-            const emailPromise = sendEmail(env, { to: userRow.email, subject, html }).catch((e) => {
-              console.warn('[WEBHOOK] Failed to send payment failure email (non-blocking):', e.message);
-            });
-            context.waitUntil(emailPromise);
+          const subRes = await fetch(`https://api.stripe.com/v1/subscriptions/${subscriptionId}`, {
+            headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}` }
+          });
+          if (subRes.ok) {
+            const subData = await subRes.json();
+            subStatus = subData.status || 'past_due';
           }
-        } catch (emailErr) {
-          console.warn('[WEBHOOK] Error sending payment failure email (non-blocking):', emailErr.message);
+        } catch (fetchErr) {
+          console.warn(`⚠️ [WEBHOOK] Could not fetch subscription status, defaulting to past_due:`, fetchErr.message);
+        }
+
+        if (subStatus === 'active') {
+          console.log(`⏭️ [WEBHOOK] invoice.payment_failed: subscription ${subscriptionId} still active (retry pending), skipping D1 update`);
+        } else {
+          await updatePlanInD1(uid, {
+            subscriptionStatus: subStatus
+          }, event.created);
+          console.log(`⚠️ [WEBHOOK] Marked subscription ${subStatus} for uid=${uid} (invoice ${invoice.id})`);
+
+          // Send payment failure email (non-blocking)
+          try {
+            const db = getDb(env);
+            const userRow = db ? await db.prepare('SELECT email, plan FROM users WHERE auth_id = ?').bind(uid).first() : null;
+            if (userRow?.email) {
+              const userName = userRow.email.split('@')[0];
+              const planName = userRow.plan || 'current';
+              const { subject, html } = paymentFailedEmail(userName, planName, env.FRONTEND_URL);
+              const emailPromise = sendEmail(env, { to: userRow.email, subject, html }).catch((e) => {
+                console.warn('[WEBHOOK] Failed to send payment failure email (non-blocking):', e.message);
+              });
+              context.waitUntil(emailPromise);
+            }
+          } catch (emailErr) {
+            console.warn('[WEBHOOK] Error sending payment failure email (non-blocking):', emailErr.message);
+          }
         }
       } else {
         console.warn(`⚠️ [WEBHOOK] invoice.payment_failed: could not resolve uid for customer ${customerId}`);
