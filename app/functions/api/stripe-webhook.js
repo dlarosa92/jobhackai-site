@@ -522,7 +522,11 @@ export async function onRequest(context) {
       const subscriptionId = invoice.subscription || null;
       const { uid, email: customerEmail } = await fetchCustomerInfo(customerId);
 
-      if (uid) {
+      // Only handle subscription invoices — one-time invoices (e.g. metered charges)
+      // have no subscription and should not affect subscription status.
+      if (!subscriptionId) {
+        console.log(`⏭️ [WEBHOOK] invoice.payment_failed: skipping non-subscription invoice ${invoice.id}`);
+      } else if (uid) {
         // Update subscription status to past_due so the app reflects reality
         await updatePlanInD1(uid, {
           subscriptionStatus: 'past_due'
