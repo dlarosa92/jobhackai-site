@@ -81,19 +81,18 @@ export async function getOrCreateUserByAuthId(env, authId, email = null, { updat
       // Debounce: Only write last_login_at if the last update was >1 hour ago.
       // This saves ~80% of D1 writes from auth without affecting retention logic.
       let shouldWriteActivity = updateActivity;
+      let debounceKey = null;
       if (shouldWriteActivity && env) {
         try {
           const kv = env.JOBHACKAI_KV;
           if (kv) {
-            const debounceKey = `loginDebounce:${authId}`;
+            debounceKey = `loginDebounce:${authId}`;
             const lastWrite = await kv.get(debounceKey);
             if (lastWrite) {
               // Already wrote within the last hour — skip the D1 write
               shouldWriteActivity = false;
-            } else {
-              // Mark that we're about to write, expires in 1 hour
-              await kv.put(debounceKey, '1', { expirationTtl: 3600 });
             }
+            // Note: KV debounce key will be set AFTER successful D1 write
           }
         } catch (debounceErr) {
           // KV failure is non-fatal — fall through to always write
@@ -107,6 +106,15 @@ export async function getOrCreateUserByAuthId(env, authId, email = null, { updat
             await db.prepare(
               'UPDATE users SET email = ?, last_login_at = datetime(\'now\'), deletion_warning_sent_at = NULL, updated_at = datetime(\'now\') WHERE id = ?'
             ).bind(email, existing.id).run();
+            // Set debounce key only after successful D1 write
+            if (debounceKey && env?.JOBHACKAI_KV) {
+              try {
+                await env.JOBHACKAI_KV.put(debounceKey, '1', { expirationTtl: 3600 });
+              } catch (kvErr) {
+                // KV write failure is non-fatal — debounce key will be set on next successful write
+                console.warn('[DB] Failed to set debounce key after D1 write (non-fatal):', kvErr.message);
+              }
+            }
           } else {
             await db.prepare(
               'UPDATE users SET email = ?, updated_at = datetime(\'now\') WHERE id = ?'
@@ -129,6 +137,15 @@ export async function getOrCreateUserByAuthId(env, authId, email = null, { updat
           await db.prepare(
             'UPDATE users SET last_login_at = datetime(\'now\'), deletion_warning_sent_at = NULL WHERE id = ?'
           ).bind(existing.id).run();
+          // Set debounce key only after successful D1 write
+          if (debounceKey && env?.JOBHACKAI_KV) {
+            try {
+              await env.JOBHACKAI_KV.put(debounceKey, '1', { expirationTtl: 3600 });
+            } catch (kvErr) {
+              // KV write failure is non-fatal — debounce key will be set on next successful write
+              console.warn('[DB] Failed to set debounce key after D1 write (non-fatal):', kvErr.message);
+            }
+          }
         } catch (colErr) {
           if (colErr.message && colErr.message.includes('no such column')) {
             console.warn('[DB] Activity columns not yet migrated, skipping last_login_at update');
