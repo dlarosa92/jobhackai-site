@@ -1,5 +1,7 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 
+// Temporary test comment to verify dev0 → develop → QA deployment pipeline
+
 export async function onRequest({ request, env }) {
   // Require authentication — this endpoint must never be public
   const token = getBearer(request);
