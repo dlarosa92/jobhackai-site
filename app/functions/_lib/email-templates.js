@@ -113,7 +113,7 @@ export function accountDeletedEmail(userEmail) {
  */
 export function paymentFailedEmail(userName, planName, appOrigin) {
   const name = escapeHtml(userName || 'there');
-  const plan = escapeHtml(planName || 'your');
+  const plan = escapeHtml(planName || 'current');
   const settingsUrl = `${normalizeAppOrigin(appOrigin)}/account-setting.html`;
   const body = `
     <h2 style="margin:0 0 16px;font-size:20px;color:#1F2937;">Your payment could not be processed</h2>
