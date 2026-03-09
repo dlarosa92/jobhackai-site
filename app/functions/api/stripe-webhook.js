@@ -544,8 +544,11 @@ export async function onRequest(context) {
           console.warn(`⚠️ [WEBHOOK] Could not fetch subscription status, defaulting to past_due:`, fetchErr.message);
         }
 
-        if (subStatus === 'active') {
-          console.log(`⏭️ [WEBHOOK] invoice.payment_failed: subscription ${subscriptionId} still active (retry pending), skipping D1 update`);
+        // Skip if subscription is still active (retries pending) or in a terminal
+        // state handled by other webhook events (e.g. customer.subscription.deleted).
+        const terminalStatuses = new Set(['active', 'canceled', 'incomplete_expired']);
+        if (terminalStatuses.has(subStatus)) {
+          console.log(`⏭️ [WEBHOOK] invoice.payment_failed: subscription ${subscriptionId} is ${subStatus}, skipping D1 update`);
         } else {
           await updatePlanInD1(uid, {
             subscriptionStatus: subStatus
