@@ -527,6 +527,14 @@ export async function onRequest(context) {
       if (!subscriptionId) {
         console.log(`⏭️ [WEBHOOK] invoice.payment_failed: skipping non-subscription invoice ${invoice.id}`);
       } else if (uid) {
+        // Skip deleted users — other handlers check this too
+        const d1Tombstone = await isDeletedUser(env, uid);
+        const kvTombstone = await env.JOBHACKAI_KV?.get(`deleted:${uid}`);
+        if (d1Tombstone || kvTombstone) {
+          console.log(`⏭️ [WEBHOOK] Skipping invoice.payment_failed: user ${uid} was deleted (tombstone found)`);
+          return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
+        }
+
         // Fetch the actual subscription status from Stripe before writing to D1.
         // Stripe fires invoice.payment_failed on every retry attempt, but the
         // subscription may still be 'active' while smart retries are pending.
