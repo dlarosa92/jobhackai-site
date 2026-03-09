@@ -20,10 +20,10 @@ d1_databases = [
 ]
 # KV namespace for caching, rate limiting, and usage tracking
 # Create with: wrangler kv namespace create JOBHACKAI_KV --env dev
-# Then replace the id below with the output id
-kv_namespaces = [
-  { binding = "JOBHACKAI_KV", id = "REPLACE_WITH_DEV_KV_NAMESPACE_ID" }
-]
+# Then uncomment and replace the id below with the output id
+# kv_namespaces = [
+#   { binding = "JOBHACKAI_KV", id = "REPLACE_WITH_DEV_KV_NAMESPACE_ID" }
+# ]
 
 [env.qa]
 name = "jobhackai-site-qa"
@@ -31,9 +31,10 @@ d1_databases = [
   { binding = "JOBHACKAI_DB", database_name = "jobhackai-qa-db", database_id = "80d87a73-6615-4823-b7a4-19a8821b4f87" },
   { binding = "INTERVIEW_QUESTIONS_DB", database_name = "jobhackai-qa-db", database_id = "80d87a73-6615-4823-b7a4-19a8821b4f87" }
 ]
-kv_namespaces = [
-  { binding = "JOBHACKAI_KV", id = "REPLACE_WITH_QA_KV_NAMESPACE_ID" }
-]
+# Create with: wrangler kv namespace create JOBHACKAI_KV --env qa
+# kv_namespaces = [
+#   { binding = "JOBHACKAI_KV", id = "REPLACE_WITH_QA_KV_NAMESPACE_ID" }
+# ]
 
 [env.production]
 name = "jobhackai-site-prod"
@@ -41,6 +42,7 @@ d1_databases = [
   { binding = "JOBHACKAI_DB", database_name = "jobhackai-prod-db", database_id = "f9b709fd-56c3-4a0b-8141-4542327c9d4d" },
   { binding = "INTERVIEW_QUESTIONS_DB", database_name = "jobhackai-prod-db", database_id = "f9b709fd-56c3-4a0b-8141-4542327c9d4d" }
 ]
-kv_namespaces = [
-  { binding = "JOBHACKAI_KV", id = "REPLACE_WITH_PROD_KV_NAMESPACE_ID" }
-]
+# Create with: wrangler kv namespace create JOBHACKAI_KV --env production
+# kv_namespaces = [
+#   { binding = "JOBHACKAI_KV", id = "REPLACE_WITH_PROD_KV_NAMESPACE_ID" }
+# ]
