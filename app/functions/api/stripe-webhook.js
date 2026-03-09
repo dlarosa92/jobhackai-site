@@ -1,7 +1,7 @@
 import { updateUserPlan, getUserPlanData, resetFeatureDailyUsage, resetUsageEvents, getDb, getOrCreateUserByAuthId, isDeletedUser } from '../_lib/db.js';
 import { stripe, pickBestSubscription } from '../_lib/billing-utils.js';
 import { sendEmail } from '../_lib/email.js';
-import { subscriptionCancelledEmail } from '../_lib/email-templates.js';
+import { subscriptionCancelledEmail, paymentFailedEmail } from '../_lib/email-templates.js';
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -511,6 +511,77 @@ export async function onRequest(context) {
             console.warn('[WEBHOOK] Error sending cancellation email (non-blocking):', emailErr.message);
           }
         }
+      }
+    }
+
+    // ─── Payment failure: mark subscription past_due, notify user ───
+    if (event.type === 'invoice.payment_failed') {
+      console.log('🎯 WEBHOOK: invoice.payment_failed received');
+      const invoice = event.data?.object || {};
+      const customerId = invoice.customer || null;
+      const subscriptionId = invoice.subscription || null;
+      const { uid, email: customerEmail } = await fetchCustomerInfo(customerId);
+
+      // Only handle subscription invoices — one-time invoices (e.g. metered charges)
+      // have no subscription and should not affect subscription status.
+      if (!subscriptionId) {
+        console.log(`⏭️ [WEBHOOK] invoice.payment_failed: skipping non-subscription invoice ${invoice.id}`);
+      } else if (uid) {
+        // Skip deleted users — other handlers check this too
+        const d1Tombstone = await isDeletedUser(env, uid);
+        const kvTombstone = await env.JOBHACKAI_KV?.get(`deleted:${uid}`);
+        if (d1Tombstone || kvTombstone) {
+          console.log(`⏭️ [WEBHOOK] Skipping invoice.payment_failed: user ${uid} was deleted (tombstone found)`);
+          return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
+        }
+
+        // Fetch the actual subscription status from Stripe before writing to D1.
+        // Stripe fires invoice.payment_failed on every retry attempt, but the
+        // subscription may still be 'active' while smart retries are pending.
+        // Only update D1 if Stripe has actually transitioned the subscription.
+        let subStatus = 'past_due';
+        try {
+          const subRes = await fetch(`https://api.stripe.com/v1/subscriptions/${subscriptionId}`, {
+            headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}` }
+          });
+          if (subRes.ok) {
+            const subData = await subRes.json();
+            subStatus = subData.status || 'past_due';
+          }
+        } catch (fetchErr) {
+          console.warn(`⚠️ [WEBHOOK] Could not fetch subscription status, defaulting to past_due:`, fetchErr.message);
+        }
+
+        // Skip if subscription is still active (retries pending) or in a terminal
+        // state handled by other webhook events (e.g. customer.subscription.deleted).
+        const terminalStatuses = new Set(['active', 'canceled', 'incomplete_expired']);
+        if (terminalStatuses.has(subStatus)) {
+          console.log(`⏭️ [WEBHOOK] invoice.payment_failed: subscription ${subscriptionId} is ${subStatus}, skipping D1 update`);
+        } else {
+          await updatePlanInD1(uid, {
+            subscriptionStatus: subStatus
+          }, event.created);
+          console.log(`⚠️ [WEBHOOK] Marked subscription ${subStatus} for uid=${uid} (invoice ${invoice.id})`);
+
+          // Send payment failure email (non-blocking)
+          try {
+            const db = getDb(env);
+            const userRow = db ? await db.prepare('SELECT email, plan FROM users WHERE auth_id = ?').bind(uid).first() : null;
+            if (userRow?.email) {
+              const userName = userRow.email.split('@')[0];
+              const planName = userRow.plan || 'current';
+              const { subject, html } = paymentFailedEmail(userName, planName, env.FRONTEND_URL);
+              const emailPromise = sendEmail(env, { to: userRow.email, subject, html }).catch((e) => {
+                console.warn('[WEBHOOK] Failed to send payment failure email (non-blocking):', e.message);
+              });
+              context.waitUntil(emailPromise);
+            }
+          } catch (emailErr) {
+            console.warn('[WEBHOOK] Error sending payment failure email (non-blocking):', emailErr.message);
+          }
+        }
+      } else {
+        console.warn(`⚠️ [WEBHOOK] invoice.payment_failed: could not resolve uid for customer ${customerId}`);
       }
     }
 
