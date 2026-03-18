@@ -342,6 +342,14 @@
   text-decoration-color: var(--color-accent-blue);
 }
 
+.prose img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-card);
+  margin: var(--space-lg) 0;
+}
+
 .prose blockquote {
   border-left: 3px solid var(--color-cta-green);
   margin: var(--space-lg) 0;
