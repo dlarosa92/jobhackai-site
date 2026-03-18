@@ -48,6 +48,7 @@ files = {
     'blog/ats-optimization-playbook.html': '../components/footer.html',
     'blog/linkedin-profile-optimization.html': '../components/footer.html',
     'blog/7-day-interview-prep-routine.html': '../components/footer.html',
+    'blog/mock-interview-online.html': '../components/footer.html',
 }
 
 for filename, rel_path in files.items():
