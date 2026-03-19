@@ -13,6 +13,16 @@
 
 window.BLOG_POSTS = [
   {
+    slug: 'mock-interview-online',
+    title: 'Mock Interview Online: Why Real-Time Practice Is Your Secret Weapon',
+    excerpt: 'Stop reading interview tips and start practicing. Real-time mock interview sessions build the structured communication skills that actually win job offers.',
+    category: 'Interview Prep',
+    date: '2026-03-18',
+    readTime: 9,
+    author: 'JobHackAI Team',
+    featured: true,
+  },
+  {
     slug: 'ats-optimization-playbook',
     title: 'The ATS Optimization Playbook: Get Your Resume Past the Bots',
     excerpt: 'Most resumes are rejected before a human ever reads them. Here is the exact framework to align your resume with ATS filters without losing your voice or authenticity.',
@@ -20,7 +30,7 @@ window.BLOG_POSTS = [
     date: '2026-02-24',
     readTime: 8,
     author: 'JobHackAI Team',
-    featured: true,
+    featured: false,
   },
   {
     slug: 'linkedin-profile-optimization',
