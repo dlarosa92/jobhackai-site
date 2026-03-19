@@ -344,10 +344,10 @@
 
 .prose img {
   display: block;
-  max-width: 100%;
+  max-width: 80%;
   height: auto;
   border-radius: var(--radius-card);
-  margin: var(--space-lg) 0;
+  margin: var(--space-lg) auto;
 }
 
 .prose blockquote {
@@ -444,5 +444,9 @@
   .post-meta {
     flex-wrap: wrap;
     gap: var(--space-xs);
+  }
+
+  .prose img {
+    max-width: 100%;
   }
 }
