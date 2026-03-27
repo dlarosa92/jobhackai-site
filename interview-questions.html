@@ -8,59 +8,106 @@
   <script src="js/static-auth-guard.js?v=20260125-1"></script>
   <script>
     // --- IMMEDIATE PAGE ACCESS CONTROL ---
-    // Wait for Firebase auth to be ready before checking (prevents false negatives)
+    // Wait for Firebase auth AND plan fetch before checking (prevents false redirects)
     (async function enforceAccessImmediate() {
-      // Wait for Firebase auth manager to be ready (max 3 seconds)
+      var allowedPlans = ['trial', 'essential', 'pro', 'premium'];
+
+      // Helper: wait for FirebaseAuthManager to appear on window (it loads async)
+      async function waitForFirebaseAuthManager(timeout) {
+        if (window.FirebaseAuthManager) return true;
+        var deadline = Date.now() + timeout;
+        return new Promise(function (resolve) {
+          var interval = setInterval(function () {
+            if (window.FirebaseAuthManager || Date.now() >= deadline) {
+              clearInterval(interval);
+              resolve(!!window.FirebaseAuthManager);
+            }
+          }, 50);
+        });
+      }
+
+      // Helper: wait for JobHackAINavigation to appear on window
+      async function waitForNavigation(timeout) {
+        if (window.JobHackAINavigation) return true;
+        var deadline = Date.now() + timeout;
+        return new Promise(function (resolve) {
+          var interval = setInterval(function () {
+            if (window.JobHackAINavigation || Date.now() >= deadline) {
+              clearInterval(interval);
+              resolve(!!window.JobHackAINavigation);
+            }
+          }, 50);
+        });
+      }
+
+      // Step 1: Wait for FirebaseAuthManager to load (max 3s)
+      await waitForFirebaseAuthManager(3000);
+
+      // Step 2: Wait for Firebase auth to be ready
+      var user = null;
       if (window.FirebaseAuthManager && window.FirebaseAuthManager.waitForAuthReady) {
         try {
-          await window.FirebaseAuthManager.waitForAuthReady(3000);
+          user = await window.FirebaseAuthManager.waitForAuthReady(5000);
         } catch (e) {
           console.warn('[INTERVIEW-Q] Auth ready timeout:', e);
         }
       }
-      
-      // Check auth state
-      let isAuthenticated = false;
-      let plan = 'free';
-      
-      if (window.FirebaseAuthManager && window.FirebaseAuthManager.getCurrentUser) {
-        const user = window.FirebaseAuthManager.getCurrentUser();
-        isAuthenticated = !!user;
-        if (window.JobHackAINavigation) {
-          plan = window.JobHackAINavigation.getEffectivePlan();
-        } else {
-          plan = localStorage.getItem('user-plan') || 'free';
-        }
-      } else {
-        // Fallback to localStorage check
-        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-        const hasFirebaseKeys = Object.keys(localStorage).some(k => 
-          k.startsWith('firebase:authUser:') && 
-          localStorage.getItem(k) && 
-          localStorage.getItem(k) !== 'null' &&
-          localStorage.getItem(k).length > 10
-        );
+
+      // Step 3: Determine authentication
+      var isAuthenticated = !!user;
+      if (!isAuthenticated) {
+        // Fallback: check localStorage + Firebase SDK keys
+        var hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+        var hasFirebaseKeys = Object.keys(localStorage).some(function (k) {
+          return k.startsWith('firebase:authUser:') &&
+            localStorage.getItem(k) &&
+            localStorage.getItem(k) !== 'null' &&
+            localStorage.getItem(k).length > 10;
+        });
         isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
-        plan = localStorage.getItem('user-plan') || 'free';
       }
-      
-      const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
-      
-      // If not authenticated, redirect to login
+
       if (!isAuthenticated) {
         console.log('🚫 [INTERVIEW-Q] Not authenticated, redirecting to login');
         window.location.href = 'login.html';
         return;
       }
-      
-      // If authenticated but on wrong plan, redirect to pricing
+
+      // Step 4: Check cached plan first (fast path)
+      var plan = localStorage.getItem('user-plan') || 'free';
+      if (allowedPlans.includes(plan)) {
+        console.log('✅ [INTERVIEW-Q] Access granted for cached plan:', plan);
+        return;
+      }
+
+      // Step 5: Cached plan would deny access — fetch authoritative plan from API
+      // Wait for navigation module to load so we can use fetchPlanFromAPI
+      await waitForNavigation(2000);
+
+      if (window.JobHackAINavigation && window.JobHackAINavigation.fetchPlanFromAPI) {
+        try {
+          var apiPlan = await window.JobHackAINavigation.fetchPlanFromAPI();
+          if (apiPlan) plan = apiPlan;
+        } catch (e) {
+          console.warn('[INTERVIEW-Q] API plan fetch error:', e);
+        }
+      }
+
+      // Also check getEffectivePlan (handles dev-plan overrides on non-prod)
+      if (!allowedPlans.includes(plan) && window.JobHackAINavigation && window.JobHackAINavigation.getEffectivePlan) {
+        var effectivePlan = window.JobHackAINavigation.getEffectivePlan();
+        if (effectivePlan && allowedPlans.includes(effectivePlan)) {
+          plan = effectivePlan;
+        }
+      }
+
+      // Step 6: Final decision
       if (!allowedPlans.includes(plan)) {
         console.log('🚫 [INTERVIEW-Q] Access denied for plan:', plan);
         window.location.href = 'pricing-a.html?plan=essential';
         return;
       }
-      
-      // Access granted
+
       console.log('✅ [INTERVIEW-Q] Access granted for plan:', plan);
     })();
   </script>
