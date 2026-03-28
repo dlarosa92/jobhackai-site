@@ -1267,14 +1267,38 @@
   </script>
   <script>
     // --- AUTHENTICATION CHECK ---
-    function checkAuthentication() {
+    async function checkAuthentication() {
+      // Skip if head guard already verified access (prevents DOM destruction race)
+      if (window.__JOBHACKAI_ACCESS_VERIFIED__) {
+        return true;
+      }
+      if (window.FirebaseAuthManager && window.FirebaseAuthManager.waitForAuthReady) {
+        try {
+          await window.FirebaseAuthManager.waitForAuthReady(3000);
+        } catch (e) {
+          console.warn('[RESUME-FEEDBACK] Auth ready timeout in checkAuthentication:', e);
+        }
+      }
+      if (window.__JOBHACKAI_ACCESS_VERIFIED__) {
+        return true;
+      }
+      // Wait for head guard async path (plan API) before sync-only checks — mirrors enforceAccess()
+      var waited = 0;
+      while (!window.__JOBHACKAI_ACCESS_VERIFIED__ && waited < 10000) {
+        await new Promise(function (r) { setTimeout(r, 200); });
+        waited += 200;
+      }
+      if (window.__JOBHACKAI_ACCESS_VERIFIED__) {
+        return true;
+      }
+
       // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
       // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
       function hasFirebaseAuthKeys() {
         try {
-          return Object.keys(localStorage).some(k => 
-            k.startsWith('firebase:authUser:') && 
-            localStorage.getItem(k) && 
+          return Object.keys(localStorage).some(k =>
+            k.startsWith('firebase:authUser:') &&
+            localStorage.getItem(k) &&
             localStorage.getItem(k) !== 'null' &&
             localStorage.getItem(k).length > 10
           );
@@ -1282,20 +1306,15 @@
           return false;
         }
       }
-      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-      const hasFirebaseKeys = hasFirebaseAuthKeys();
-      const isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
-      const mainContent = document.querySelector('main');
-      
-      if (!isAuthenticated) {
-        mainContent.innerHTML = `
+
+      const loginRequiredHtml = `
           <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
             <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
             <h1 style="font-size: 2rem; font-weight: 700; color: var(--color-text-main); margin-bottom: 1rem;">
               Login Required
             </h1>
             <p style="font-size: 1.1rem; color: var(--color-text-secondary); margin-bottom: 2rem; line-height: 1.6;">
-              Resume Feedback Pro requires you to be logged in to access this tool. 
+              Resume Feedback Pro requires you to be logged in to access this tool.
               Please sign in to get started.
             </p>
             <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
@@ -1308,6 +1327,24 @@
             </div>
           </div>
         `;
+
+      if (window.JobHackAINavigation) {
+        const authState = window.JobHackAINavigation.getAuthState();
+        if (!authState.isAuthenticated) {
+          const mainContent = document.querySelector('main');
+          mainContent.innerHTML = loginRequiredHtml;
+          return false;
+        }
+        return true;
+      }
+
+      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+      const hasFirebaseKeys = hasFirebaseAuthKeys();
+      const isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
+      const mainContent = document.querySelector('main');
+
+      if (!isAuthenticated) {
+        mainContent.innerHTML = loginRequiredHtml;
         return false;
       }
       return true;
@@ -1392,9 +1429,9 @@
     }
 
     // --- Initialize on load ---
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', async function() {
       // Check authentication first
-      if (!checkAuthentication()) {
+      if (!(await checkAuthentication())) {
         return; // Stop here if not authenticated
       }
       
