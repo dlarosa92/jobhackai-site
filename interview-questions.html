@@ -67,6 +67,7 @@
         console.log('✅ [INTERVIEW-Q] Access granted for cached plan:', plan);
         document.documentElement.classList.remove('auth-pending');
         document.documentElement.classList.remove('plan-pending');
+        window.__JOBHACKAI_ACCESS_VERIFIED__ = true;
         return;
       }
 
@@ -103,6 +104,7 @@
 
       document.documentElement.classList.remove('auth-pending');
       document.documentElement.classList.remove('plan-pending');
+      window.__JOBHACKAI_ACCESS_VERIFIED__ = true;
       console.log('✅ [INTERVIEW-Q] Access granted for plan:', plan);
     })();
   </script>
@@ -4552,40 +4554,35 @@ function initIQPage(){
     }
     
     // --- PAGE ACCESS CONTROL (Second check after navigation system) ---
-    // Also run after navigation system initializes to double-check
+    // Skip if the head guard already verified access (prevents race condition redirects)
     function enforceAccess() {
-      let authState, userPlan;
-      
+      if (window.__JOBHACKAI_ACCESS_VERIFIED__) {
+        console.log('[INTERVIEW-Q] enforceAccess: skipping, head guard already verified access');
+        return;
+      }
+
+      var authState, userPlan;
+
       if (window.JobHackAINavigation) {
         authState = window.JobHackAINavigation.getAuthState();
         userPlan = window.JobHackAINavigation.getEffectivePlan();
       } else {
-        // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
-        // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
-        // Use same pattern as checkAuthentication() for consistency
-        function hasFirebaseAuthKeys() {
-          try {
-            return Object.keys(localStorage).some(k => 
-              k.startsWith('firebase:authUser:') && 
-              localStorage.getItem(k) && 
-              localStorage.getItem(k) !== 'null' &&
-              localStorage.getItem(k).length > 10
-            );
-          } catch (e) {
-            return false;
-          }
-        }
-        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-        const hasFirebaseKeys = hasFirebaseAuthKeys();
+        var hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+        var hasFirebaseKeys = Object.keys(localStorage).some(function (k) {
+          return k.startsWith('firebase:authUser:') &&
+            localStorage.getItem(k) &&
+            localStorage.getItem(k) !== 'null' &&
+            localStorage.getItem(k).length > 10;
+        });
         authState = { isAuthenticated: hasLocalStorageAuth || hasFirebaseKeys };
         userPlan = localStorage.getItem('user-plan') || 'free';
       }
-      
-      const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
-      
+
+      var allowedPlans = ['trial', 'essential', 'pro', 'premium'];
+
       if (!authState.isAuthenticated || !allowedPlans.includes(userPlan)) {
         if (!authState.isAuthenticated) {
-        window.location.href = 'login.html';
+          window.location.href = 'login.html';
         } else {
           window.location.href = 'pricing-a.html?plan=essential';
         }
