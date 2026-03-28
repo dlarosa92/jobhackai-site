@@ -12,6 +12,18 @@
     (async function enforceAccessImmediate() {
       var allowedPlans = ['trial', 'essential', 'pro', 'premium'];
 
+      // Synchronous fast path: check localStorage auth + cached plan BEFORE any async work.
+      // This sets __JOBHACKAI_ACCESS_VERIFIED__ immediately so the body guard never races.
+      var cachedPlan = localStorage.getItem('user-plan') || 'free';
+      var hasLocalAuth = localStorage.getItem('user-authenticated') === 'true';
+      if (hasLocalAuth && allowedPlans.includes(cachedPlan)) {
+        console.log('✅ [INTERVIEW-Q] Sync fast path: access granted for cached plan:', cachedPlan);
+        window.__JOBHACKAI_ACCESS_VERIFIED__ = true;
+        document.documentElement.classList.remove('auth-pending');
+        document.documentElement.classList.remove('plan-pending');
+        return;
+      }
+
       // Helper: wait for an object to appear on window
       function waitForGlobal(name, timeout) {
         if (window[name]) return Promise.resolve(true);
