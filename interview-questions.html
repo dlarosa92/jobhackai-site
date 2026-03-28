@@ -1825,6 +1825,10 @@
 
     // --- AUTHENTICATION CHECK ---
     async function checkAuthentication() {
+      // Skip if head guard already verified access (prevents DOM destruction race)
+      if (window.__JOBHACKAI_ACCESS_VERIFIED__) {
+        return true;
+      }
       // Wait for Firebase auth to be ready
       if (window.FirebaseAuthManager && window.FirebaseAuthManager.waitForAuthReady) {
         try {
