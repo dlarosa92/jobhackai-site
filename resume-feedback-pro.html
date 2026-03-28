@@ -1239,7 +1239,8 @@
             localStorage.getItem(k) !== 'null' &&
             localStorage.getItem(k).length > 10;
         });
-        isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
+        // SECURITY: Require BOTH signals (matches head fast path + static-auth-guard.js)
+        isAuthenticated = hasLocalStorageAuth && hasFirebaseKeys;
         plan = localStorage.getItem('user-plan') || 'free';
       }
 
@@ -1282,15 +1283,8 @@
       if (window.__JOBHACKAI_ACCESS_VERIFIED__) {
         return true;
       }
-      // Wait for head guard async path (plan API) before sync-only checks — mirrors enforceAccess()
-      var waited = 0;
-      while (!window.__JOBHACKAI_ACCESS_VERIFIED__ && waited < 10000) {
-        await new Promise(function (r) { setTimeout(r, 200); });
-        waited += 200;
-      }
-      if (window.__JOBHACKAI_ACCESS_VERIFIED__) {
-        return true;
-      }
+      // Head guard's 10s wait runs in enforceAccess (DOMContentLoaded); avoid duplicating it here
+      // so init is not blocked by Firebase wait + two sequential polls (~13s).
 
       // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
       // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
@@ -1340,7 +1334,8 @@
 
       const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
       const hasFirebaseKeys = hasFirebaseAuthKeys();
-      const isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
+      // SECURITY: Require BOTH signals (matches head fast path + static-auth-guard.js)
+      const isAuthenticated = hasLocalStorageAuth && hasFirebaseKeys;
       const mainContent = document.querySelector('main');
 
       if (!isAuthenticated) {
@@ -1573,7 +1568,8 @@
             }
             const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
             const hasFirebaseKeys = hasFirebaseAuthKeys();
-            isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
+            // SECURITY: Require BOTH signals (matches head fast path + static-auth-guard.js)
+            isAuthenticated = hasLocalStorageAuth && hasFirebaseKeys;
             plan = localStorage.getItem('user-plan') || 'free';
           }
         }
@@ -1599,7 +1595,8 @@
           }
           const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
           const hasFirebaseKeys = hasFirebaseAuthKeys();
-          isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
+          // SECURITY: Require BOTH signals (matches head fast path + static-auth-guard.js)
+          isAuthenticated = hasLocalStorageAuth && hasFirebaseKeys;
           plan = localStorage.getItem('user-plan') || 'free';
         }
       }
@@ -9163,7 +9160,8 @@
       }
       const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
       const hasFirebaseKeys = hasFirebaseAuthKeys();
-      const isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
+      // SECURITY: Require BOTH signals (same as checkAuthentication localStorage path)
+      const isAuthenticated = hasLocalStorageAuth && hasFirebaseKeys;
       if (!isAuthenticated) {
         console.log('[RESUME-FEEDBACK-HISTORY] Skipping history load - not authenticated');
         const emptyEl = document.getElementById('rf-history-empty');
