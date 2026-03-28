@@ -64,8 +64,11 @@
           }
 
           // Check authentication: prefer Firebase user, then localStorage
+          // Note: waitForAuthReady can return AUTH_PENDING sentinel ({_authPending:true})
+          // on timeout — a truthy non-user object. Exclude it.
+          var realUser = user && !user._authPending ? user : null;
           var navAuth = window.JobHackAINavigation && window.JobHackAINavigation.getAuthState && window.JobHackAINavigation.getAuthState();
-          var authConfirmed = user || (navAuth && navAuth.isAuthenticated) || isAuthenticated;
+          var authConfirmed = realUser || (navAuth && navAuth.isAuthenticated) || isAuthenticated;
 
           if (!authConfirmed) {
             window.location.href = 'login.html';

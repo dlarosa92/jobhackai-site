@@ -40,7 +40,9 @@
       }
 
       // Step 3: Determine authentication
-      var isAuthenticated = !!user;
+      // Note: waitForAuthReady can return AUTH_PENDING sentinel ({_authPending:true})
+      // on timeout — a truthy non-user object. Exclude it.
+      var isAuthenticated = !!user && !user._authPending;
       if (!isAuthenticated) {
         // Fallback: check localStorage + Firebase SDK keys
         var hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
