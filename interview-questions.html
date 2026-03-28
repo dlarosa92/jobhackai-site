@@ -65,6 +65,8 @@
       var plan = localStorage.getItem('user-plan') || 'free';
       if (allowedPlans.includes(plan)) {
         console.log('✅ [INTERVIEW-Q] Access granted for cached plan:', plan);
+        document.documentElement.classList.remove('auth-pending');
+        document.documentElement.classList.remove('plan-pending');
         return;
       }
 
@@ -99,6 +101,7 @@
         return;
       }
 
+      document.documentElement.classList.remove('auth-pending');
       document.documentElement.classList.remove('plan-pending');
       console.log('✅ [INTERVIEW-Q] Access granted for plan:', plan);
     })();
