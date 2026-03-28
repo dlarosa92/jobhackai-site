@@ -14,9 +14,19 @@
 
       // Synchronous fast path: check localStorage auth + cached plan BEFORE any async work.
       // This sets __JOBHACKAI_ACCESS_VERIFIED__ immediately so the body guard never races.
+      // SECURITY: Require BOTH user-authenticated AND firebase:authUser: keys
+      // (matches static-auth-guard.js AND logic to prevent XSS single-key bypass)
       var cachedPlan = localStorage.getItem('user-plan') || 'free';
       var hasLocalAuth = localStorage.getItem('user-authenticated') === 'true';
-      if (hasLocalAuth && allowedPlans.includes(cachedPlan)) {
+      var hasFBKeys = false;
+      for (var i = 0; i < localStorage.length; i++) {
+        var fk = localStorage.key(i);
+        if (fk && fk.indexOf('firebase:authUser:') === 0) {
+          var fd = localStorage.getItem(fk);
+          if (fd && fd !== 'null' && fd.length > 10) { hasFBKeys = true; break; }
+        }
+      }
+      if (hasLocalAuth && hasFBKeys && allowedPlans.includes(cachedPlan)) {
         console.log('✅ [INTERVIEW-Q] Sync fast path: access granted for cached plan:', cachedPlan);
         window.__JOBHACKAI_ACCESS_VERIFIED__ = true;
         document.documentElement.classList.remove('auth-pending');
@@ -4567,12 +4577,26 @@ function initIQPage(){
     
     // --- PAGE ACCESS CONTROL (Second check after navigation system) ---
     // Skip if the head guard already verified access (prevents race condition redirects)
-    function enforceAccess() {
+    async function enforceAccess() {
       if (window.__JOBHACKAI_ACCESS_VERIFIED__) {
         console.log('[INTERVIEW-Q] enforceAccess: skipping, head guard already verified access');
         return;
       }
 
+      // Wait for head guard async path to complete before checking independently.
+      // Head guard awaits FirebaseAuthManager (3s) + waitForAuthReady (5s) + API fetch,
+      // so allow up to 10s for it to set __JOBHACKAI_ACCESS_VERIFIED__.
+      var waited = 0;
+      while (!window.__JOBHACKAI_ACCESS_VERIFIED__ && waited < 10000) {
+        await new Promise(function(r) { setTimeout(r, 200); });
+        waited += 200;
+      }
+      if (window.__JOBHACKAI_ACCESS_VERIFIED__) {
+        console.log('[INTERVIEW-Q] enforceAccess: head guard verified after', waited, 'ms');
+        return;
+      }
+
+      // Head guard timed out or denied — do independent fallback check
       var authState, userPlan;
 
       if (window.JobHackAINavigation) {
@@ -4614,7 +4638,7 @@ function initIQPage(){
         updateInterviewUIForPlan();
         
         // Enforce access control
-        enforceAccess();
+        await enforceAccess();
       };
       
       // Try to initialize immediately, then retry after a short delay
