@@ -84,6 +84,9 @@
           }
 
           // Cached plan would deny access or is missing — fetch from API
+          // Add plan-pending to keep content hidden during the async fetch,
+          // since static-auth-guard.js may remove auth-pending concurrently.
+          document.documentElement.classList.add('plan-pending');
           await waitForGlobal('JobHackAINavigation', 2000);
 
           var plan = cachedPlan || 'free';
