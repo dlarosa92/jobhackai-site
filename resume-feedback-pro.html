@@ -128,8 +128,9 @@
         document.documentElement.classList.add('auth-pending');
         document.addEventListener('firebase-auth-ready', handleAuthReadyOrTimeout, { once: true });
       } else {
-        // Fast path: if cached plan is allowed, show immediately
-        if (cachedPlan && allowedPlans.includes(cachedPlan)) {
+        // Fast path: if BOTH auth signals present and cached plan is allowed, show immediately
+        // SECURITY: Require BOTH signals (matches static-auth-guard.js AND logic)
+        if (hasLocalStorageAuth && hasFirebaseKeys && cachedPlan && allowedPlans.includes(cachedPlan)) {
           window.__JOBHACKAI_PLAN_PENDING__ = false;
           document.documentElement.classList.remove('auth-pending');
           document.documentElement.classList.remove('plan-pending');
@@ -1210,6 +1211,20 @@
         return;
       }
 
+      // Wait for head guard async path to complete before checking independently.
+      // Head guard awaits FirebaseAuthManager (3s) + waitForAuthReady (5s) + API fetch,
+      // so allow up to 10s for it to set __JOBHACKAI_ACCESS_VERIFIED__.
+      var waited = 0;
+      while (!window.__JOBHACKAI_ACCESS_VERIFIED__ && waited < 10000) {
+        await new Promise(function(r) { setTimeout(r, 200); });
+        waited += 200;
+      }
+      if (window.__JOBHACKAI_ACCESS_VERIFIED__) {
+        console.log('[RESUME-FEEDBACK] enforceAccess: head guard verified after', waited, 'ms');
+        return;
+      }
+
+      // Head guard timed out or denied — do independent fallback check
       var isAuthenticated, plan;
 
       if (window.JobHackAINavigation) {
