@@ -87,6 +87,7 @@
             document.documentElement.classList.remove('auth-pending');
             document.documentElement.classList.remove('plan-pending');
             window.__JOBHACKAI_ACCESS_VERIFIED__ = true;
+            window.__JOBHACKAI_VERIFIED_PLAN__ = cachedPlan;
             done = true;
             return;
           }
@@ -125,6 +126,7 @@
           document.documentElement.classList.remove('auth-pending');
           document.documentElement.classList.remove('plan-pending');
           window.__JOBHACKAI_ACCESS_VERIFIED__ = true;
+          window.__JOBHACKAI_VERIFIED_PLAN__ = plan;
           done = true;
         } finally {
           inFlight = false;
@@ -142,6 +144,7 @@
           document.documentElement.classList.remove('auth-pending');
           document.documentElement.classList.remove('plan-pending');
           window.__JOBHACKAI_ACCESS_VERIFIED__ = true;
+          window.__JOBHACKAI_VERIFIED_PLAN__ = cachedPlan;
           done = true;
           try { clearTimeout(timeoutHandle); } catch (_) {}
         } else {
@@ -1261,6 +1264,7 @@
         }
       } else {
         window.__JOBHACKAI_ACCESS_VERIFIED__ = true;
+        window.__JOBHACKAI_VERIFIED_PLAN__ = plan;
         console.log('[RESUME-FEEDBACK] enforceAccess: fallback granted access, flag set');
       }
     }
@@ -1640,6 +1644,7 @@
         // Access granted - clear plan pending flag and class
         // This allows tests to detect when plan hydration is complete
         window.__JOBHACKAI_ACCESS_VERIFIED__ = true;
+        window.__JOBHACKAI_VERIFIED_PLAN__ = plan;
         window.__JOBHACKAI_PLAN_PENDING__ = false;
         document.documentElement.classList.remove('plan-pending');
         // Ensure UI is updated
@@ -1651,6 +1656,10 @@
     const RF_ALLOWED_PLANS = ['trial', 'essential', 'pro', 'premium'];
 
     function getVerifiedCachedPlan() {
+      const verifiedPlan = window.__JOBHACKAI_VERIFIED_PLAN__;
+      if (window.__JOBHACKAI_ACCESS_VERIFIED__ && RF_ALLOWED_PLANS.includes(verifiedPlan)) {
+        return verifiedPlan;
+      }
       const cachedPlan = localStorage.getItem('user-plan');
       return window.__JOBHACKAI_ACCESS_VERIFIED__ && RF_ALLOWED_PLANS.includes(cachedPlan)
         ? cachedPlan

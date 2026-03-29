@@ -36,6 +36,7 @@
       if (hasLocalAuth && hasFBKeys && allowedPlans.includes(cachedPlan)) {
         console.log('✅ [INTERVIEW-Q] Sync fast path: access granted for cached plan:', cachedPlan);
         window.__JOBHACKAI_ACCESS_VERIFIED__ = true;
+        window.__JOBHACKAI_VERIFIED_PLAN__ = cachedPlan;
         document.documentElement.classList.remove('auth-pending');
         document.documentElement.classList.remove('plan-pending');
         return;
@@ -98,6 +99,7 @@
         document.documentElement.classList.remove('auth-pending');
         document.documentElement.classList.remove('plan-pending');
         window.__JOBHACKAI_ACCESS_VERIFIED__ = true;
+        window.__JOBHACKAI_VERIFIED_PLAN__ = plan;
         return;
       }
 
@@ -135,6 +137,7 @@
       document.documentElement.classList.remove('auth-pending');
       document.documentElement.classList.remove('plan-pending');
       window.__JOBHACKAI_ACCESS_VERIFIED__ = true;
+      window.__JOBHACKAI_VERIFIED_PLAN__ = plan;
       console.log('✅ [INTERVIEW-Q] Access granted for plan:', plan);
     })();
   </script>
@@ -1930,6 +1933,10 @@
     const IQ_ALLOWED_PLANS = ['trial', 'essential', 'pro', 'premium'];
 
     function getVerifiedCachedPlan() {
+      const verifiedPlan = window.__JOBHACKAI_VERIFIED_PLAN__;
+      if (window.__JOBHACKAI_ACCESS_VERIFIED__ && IQ_ALLOWED_PLANS.includes(verifiedPlan)) {
+        return verifiedPlan;
+      }
       const cachedPlan = localStorage.getItem('user-plan');
       return window.__JOBHACKAI_ACCESS_VERIFIED__ && IQ_ALLOWED_PLANS.includes(cachedPlan)
         ? cachedPlan
@@ -4662,6 +4669,7 @@ function initIQPage(){
         }
       } else {
         window.__JOBHACKAI_ACCESS_VERIFIED__ = true;
+        window.__JOBHACKAI_VERIFIED_PLAN__ = userPlan;
         console.log('[INTERVIEW-Q] enforceAccess: fallback granted access, flag set');
       }
     }
