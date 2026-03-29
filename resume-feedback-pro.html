@@ -11,6 +11,13 @@
     // Run immediately to prevent content flash for unauthorized users
     // FIX: Fetch plan from API before redirecting to prevent false pricing redirects
     (function enforceAccessImmediate() {
+      // If access was already pre-verified (e.g. by test harness), skip all auth logic
+      if (window.__JOBHACKAI_ACCESS_VERIFIED__) {
+        document.documentElement.classList.remove('auth-pending');
+        document.documentElement.classList.remove('plan-pending');
+        return;
+      }
+
       // SECURITY: Check auth state using localStorage flags and Firebase SDK keys
       var hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
       var hasFirebaseKeys = Object.keys(localStorage).some(function (k) {
@@ -79,6 +86,7 @@
           if (cachedPlan && allowedPlans.includes(cachedPlan)) {
             document.documentElement.classList.remove('auth-pending');
             document.documentElement.classList.remove('plan-pending');
+            window.__JOBHACKAI_ACCESS_VERIFIED__ = true;
             done = true;
             return;
           }
@@ -116,6 +124,7 @@
           // Access granted
           document.documentElement.classList.remove('auth-pending');
           document.documentElement.classList.remove('plan-pending');
+          window.__JOBHACKAI_ACCESS_VERIFIED__ = true;
           done = true;
         } finally {
           inFlight = false;
@@ -126,11 +135,13 @@
         document.documentElement.classList.add('auth-pending');
         document.addEventListener('firebase-auth-ready', handleAuthReadyOrTimeout, { once: true });
       } else {
-        // Fast path: if cached plan is allowed, show immediately
-        if (cachedPlan && allowedPlans.includes(cachedPlan)) {
+        // Fast path: if BOTH auth signals present and cached plan is allowed, show immediately
+        // SECURITY: Require BOTH signals (matches static-auth-guard.js AND logic)
+        if (hasLocalStorageAuth && hasFirebaseKeys && cachedPlan && allowedPlans.includes(cachedPlan)) {
           window.__JOBHACKAI_PLAN_PENDING__ = false;
           document.documentElement.classList.remove('auth-pending');
           document.documentElement.classList.remove('plan-pending');
+          window.__JOBHACKAI_ACCESS_VERIFIED__ = true;
           done = true;
           try { clearTimeout(timeoutHandle); } catch (_) {}
         } else {
@@ -1200,92 +1211,48 @@
   </script>
   <script>
     // --- PAGE ACCESS CONTROL (Second check after navigation system) ---
-    // Also run after navigation system initializes to double-check
+    // Skip if the head guard already verified access (prevents race condition redirects)
     async function enforceAccess() {
-      // TRI-STATE FIX: Wait for Firebase auth to be ready before redirecting
-      let isAuthenticated, plan;
-      
-      // Wait for Firebase auth to be ready if FirebaseAuthManager exists
-      if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.waitForAuthReady === 'function') {
-        try {
-          console.log('[RESUME-FEEDBACK] Waiting for Firebase auth to be ready before enforceAccess check...');
-          const user = await window.FirebaseAuthManager.waitForAuthReady(8000);
-          
-          // Prefer Firebase user result over navigation state (navigation may not have synced yet)
-          if (window.JobHackAINavigation) {
-            const authState = window.JobHackAINavigation.getAuthState();
-            isAuthenticated = user || (authState && authState.isAuthenticated);
-            plan = window.JobHackAINavigation.getEffectivePlan();
-          } else {
-            isAuthenticated = !!user;
-            plan = localStorage.getItem('user-plan') || 'free';
-          }
-        } catch (error) {
-          console.warn('[RESUME-FEEDBACK] waitForAuthReady error in enforceAccess, using fallback:', error);
-          // Fallback to navigation/localStorage check
-          if (window.JobHackAINavigation) {
-            const authState = window.JobHackAINavigation.getAuthState();
-            isAuthenticated = authState && authState.isAuthenticated;
-            plan = window.JobHackAINavigation.getEffectivePlan();
-          } else {
-            // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
-            function hasFirebaseAuthKeys() {
-              try {
-                return Object.keys(localStorage).some(k => 
-                  k.startsWith('firebase:authUser:') && 
-                  localStorage.getItem(k) && 
-                  localStorage.getItem(k) !== 'null' &&
-                  localStorage.getItem(k).length > 10
-                );
-              } catch (e) {
-                return false;
-              }
-            }
-            const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-            const hasFirebaseKeys = hasFirebaseAuthKeys();
-            isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
-            plan = localStorage.getItem('user-plan') || 'free';
-          }
-        }
-      } else {
-        // No FirebaseAuthManager - use navigation/localStorage fallback
-        if (window.JobHackAINavigation) {
-          const authState = window.JobHackAINavigation.getAuthState();
-          isAuthenticated = authState.isAuthenticated;
-          plan = window.JobHackAINavigation.getEffectivePlan();
-        } else {
-          // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
-          function hasFirebaseAuthKeys() {
-            try {
-              return Object.keys(localStorage).some(k => 
-                k.startsWith('firebase:authUser:') && 
-                localStorage.getItem(k) && 
-                localStorage.getItem(k) !== 'null' &&
-                localStorage.getItem(k).length > 10
-              );
-            } catch (e) {
-              return false;
-            }
-          }
-          const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-          const hasFirebaseKeys = hasFirebaseAuthKeys();
-          isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
-          plan = localStorage.getItem('user-plan') || 'free';
-        }
+      if (window.__JOBHACKAI_ACCESS_VERIFIED__) {
+        console.log('[RESUME-FEEDBACK] enforceAccess: skipping, head guard already verified access');
+        return;
       }
-      
-      // FIX: Enhanced logging for plan detection debugging
-      console.log('[RESUME-FEEDBACK] Plan detection debug:', {
-        isAuthenticated,
-        plan,
-        navigationPlan: window.JobHackAINavigation?.getEffectivePlan?.(),
-        localStoragePlan: localStorage.getItem('user-plan'),
-        devPlan: localStorage.getItem('dev-plan'),
-        authState: window.JobHackAINavigation?.getAuthState?.()
-      });
-      
-      const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
-      
+
+      // Wait for head guard async path to complete before checking independently.
+      // Head guard awaits FirebaseAuthManager (3s) + waitForAuthReady (5s) + API fetch,
+      // so allow up to 10s for it to set __JOBHACKAI_ACCESS_VERIFIED__.
+      var waited = 0;
+      while (!window.__JOBHACKAI_ACCESS_VERIFIED__ && waited < 10000) {
+        await new Promise(function(r) { setTimeout(r, 200); });
+        waited += 200;
+      }
+      if (window.__JOBHACKAI_ACCESS_VERIFIED__) {
+        console.log('[RESUME-FEEDBACK] enforceAccess: head guard verified after', waited, 'ms');
+        return;
+      }
+
+      // Head guard timed out or denied — do independent fallback check
+      var isAuthenticated, plan;
+
+      if (window.JobHackAINavigation) {
+        var authState = window.JobHackAINavigation.getAuthState();
+        isAuthenticated = authState && authState.isAuthenticated;
+        plan = window.JobHackAINavigation.getEffectivePlan();
+      } else {
+        var hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+        var hasFirebaseKeys = Object.keys(localStorage).some(function (k) {
+          return k.startsWith('firebase:authUser:') &&
+            localStorage.getItem(k) &&
+            localStorage.getItem(k) !== 'null' &&
+            localStorage.getItem(k).length > 10;
+        });
+        // SECURITY: Require BOTH signals (matches head fast path + static-auth-guard.js)
+        isAuthenticated = hasLocalStorageAuth && hasFirebaseKeys;
+        plan = localStorage.getItem('user-plan') || 'free';
+      }
+
+      var allowedPlans = ['trial', 'essential', 'pro', 'premium'];
+
       if (!isAuthenticated || !allowedPlans.includes(plan)) {
         if (!isAuthenticated) {
           window.location.href = 'login.html';
@@ -1294,28 +1261,45 @@
         }
       }
     }
-    
+
     // Wait for DOM to be ready before enforcing access again
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', async () => {
+      document.addEventListener('DOMContentLoaded', async function () {
         await enforceAccess();
       });
     } else {
-      setTimeout(async () => {
+      setTimeout(async function () {
         await enforceAccess();
-      }, 100); // Small delay to allow navigation system to initialize
+      }, 100);
     }
   </script>
   <script>
     // --- AUTHENTICATION CHECK ---
-    function checkAuthentication() {
+    async function checkAuthentication() {
+      // Skip if head guard already verified access (prevents DOM destruction race)
+      if (window.__JOBHACKAI_ACCESS_VERIFIED__) {
+        return true;
+      }
+      if (window.FirebaseAuthManager && window.FirebaseAuthManager.waitForAuthReady) {
+        try {
+          await window.FirebaseAuthManager.waitForAuthReady(3000);
+        } catch (e) {
+          console.warn('[RESUME-FEEDBACK] Auth ready timeout in checkAuthentication:', e);
+        }
+      }
+      if (window.__JOBHACKAI_ACCESS_VERIFIED__) {
+        return true;
+      }
+      // Head guard's 10s wait runs in enforceAccess (DOMContentLoaded); avoid duplicating it here
+      // so init is not blocked by Firebase wait + two sequential polls (~13s).
+
       // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
       // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
       function hasFirebaseAuthKeys() {
         try {
-          return Object.keys(localStorage).some(k => 
-            k.startsWith('firebase:authUser:') && 
-            localStorage.getItem(k) && 
+          return Object.keys(localStorage).some(k =>
+            k.startsWith('firebase:authUser:') &&
+            localStorage.getItem(k) &&
             localStorage.getItem(k) !== 'null' &&
             localStorage.getItem(k).length > 10
           );
@@ -1323,20 +1307,15 @@
           return false;
         }
       }
-      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-      const hasFirebaseKeys = hasFirebaseAuthKeys();
-      const isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
-      const mainContent = document.querySelector('main');
-      
-      if (!isAuthenticated) {
-        mainContent.innerHTML = `
+
+      const loginRequiredHtml = `
           <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
             <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
             <h1 style="font-size: 2rem; font-weight: 700; color: var(--color-text-main); margin-bottom: 1rem;">
               Login Required
             </h1>
             <p style="font-size: 1.1rem; color: var(--color-text-secondary); margin-bottom: 2rem; line-height: 1.6;">
-              Resume Feedback Pro requires you to be logged in to access this tool. 
+              Resume Feedback Pro requires you to be logged in to access this tool.
               Please sign in to get started.
             </p>
             <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
@@ -1349,6 +1328,25 @@
             </div>
           </div>
         `;
+
+      if (window.JobHackAINavigation) {
+        const authState = window.JobHackAINavigation.getAuthState();
+        if (!authState.isAuthenticated) {
+          const mainContent = document.querySelector('main');
+          mainContent.innerHTML = loginRequiredHtml;
+          return false;
+        }
+        return true;
+      }
+
+      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+      const hasFirebaseKeys = hasFirebaseAuthKeys();
+      // SECURITY: Require BOTH signals (matches head fast path + static-auth-guard.js)
+      const isAuthenticated = hasLocalStorageAuth && hasFirebaseKeys;
+      const mainContent = document.querySelector('main');
+
+      if (!isAuthenticated) {
+        mainContent.innerHTML = loginRequiredHtml;
         return false;
       }
       return true;
@@ -1433,9 +1431,9 @@
     }
 
     // --- Initialize on load ---
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', async function() {
       // Check authentication first
-      if (!checkAuthentication()) {
+      if (!(await checkAuthentication())) {
         return; // Stop here if not authenticated
       }
       
@@ -1577,7 +1575,8 @@
             }
             const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
             const hasFirebaseKeys = hasFirebaseAuthKeys();
-            isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
+            // SECURITY: Require BOTH signals (matches head fast path + static-auth-guard.js)
+            isAuthenticated = hasLocalStorageAuth && hasFirebaseKeys;
             plan = localStorage.getItem('user-plan') || 'free';
           }
         }
@@ -1603,7 +1602,8 @@
           }
           const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
           const hasFirebaseKeys = hasFirebaseAuthKeys();
-          isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
+          // SECURITY: Require BOTH signals (matches head fast path + static-auth-guard.js)
+          isAuthenticated = hasLocalStorageAuth && hasFirebaseKeys;
           plan = localStorage.getItem('user-plan') || 'free';
         }
       }
@@ -9167,7 +9167,8 @@
       }
       const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
       const hasFirebaseKeys = hasFirebaseAuthKeys();
-      const isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
+      // SECURITY: Require BOTH signals (same as checkAuthentication localStorage path)
+      const isAuthenticated = hasLocalStorageAuth && hasFirebaseKeys;
       if (!isAuthenticated) {
         console.log('[RESUME-FEEDBACK-HISTORY] Skipping history load - not authenticated');
         const emptyEl = document.getElementById('rf-history-empty');
