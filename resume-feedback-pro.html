@@ -26,7 +26,7 @@
           localStorage.getItem(k) !== 'null' &&
           localStorage.getItem(k).length > 10;
       });
-      var isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
+      var isAuthenticated = hasLocalStorageAuth && hasFirebaseKeys;
       var allowedPlans = ['trial', 'essential', 'pro', 'premium'];
       window.__JOBHACKAI_RF_ALLOWED_PLANS__ = allowedPlans;
       var cachedPlan = localStorage.getItem('user-plan');
@@ -137,7 +137,7 @@
       } else {
         // Fast path: if BOTH auth signals present and cached plan is allowed, show immediately
         // SECURITY: Require BOTH signals (matches static-auth-guard.js AND logic)
-        if (hasLocalStorageAuth && hasFirebaseKeys && cachedPlan && allowedPlans.includes(cachedPlan)) {
+        if (isAuthenticated && cachedPlan && allowedPlans.includes(cachedPlan)) {
           window.__JOBHACKAI_PLAN_PENDING__ = false;
           document.documentElement.classList.remove('auth-pending');
           document.documentElement.classList.remove('plan-pending');
