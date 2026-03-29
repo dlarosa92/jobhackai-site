@@ -30,8 +30,6 @@ async function forceAuthenticatedPlan(page, plan = 'pro') {
       localStorage.setItem('user-authenticated', 'true');
       localStorage.setItem('user-plan', planValue);
       localStorage.setItem('dev-plan', planValue);
-      // Signal to all page guards that access is pre-verified for testing
-      window.__JOBHACKAI_ACCESS_VERIFIED__ = true;
     } catch {
       // no-op
     }
@@ -582,11 +580,6 @@ test.describe('Full App Check', () => {
     await page.goto('/interview-questions.html');
     await page.waitForLoadState('domcontentloaded');
     await waitForAuthReady(page, 15000);
-    await page.waitForFunction(() =>
-      !document.documentElement.classList.contains('auth-pending') &&
-      !document.documentElement.classList.contains('plan-pending'),
-      null, { timeout: 15000 }
-    );
 
     await page.fill('#iq-role', 'Software Engineer');
     await page.selectOption('#iq-seniority', { label: 'Mid' });
