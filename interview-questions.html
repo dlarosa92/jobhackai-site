@@ -1927,13 +1927,30 @@
     }
 
     // --- USER PLAN LOGIC ---
+    const IQ_ALLOWED_PLANS = ['trial', 'essential', 'pro', 'premium'];
+
+    function getVerifiedCachedPlan() {
+      const cachedPlan = localStorage.getItem('user-plan');
+      return window.__JOBHACKAI_ACCESS_VERIFIED__ && IQ_ALLOWED_PLANS.includes(cachedPlan)
+        ? cachedPlan
+        : null;
+    }
+
     function getUserPlan() {
-      // Use navigation system's plan detection for consistency
-      if (window.JobHackAINavigation) {
-        return window.JobHackAINavigation.getEffectivePlan();
-      } else {
-        return localStorage.getItem('user-plan') || 'free';
+      const verifiedCachedPlan = getVerifiedCachedPlan();
+
+      // During early hydration on dev, navigation can briefly report visitor/free
+      // before auth/plan reconciliation finishes even though the head guard already
+      // verified a paid plan from cache. Prefer the verified cached plan in that window.
+      if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
+        const effectivePlan = window.JobHackAINavigation.getEffectivePlan();
+        if (verifiedCachedPlan && (!effectivePlan || effectivePlan === 'visitor' || effectivePlan === 'free')) {
+          return verifiedCachedPlan;
+        }
+        return effectivePlan;
       }
+
+      return verifiedCachedPlan || localStorage.getItem('user-plan') || 'free';
     }
     
     const user = {
@@ -4052,7 +4069,7 @@
       }
     }
     async function iqHandleMock(useSaved){
-      const plan=(window.JobHackAINavigation?.getEffectivePlan?.()||localStorage.getItem('user-plan')||'free');
+      const plan = getUserPlan();
       const role = ($IQ('#iq-role')?.value?.trim()||iqState.set?.role||'');
       
       // Get selected questions (from saved/favorites)
