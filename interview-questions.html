@@ -1845,7 +1845,11 @@
           console.warn('[INTERVIEW-Q] Auth ready timeout in checkAuthentication:', e);
         }
       }
-      
+      // Recheck: head guard may have verified access during the Firebase wait
+      if (window.__JOBHACKAI_ACCESS_VERIFIED__) {
+        return true;
+      }
+
       // Use navigation system's authentication check for consistency
       if (window.JobHackAINavigation) {
         const authState = window.JobHackAINavigation.getAuthState();
