@@ -10,6 +10,13 @@
     // --- IMMEDIATE PAGE ACCESS CONTROL ---
     // Wait for Firebase auth AND plan fetch before checking (prevents false redirects)
     (async function enforceAccessImmediate() {
+      // If access was already pre-verified (e.g. by test harness), skip all auth logic
+      if (window.__JOBHACKAI_ACCESS_VERIFIED__) {
+        document.documentElement.classList.remove('auth-pending');
+        document.documentElement.classList.remove('plan-pending');
+        return;
+      }
+
       var allowedPlans = ['trial', 'essential', 'pro', 'premium'];
 
       // Synchronous fast path: check localStorage auth + cached plan BEFORE any async work.
