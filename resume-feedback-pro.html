@@ -1536,6 +1536,12 @@
     }
     
     async function enforceAccessControl(allowedPlans) {
+      // Skip if head guard already verified access (prevents race-condition redirects)
+      if (window.__JOBHACKAI_ACCESS_VERIFIED__) {
+        console.log('[RESUME-FEEDBACK] enforceAccessControl: skipping, head guard already verified access');
+        return;
+      }
+
       // TRI-STATE FIX: Wait for Firebase auth to be ready before redirecting
       // This prevents race conditions where Firebase is still initializing
       let isAuthenticated, plan;
@@ -1545,7 +1551,13 @@
         try {
           console.log('[RESUME-FEEDBACK] Waiting for Firebase auth to be ready before access control check...');
           const user = await window.FirebaseAuthManager.waitForAuthReady(8000);
-          
+
+          // Re-check after async wait — head guard may have verified during the wait
+          if (window.__JOBHACKAI_ACCESS_VERIFIED__) {
+            console.log('[RESUME-FEEDBACK] enforceAccessControl: head guard verified during auth wait');
+            return;
+          }
+
           // Prefer Firebase user result over navigation state (navigation may not have synced yet)
           if (window.JobHackAINavigation) {
             const authState = window.JobHackAINavigation.getAuthState();
