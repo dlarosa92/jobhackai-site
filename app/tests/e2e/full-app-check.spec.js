@@ -32,6 +32,7 @@ async function forceAuthenticatedPlan(page, plan = 'pro') {
       localStorage.setItem('dev-plan', planValue);
       // Signal to all page guards that access is pre-verified for testing
       window.__JOBHACKAI_ACCESS_VERIFIED__ = true;
+      window.__JOBHACKAI_VERIFIED_PLAN__ = planValue;
     } catch {
       // no-op
     }

@@ -1951,7 +1951,7 @@
       // verified a paid plan from cache. Prefer the verified cached plan in that window.
       if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
         const effectivePlan = window.JobHackAINavigation.getEffectivePlan();
-        if (verifiedCachedPlan && (!effectivePlan || effectivePlan === 'visitor' || effectivePlan === 'free')) {
+        if (verifiedCachedPlan && (!effectivePlan || effectivePlan === 'undefined' || effectivePlan === 'visitor' || effectivePlan === 'free')) {
           return verifiedCachedPlan;
         }
         if (!effectivePlan || effectivePlan === 'undefined') {

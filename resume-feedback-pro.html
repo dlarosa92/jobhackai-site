@@ -9188,6 +9188,11 @@
      * Initialize history on page load
      */
     function initializeHistory() {
+      if (window.__JOBHACKAI_ACCESS_VERIFIED__) {
+        loadHistoryList();
+        return;
+      }
+
       // Only load history if user is authenticated
       // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
       // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
