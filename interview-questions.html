@@ -1946,16 +1946,13 @@
     function getUserPlan() {
       const verifiedCachedPlan = getVerifiedCachedPlan();
 
-      // During early hydration on dev, navigation can briefly report visitor/free
-      // before auth/plan reconciliation finishes even though the head guard already
-      // verified a paid plan from cache. Prefer the verified cached plan in that window.
       if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
         const effectivePlan = window.JobHackAINavigation.getEffectivePlan();
-        if (verifiedCachedPlan && (!effectivePlan || effectivePlan === 'undefined' || effectivePlan === 'visitor' || effectivePlan === 'free')) {
-          return verifiedCachedPlan;
-        }
-        if (!effectivePlan || effectivePlan === 'undefined') {
-          return localStorage.getItem('user-plan') || verifiedCachedPlan || 'free';
+        // Only use verifiedCachedPlan when navigation hasn't hydrated yet
+        // (undefined/visitor). Once navigation reports a real plan (including 'free'),
+        // trust it — it reflects the authoritative state (e.g. expired trial).
+        if (!effectivePlan || effectivePlan === 'undefined' || effectivePlan === 'visitor') {
+          return verifiedCachedPlan || localStorage.getItem('user-plan') || 'free';
         }
         return effectivePlan;
       }
@@ -4619,11 +4616,40 @@ function initIQPage(){
       }
     }
     
+    // --- DEFERRED RE-VERIFICATION ---
+    // When the head guard granted access via the sync fast path (localStorage only),
+    // schedule an async API check to catch stale/expired plans.
+    function deferredPlanReVerify() {
+      setTimeout(async function() {
+        try {
+          if (!window.JobHackAINavigation) return;
+          if (typeof window.JobHackAINavigation.fetchPlanFromAPI !== 'function') return;
+          var apiPlan = await window.JobHackAINavigation.fetchPlanFromAPI();
+          if (!apiPlan) return;
+          var allowedPlans = ['trial', 'essential', 'pro', 'premium'];
+          if (!allowedPlans.includes(apiPlan)) {
+            console.warn('[INTERVIEW-Q] Deferred re-verify: plan is now', apiPlan, '— revoking access');
+            window.__JOBHACKAI_ACCESS_VERIFIED__ = false;
+            window.__JOBHACKAI_VERIFIED_PLAN__ = null;
+            window.location.href = 'pricing-a.html?plan=essential';
+          } else if (apiPlan !== window.__JOBHACKAI_VERIFIED_PLAN__) {
+            console.log('[INTERVIEW-Q] Deferred re-verify: updating verified plan to', apiPlan);
+            window.__JOBHACKAI_VERIFIED_PLAN__ = apiPlan;
+          }
+        } catch (e) {
+          console.warn('[INTERVIEW-Q] Deferred re-verify error:', e);
+        }
+      }, 2000);
+    }
+
     // --- PAGE ACCESS CONTROL (Second check after navigation system) ---
     // Skip if the head guard already verified access (prevents race condition redirects)
     async function enforceAccess() {
       if (window.__JOBHACKAI_ACCESS_VERIFIED__) {
-        console.log('[INTERVIEW-Q] enforceAccess: skipping, head guard already verified access');
+        console.log('[INTERVIEW-Q] enforceAccess: head guard set flag, scheduling deferred re-verification');
+        // Head guard's sync fast path uses only localStorage (no API call).
+        // Schedule a deferred re-verification so stale cached plans get caught.
+        deferredPlanReVerify();
         return;
       }
 
