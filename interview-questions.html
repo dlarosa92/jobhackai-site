@@ -74,7 +74,8 @@
             localStorage.getItem(k) !== 'null' &&
             localStorage.getItem(k).length > 10;
         });
-        isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
+        // SECURITY: Require BOTH signals (matches sync fast path + static-auth-guard.js)
+        isAuthenticated = hasLocalStorageAuth && hasFirebaseKeys;
       }
 
       if (!isAuthenticated) {
@@ -1884,7 +1885,8 @@
         }
         const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
         const hasFirebaseKeys = hasFirebaseAuthKeys();
-        const isAuthenticated = hasLocalStorageAuth || hasFirebaseKeys;
+        // SECURITY: Require BOTH signals (matches head fast path + static-auth-guard.js)
+        const isAuthenticated = hasLocalStorageAuth && hasFirebaseKeys;
         if (!isAuthenticated) {
           const mainContent = document.querySelector('main');
           mainContent.innerHTML = `
@@ -4614,7 +4616,8 @@ function initIQPage(){
             localStorage.getItem(k) !== 'null' &&
             localStorage.getItem(k).length > 10;
         });
-        authState = { isAuthenticated: hasLocalStorageAuth || hasFirebaseKeys };
+        // SECURITY: Require BOTH signals (matches head fast path + static-auth-guard.js)
+        authState = { isAuthenticated: hasLocalStorageAuth && hasFirebaseKeys };
         userPlan = localStorage.getItem('user-plan') || 'free';
       }
 
