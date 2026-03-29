@@ -137,7 +137,7 @@
       } else {
         // Fast path: if BOTH auth signals present and cached plan is allowed, show immediately
         // SECURITY: Require BOTH signals (matches static-auth-guard.js AND logic)
-        if (isAuthenticated && cachedPlan && allowedPlans.includes(cachedPlan)) {
+        if (cachedPlan && allowedPlans.includes(cachedPlan)) {
           window.__JOBHACKAI_PLAN_PENDING__ = false;
           document.documentElement.classList.remove('auth-pending');
           document.documentElement.classList.remove('plan-pending');
