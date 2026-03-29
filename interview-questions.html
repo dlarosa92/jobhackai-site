@@ -1947,6 +1947,9 @@
         if (verifiedCachedPlan && (!effectivePlan || effectivePlan === 'visitor' || effectivePlan === 'free')) {
           return verifiedCachedPlan;
         }
+        if (!effectivePlan || effectivePlan === 'undefined') {
+          return localStorage.getItem('user-plan') || verifiedCachedPlan || 'free';
+        }
         return effectivePlan;
       }
 
