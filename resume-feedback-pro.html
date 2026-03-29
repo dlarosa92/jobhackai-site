@@ -1413,7 +1413,7 @@
 
     // --- PLAN-BASED ACCESS CONTROL ---
     function checkPlanAccess() {
-      const currentPlan = window.JobHackAINavigation ? window.JobHackAINavigation.getEffectivePlan() : 'free';
+      const currentPlan = getCurrentUserPlan();
       const lockedDiv = document.getElementById('rfp-locked');
       const formDiv = document.getElementById('rfp-form');
       const resultsDiv = document.getElementById('rfp-results');
@@ -1648,17 +1648,31 @@
     }
 
     // --- UPDATED USER PLAN LOGIC ---
+    const RF_ALLOWED_PLANS = ['trial', 'essential', 'pro', 'premium'];
+
+    function getVerifiedCachedPlan() {
+      const cachedPlan = localStorage.getItem('user-plan');
+      return window.__JOBHACKAI_ACCESS_VERIFIED__ && RF_ALLOWED_PLANS.includes(cachedPlan)
+        ? cachedPlan
+        : null;
+    }
+
     function getCurrentUserPlan() {
-      // Use navigation system's plan detection for consistency
+      const verifiedCachedPlan = getVerifiedCachedPlan();
+
+      // During early hydration on dev, navigation can briefly report visitor/free
+      // before auth/plan reconciliation finishes even though the head guard already
+      // verified a paid plan from cache. Prefer the verified cached plan in that window.
       let plan = 'free';
       if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
         plan = window.JobHackAINavigation.getEffectivePlan();
-        // If navigation returns undefined or invalid, fall back to localStorage
-        if (!plan || plan === 'undefined') {
-          plan = localStorage.getItem('user-plan') || 'free';
+        if (verifiedCachedPlan && (!plan || plan === 'undefined' || plan === 'visitor' || plan === 'free')) {
+          plan = verifiedCachedPlan;
+        } else if (!plan || plan === 'undefined') {
+          plan = localStorage.getItem('user-plan') || verifiedCachedPlan || 'free';
         }
       } else {
-        plan = localStorage.getItem('user-plan') || 'free';
+        plan = verifiedCachedPlan || localStorage.getItem('user-plan') || 'free';
       }
       
       // FIX: Validate plan value to prevent corrupted data (e.g., "central")
@@ -2815,8 +2829,8 @@
       const allowedPlans = ['pro', 'premium'];
       let currentPlan = null;
       try {
-        if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
-          currentPlan = window.JobHackAINavigation.getEffectivePlan();
+        if (typeof getCurrentUserPlan === 'function') {
+          currentPlan = getCurrentUserPlan();
         } else if (typeof getCurrentPlanStandalone === 'function') {
           currentPlan = getCurrentPlanStandalone();
         }
