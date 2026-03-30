@@ -1216,7 +1216,10 @@
     // --- DEFERRED RE-VERIFICATION ---
     // When the head guard granted access via the sync fast path (localStorage only),
     // schedule an async API check to catch stale/expired plans.
+    var _deferredReVerifyScheduled = false;
     function deferredPlanReVerify() {
+      if (_deferredReVerifyScheduled) return;
+      _deferredReVerifyScheduled = true;
       setTimeout(async function() {
         try {
           if (!window.JobHackAINavigation) return;
@@ -1258,6 +1261,7 @@
       }
       if (window.__JOBHACKAI_ACCESS_VERIFIED__) {
         console.log('[RESUME-FEEDBACK] enforceAccess: head guard verified after', waited, 'ms');
+        deferredPlanReVerify();
         return;
       }
 
