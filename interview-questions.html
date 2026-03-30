@@ -4639,7 +4639,7 @@ function initIQPage(){
             console.log('[INTERVIEW-Q] Deferred re-verify: updating verified plan to', apiPlan);
             window.__JOBHACKAI_VERIFIED_PLAN__ = apiPlan;
             updateInterviewUIForPlan();
-            document.dispatchEvent(new CustomEvent('planChanged', { detail: { plan: apiPlan } }));
+            window.dispatchEvent(new CustomEvent('planChanged', { detail: { plan: apiPlan } }));
           }
         } catch (e) {
           console.warn('[INTERVIEW-Q] Deferred re-verify error:', e);
