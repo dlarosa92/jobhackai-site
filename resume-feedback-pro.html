@@ -1577,6 +1577,7 @@
       // Skip if head guard already verified access (prevents race-condition redirects)
       if (window.__JOBHACKAI_ACCESS_VERIFIED__) {
         console.log('[RESUME-FEEDBACK] enforceAccessControl: skipping, head guard already verified access');
+        deferredPlanReVerify();
         return;
       }
 
@@ -1593,6 +1594,7 @@
           // Re-check after async wait — head guard may have verified during the wait
           if (window.__JOBHACKAI_ACCESS_VERIFIED__) {
             console.log('[RESUME-FEEDBACK] enforceAccessControl: head guard verified during auth wait');
+            deferredPlanReVerify();
             return;
           }
 
