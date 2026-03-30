@@ -1235,6 +1235,8 @@
           } else if (apiPlan !== window.__JOBHACKAI_VERIFIED_PLAN__) {
             console.log('[RESUME-FEEDBACK] Deferred re-verify: updating verified plan to', apiPlan);
             window.__JOBHACKAI_VERIFIED_PLAN__ = apiPlan;
+            updateRfTileForPlan();
+            document.dispatchEvent(new CustomEvent('planChanged', { detail: { plan: apiPlan } }));
           }
         } catch (e) {
           console.warn('[RESUME-FEEDBACK] Deferred re-verify error:', e);

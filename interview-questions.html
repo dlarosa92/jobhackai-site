@@ -4638,6 +4638,8 @@ function initIQPage(){
           } else if (apiPlan !== window.__JOBHACKAI_VERIFIED_PLAN__) {
             console.log('[INTERVIEW-Q] Deferred re-verify: updating verified plan to', apiPlan);
             window.__JOBHACKAI_VERIFIED_PLAN__ = apiPlan;
+            updateInterviewUIForPlan();
+            document.dispatchEvent(new CustomEvent('planChanged', { detail: { plan: apiPlan } }));
           }
         } catch (e) {
           console.warn('[INTERVIEW-Q] Deferred re-verify error:', e);
