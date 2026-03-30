@@ -9216,31 +9216,27 @@
      * Initialize history on page load
      */
     function initializeHistory() {
+      // Determine authentication: trust the access-verified flag, else check localStorage
+      var isAuthenticated = false;
       if (window.__JOBHACKAI_ACCESS_VERIFIED__) {
-        loadHistoryList();
-        return;
+        isAuthenticated = true;
+      } else {
+        // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
+        // Use same pattern as checkAuthentication() for consistency
+        var hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+        var hasFirebaseKeys = false;
+        try {
+          hasFirebaseKeys = Object.keys(localStorage).some(function(k) {
+            return k.startsWith('firebase:authUser:') &&
+              localStorage.getItem(k) &&
+              localStorage.getItem(k) !== 'null' &&
+              localStorage.getItem(k).length > 10;
+          });
+        } catch (e) { /* ignore */ }
+        // SECURITY: Require BOTH signals (same as checkAuthentication localStorage path)
+        isAuthenticated = hasLocalStorageAuth && hasFirebaseKeys;
       }
 
-      // Only load history if user is authenticated
-      // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
-      // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
-      // Use same pattern as checkAuthentication() for consistency
-      function hasFirebaseAuthKeys() {
-        try {
-          return Object.keys(localStorage).some(k => 
-            k.startsWith('firebase:authUser:') && 
-            localStorage.getItem(k) && 
-            localStorage.getItem(k) !== 'null' &&
-            localStorage.getItem(k).length > 10
-          );
-        } catch (e) {
-          return false;
-        }
-      }
-      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-      const hasFirebaseKeys = hasFirebaseAuthKeys();
-      // SECURITY: Require BOTH signals (same as checkAuthentication localStorage path)
-      const isAuthenticated = hasLocalStorageAuth && hasFirebaseKeys;
       if (!isAuthenticated) {
         console.log('[RESUME-FEEDBACK-HISTORY] Skipping history load - not authenticated');
         const emptyEl = document.getElementById('rf-history-empty');
@@ -9249,7 +9245,7 @@
         if (emptyEl) emptyEl.hidden = false;
         return;
       }
-      
+
       // Load history from server
       fetchResumeFeedbackHistory();
       
