@@ -4700,6 +4700,8 @@ function initIQPage(){
       } else {
         window.__JOBHACKAI_ACCESS_VERIFIED__ = true;
         window.__JOBHACKAI_VERIFIED_PLAN__ = userPlan;
+        document.documentElement.classList.remove('auth-pending');
+        document.documentElement.classList.remove('plan-pending');
         console.log('[INTERVIEW-Q] enforceAccess: fallback granted access, flag set');
         deferredPlanReVerify();
       }

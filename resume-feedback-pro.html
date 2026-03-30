@@ -1296,6 +1296,8 @@
       } else {
         window.__JOBHACKAI_ACCESS_VERIFIED__ = true;
         window.__JOBHACKAI_VERIFIED_PLAN__ = plan;
+        document.documentElement.classList.remove('auth-pending');
+        document.documentElement.classList.remove('plan-pending');
         console.log('[RESUME-FEEDBACK] enforceAccess: fallback granted access, flag set');
         deferredPlanReVerify();
       }
