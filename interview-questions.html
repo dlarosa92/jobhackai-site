@@ -4496,10 +4496,8 @@ function initIQPage(){
           mockBtn?.setAttribute('data-locked','true');
         }
       } else {
-        // Lock input and show upgrade prompt
+        // Page guard already redirects unauthorized users; never show upgrade banner.
         roleInput.disabled = true;
-        upgradeBtn.style.display = 'block';
-        lockDiv.style.display = 'block';
         if (mockLock) mockLock.style.display = 'inline-flex';
         mockBtn?.setAttribute('data-locked','true');
       }
