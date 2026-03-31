@@ -115,11 +115,6 @@ window.PageAccessControl = (function () {
     }, 2000);
   }
 
-  // Allow re-scheduling after a page-level plan change (e.g. upgrade)
-  function resetDeferredReVerify() {
-    _deferredReVerifyScheduled = false;
-  }
-
   // ---- page access enforcement ----
 
   // opts.allowedPlans  – array of plan slugs that grant access (default PAID_PLANS)
@@ -194,7 +189,6 @@ window.PageAccessControl = (function () {
     getVerifiedCachedPlan: getVerifiedCachedPlan,
     getCurrentUserPlan: getCurrentUserPlan,
     deferredPlanReVerify: deferredPlanReVerify,
-    resetDeferredReVerify: resetDeferredReVerify,
     enforceAccess: enforceAccess
   };
 })();
