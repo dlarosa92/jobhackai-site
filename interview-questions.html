@@ -1935,10 +1935,6 @@
     // --- USER PLAN LOGIC (delegated to shared page-access-control.js) ---
     const IQ_ALLOWED_PLANS = window.PageAccessControl.PAID_PLANS;
 
-    function getVerifiedCachedPlan() {
-      return window.PageAccessControl.getVerifiedCachedPlan(IQ_ALLOWED_PLANS);
-    }
-
     function getUserPlan() {
       return window.PageAccessControl.getCurrentUserPlan(IQ_ALLOWED_PLANS, '[INTERVIEW-Q]');
     }

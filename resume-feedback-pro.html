@@ -1621,10 +1621,6 @@
     // --- USER PLAN LOGIC (delegated to shared page-access-control.js) ---
     const RF_ALLOWED_PLANS = window.PageAccessControl.PAID_PLANS;
 
-    function getVerifiedCachedPlan() {
-      return window.PageAccessControl.getVerifiedCachedPlan(RF_ALLOWED_PLANS);
-    }
-
     function getCurrentUserPlan() {
       return window.PageAccessControl.getCurrentUserPlan(RF_ALLOWED_PLANS, '[RESUME-FEEDBACK]');
     }
