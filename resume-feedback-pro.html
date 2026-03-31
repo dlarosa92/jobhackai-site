@@ -1219,7 +1219,7 @@
     // --- DEFERRED RE-VERIFICATION & PAGE ACCESS CONTROL ---
     // Delegated to shared page-access-control.js
     var _rfAccessOpts = {
-      allowedPlans: ['trial', 'essential', 'pro', 'premium'],
+      allowedPlans: window.PageAccessControl.PAID_PLANS,
       logPrefix: '[RESUME-FEEDBACK]',
       onPlanChanged: function () { updateRfTileForPlan(); }
     };
