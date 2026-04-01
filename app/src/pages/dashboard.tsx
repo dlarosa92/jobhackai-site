@@ -284,21 +284,32 @@ export default function Dashboard() {
         // SECURITY: Do NOT store user-email in localStorage - email available via Firebase auth
         try { localStorage.setItem('user-authenticated', 'true'); } catch (_) {}
 
-        // Default plan
+        // Read plan from PlanCache (populated by firebase-auth.js) or localStorage.
+        // Do NOT call /api/plan/me here — firebase-auth.js already fetched it via PlanCache.
         let plan = 'free';
         let trialEndsAt = '';
         let token = '';
         try {
           token = await u.getIdToken();
-          const r = await fetch('/api/plan/me', { headers: { Authorization: `Bearer ${token}` } });
-          if (r.ok) {
-            const data = await r.json();
-            plan = data?.plan || 'free';
-            trialEndsAt = data?.trialEndsAt || '';
-            try {
-              localStorage.setItem('user-plan', plan);
-              if (trialEndsAt) localStorage.setItem('trial-ends-at', trialEndsAt);
-            } catch (_) {}
+          // Try PlanCache first (deduplicated, already fetched by firebase-auth.js)
+          const w = window as any;
+          if (w.PlanCache) {
+            const cached = w.PlanCache.getCachedPlan();
+            if (cached && cached.plan) {
+              plan = cached.plan;
+              trialEndsAt = cached.trialEndsAt || '';
+            } else {
+              // PlanCache exists but hasn't been populated yet — fetch through it
+              const result = await w.PlanCache.getPlan(token);
+              if (result) {
+                plan = result.plan || 'free';
+                trialEndsAt = result.trialEndsAt || '';
+              }
+            }
+          } else {
+            // PlanCache not loaded (unlikely in HTML dashboard) — read localStorage
+            plan = localStorage.getItem('user-plan') || 'free';
+            trialEndsAt = localStorage.getItem('trial-ends-at') || '';
           }
         } catch (_) {}
 
