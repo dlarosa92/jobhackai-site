@@ -1936,7 +1936,8 @@
     const IQ_ALLOWED_PLANS = window.PageAccessControl ? window.PageAccessControl.PAID_PLANS : ['trial', 'essential', 'pro', 'premium'];
 
     function getUserPlan() {
-      return window.PageAccessControl.getCurrentUserPlan(IQ_ALLOWED_PLANS, '[INTERVIEW-Q]');
+      if (window.PageAccessControl) return window.PageAccessControl.getCurrentUserPlan(IQ_ALLOWED_PLANS, '[INTERVIEW-Q]');
+      return localStorage.getItem('user-plan') || 'free';
     }
 
     const user = {
@@ -4602,11 +4603,11 @@ function initIQPage(){
     };
 
     function deferredPlanReVerify() {
-      window.PageAccessControl.deferredPlanReVerify(_iqAccessOpts);
+      if (window.PageAccessControl) window.PageAccessControl.deferredPlanReVerify(_iqAccessOpts);
     }
 
     async function enforceAccess() {
-      await window.PageAccessControl.enforceAccess(_iqAccessOpts);
+      if (window.PageAccessControl) await window.PageAccessControl.enforceAccess(_iqAccessOpts);
     }
     
     // Initialize page when DOM is ready

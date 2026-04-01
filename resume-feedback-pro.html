@@ -1226,11 +1226,11 @@
     };
 
     function deferredPlanReVerify() {
-      window.PageAccessControl.deferredPlanReVerify(_rfAccessOpts);
+      if (window.PageAccessControl) window.PageAccessControl.deferredPlanReVerify(_rfAccessOpts);
     }
 
     async function enforceAccess() {
-      await window.PageAccessControl.enforceAccess(_rfAccessOpts);
+      if (window.PageAccessControl) await window.PageAccessControl.enforceAccess(_rfAccessOpts);
     }
 
     // Wait for DOM to be ready before enforcing access again
@@ -1623,7 +1623,8 @@
     const RF_ALLOWED_PLANS = window.PageAccessControl ? window.PageAccessControl.PAID_PLANS : ['trial', 'essential', 'pro', 'premium'];
 
     function getCurrentUserPlan() {
-      return window.PageAccessControl.getCurrentUserPlan(RF_ALLOWED_PLANS, '[RESUME-FEEDBACK]');
+      if (window.PageAccessControl) return window.PageAccessControl.getCurrentUserPlan(RF_ALLOWED_PLANS, '[RESUME-FEEDBACK]');
+      return localStorage.getItem('user-plan') || 'free';
     }
 
     // --- UPDATED USER OBJECT ---
