@@ -85,7 +85,19 @@
     invalidate: function () {
       _cached = null;
       _cachedAt = 0;
+      
+      // Store the current in-flight promise to prevent race conditions
+      var oldInflight = _inflight;
       _inflight = null;
+      
+      // If there was an in-flight request, chain a handler to prevent it from
+      // updating the cache when it completes
+      if (oldInflight) {
+        oldInflight.then(function() {
+          // Do nothing with the result - prevent the old promise's result
+          // from overwriting our freshly invalidated cache
+        });
+      }
     }
   };
 })();
