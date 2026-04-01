@@ -1305,15 +1305,20 @@
         }
       } catch (_) {}
       
-      // Fetch trial data from D1 via /api/plan/me (source of truth)
+      // Fetch trial data from D1 via PlanCache (deduplicated)
       let trialEndsAtFromAPI = null;
       try {
         const firebaseToken = await getFirebaseIdToken();
-        if (firebaseToken) {
+        if (firebaseToken && window.PlanCache) {
+          const result = await window.PlanCache.getPlan(firebaseToken);
+          if (result && result.trialEndsAt) {
+            trialEndsAtFromAPI = result.trialEndsAt;
+            console.log('✅ Fetched trial end date from PlanCache:', result.trialEndsAt);
+          }
+        } else if (firebaseToken) {
           const planResponse = await fetch('/api/plan/me', {
             headers: { 'Authorization': `Bearer ${firebaseToken}` }
           });
-          
           if (planResponse.ok) {
             const planData = await planResponse.json();
             if (planData.trialEndsAt) {
@@ -1376,13 +1381,19 @@
         try {
           const firebaseToken = await getFirebaseIdToken();
           if (!firebaseToken) return;
-          
-          const planResponse = await fetch('/api/plan/me', {
-            headers: { 'Authorization': `Bearer ${firebaseToken}` }
-          });
-          
-          if (planResponse.ok) {
-            const planData = await planResponse.json();
+
+          let planData = null;
+          if (window.PlanCache) {
+            const result = await window.PlanCache.getPlan(firebaseToken, true);
+            if (result) planData = result;
+          } else {
+            const planResponse = await fetch('/api/plan/me', {
+              headers: { 'Authorization': `Bearer ${firebaseToken}` }
+            });
+            if (planResponse.ok) planData = await planResponse.json();
+          }
+
+          if (planData) {
             const newPlan = planData.plan || 'free';
             
             // Check if plan changed
@@ -1498,13 +1509,18 @@
           try {
             const firebaseToken = await getFirebaseIdToken();
             if (!firebaseToken) return;
-            
-            const planResponse = await fetch('/api/plan/me', {
-              headers: { 'Authorization': `Bearer ${firebaseToken}` }
-            });
-            
-            if (planResponse.ok) {
-              const planData = await planResponse.json();
+
+            let planData = null;
+            if (window.PlanCache) {
+              planData = await window.PlanCache.getPlan(firebaseToken, true);
+            } else {
+              const planResponse = await fetch('/api/plan/me', {
+                headers: { 'Authorization': `Bearer ${firebaseToken}` }
+              });
+              if (planResponse.ok) planData = await planResponse.json();
+            }
+
+            if (planData) {
               
               // Check if plan changed (trial expired) - CRITICAL: always check this
               if (planData.plan !== 'trial' && planState.currentPlan === 'trial') {
@@ -1638,12 +1654,15 @@
       try {
         const user = window.FirebaseAuthManager?.getCurrentUser?.();
         if (!user) return null;
-        
+
         const idToken = await user.getIdToken();
+        if (window.PlanCache) {
+          return await window.PlanCache.getPlan(idToken);
+        }
         const res = await fetch('/api/plan/me', {
           headers: { Authorization: `Bearer ${idToken}` }
         });
-        
+
         if (!res.ok) return null;
         return await res.json();
       } catch (e) {
@@ -2602,15 +2621,24 @@
           // Fallback to plan/me if billing-status didn't work
           if (plan === 'free') {
             try {
-              const planRes = await fetch('/api/plan/me', {
-                headers: { Authorization: `Bearer ${idToken}` }
-              });
-              if (planRes.ok) {
-                const planData = await planRes.json();
-                if (planData.plan && planData.plan !== 'free') {
-                  plan = planData.plan;
+              if (window.PlanCache) {
+                const result = await window.PlanCache.getPlan(idToken);
+                if (result && result.plan && result.plan !== 'free') {
+                  plan = result.plan;
                   localStorage.setItem('user-plan', plan);
-                  console.log('✅ [ATS-UPLOAD] Plan from plan/me:', plan);
+                  console.log('✅ [ATS-UPLOAD] Plan from PlanCache:', plan);
+                }
+              } else {
+                const planRes = await fetch('/api/plan/me', {
+                  headers: { Authorization: `Bearer ${idToken}` }
+                });
+                if (planRes.ok) {
+                  const planData = await planRes.json();
+                  if (planData.plan && planData.plan !== 'free') {
+                    plan = planData.plan;
+                    localStorage.setItem('user-plan', plan);
+                    console.log('✅ [ATS-UPLOAD] Plan from plan/me:', plan);
+                  }
                 }
               }
             } catch (planError) {
@@ -2846,15 +2874,24 @@
               
               // Fallback to plan/me if billing-status didn't work or returned free
               if (userPlan === 'free') {
-                const planRes = await fetch('/api/plan/me', {
-                  headers: { Authorization: `Bearer ${idToken}` }
-                });
-                if (planRes.ok) {
-                  const planData = await planRes.json();
-                  if (planData.plan && planData.plan !== 'free') {
-                    userPlan = planData.plan;
-                    localStorage.setItem('user-plan', planData.plan);
-                    console.log('✅ [ATS-UPLOAD] Plan from plan/me:', planData.plan);
+                if (window.PlanCache) {
+                  const result = await window.PlanCache.getPlan(idToken);
+                  if (result && result.plan && result.plan !== 'free') {
+                    userPlan = result.plan;
+                    localStorage.setItem('user-plan', result.plan);
+                    console.log('✅ [ATS-UPLOAD] Plan from PlanCache:', result.plan);
+                  }
+                } else {
+                  const planRes = await fetch('/api/plan/me', {
+                    headers: { Authorization: `Bearer ${idToken}` }
+                  });
+                  if (planRes.ok) {
+                    const planData = await planRes.json();
+                    if (planData.plan && planData.plan !== 'free') {
+                      userPlan = planData.plan;
+                      localStorage.setItem('user-plan', planData.plan);
+                      console.log('✅ [ATS-UPLOAD] Plan from plan/me:', planData.plan);
+                    }
                   }
                 }
               }
