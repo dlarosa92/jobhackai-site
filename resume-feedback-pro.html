@@ -1220,7 +1220,7 @@
     // --- DEFERRED RE-VERIFICATION & PAGE ACCESS CONTROL ---
     // Delegated to shared page-access-control.js
     var _rfAccessOpts = {
-      allowedPlans: window.PageAccessControl.PAID_PLANS,
+      allowedPlans: window.PageAccessControl ? window.PageAccessControl.PAID_PLANS : ['trial', 'essential', 'pro', 'premium'],
       logPrefix: '[RESUME-FEEDBACK]',
       onPlanChanged: function () { updateRfTileForPlan(); }
     };
@@ -1620,7 +1620,7 @@
     }
 
     // --- USER PLAN LOGIC (delegated to shared page-access-control.js) ---
-    const RF_ALLOWED_PLANS = window.PageAccessControl.PAID_PLANS;
+    const RF_ALLOWED_PLANS = window.PageAccessControl ? window.PageAccessControl.PAID_PLANS : ['trial', 'essential', 'pro', 'premium'];
 
     function getCurrentUserPlan() {
       return window.PageAccessControl.getCurrentUserPlan(RF_ALLOWED_PLANS, '[RESUME-FEEDBACK]');

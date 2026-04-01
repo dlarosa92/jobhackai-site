@@ -2808,7 +2808,11 @@ async function fetchPlanFromAPI() {
           if (billingData.ok && billingData.plan && billingData.plan !== 'free') {
             console.log(`🔄 fetchPlanFromAPI: Found plan ${billingData.plan} from billing-status, syncing to D1...`);
             plan = billingData.plan;
-            if (window.PlanCache) window.PlanCache.setCachedPlan(plan);
+            if (window.PlanCache) {
+              const cachedPlan = window.PlanCache.getCachedPlan();
+              const trialEndsAt = cachedPlan ? cachedPlan.trialEndsAt : localStorage.getItem('trial-ends-at');
+              window.PlanCache.setCachedPlan(plan, trialEndsAt);
+            }
             fetch('/api/sync-stripe-plan', {
               method: 'POST',
               headers: { Authorization: `Bearer ${idToken}` }

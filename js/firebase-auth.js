@@ -783,6 +783,7 @@ class AuthManager {
               const idToken = getIdTokenSync();
               let kvPlan = null;
               if (window.PlanCache && idToken) {
+                window.PlanCache.invalidate();
                 const result = await window.PlanCache.getPlan(idToken);
                 kvPlan = result && result.plan ? result : null;
               } else {

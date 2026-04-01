@@ -747,8 +747,16 @@ class AuthManager {
               actualPlan = selectedPlan === 'trial' ? 'pending' : selectedPlan;
               console.log('✅ Using newly selected plan for LinkedIn sign-in (same-window):', actualPlan);
             } else {
-              // Fetch plan from API using token
-              const kvPlan = await apiFetchJSON('/api/plan/me');
+              // Fetch plan from API using PlanCache (deduplicated)
+              const idToken = getIdTokenSync();
+              let kvPlan = null;
+              if (window.PlanCache && idToken) {
+                window.PlanCache.invalidate();
+                const result = await window.PlanCache.getPlan(idToken);
+                kvPlan = result && result.plan ? result : null;
+              } else {
+                kvPlan = await apiFetchJSON('/api/plan/me');
+              }
               if (kvPlan?.plan) {
                 actualPlan = kvPlan.plan;
                 console.log('✅ Fetched plan from API during LinkedIn sign-in (same-window):', actualPlan);

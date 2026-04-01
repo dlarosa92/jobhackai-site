@@ -1933,7 +1933,7 @@
     }
 
     // --- USER PLAN LOGIC (delegated to shared page-access-control.js) ---
-    const IQ_ALLOWED_PLANS = window.PageAccessControl.PAID_PLANS;
+    const IQ_ALLOWED_PLANS = window.PageAccessControl ? window.PageAccessControl.PAID_PLANS : ['trial', 'essential', 'pro', 'premium'];
 
     function getUserPlan() {
       return window.PageAccessControl.getCurrentUserPlan(IQ_ALLOWED_PLANS, '[INTERVIEW-Q]');
