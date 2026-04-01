@@ -9,6 +9,7 @@
   var _cached = null;   // { plan, trialEndsAt }
   var _cachedAt = 0;
   var _inflight = null; // Promise | null
+  var _generation = 0;  // Incremented on invalidate to discard stale in-flight results
   var CACHE_TTL = 30000; // 30 seconds
 
   function doFetch(token) {
@@ -28,9 +29,10 @@
       localStorage.setItem('user-plan', result.plan || 'free');
       if (result.trialEndsAt) {
         localStorage.setItem('trial-ends-at', result.trialEndsAt);
-      } else {
-        localStorage.removeItem('trial-ends-at');
       }
+      // Do NOT remove trial-ends-at when absent — a previous API call
+      // may have set it correctly and callers like billing-status fallback
+      // may not have trialEndsAt available.
     } catch (_) { /* localStorage may be unavailable */ }
   }
 
@@ -48,18 +50,19 @@
       // Deduplicate in-flight requests — all callers share the same promise
       if (_inflight) return _inflight;
 
+      var gen = ++_generation;
       _inflight = doFetch(token)
         .then(function (result) {
-          if (result) {
+          if (gen === _generation && result) {
             _cached = result;
             _cachedAt = Date.now();
             persistToLocalStorage(result);
           }
-          _inflight = null;
+          if (gen === _generation) _inflight = null;
           return result;
         })
         .catch(function (err) {
-          _inflight = null;
+          if (gen === _generation) _inflight = null;
           console.warn('[PlanCache] fetch failed:', err);
           return null;
         });
@@ -85,19 +88,8 @@
     invalidate: function () {
       _cached = null;
       _cachedAt = 0;
-      
-      // Store the current in-flight promise to prevent race conditions
-      var oldInflight = _inflight;
       _inflight = null;
-      
-      // If there was an in-flight request, chain a handler to prevent it from
-      // updating the cache when it completes
-      if (oldInflight) {
-        oldInflight.then(function() {
-          // Do nothing with the result - prevent the old promise's result
-          // from overwriting our freshly invalidated cache
-        });
-      }
+      ++_generation; // Ensures any in-flight fetch won't overwrite cache when it resolves
     }
   };
 })();
