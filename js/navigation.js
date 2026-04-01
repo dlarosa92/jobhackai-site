@@ -2569,88 +2569,25 @@ async function initializeNavigation() {
 //   document.body.appendChild(switcher);
 //   navLog('debug', 'Quick plan switcher appended to body');
 
-  // CRITICAL FIX: For authenticated users, fetch plan before rendering navigation
-  // This prevents race condition where navigation shows wrong plan initially
+  // For authenticated users, read plan from PlanCache or localStorage.
+  // The authoritative /api/plan/me fetch is handled by firebase-auth.js via PlanCache
+  // (which deduplicates concurrent requests). Navigation just reads the cached result.
   if (authState.isAuthenticated && window.FirebaseAuthManager?.getCurrentUser) {
-    navLog('info', 'Authenticated user detected, fetching plan before navigation render');
+    navLog('info', 'Authenticated user detected, reading plan for navigation render');
     try {
-      const user = window.FirebaseAuthManager.getCurrentUser();
-      if (user) {
-        const token = await user.getIdToken();
-        // Fetch plan from API first
-        const planRes = await fetch('/api/plan/me', {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (planRes.ok) {
-          const planData = await planRes.json();
-          if (planData.plan) {
-            navLog('info', 'Fetched plan from API, updating localStorage', planData.plan);
-            localStorage.setItem('user-plan', planData.plan);
-            localStorage.setItem('dev-plan', planData.plan);
-            
-            // If plan is free, double-check with billing-status as fallback
-            if (planData.plan === 'free') {
-              navLog('info', 'Plan is free, checking billing-status as fallback');
-              const billingRes = await fetch('/api/billing-status?force=1', {
-                headers: { Authorization: `Bearer ${token}` }
-              });
-              if (billingRes.ok) {
-                const billingData = await billingRes.json();
-                if (billingData.ok && billingData.plan && billingData.plan !== 'free') {
-                  navLog('info', 'Found plan from billing-status fallback, updating', billingData.plan);
-                  localStorage.setItem('user-plan', billingData.plan);
-                  localStorage.setItem('dev-plan', billingData.plan);
-                  // Sync to D1 asynchronously (via sync-stripe-plan which writes to D1)
-                  fetch('/api/sync-stripe-plan', {
-                    method: 'POST',
-                    headers: { Authorization: `Bearer ${token}` }
-                  }).catch(err => navLog('warn', 'Failed to sync plan to D1 (non-critical):', err));
-                }
-              }
-            }
-          } else {
-            // plan/me returned successfully but without plan field - use billing-status as fallback
-            navLog('info', 'plan/me response missing plan field, checking billing-status as fallback');
-            const billingRes = await fetch('/api/billing-status?force=1', {
-              headers: { Authorization: `Bearer ${token}` }
-            });
-            if (billingRes.ok) {
-              const billingData = await billingRes.json();
-              if (billingData.ok && billingData.plan) {
-                navLog('info', 'Found plan from billing-status fallback (plan/me missing plan)', billingData.plan);
-                localStorage.setItem('user-plan', billingData.plan);
-                localStorage.setItem('dev-plan', billingData.plan);
-                // Sync to KV asynchronously
-                fetch('/api/sync-stripe-plan', {
-                  method: 'POST',
-                  headers: { Authorization: `Bearer ${token}` }
-                }).catch(err => navLog('warn', 'Failed to sync plan to KV (non-critical):', err));
-              }
-            }
-          }
-        } else {
-          // plan/me failed - use billing-status as fallback
-          navLog('info', 'plan/me request failed, checking billing-status as fallback');
-          const billingRes = await fetch('/api/billing-status?force=1', {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          if (billingRes.ok) {
-            const billingData = await billingRes.json();
-            if (billingData.ok && billingData.plan) {
-              navLog('info', 'Found plan from billing-status fallback (plan/me failed)', billingData.plan);
-              localStorage.setItem('user-plan', billingData.plan);
-              localStorage.setItem('dev-plan', billingData.plan);
-              // Sync to KV asynchronously
-              fetch('/api/sync-stripe-plan', {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${token}` }
-              }).catch(err => navLog('warn', 'Failed to sync plan to KV (non-critical):', err));
-            }
-          }
-        }
+      // Check PlanCache first (populated by firebase-auth.js during auth init)
+      const cached = window.PlanCache && window.PlanCache.getCachedPlan();
+      if (cached && cached.plan) {
+        navLog('info', 'Using plan from PlanCache:', cached.plan);
+        localStorage.setItem('user-plan', cached.plan);
+        localStorage.setItem('dev-plan', cached.plan);
+      } else {
+        // PlanCache not populated yet — use localStorage (set by firebase-auth.js)
+        const lsPlan = localStorage.getItem('user-plan');
+        navLog('info', 'PlanCache not yet populated, using localStorage plan:', lsPlan || 'free');
       }
     } catch (planError) {
-      navLog('warn', 'Plan fetch failed (non-critical), continuing with navigation render:', planError);
+      navLog('warn', 'Plan read failed (non-critical), continuing with navigation render:', planError);
     }
   }
   
@@ -2828,21 +2765,13 @@ async function initializeNavigation() {
 }
 
 // --- Plan Reconciliation from D1 via API ---
+// Routes through PlanCache to deduplicate concurrent /api/plan/me requests.
+// Retains billing-status fallback for D1/Stripe sync mismatches.
 async function fetchPlanFromAPI() {
   try {
-    // DEFENSIVE GUARD: Ensure FirebaseAuthManager is loaded
     if (!window.FirebaseAuthManager) {
       console.log('🔍 fetchPlanFromAPI: FirebaseAuthManager not loaded yet, skipping');
       return null;
-    }
-
-    // DEFENSIVE GUARD: Wait for auth to be ready if it's still initializing
-    if (window.FirebaseAuthManager.waitForAuthReady) {
-      try {
-        await window.FirebaseAuthManager.waitForAuthReady(1000); // Short timeout
-      } catch (e) {
-        console.log('🔍 fetchPlanFromAPI: Auth ready timeout, continuing anyway');
-      }
     }
 
     const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
@@ -2850,67 +2779,63 @@ async function fetchPlanFromAPI() {
       console.log('🔍 fetchPlanFromAPI: No current user available');
       return null;
     }
-    
+
     const idToken = await currentUser.getIdToken?.();
     if (!idToken) {
       console.log('🔍 fetchPlanFromAPI: No ID token available');
       return null;
     }
-    
-    console.log('🔍 fetchPlanFromAPI: Fetching plan from D1 via API...');
-    const r = await fetch('/api/plan/me', { headers: { Authorization: `Bearer ${idToken}` } });
-    if (!r.ok) {
-      console.warn(`🔍 fetchPlanFromAPI: API returned ${r.status} ${r.statusText}`);
-      return null;
+
+    // Use PlanCache to deduplicate concurrent /api/plan/me calls
+    let plan = null;
+    if (window.PlanCache) {
+      const result = await window.PlanCache.getPlan(idToken);
+      plan = result && result.plan ? result.plan : null;
+      console.log('🔍 fetchPlanFromAPI (via PlanCache):', plan);
+    } else {
+      console.log('🔍 fetchPlanFromAPI: Fetching plan from D1 via API...');
+      const r = await fetch('/api/plan/me', { headers: { Authorization: `Bearer ${idToken}` } });
+      if (!r.ok) {
+        console.warn(`🔍 fetchPlanFromAPI: API returned ${r.status} ${r.statusText}`);
+        return null;
+      }
+      const data = await r.json();
+      plan = data.plan || 'free';
+      if (data.trialEndsAt) {
+        localStorage.setItem('trial-ends-at', data.trialEndsAt);
+      } else {
+        localStorage.removeItem('trial-ends-at');
+      }
     }
-    
-    const data = await r.json();
-    console.log('🔍 fetchPlanFromAPI: API response:', data);
-    
-    let plan = data.plan || 'free';
-    
-    // CRITICAL FIX: If plan is 'free' but user is authenticated, check billing-status as fallback
-    // This handles cases where D1 is out of sync with Stripe (shouldn't happen, but safety net)
+
+    if (!plan) return null;
+
+    // Billing-status fallback: if D1 says 'free' but Stripe may disagree
     if (plan === 'free' && currentUser) {
       console.log('🔍 fetchPlanFromAPI: Plan is free, checking billing-status as fallback...');
       try {
-        const billingRes = await fetch('/api/billing-status?force=1', { 
-          headers: { Authorization: `Bearer ${idToken}` } 
+        const billingRes = await fetch('/api/billing-status?force=1', {
+          headers: { Authorization: `Bearer ${idToken}` }
         });
         if (billingRes.ok) {
           const billingData = await billingRes.json();
           if (billingData.ok && billingData.plan && billingData.plan !== 'free') {
             console.log(`🔄 fetchPlanFromAPI: Found plan ${billingData.plan} from billing-status, syncing to D1...`);
             plan = billingData.plan;
-            // Sync to D1 (via sync-stripe-plan which writes to D1)
-            try {
-              const syncRes = await fetch('/api/sync-stripe-plan', {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${idToken}` }
-              });
-              if (syncRes.ok) {
-                console.log('✅ fetchPlanFromAPI: Plan synced to D1');
-              }
-            } catch (syncError) {
-              console.warn('⚠️ fetchPlanFromAPI: Failed to sync plan to D1:', syncError);
-            }
+            if (window.PlanCache) window.PlanCache.setCachedPlan(plan);
+            fetch('/api/sync-stripe-plan', {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${idToken}` }
+            }).catch(err => console.warn('⚠️ fetchPlanFromAPI: Failed to sync plan to D1:', err));
           }
         }
       } catch (billingError) {
         console.warn('⚠️ fetchPlanFromAPI: Failed to check billing-status:', billingError);
       }
     }
-    
-    // Store trial end date if available
-    if (data.trialEndsAt) {
-      localStorage.setItem('trial-ends-at', data.trialEndsAt);
-    } else {
-      localStorage.removeItem('trial-ends-at');
-    }
-    
-    // Update localStorage with correct plan
+
     localStorage.setItem('user-plan', plan);
-    console.log(`✅ fetchPlanFromAPI: Successfully fetched plan from D1: ${plan}`);
+    console.log(`✅ fetchPlanFromAPI: Successfully fetched plan: ${plan}`);
     return plan;
   } catch (error) {
     console.warn('❌ fetchPlanFromAPI: Error fetching plan:', error);
@@ -2931,31 +2856,16 @@ async function reconcilePlanFromAPI() {
     return;
   }
   
-  // FIX: Add retry mechanism for plan reconciliation
-  let plan = null;
-  let retryCount = 0;
-  const maxRetries = 3;
-  
   console.log('🔍 reconcilePlanFromAPI: Starting plan reconciliation from D1...');
-  
-  while (!plan && retryCount < maxRetries) {
-    try {
-      plan = await fetchPlanFromAPI();
-      if (plan) {
-        console.log(`✅ Plan reconciliation successful on attempt ${retryCount + 1}:`, plan);
-        break;
-      }
-    } catch (error) {
-      console.warn(`⚠️ Plan reconciliation attempt ${retryCount + 1} failed:`, error);
-    }
-    
-    retryCount++;
-    if (retryCount < maxRetries) {
-      console.log(`🔄 Retrying plan reconciliation in ${retryCount * 1000}ms...`);
-      await new Promise(resolve => setTimeout(resolve, retryCount * 1000));
-    }
+
+  // Single attempt — PlanCache handles deduplication; no retry cascade needed
+  let plan = null;
+  try {
+    plan = await fetchPlanFromAPI();
+  } catch (error) {
+    console.warn('⚠️ Plan reconciliation failed:', error);
   }
-  
+
   const current = localStorage.getItem('user-plan');
   if (plan && plan !== current) {
     console.log(`🔄 Updating plan from ${current} to ${plan}`);
@@ -2964,7 +2874,7 @@ async function reconcilePlanFromAPI() {
     scheduleUpdateNavigation(true);
     try { new BroadcastChannel('auth').postMessage({ type: 'plan-update', plan: plan }); } catch (_) {}
   } else if (!plan) {
-    console.warn('⚠️ Plan reconciliation failed after all retries, keeping current plan:', current);
+    console.warn('⚠️ Plan reconciliation failed, keeping current plan:', current);
   }
 }
 
