@@ -4476,8 +4476,9 @@ function initIQPage(){
           mockBtn?.setAttribute('data-locked','true');
         }
       } else {
-        // Page guard already redirects unauthorized users; never show upgrade banner.
         roleInput.disabled = true;
+        upgradeBtn.style.display = '';
+        lockDiv.style.display = '';
         if (mockLock) mockLock.style.display = 'inline-flex';
         mockBtn?.setAttribute('data-locked','true');
       }
