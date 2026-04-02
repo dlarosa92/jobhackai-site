@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>html.auth-pending,html.plan-pending{visibility:hidden}</style>
   <script src="js/static-auth-guard.js?v=20260125-1"></script>
+  <script src="js/page-access-control.js?v=20260331-1"></script>
   <script>
     // --- IMMEDIATE PAGE ACCESS CONTROL ---
     // Run immediately to prevent content flash for unauthorized users
@@ -38,19 +39,21 @@
         if (!done) handleAuthReadyOrTimeout();
       }, 5000);
 
-      // Helper: wait for an object to appear on window
-      function waitForGlobal(name, timeout) {
-        if (window[name]) return Promise.resolve(true);
-        var deadline = Date.now() + timeout;
-        return new Promise(function (resolve) {
-          var interval = setInterval(function () {
-            if (window[name] || Date.now() >= deadline) {
-              clearInterval(interval);
-              resolve(!!window[name]);
-            }
-          }, 50);
-        });
-      }
+      // Helper: delegate to shared module
+      var waitForGlobal = window.PageAccessControl
+        ? window.PageAccessControl.waitForGlobal
+        : function(name, timeout) {
+            if (window[name]) return Promise.resolve(true);
+            var deadline = Date.now() + timeout;
+            return new Promise(function (resolve) {
+              var interval = setInterval(function () {
+                if (window[name] || Date.now() >= deadline) {
+                  clearInterval(interval);
+                  resolve(!!window[name]);
+                }
+              }, 50);
+            });
+          };
 
       async function handleAuthReadyOrTimeout() {
         if (done || inFlight) return;
@@ -1183,6 +1186,7 @@
   <script src="js/mobile-menu.js?v=20250115-1"></script>
   
   <!-- Load Firebase auth as ES module (same pattern as dashboard.html) -->
+  <script src="js/plan-cache.js"></script>
   <script type="module" src="js/firebase-auth.js?v=20260207-2"></script>
   
   <!-- DEV-ONLY PLAN TOGGLE will be added by navigation.js -->
@@ -1213,96 +1217,20 @@
     }
   </script>
   <script>
-    // --- DEFERRED RE-VERIFICATION ---
-    // When the head guard granted access via the sync fast path (localStorage only),
-    // schedule an async API check to catch stale/expired plans.
-    var _deferredReVerifyScheduled = false;
+    // --- DEFERRED RE-VERIFICATION & PAGE ACCESS CONTROL ---
+    // Delegated to shared page-access-control.js
+    var _rfAccessOpts = {
+      allowedPlans: window.PageAccessControl ? window.PageAccessControl.PAID_PLANS : ['trial', 'essential', 'pro', 'premium'],
+      logPrefix: '[RESUME-FEEDBACK]',
+      onPlanChanged: function () { updateRfTileForPlan(); }
+    };
+
     function deferredPlanReVerify() {
-      if (_deferredReVerifyScheduled) return;
-      _deferredReVerifyScheduled = true;
-      setTimeout(async function() {
-        try {
-          if (!window.JobHackAINavigation) return;
-          if (typeof window.JobHackAINavigation.fetchPlanFromAPI !== 'function') return;
-          var apiPlan = await window.JobHackAINavigation.fetchPlanFromAPI();
-          if (!apiPlan) return;
-          var allowedPlans = ['trial', 'essential', 'pro', 'premium'];
-          if (!allowedPlans.includes(apiPlan)) {
-            console.warn('[RESUME-FEEDBACK] Deferred re-verify: plan is now', apiPlan, '— revoking access');
-            window.__JOBHACKAI_ACCESS_VERIFIED__ = false;
-            window.__JOBHACKAI_VERIFIED_PLAN__ = null;
-            window.location.href = 'pricing-a.html?plan=essential';
-          } else if (apiPlan !== window.__JOBHACKAI_VERIFIED_PLAN__) {
-            console.log('[RESUME-FEEDBACK] Deferred re-verify: updating verified plan to', apiPlan);
-            window.__JOBHACKAI_VERIFIED_PLAN__ = apiPlan;
-            updateRfTileForPlan();
-            window.dispatchEvent(new CustomEvent('planChanged', { detail: { plan: apiPlan } }));
-          }
-        } catch (e) {
-          console.warn('[RESUME-FEEDBACK] Deferred re-verify error:', e);
-        }
-      }, 2000);
+      if (window.PageAccessControl) window.PageAccessControl.deferredPlanReVerify(_rfAccessOpts);
     }
 
-    // --- PAGE ACCESS CONTROL (Second check after navigation system) ---
-    // Skip if the head guard already verified access (prevents race condition redirects)
     async function enforceAccess() {
-      if (window.__JOBHACKAI_ACCESS_VERIFIED__) {
-        console.log('[RESUME-FEEDBACK] enforceAccess: head guard set flag, scheduling deferred re-verification');
-        deferredPlanReVerify();
-        return;
-      }
-
-      // Wait for head guard async path to complete before checking independently.
-      // Head guard awaits FirebaseAuthManager (3s) + waitForAuthReady (5s) + API fetch,
-      // so allow up to 10s for it to set __JOBHACKAI_ACCESS_VERIFIED__.
-      var waited = 0;
-      while (!window.__JOBHACKAI_ACCESS_VERIFIED__ && waited < 10000) {
-        await new Promise(function(r) { setTimeout(r, 200); });
-        waited += 200;
-      }
-      if (window.__JOBHACKAI_ACCESS_VERIFIED__) {
-        console.log('[RESUME-FEEDBACK] enforceAccess: head guard verified after', waited, 'ms');
-        deferredPlanReVerify();
-        return;
-      }
-
-      // Head guard timed out or denied — do independent fallback check
-      var isAuthenticated, plan;
-
-      if (window.JobHackAINavigation) {
-        var authState = window.JobHackAINavigation.getAuthState();
-        isAuthenticated = authState && authState.isAuthenticated;
-        plan = window.JobHackAINavigation.getEffectivePlan();
-      } else {
-        var hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-        var hasFirebaseKeys = Object.keys(localStorage).some(function (k) {
-          return k.startsWith('firebase:authUser:') &&
-            localStorage.getItem(k) &&
-            localStorage.getItem(k) !== 'null' &&
-            localStorage.getItem(k).length > 10;
-        });
-        // SECURITY: Require BOTH signals (matches head fast path + static-auth-guard.js)
-        isAuthenticated = hasLocalStorageAuth && hasFirebaseKeys;
-        plan = localStorage.getItem('user-plan') || 'free';
-      }
-
-      var allowedPlans = ['trial', 'essential', 'pro', 'premium'];
-
-      if (!isAuthenticated || !allowedPlans.includes(plan)) {
-        if (!isAuthenticated) {
-          window.location.href = 'login.html';
-        } else {
-          window.location.href = 'pricing-a.html?plan=essential';
-        }
-      } else {
-        window.__JOBHACKAI_ACCESS_VERIFIED__ = true;
-        window.__JOBHACKAI_VERIFIED_PLAN__ = plan;
-        document.documentElement.classList.remove('auth-pending');
-        document.documentElement.classList.remove('plan-pending');
-        console.log('[RESUME-FEEDBACK] enforceAccess: fallback granted access, flag set');
-        deferredPlanReVerify();
-      }
+      if (window.PageAccessControl) await window.PageAccessControl.enforceAccess(_rfAccessOpts);
     }
 
     // Wait for DOM to be ready before enforcing access again
@@ -1691,61 +1619,12 @@
       }
     }
 
-    // --- UPDATED USER PLAN LOGIC ---
-    const RF_ALLOWED_PLANS = ['trial', 'essential', 'pro', 'premium'];
-
-    function getVerifiedCachedPlan() {
-      const verifiedPlan = window.__JOBHACKAI_VERIFIED_PLAN__;
-      if (window.__JOBHACKAI_ACCESS_VERIFIED__ && RF_ALLOWED_PLANS.includes(verifiedPlan)) {
-        return verifiedPlan;
-      }
-      const cachedPlan = localStorage.getItem('user-plan');
-      return window.__JOBHACKAI_ACCESS_VERIFIED__ && RF_ALLOWED_PLANS.includes(cachedPlan)
-        ? cachedPlan
-        : null;
-    }
+    // --- USER PLAN LOGIC (delegated to shared page-access-control.js) ---
+    const RF_ALLOWED_PLANS = window.PageAccessControl ? window.PageAccessControl.PAID_PLANS : ['trial', 'essential', 'pro', 'premium'];
 
     function getCurrentUserPlan() {
-      const verifiedCachedPlan = getVerifiedCachedPlan();
-
-      // During early hydration on dev, navigation can briefly report visitor/free
-      // before auth/plan reconciliation finishes even though the head guard already
-      // verified a paid plan from cache. Prefer the verified cached plan in that window.
-      let plan = 'free';
-      if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
-        plan = window.JobHackAINavigation.getEffectivePlan();
-        // Only use verifiedCachedPlan when navigation hasn't hydrated yet
-        // (undefined/visitor). Once navigation reports a real plan (including 'free'),
-        // trust it — it reflects the authoritative state (e.g. expired trial).
-        if (!plan || plan === 'undefined' || plan === 'visitor') {
-          plan = verifiedCachedPlan || localStorage.getItem('user-plan') || 'free';
-        }
-      } else {
-        plan = verifiedCachedPlan || localStorage.getItem('user-plan') || 'free';
-      }
-      
-      // FIX: Validate plan value to prevent corrupted data (e.g., "central")
-      const validPlans = ['visitor', 'free', 'trial', 'essential', 'pro', 'premium'];
-      if (!validPlans.includes(plan)) {
-        const oldPlan = plan; // Capture original invalid plan before reassignment
-        console.warn('[RESUME-FEEDBACK] Invalid plan detected:', plan, '- resetting to free');
-        plan = 'free';
-        // Clean up corrupted plan values
-        localStorage.setItem('user-plan', 'free');
-        const devPlan = localStorage.getItem('dev-plan');
-        if (devPlan && !validPlans.includes(devPlan)) {
-          localStorage.setItem('dev-plan', 'free');
-        }
-        // Log for debugging
-        console.log('[RESUME-FEEDBACK] Plan cleanup completed:', {
-          oldPlan: oldPlan,
-          newPlan: 'free',
-          localStoragePlan: localStorage.getItem('user-plan'),
-          devPlan: localStorage.getItem('dev-plan')
-        });
-      }
-      
-      return plan;
+      if (window.PageAccessControl) return window.PageAccessControl.getCurrentUserPlan(RF_ALLOWED_PLANS, '[RESUME-FEEDBACK]');
+      return localStorage.getItem('user-plan') || 'free';
     }
 
     // --- UPDATED USER OBJECT ---

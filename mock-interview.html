@@ -4,27 +4,145 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>html.auth-pending{visibility:hidden}</style>
+  <style>html.auth-pending,html.plan-pending{visibility:hidden}</style>
   <script src="js/static-auth-guard.js?v=20260125-1"></script>
+  <script src="js/page-access-control.js?v=20260331-1"></script>
   <script>
-    // Canonical plan/auth check using JobHackAINavigation
-    function ensureMockInterviewAccess() {
-      const nav = window.JobHackAINavigation;
-      if (!nav || !nav.getEffectivePlan || !nav.getAuthState) {
-        return false; // wait until navigation is ready
+    // --- IMMEDIATE PAGE ACCESS CONTROL ---
+    // Wait for Firebase auth AND plan fetch before checking (prevents false redirects)
+    (async function enforceAccessImmediate() {
+      // If access was already pre-verified (e.g. by test harness), skip all auth logic
+      if (window.__JOBHACKAI_ACCESS_VERIFIED__) {
+        document.documentElement.classList.remove('auth-pending');
+        document.documentElement.classList.remove('plan-pending');
+        return;
       }
-      const plan = nav.getEffectivePlan();
-      const auth = nav.getAuthState();
-      const allowed = ['pro', 'premium'];
-      if (!auth.isAuthenticated || !allowed.includes(plan)) {
-        window.location.href = 'interview-questions.html?upgrade=mock-interview';
-        return false;
-      }
-      return true;
-    }
 
-    document.addEventListener('navigationReady', ensureMockInterviewAccess);
-    document.addEventListener('DOMContentLoaded', ensureMockInterviewAccess);
+      var allowedPlans = ['pro', 'premium'];
+
+      // Synchronous fast path: check localStorage auth + cached plan BEFORE any async work.
+      // This sets __JOBHACKAI_ACCESS_VERIFIED__ immediately so the body guard never races.
+      // SECURITY: Require BOTH user-authenticated AND firebase:authUser: keys
+      // (matches static-auth-guard.js AND logic to prevent XSS single-key bypass)
+      var cachedPlan = localStorage.getItem('user-plan') || 'free';
+      var hasLocalAuth = localStorage.getItem('user-authenticated') === 'true';
+      var hasFBKeys = false;
+      for (var i = 0; i < localStorage.length; i++) {
+        var fk = localStorage.key(i);
+        if (fk && fk.indexOf('firebase:authUser:') === 0) {
+          var fd = localStorage.getItem(fk);
+          if (fd && fd !== 'null' && fd.length > 10) { hasFBKeys = true; break; }
+        }
+      }
+      if (hasLocalAuth && hasFBKeys && allowedPlans.includes(cachedPlan)) {
+        console.log('✅ [MOCK-INTERVIEW] Sync fast path: access granted for cached plan:', cachedPlan);
+        window.__JOBHACKAI_ACCESS_VERIFIED__ = true;
+        window.__JOBHACKAI_VERIFIED_PLAN__ = cachedPlan;
+        document.documentElement.classList.remove('auth-pending');
+        document.documentElement.classList.remove('plan-pending');
+        return;
+      }
+
+      // Helper: delegate to shared module
+      var waitForGlobal = window.PageAccessControl
+        ? window.PageAccessControl.waitForGlobal
+        : function(name, timeout) {
+            if (window[name]) return Promise.resolve(true);
+            var deadline = Date.now() + timeout;
+            return new Promise(function (resolve) {
+              var interval = setInterval(function () {
+                if (window[name] || Date.now() >= deadline) {
+                  clearInterval(interval);
+                  resolve(!!window[name]);
+                }
+              }, 50);
+            });
+          };
+
+      // Step 1: Wait for FirebaseAuthManager to load (max 3s)
+      await waitForGlobal('FirebaseAuthManager', 3000);
+
+      // Step 2: Wait for Firebase auth to be ready
+      var user = null;
+      if (window.FirebaseAuthManager && window.FirebaseAuthManager.waitForAuthReady) {
+        try {
+          user = await window.FirebaseAuthManager.waitForAuthReady(5000);
+        } catch (e) {
+          console.warn('[MOCK-INTERVIEW] Auth ready timeout:', e);
+        }
+      }
+
+      // Step 3: Determine authentication
+      // Note: waitForAuthReady can return AUTH_PENDING sentinel ({_authPending:true})
+      // on timeout — a truthy non-user object. Exclude it.
+      var isAuthenticated = !!user && !user._authPending;
+      if (!isAuthenticated) {
+        // Fallback: check localStorage + Firebase SDK keys
+        var hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+        var hasFirebaseKeys = Object.keys(localStorage).some(function (k) {
+          return k.startsWith('firebase:authUser:') &&
+            localStorage.getItem(k) &&
+            localStorage.getItem(k) !== 'null' &&
+            localStorage.getItem(k).length > 10;
+        });
+        // SECURITY: Require BOTH signals (matches sync fast path + static-auth-guard.js)
+        isAuthenticated = hasLocalStorageAuth && hasFirebaseKeys;
+      }
+
+      if (!isAuthenticated) {
+        console.log('🚫 [MOCK-INTERVIEW] Not authenticated, redirecting to login');
+        window.location.href = 'login.html';
+        return;
+      }
+
+      // Step 4: Check cached plan first (fast path)
+      var plan = localStorage.getItem('user-plan') || 'free';
+      if (allowedPlans.includes(plan)) {
+        console.log('✅ [MOCK-INTERVIEW] Access granted for cached plan:', plan);
+        document.documentElement.classList.remove('auth-pending');
+        document.documentElement.classList.remove('plan-pending');
+        window.__JOBHACKAI_ACCESS_VERIFIED__ = true;
+        window.__JOBHACKAI_VERIFIED_PLAN__ = plan;
+        return;
+      }
+
+      // Step 5: Cached plan would deny access — add plan-pending to hide content
+      // while we fetch the authoritative plan from the API
+      document.documentElement.classList.add('plan-pending');
+
+      // Wait for navigation module to load so we can use fetchPlanFromAPI
+      await waitForGlobal('JobHackAINavigation', 2000);
+
+      if (window.JobHackAINavigation && window.JobHackAINavigation.fetchPlanFromAPI) {
+        try {
+          var apiPlan = await window.JobHackAINavigation.fetchPlanFromAPI();
+          if (apiPlan) plan = apiPlan;
+        } catch (e) {
+          console.warn('[MOCK-INTERVIEW] API plan fetch error:', e);
+        }
+      }
+
+      // Also check getEffectivePlan (handles dev-plan overrides on non-prod)
+      if (!allowedPlans.includes(plan) && window.JobHackAINavigation && window.JobHackAINavigation.getEffectivePlan) {
+        var effectivePlan = window.JobHackAINavigation.getEffectivePlan();
+        if (effectivePlan && allowedPlans.includes(effectivePlan)) {
+          plan = effectivePlan;
+        }
+      }
+
+      // Step 6: Final decision
+      if (!allowedPlans.includes(plan)) {
+        console.log('🚫 [MOCK-INTERVIEW] Access denied for plan:', plan, '— redirecting to interview-questions');
+        window.location.href = 'interview-questions.html?upgrade=mock-interview';
+        return;
+      }
+
+      document.documentElement.classList.remove('auth-pending');
+      document.documentElement.classList.remove('plan-pending');
+      window.__JOBHACKAI_ACCESS_VERIFIED__ = true;
+      window.__JOBHACKAI_VERIFIED_PLAN__ = plan;
+      console.log('✅ [MOCK-INTERVIEW] Access granted for plan:', plan);
+    })();
   </script>
   <title>Mock Interviews with AI - JobHackAI</title>
   <link rel="icon" type="image/png" href="assets/jobhackai_icon_only_128.png">
@@ -1623,6 +1741,7 @@
   <!-- Scripts -->
   <script src="js/navigation.js?v=20260208-1"></script>
   <script src="js/universal-logout.js?v=20260208-1"></script>
+  <script src="js/plan-cache.js"></script>
   <script type="module" src="js/firebase-auth.js?v=20260207-2"></script>
   <script src="js/role-selector.js?v=20250115-1" type="module"></script>
   <script src="js/main.js" type="module"></script>
@@ -3058,6 +3177,32 @@
       document.addEventListener('DOMContentLoaded', init);
     } else {
       init();
+    }
+
+    // --- DEFERRED RE-VERIFICATION & PAGE ACCESS CONTROL ---
+    // Delegated to shared page-access-control.js
+    var _miAccessOpts = {
+      allowedPlans: ['pro', 'premium'],
+      logPrefix: '[MOCK-INTERVIEW]',
+      deniedRedirect: 'interview-questions.html?upgrade=mock-interview'
+    };
+
+    function deferredPlanReVerify() {
+      if (window.PageAccessControl) window.PageAccessControl.deferredPlanReVerify(_miAccessOpts);
+    }
+
+    async function miEnforceAccess() {
+      if (window.PageAccessControl) await window.PageAccessControl.enforceAccess(_miAccessOpts);
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', async function () {
+        await miEnforceAccess();
+      });
+    } else {
+      setTimeout(async function () {
+        await miEnforceAccess();
+      }, 100);
     }
   </script>
   <script src="js/feedback-widget.js?v=20260303-1" defer></script>

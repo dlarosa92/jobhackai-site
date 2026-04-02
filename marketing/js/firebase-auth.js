@@ -85,6 +85,7 @@ function clearAuthCookies() {
 }
 
 // --- DIRECT PLAN FETCH FROM D1 VIA API (navigation-independent) ---
+// Routes through PlanCache when available to deduplicate concurrent requests.
 async function fetchPlanFromAPI() {
   try {
     const user = auth.currentUser;
@@ -97,6 +98,12 @@ async function fetchPlanFromAPI() {
       console.log('🔍 fetchPlanFromAPI: no idToken');
       return null;
     }
+    if (window.PlanCache) {
+      const result = await window.PlanCache.getPlan(idToken);
+      const plan = result && result.plan;
+      console.log(`📊 fetchPlanFromAPI (via PlanCache): plan="${plan}"`);
+      return plan || null;
+    }
     console.log(`🔍 fetchPlanFromAPI: calling /api/plan/me for uid=${user.uid}`);
     const res = await fetch('/api/plan/me', { headers: { Authorization: `Bearer ${idToken}` } });
     if (!res.ok) {
@@ -107,7 +114,6 @@ async function fetchPlanFromAPI() {
     console.log(`📊 fetchPlanFromAPI: API returned plan="${data?.plan}"`);
     return data?.plan || null;
   } catch (e) {
-    // API fetch failed - this is non-critical, will fallback to 'free'
     console.log('ℹ️ Direct plan API fetch unavailable, will use fallback:', e.message || 'network error');
     return null;
   }
@@ -741,8 +747,16 @@ class AuthManager {
               actualPlan = selectedPlan === 'trial' ? 'pending' : selectedPlan;
               console.log('✅ Using newly selected plan for LinkedIn sign-in (same-window):', actualPlan);
             } else {
-              // Fetch plan from API using token
-              const kvPlan = await apiFetchJSON('/api/plan/me');
+              // Fetch plan from API using PlanCache (deduplicated)
+              const idToken = getIdTokenSync();
+              let kvPlan = null;
+              if (window.PlanCache && idToken) {
+                window.PlanCache.invalidate();
+                const result = await window.PlanCache.getPlan(idToken);
+                kvPlan = result && result.plan ? result : null;
+              } else {
+                kvPlan = await apiFetchJSON('/api/plan/me');
+              }
               if (kvPlan?.plan) {
                 actualPlan = kvPlan.plan;
                 console.log('✅ Fetched plan from API during LinkedIn sign-in (same-window):', actualPlan);
