@@ -9,8 +9,8 @@
 // Mock environment for testing
 const mockEnv = {
   OPENAI_API_KEY: process.env.OPENAI_API_KEY || 'test-key',
-  OPENAI_MODEL_FEEDBACK: process.env.OPENAI_MODEL_FEEDBACK || 'gpt-4o-mini',
-  OPENAI_MODEL_REWRITE: process.env.OPENAI_MODEL_REWRITE || 'gpt-4o',
+  OPENAI_MODEL_FEEDBACK: process.env.OPENAI_MODEL_FEEDBACK || 'gpt-4.1-mini',
+  OPENAI_MODEL_REWRITE: process.env.OPENAI_MODEL_REWRITE || 'gpt-4.1',
   OPENAI_MAX_TOKENS_ATS: process.env.OPENAI_MAX_TOKENS_ATS || '800',
   OPENAI_MAX_TOKENS_REWRITE: process.env.OPENAI_MAX_TOKENS_REWRITE || '2000',
   OPENAI_TEMPERATURE_SCORING: process.env.OPENAI_TEMPERATURE_SCORING || '0.2',
@@ -82,7 +82,7 @@ async function testATSFeedback() {
         totalTokens: 'number',
         cachedTokens: 'number'
       },
-      model: 'gpt-4o-mini',
+      model: 'gpt-4.1-mini',
       finishReason: 'stop'
     });
     
@@ -117,7 +117,7 @@ async function testResumeRewrite() {
         totalTokens: 'number',
         cachedTokens: 'number'
       },
-      model: 'gpt-4o',
+      model: 'gpt-4.1',
       finishReason: 'stop'
     });
     

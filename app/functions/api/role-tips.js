@@ -205,7 +205,7 @@ export async function onRequest(context) {
     if (env.JOBHACKAI_KV) {
       try {
         // Cache key: uid + resumeId + normalizedRole + model + schema version
-        const modelVersion = env.OPENAI_MODEL_FEEDBACK || 'gpt-4o-mini';
+        const modelVersion = env.OPENAI_MODEL_FEEDBACK || 'gpt-4.1-mini';
         const schemaVersion = 'v1';
         const cacheKey = `roleTips:${uid}:${sanitizedResumeId}:${normalizedRole}:${modelVersion}:${schemaVersion}`;
         const cached = await env.JOBHACKAI_KV.get(cacheKey);
@@ -396,7 +396,7 @@ export async function onRequest(context) {
     // C5: Cache result in KV (optional, non-blocking)
     if (roleSpecificFeedback && env.JOBHACKAI_KV) {
       try {
-        const modelVersion = env.OPENAI_MODEL_FEEDBACK || 'gpt-4o-mini';
+        const modelVersion = env.OPENAI_MODEL_FEEDBACK || 'gpt-4.1-mini';
         const schemaVersion = 'v1';
         const cacheKey = `roleTips:${uid}:${sanitizedResumeId}:${normalizedRole}:${modelVersion}:${schemaVersion}`;
         await env.JOBHACKAI_KV.put(cacheKey, JSON.stringify({
