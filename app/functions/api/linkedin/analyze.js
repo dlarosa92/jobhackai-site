@@ -402,8 +402,8 @@ export async function onRequest(context) {
       // AI call (single call for all sections)
       aiResult = await callOpenAI(
         {
-          model: env.OPENAI_MODEL_LINKEDIN_ANALYZE || 'gpt-4o-mini',
-          fallbackModel: 'gpt-4o-mini',
+          model: env.OPENAI_MODEL_LINKEDIN_ANALYZE || 'gpt-4.1-mini',
+          fallbackModel: 'gpt-4.1-mini',
           messages: buildAnalyzeMessages(inputJsonObj),
           responseFormat: analyzeResponseSchema(includeRecommendations),
           maxTokens: Number(env.OPENAI_MAX_TOKENS_LINKEDIN_ANALYZE) > 0 ? Number(env.OPENAI_MAX_TOKENS_LINKEDIN_ANALYZE) : 1300,

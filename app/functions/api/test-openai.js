@@ -55,7 +55,7 @@ export async function onRequest(context) {
     }
 
     // Get model configuration from env vars
-    const model = env.OPENAI_MODEL_ATS || 'gpt-4o-mini';
+    const model = env.OPENAI_MODEL_ATS || 'gpt-4.1-mini';
     const temperature = parseFloat(env.OPENAI_TEMPERATURE_SCORING || '0.2');
     const maxTokens = parseInt(env.OPENAI_MAX_TOKENS_ATS || '800', 10);
 
