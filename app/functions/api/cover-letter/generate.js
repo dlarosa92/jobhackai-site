@@ -269,8 +269,8 @@ export async function onRequest(context) {
 
     const result = await callOpenAI(
       {
-        model: 'gpt-4o-mini',
-        fallbackModel: 'gpt-4o-mini',
+        model: 'gpt-4.1-mini',
+        fallbackModel: 'gpt-4.1-mini',
         messages: [
           {
             role: 'system',

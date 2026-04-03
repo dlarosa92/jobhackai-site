@@ -53,7 +53,7 @@ export async function verifyGrammarWithAI(resumeText, env) {
     }
   }
 
-  const model = env.OPENAI_MODEL_GRAMMAR || 'gpt-4o-mini';
+  const model = env.OPENAI_MODEL_GRAMMAR || 'gpt-4.1-mini';
   const apiUrl = 'https://api.openai.com/v1/chat/completions';
 
   const systemPrompt = 'You are a grammar evaluator. Answer with JSON only.';
