@@ -20,11 +20,11 @@ window.BLOG_POSTS = [
     date: '2026-04-05',
     readTime: 7,
     author: 'JobHackAI Team',
-    featured: false,
+    featured: true,
   },
   {
     slug: 'the-2-percent-rule',
-    title: 'The 2% Rule: Why 98% of Job Applications Are Ghosted in 2026 (And the Fix)',
+    title: 'The 2% Rule: 98% of Job Applications Are Ghosted in 2026.',
     excerpt: 'For every 100 generic applications, only two people get an interview. Learn why tailored resumes and AI-optimized cover letters get you into the 5% interview club.',
     category: 'Job Search',
     date: '2026-04-05',
@@ -40,7 +40,7 @@ window.BLOG_POSTS = [
     date: '2026-03-18',
     readTime: 9,
     author: 'JobHackAI Team',
-    featured: true,
+    featured: false,
   },
   {
     slug: 'ats-optimization-playbook',
