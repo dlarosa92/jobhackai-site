@@ -45,7 +45,7 @@ Guidelines:
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini', // Cost-effective model
+        model: 'gpt-4.1-mini', // Cost-effective model
         messages: [
           { role: 'system', content: 'You are an expert in job role requirements and skill templates. Return only valid JSON.' },
           { role: 'user', content: prompt }
