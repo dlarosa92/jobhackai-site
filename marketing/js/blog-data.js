@@ -13,6 +13,26 @@
 
 window.BLOG_POSTS = [
   {
+    slug: 'behavioral-interview-anxiety',
+    title: 'Behavioral Interview Anxiety: Why 85% of Job Seekers Feel Unprepared (And the Fix)',
+    excerpt: 'The gap between your achievements and your ability to articulate them under pressure is where careers stall. Learn the SAO framework and text-based practice method that closes the Experience Gap.',
+    category: 'Interview Prep',
+    date: '2026-04-05',
+    readTime: 7,
+    author: 'JobHackAI Team',
+    featured: false,
+  },
+  {
+    slug: 'the-2-percent-rule',
+    title: 'The 2% Rule: Why 98% of Job Applications Are Ghosted in 2026 (And the Fix)',
+    excerpt: 'For every 100 generic applications, only two people get an interview. Learn why tailored resumes and AI-optimized cover letters get you into the 5% interview club.',
+    category: 'Job Search',
+    date: '2026-04-05',
+    readTime: 8,
+    author: 'JobHackAI Team',
+    featured: false,
+  },
+  {
     slug: 'mock-interview-online',
     title: 'Mock Interview Online: Why Real-Time Practice Is Your Secret Weapon',
     excerpt: 'Stop reading interview tips and start practicing. Real-time mock interview sessions build the structured communication skills that actually win job offers.',
