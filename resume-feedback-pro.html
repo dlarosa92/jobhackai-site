@@ -126,10 +126,19 @@
           }
 
           // Access granted
-          document.documentElement.classList.remove('auth-pending');
-          document.documentElement.classList.remove('plan-pending');
           window.__JOBHACKAI_ACCESS_VERIFIED__ = true;
           window.__JOBHACKAI_VERIFIED_PLAN__ = plan;
+          window.__JOBHACKAI_PLAN_PENDING__ = false;
+          document.documentElement.classList.remove('auth-pending');
+          document.documentElement.classList.remove('plan-pending');
+          // Reconcile UI same frame plan-pending is cleared so stale pending
+          // badges (grey "Locked" / red fallback) don't paint before a later
+          // event refreshes them. Body-level enforceAccessControl does the
+          // same at the parallel grant path.
+          try {
+            if (typeof updateRfTileForPlan === 'function') updateRfTileForPlan(plan);
+            window.dispatchEvent(new CustomEvent('planChanged', { detail: { newPlan: plan, source: 'head-guard' } }));
+          } catch (_) {}
           done = true;
         } finally {
           inFlight = false;

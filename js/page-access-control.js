@@ -45,11 +45,16 @@ window.PageAccessControl = (function () {
     var plan = 'free';
     if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
       plan = window.JobHackAINavigation.getEffectivePlan();
-      // Only use verifiedCachedPlan when navigation hasn't hydrated yet
-      // (undefined/visitor). Once navigation reports a real plan (including 'free'),
-      // trust it — it reflects the authoritative state (e.g. expired trial).
+      // Prefer verifiedCachedPlan when navigation hasn't hydrated (undefined/visitor)
+      // OR when nav reports 'free' but access has already been verified against a
+      // paid plan — the head guard's verified plan is authoritative and nav may
+      // transiently report 'free' during hydration, causing a Free-state flash.
+      // deferredPlanReVerify + the 'planChanged' event will downgrade later if
+      // the plan truly changed (e.g. expired trial).
       if (!plan || plan === 'undefined' || plan === 'visitor') {
         plan = verifiedCachedPlan || localStorage.getItem('user-plan') || 'free';
+      } else if (plan === 'free' && verifiedCachedPlan) {
+        plan = verifiedCachedPlan;
       }
     } else {
       plan = verifiedCachedPlan || localStorage.getItem('user-plan') || 'free';
