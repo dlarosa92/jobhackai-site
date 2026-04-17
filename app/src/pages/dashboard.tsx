@@ -949,7 +949,7 @@ export default function Dashboard() {
               <rect x="3" y="7" width="18" height="13" rx="2"/>
               <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/>
             </svg>
-            <span>JOBHACKAI</span>
+            <span>JOBHACKAI<sup>&trade;</sup></span>
           </a>
           <div className="nav-group">
             <nav className="nav-links" role="navigation">
@@ -1184,13 +1184,12 @@ export default function Dashboard() {
               <rect x="3" y="7" width="18" height="13" rx="2" stroke="#1F2937" strokeWidth="2"/>
               <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2" stroke="#1F2937" strokeWidth="2"/>
             </svg>
-            <span className="footer-name">JOBHACKAI</span>
+            <span className="footer-name">JOBHACKAI<sup>&trade;</sup></span>
           </div>
           <div className="footer-legal">
             <p>© 2026 JobHackAI. All rights reserved.</p>
           </div>
           <div className="footer-links">
-            <a href="https://jobhackai.io/">Home</a>
             <a href="/support">Support</a>
             <a href="/privacy">Privacy</a>
           </div>

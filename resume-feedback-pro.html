@@ -126,10 +126,19 @@
           }
 
           // Access granted
-          document.documentElement.classList.remove('auth-pending');
-          document.documentElement.classList.remove('plan-pending');
           window.__JOBHACKAI_ACCESS_VERIFIED__ = true;
           window.__JOBHACKAI_VERIFIED_PLAN__ = plan;
+          window.__JOBHACKAI_PLAN_PENDING__ = false;
+          document.documentElement.classList.remove('auth-pending');
+          document.documentElement.classList.remove('plan-pending');
+          // Reconcile UI same frame plan-pending is cleared so stale pending
+          // badges (grey "Locked" / red fallback) don't paint before a later
+          // event refreshes them. Body-level enforceAccessControl does the
+          // same at the parallel grant path.
+          try {
+            if (typeof updateRfTileForPlan === 'function') updateRfTileForPlan(plan);
+            window.dispatchEvent(new CustomEvent('planChanged', { detail: { newPlan: plan, source: 'head-guard' } }));
+          } catch (_) {}
           done = true;
         } finally {
           inFlight = false;
@@ -1160,7 +1169,7 @@
           <rect x="3" y="7" width="18" height="13" rx="2"/>
           <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/>
         </svg>
-        <span>JOBHACKAI</span>
+        <span>JOBHACKAI<sup>&trade;</sup></span>
       </a>
       <div class="nav-group">
         <nav class="nav-links" role="navigation">
@@ -9817,20 +9826,19 @@
   </main>
 
   <!-- Footer -->
-  <footer class="site-footer" style="position:sticky;bottom:0;width:100%;background:var(--color-card-bg);">
+  <footer class="site-footer">
     <div class="footer-container">
       <div class="footer-brand">
         <svg class="footer-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <rect x="3" y="7" width="18" height="13" rx="2" stroke="#1F2937" stroke-width="2"/>
           <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2" stroke="#1F2937" stroke-width="2"/>
         </svg>
-        <span class="footer-name">JOBHACKAI</span>
+        <span class="footer-name">JOBHACKAI<sup>&trade;</sup></span>
       </div>
       <div class="footer-legal">
         <p>© 2026 JobHackAI. All rights reserved.</p>
       </div>
       <div class="footer-links">
-        <a href="https://jobhackai.io/">Home</a>
         <a href="help.html">Help</a>
         <a href="privacy.html">Privacy</a>
         <a href="terms.html">Terms</a>
