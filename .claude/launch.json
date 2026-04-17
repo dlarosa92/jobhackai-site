@@ -15,8 +15,8 @@
     },
     {
       "name": "static-http",
-      "runtimeExecutable": "/usr/bin/env",
-      "runtimeArgs": ["PATH=/opt/homebrew/bin:/usr/bin:/bin", "/opt/homebrew/bin/npx", "-y", "http-server", "/Users/sebastian/Documents/jobhackai-site", "-p", "8000", "-c-1"],
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["-y", "http-server", ".", "-p", "8000", "-c-1"],
       "port": 8000
     }
   ]
