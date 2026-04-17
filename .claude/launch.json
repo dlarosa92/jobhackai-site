@@ -15,8 +15,17 @@
     },
     {
       "name": "static-http",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": ["-y", "http-server", ".", "-p", "8000", "-c-1"],
+      "runtimeExecutable": "/usr/bin/env",
+      "runtimeArgs": [
+        "PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin",
+        "npx",
+        "-y",
+        "http-server",
+        ".",
+        "-p",
+        "8000",
+        "-c-1"
+      ],
       "port": 8000
     }
   ]
