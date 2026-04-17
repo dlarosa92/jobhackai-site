@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "wrangler-dev",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["wrangler", "dev", "--env", "dev"],
+      "port": 8787
+    },
+    {
+      "name": "firebase-hosting",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["firebase", "emulators:start", "--only", "hosting"],
+      "port": 5000
+    },
+    {
+      "name": "static-http",
+      "runtimeExecutable": "/usr/bin/env",
+      "runtimeArgs": ["PATH=/opt/homebrew/bin:/usr/bin:/bin", "/opt/homebrew/bin/npx", "-y", "http-server", "/Users/sebastian/Documents/jobhackai-site", "-p", "8000", "-c-1"],
+      "port": 8000
+    }
+  ]
+}
