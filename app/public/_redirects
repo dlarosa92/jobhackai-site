@@ -10,6 +10,10 @@
 /auth/action   /auth/action/index.html   200
 /auth/action/   /auth/action/index.html   200
 
+# App root should go to the real login flow, not the legacy landing page
+/   /login   302
+/index.html   /login   301
+
 # Redirect deleted pages to account settings
 /add-card   /account-setting.html   301
 /add-card.html   /account-setting.html   301
