@@ -535,6 +535,39 @@ function getAuthPersistenceStores() {
   return stores;
 }
 
+function getAuthPersistenceValue(key) {
+  for (const store of getAuthPersistenceStores()) {
+    try {
+      const value = store.getItem(key);
+      if (value !== null) return value;
+    } catch (_) {}
+  }
+  return null;
+}
+
+function setAuthPersistenceValue(key, value) {
+  for (const store of getAuthPersistenceStores()) {
+    try {
+      store.setItem(key, value);
+    } catch (_) {}
+  }
+}
+
+function getAuthPlanValue(key) {
+  let sessionValue = null;
+  let localValue = null;
+
+  try { sessionValue = sessionStorage.getItem(key); } catch (_) {}
+  try { localValue = localStorage.getItem(key); } catch (_) {}
+
+  if (localValue !== null && localValue !== sessionValue) {
+    try { sessionStorage.setItem(key, localValue); } catch (_) {}
+    return localValue;
+  }
+
+  return sessionValue !== null ? sessionValue : localValue;
+}
+
 function hasStoredAuthenticatedFlag() {
   if (_authPersistence?.hasStoredAuthenticatedFlag) {
     return _authPersistence.hasStoredAuthenticatedFlag();
@@ -1074,8 +1107,7 @@ function getAuthState() {
         if (storedAuth) {
           // Firebase is initialized and says logged out, but persisted auth state is stale - sync localStorage
           navLog('error', 'Firebase says logged out but persisted auth state is stale, syncing localStorage');
-          localStorage.setItem('user-authenticated', 'false');
-          try { sessionStorage.setItem('user-authenticated', 'false'); } catch (_) {}
+          setAuthPersistenceValue('user-authenticated', 'false');
           localStorage.removeItem('user-email');
           return {
             isAuthenticated: false,
@@ -1095,8 +1127,8 @@ function getAuthState() {
 
   if (actualAuth) {
     try {
-      const storedPlan = localStorage.getItem('user-plan');
-      const storedDevPlan = localStorage.getItem('dev-plan');
+      const storedPlan = getAuthPlanValue('user-plan');
+      const storedDevPlan = getAuthPlanValue('dev-plan');
 
       // Validate plan values are in allowed list
       // SECURITY FIX: Include 'pending' as legitimate plan state for trial users waiting for webhook confirmation
@@ -1154,25 +1186,17 @@ function setAuthState(isAuthenticated, plan = null) {
   navLog('info', 'setAuthState() called', { isAuthenticated, plan });
 
   try {
-    const authFlag = isAuthenticated ? 'true' : 'false';
-    localStorage.setItem('user-authenticated', authFlag);
-    try {
-      sessionStorage.setItem('user-authenticated', authFlag);
-    } catch (_) {}
+    setAuthPersistenceValue('user-authenticated', isAuthenticated ? 'true' : 'false');
     // NOTE: Do NOT call clearUrlAuthHandoff() here. On the marketing site, Firebase has
     // no local session and fires onAuthStateChanged(null) which calls setAuthState(false).
     // Clearing the URL handoff here would undo the auth hint set by app.jobhackai.io.
     // URL handoff is only cleared on explicit logout in logout().
     if (plan) {
-      const oldPlan = localStorage.getItem('user-plan') || localStorage.getItem('dev-plan');
+      const oldPlan = getAuthPlanValue('user-plan') || getAuthPlanValue('dev-plan');
       // Only update and dispatch if the plan actually changed
       if (String(oldPlan) !== String(plan)) {
-        localStorage.setItem('user-plan', plan);
-        localStorage.setItem('dev-plan', plan);
-        try {
-          sessionStorage.setItem('user-plan', plan);
-          sessionStorage.setItem('dev-plan', plan);
-        } catch (_) {}
+        setAuthPersistenceValue('user-plan', plan);
+        setAuthPersistenceValue('dev-plan', plan);
 
         // Dispatch planChanged event to notify other components (dashboard, account-settings, etc.)
         // This ensures immediate UI updates when plan changes, rather than waiting for polling
@@ -1187,25 +1211,23 @@ function setAuthState(isAuthenticated, plan = null) {
           navLog('warn', 'setAuthState: Failed to dispatch planChanged event', { message: eventError?.message });
         }
       } else {
-        // Keep localStorage consistent even if no event dispatched (ensure value exists)
+        // Keep persisted auth state consistent even if no event dispatched.
         try {
-          localStorage.setItem('user-plan', plan);
-          localStorage.setItem('dev-plan', plan);
-          sessionStorage.setItem('user-plan', plan);
-          sessionStorage.setItem('dev-plan', plan);
+          setAuthPersistenceValue('user-plan', plan);
+          setAuthPersistenceValue('dev-plan', plan);
         } catch (_) {}
         navLog('debug', 'setAuthState: plan unchanged, skipping planChanged dispatch', { oldPlan, newPlan: plan });
       }
     }
   } catch (e) {
-    navLog('warn', 'Failed to set auth state in localStorage', { message: e?.message });
+    navLog('warn', 'Failed to set auth state in persisted storage', { message: e?.message });
   }
 
   // Only log on debug level to reduce spam
-  navLog('debug', 'Auth state updated in localStorage', {
-    'user-authenticated': localStorage.getItem('user-authenticated'),
-    'user-plan': localStorage.getItem('user-plan'),
-    'dev-plan': localStorage.getItem('dev-plan')
+  navLog('debug', 'Auth state updated in persisted storage', {
+    'user-authenticated': getAuthPersistenceValue('user-authenticated'),
+    'user-plan': getAuthPlanValue('user-plan'),
+    'dev-plan': getAuthPlanValue('dev-plan')
   });
 
   // Trigger navigation update after state change

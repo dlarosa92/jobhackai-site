@@ -53,6 +53,7 @@ const PROD_COOKIE_HOSTS = ['app.jobhackai.io', 'jobhackai.io', 'www.jobhackai.io
 const VERIFICATION_ACTION_PATH = '/auth/action';
 const PROD_APP_ORIGIN = 'https://app.jobhackai.io';
 const FIREBASE_AUTH_STORAGE_KEY_PREFIX = 'firebase:authUser:';
+const AUTH_COOKIE_ALLOWED_PLANS = new Set(['free', 'trial', 'essential', 'pro', 'premium', 'pending']);
 const ACTION_SETTINGS_RECOVERABLE_CODES = new Set([
   'auth/invalid-continue-uri',
   'auth/missing-continue-uri',
@@ -64,6 +65,11 @@ function isProdHost() {
   try { return PROD_COOKIE_HOSTS.includes(window.location.hostname || ''); } catch (_) { return false; }
 }
 
+function normalizeAuthCookiePlan(plan) {
+  const normalized = String(plan || '').trim().toLowerCase();
+  return AUTH_COOKIE_ALLOWED_PLANS.has(normalized) ? normalized : 'free';
+}
+
 function setAuthCookies(plan, isVerified = true) {
   try {
     if (!isProdHost()) return;
@@ -71,9 +77,9 @@ function setAuthCookies(plan, isVerified = true) {
     const maxAge = 60 * 60 * 24 * 30; // 30 days
     const secure = '; Secure';
     const authValue = isVerified ? '1' : '0';
+    const planValue = encodeURIComponent(normalizeAuthCookiePlan(plan));
     document.cookie = `jhai_auth=${authValue}; domain=${domain}; path=/; max-age=${maxAge}; SameSite=Lax${secure}`;
-    const planCookie = encodeURIComponent(String(plan || 'free'));
-    document.cookie = `jhai_plan=${planCookie}; domain=${domain}; path=/; max-age=${maxAge}; SameSite=Lax${secure}`;
+    document.cookie = `jhai_plan=${planValue}; domain=${domain}; path=/; max-age=${maxAge}; SameSite=Lax${secure}`;
     // Clear legacy PII cookie if it exists from older builds.
     document.cookie = `jhai_name=; domain=${domain}; path=/; max-age=0`;
   } catch (e) { /* best-effort */ }

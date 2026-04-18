@@ -622,6 +622,8 @@
   <!-- Inactivity tracker - auto-logout after 30 minutes of inactivity -->
   <script src="js/inactivity-tracker.js?v=20250115-1"></script>
   <script>
+    window.__ACCOUNT_SETTINGS_READ_ONLY_LOAD__ = true;
+
     // DO NOT call initializeNavigation synchronously on auth-protected pages
     // Wait for DOMContentLoaded so Firebase auth module has time to load
     window.addEventListener('DOMContentLoaded', async function() {
