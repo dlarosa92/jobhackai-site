@@ -421,14 +421,7 @@ function clearUrlAuthHandoff() {
 }
 
 function buildAuthHandoffHref(href, isAuthenticated, plan) {
-  if (!isAuthenticated || !isProdAppHost()) return href;
-  try {
-    const url = new URL(href, window.location.origin);
-    if (!isProdMarketingHostName(url.hostname)) return href;
-    return `${url}`;
-  } catch (_) {
-    return href;
-  }
+  return href;
 }
 
 // Consume auth handoff from URL as early as possible on marketing pages.
@@ -1079,8 +1072,8 @@ function getAuthState() {
             userPlan: null,
             devPlan: null
           };
-      }
-    } catch (storageError) {
+        }
+      } catch (storageError) {
         navLog('error', 'Failed to check persisted auth state', storageError.message);
       }
     }
