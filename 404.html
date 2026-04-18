@@ -150,7 +150,12 @@
           return false;
         }
       }
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' || hasFirebaseAuthKeys();
+      const localAuthFlag = localStorage.getItem('user-authenticated');
+      const sessionAuthFlag = sessionStorage.getItem('user-authenticated');
+      const resolvedStoredAuth = (localAuthFlag === 'false' || sessionAuthFlag === 'false')
+        ? 'false'
+        : ((sessionAuthFlag === 'true' || localAuthFlag === 'true') ? 'true' : null);
+      const isAuthenticated = resolvedStoredAuth === 'true' || (resolvedStoredAuth !== 'false' && hasFirebaseAuthKeys());
       if (isAuthenticated) {
         cta.textContent = 'Go to dashboard';
         cta.setAttribute('href', '/dashboard.html');

@@ -152,31 +152,39 @@ window.PageAccessControl = (function () {
     }
 
     // Head guard timed out or denied — do independent fallback check
-    var isAuthenticated, plan;
+      var isAuthenticated, plan;
+      function getStoredAuthFlagValue() {
+        var localValue = null;
+        var sessionValue = null;
+        try { localValue = localStorage.getItem('user-authenticated'); } catch (_) {}
+        try { sessionValue = sessionStorage.getItem('user-authenticated'); } catch (_) {}
+        if (localValue === 'false' || sessionValue === 'false') return 'false';
+        if (sessionValue === 'true' || localValue === 'true') return 'true';
+        return null;
+      }
 
-    if (window.JobHackAINavigation) {
-      var authState = window.JobHackAINavigation.getAuthState();
-      isAuthenticated = authState && authState.isAuthenticated;
-      plan = window.JobHackAINavigation.getEffectivePlan();
-    } else {
-      var hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-      var hasSessionStorageAuth = sessionStorage.getItem('user-authenticated') === 'true';
-      var hasFirebaseKeys = [sessionStorage, localStorage].some(function (storage) {
-        try {
-          return Object.keys(storage).some(function (k) {
+      if (window.JobHackAINavigation) {
+        var authState = window.JobHackAINavigation.getAuthState();
+        isAuthenticated = authState && authState.isAuthenticated;
+        plan = window.JobHackAINavigation.getEffectivePlan();
+      } else {
+        var hasStoredAuth = getStoredAuthFlagValue() === 'true';
+        var hasFirebaseKeys = [sessionStorage, localStorage].some(function (storage) {
+          try {
+            return Object.keys(storage).some(function (k) {
             return k.startsWith('firebase:authUser:') &&
               storage.getItem(k) &&
               storage.getItem(k) !== 'null' &&
               storage.getItem(k).length > 10;
           });
         } catch (_) {
-          return false;
-        }
-      });
-      // SECURITY: Require BOTH signals (matches head fast path + static-auth-guard.js)
-      isAuthenticated = (hasLocalStorageAuth || hasSessionStorageAuth) && hasFirebaseKeys;
-      plan = localStorage.getItem('user-plan') || 'free';
-    }
+            return false;
+          }
+        });
+        // SECURITY: Require BOTH signals (matches head fast path + static-auth-guard.js)
+        isAuthenticated = hasStoredAuth && hasFirebaseKeys;
+        plan = localStorage.getItem('user-plan') || 'free';
+      }
 
     if (!isAuthenticated || allowedPlans.indexOf(plan) === -1) {
       if (!isAuthenticated) {

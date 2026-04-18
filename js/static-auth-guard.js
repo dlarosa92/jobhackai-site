@@ -33,9 +33,17 @@
 
     function hasFirebaseAuth() {
       try {
+        function getStoredAuthFlagValue() {
+          var localValue = null;
+          var sessionValue = null;
+          try { localValue = localStorage.getItem('user-authenticated'); } catch (_) {}
+          try { sessionValue = sessionStorage.getItem('user-authenticated'); } catch (_) {}
+          if (localValue === 'false' || sessionValue === 'false') return 'false';
+          if (sessionValue === 'true' || localValue === 'true') return 'true';
+          return null;
+        }
         // First check: Look for our auth state flag (set by firebase-auth.js)
-        const hasAuthStateFlag = localStorage.getItem('user-authenticated') === 'true'
-          || sessionStorage.getItem('user-authenticated') === 'true';
+        const hasAuthStateFlag = getStoredAuthFlagValue() === 'true';
         
         let hasFirebaseKeys = false;
         var storages = getFirebaseAuthStorages();

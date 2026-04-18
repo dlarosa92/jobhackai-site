@@ -14,8 +14,26 @@
     return stores;
   }
 
+  /**
+   * Resolve the effective stored auth flag for the current tab.
+   * Explicit false in either storage should win over stale shared true values.
+   */
+  function getResolvedStoredAuthFlagValue() {
+    var sessionValue = null;
+    var localValue = null;
+    try { sessionValue = sessionStorage.getItem('user-authenticated'); } catch (_) {}
+    try { localValue = localStorage.getItem('user-authenticated'); } catch (_) {}
+
+    if (localValue === 'false' || sessionValue === 'false') return 'false';
+    if (sessionValue === 'true' || localValue === 'true') return 'true';
+    return null;
+  }
+
   /** Prefer localStorage when values differ so cross-tab / navigation updates win over stale session copies. */
   function getCrossTabStoredValue(key) {
+    if (key === 'user-authenticated') {
+      return getResolvedStoredAuthFlagValue();
+    }
     var stores = getAuthPersistenceStores();
     for (var i = stores.length - 1; i >= 0; i--) {
       try {
@@ -36,17 +54,7 @@
   }
 
   function hasStoredAuthenticatedFlag() {
-    try {
-      return getAuthPersistenceStores().some(function (store) {
-        try {
-          return store.getItem('user-authenticated') === 'true';
-        } catch (_) {
-          return false;
-        }
-      });
-    } catch (_) {
-      return false;
-    }
+    return getResolvedStoredAuthFlagValue() === 'true';
   }
 
   function hasFirebaseAuthPersistence() {
@@ -72,6 +80,7 @@
   window.JobHackAIAuthPersistence = {
     FIREBASE_AUTH_STORAGE_KEY_PREFIX: FIREBASE_AUTH_STORAGE_KEY_PREFIX,
     getAuthPersistenceStores: getAuthPersistenceStores,
+    getResolvedStoredAuthFlagValue: getResolvedStoredAuthFlagValue,
     getCrossTabStoredValue: getCrossTabStoredValue,
     setCrossTabStoredValue: setCrossTabStoredValue,
     hasStoredAuthenticatedFlag: hasStoredAuthenticatedFlag,

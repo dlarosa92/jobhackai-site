@@ -536,6 +536,9 @@ function getAuthPersistenceStores() {
 }
 
 function getAuthPersistenceValue(key) {
+  if (key === 'user-authenticated') {
+    return getResolvedStoredAuthFlagValue();
+  }
   const stores = getAuthPersistenceStores();
   for (let i = stores.length - 1; i >= 0; i--) {
     try {
@@ -543,6 +546,19 @@ function getAuthPersistenceValue(key) {
       if (value !== null) return value;
     } catch (_) {}
   }
+  return null;
+}
+
+function getResolvedStoredAuthFlagValue() {
+  if (_authPersistence?.getResolvedStoredAuthFlagValue) {
+    return _authPersistence.getResolvedStoredAuthFlagValue();
+  }
+  let sessionValue = null;
+  let localValue = null;
+  try { sessionValue = sessionStorage.getItem('user-authenticated'); } catch (_) {}
+  try { localValue = localStorage.getItem('user-authenticated'); } catch (_) {}
+  if (localValue === 'false' || sessionValue === 'false') return 'false';
+  if (sessionValue === 'true' || localValue === 'true') return 'true';
   return null;
 }
 
@@ -573,17 +589,7 @@ function hasStoredAuthenticatedFlag() {
   if (_authPersistence?.hasStoredAuthenticatedFlag) {
     return _authPersistence.hasStoredAuthenticatedFlag();
   }
-  try {
-    return getAuthPersistenceStores().some((store) => {
-      try {
-        return store.getItem('user-authenticated') === 'true';
-      } catch (_) {
-        return false;
-      }
-    });
-  } catch (_) {
-    return false;
-  }
+  return getResolvedStoredAuthFlagValue() === 'true';
 }
 
 function hasFirebaseAuthPersistence() {

@@ -128,8 +128,10 @@
     
     if (!hasFirebaseManager) {
       try {
-        const authStateIsTrue = localStorage.getItem('user-authenticated') === 'true'
-          || sessionStorage.getItem('user-authenticated') === 'true';
+        const localValue = localStorage.getItem('user-authenticated');
+        const sessionValue = sessionStorage.getItem('user-authenticated');
+        const authStateIsTrue = !(localValue === 'false' || sessionValue === 'false')
+          && (localValue === 'true' || sessionValue === 'true');
         // Check Firebase SDK keys as fallback (more reliable than email)
         // SECURITY: Require BOTH flag AND Firebase keys to prevent stale flag from causing false positives
         // If only flag exists without keys, it's likely stale (user logged out)

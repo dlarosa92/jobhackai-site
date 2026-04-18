@@ -129,11 +129,14 @@ function getAuthState() {
       }
     });
   }
-  const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true'
-    || sessionStorage.getItem('user-authenticated') === 'true';
+  const localValue = localStorage.getItem('user-authenticated');
+  const sessionValue = sessionStorage.getItem('user-authenticated');
+  const resolvedStoredAuth = (localValue === 'false' || sessionValue === 'false')
+    ? 'false'
+    : ((sessionValue === 'true' || localValue === 'true') ? 'true' : null);
   const hasFirebaseKeys = hasFirebaseAuthKeys();
   return {
-    isAuthenticated: hasLocalStorageAuth || hasFirebaseKeys
+    isAuthenticated: resolvedStoredAuth === 'true' || (resolvedStoredAuth !== 'false' && hasFirebaseKeys)
   };
 }
 

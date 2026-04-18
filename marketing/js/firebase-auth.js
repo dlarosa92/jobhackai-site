@@ -378,15 +378,12 @@ class AuthManager {
   _clearStaleAuthStorage(reason = 'unauthenticated') {
     try {
       const cleared = [];
-      // getCrossTabStoredValue prefers localStorage over sessionStorage. Removing the shared key
-      // lets other tabs fall back to stale sessionStorage=true after an explicit logout in this tab.
-      // For explicit sign-out only, reinforce localStorage=false; otherwise remove the key so we do
-      // not mask sessionStorage=true in tabs that remain signed in (heuristic stale cleanup).
+      const isExplicitSignOut = reason === 'firebase-auth-signed-out' && this._explicitSignOutInProgress;
+      // Passive onAuthStateChanged(null) in a fresh tab should only clear current-tab session state.
+      // Preserving shared localStorage avoids logging out other tabs that still have a valid session.
       try {
-        if (reason === 'firebase-auth-signed-out' && this._explicitSignOutInProgress) {
+        if (isExplicitSignOut) {
           localStorage.setItem('user-authenticated', 'false');
-        } else {
-          localStorage.removeItem('user-authenticated');
         }
       } catch (_) {}
       try { sessionStorage.setItem('user-authenticated', 'false'); } catch (_) {}
@@ -396,8 +393,9 @@ class AuthManager {
       // Cookies are only cleared on explicit logout in signOutUser().
       cleared.push('user-authenticated');
 
+      const storagesToClear = isExplicitSignOut ? getStorageBackends() : [sessionStorage];
       ['user-email', 'auth-user', 'user-plan', 'dev-plan', 'user-name'].forEach((key) => {
-        for (const storage of getStorageBackends()) {
+        for (const storage of storagesToClear) {
           try {
             storage.removeItem(key);
             cleared.push(key);
@@ -405,14 +403,16 @@ class AuthManager {
         }
       });
 
-      for (const storage of getStorageBackends()) {
+      for (const storage of storagesToClear) {
         cleared.push(...clearFirebaseAuthShards(storage));
       }
       try {
         sessionStorage.removeItem(UserDatabase.DB_KEY);
         sessionStorage.removeItem(UserDatabase.BACKUP_KEY);
       } catch (_) {}
-      UserDatabase.clearLegacyLocalCopies();
+      if (isExplicitSignOut) {
+        UserDatabase.clearLegacyLocalCopies();
+      }
 
       if (cleared.length > 0) {
         console.log(`[AUTH] Cleared stale auth storage (${reason}):`, cleared);
