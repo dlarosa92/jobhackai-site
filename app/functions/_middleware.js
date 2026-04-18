@@ -1,12 +1,39 @@
-export async function onRequest({ next, env }) {
+import {
+  isProductionEnvironment,
+  notFoundInProductionResponse,
+  STANDARD_SECURITY_HEADERS
+} from './_lib/debug-access.js';
+
+const PRODUCTION_ONLY_DEBUG_PATHS = new Set([
+  '/api/ats-health',
+  '/api/test-openai',
+  '/auth-test',
+  '/auth-test.html',
+  '/dashboard-simple',
+  '/dashboard-simple.html',
+  '/debug-stripe',
+  '/env-test',
+  '/simple-test',
+  '/simple-test.html',
+  '/stripe-key-test',
+  '/stripe-test',
+  '/stripe-test.html'
+]);
+
+export async function onRequest({ request, next, env }) {
+  const pathname = request ? new URL(request.url).pathname.replace(/\/+$/, '') || '/' : null;
+
+  if (pathname && isProductionEnvironment(env) && PRODUCTION_ONLY_DEBUG_PATHS.has(pathname)) {
+    return notFoundInProductionResponse();
+  }
+
   const res = await next();
   const h = new Headers(res.headers);
 
-  // Security headers — applied on ALL environments
-  h.set('x-content-type-options', 'nosniff');
-  h.set('x-frame-options', 'DENY');
-  h.set('referrer-policy', 'strict-origin-when-cross-origin');
-  h.set('permissions-policy', 'camera=(), microphone=(), geolocation=()');
+  // Security headers — applied on ALL environments (shared with notFoundInProductionResponse)
+  for (const [name, value] of Object.entries(STANDARD_SECURITY_HEADERS)) {
+    h.set(name, value);
+  }
 
   // QA-only: prevent indexing and disable caching
   if (env.ENVIRONMENT === 'qa') {

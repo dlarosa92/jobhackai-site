@@ -2,6 +2,7 @@
 // Verifies OPENAI_API_KEY and model configurations are working properly
 
 import { callOpenAI } from '../_lib/openai-client.js';
+import { isProductionEnvironment, notFoundInProductionResponse } from '../_lib/debug-access.js';
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -35,6 +36,10 @@ function json(data, status = 200, origin, env) {
 export async function onRequest(context) {
   const { request, env } = context;
   const origin = request.headers.get('Origin') || '';
+
+  if (isProductionEnvironment(env)) {
+    return notFoundInProductionResponse();
+  }
 
   if (request.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders(origin, env) });
@@ -163,4 +168,3 @@ Return a short JSON object with this structure:
     }, errorCode, origin, env);
   }
 }
-
