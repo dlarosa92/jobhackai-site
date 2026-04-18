@@ -383,45 +383,6 @@ export default function Dashboard() {
     };
   }, []);
 
-  // Keep the official logo favicon across color schemes
-  useEffect(() => {
-    const FAVICON_LIGHT = '/assets/jobhackai_icon_Favicon_128.png'
-    const FAVICON_DARK = '/assets/jobhackai_icon_Favicon_128.png'
-
-    const updateFavicon = (isDarkMode: boolean) => {
-      const faviconPath = isDarkMode ? FAVICON_DARK : FAVICON_LIGHT
-      const existingFavicons = document.querySelectorAll('link[rel="icon"], link[rel="apple-touch-icon"]')
-      existingFavicons.forEach(link => link.remove())
-
-      const faviconLink = document.createElement('link')
-      faviconLink.rel = 'icon'
-      faviconLink.type = 'image/png'
-      faviconLink.href = faviconPath
-      document.head.appendChild(faviconLink)
-
-      const appleTouchLink = document.createElement('link')
-      appleTouchLink.rel = 'apple-touch-icon'
-      appleTouchLink.href = faviconPath
-      document.head.appendChild(appleTouchLink)
-    }
-
-    const detectColorScheme = () => {
-      return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
-    }
-
-    const isDarkMode = detectColorScheme()
-    updateFavicon(isDarkMode)
-
-    if (window.matchMedia) {
-      const darkModeQuery = window.matchMedia('(prefers-color-scheme: dark)')
-      if (darkModeQuery.addEventListener) {
-        darkModeQuery.addEventListener('change', (e) => updateFavicon(e.matches))
-      } else if (darkModeQuery.addListener) {
-        darkModeQuery.addListener((e) => updateFavicon(e.matches))
-      }
-    }
-  }, []);
-
   // Show welcome popup on first dashboard visit
   useEffect(() => {
     // Wait for user data to be loaded before showing welcome popup
@@ -459,7 +420,7 @@ export default function Dashboard() {
         <link rel="stylesheet" href="/header.css" />
         <link rel="stylesheet" href="/footer.css" />
         <link rel="icon" type="image/png" href="/assets/jobhackai_icon_Favicon_128.png" />
-        <link rel="apple-touch-icon" href="/assets/jobhackai_icon_Favicon_128.png" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/assets/jobhackai_apple_touch_icon_180.png" />
         <script src="/js/welcome-popup.js" type="module"></script>
       </Head>
 
