@@ -138,17 +138,18 @@
     (function () {
       const cta = document.getElementById('primary-cta');
       if (!cta) return;
-      function hasFirebaseAuthKeys() {
+      function hasFirebaseAuthKeysInStorage(storage) {
         try {
-          return Object.keys(localStorage).some(k =>
-            k.startsWith('firebase:authUser:') &&
-            localStorage.getItem(k) &&
-            localStorage.getItem(k) !== 'null' &&
-            localStorage.getItem(k).length > 10
-          );
+          return Object.keys(storage).some(k => {
+            const v = storage.getItem(k);
+            return k.startsWith('firebase:authUser:') && v && v !== 'null' && v.length > 10;
+          });
         } catch (e) {
           return false;
         }
+      }
+      function hasFirebaseAuthKeys() {
+        return hasFirebaseAuthKeysInStorage(localStorage) || hasFirebaseAuthKeysInStorage(sessionStorage);
       }
       const localAuthFlag = localStorage.getItem('user-authenticated');
       const sessionAuthFlag = sessionStorage.getItem('user-authenticated');
