@@ -349,6 +349,7 @@ class AuthManager {
     this._pendingAuthUser = null;
     this._pendingAuthState = null;
     this._explicitSignOutInProgress = false;
+    this._linkedInSessionRestoreInFlight = false;
     this._initializeAuthReady();
     this._redirectProcessing = this._isGoogleRedirectInProgress();
     this.setupAuthStateListener();
@@ -628,14 +629,21 @@ class AuthManager {
           // Try to restore SDK auth state using stored LinkedIn OIDC id_token if available
           const storedOidcToken = sessionStorage.getItem('linkedin_oidc_id_token');
           if (storedOidcToken) {
-            // Attempt SDK sign-in asynchronously
-            // onAuthStateChanged will fire again when SDK sign-in completes
-            const provider = new OAuthProvider('oidc.linkedin.com');
-            const credential = provider.credential({ idToken: storedOidcToken });
-            signInWithCredential(auth, credential).then((result) => {
+            if (this._linkedInSessionRestoreInFlight) {
+              console.log('⏳ LinkedIn SDK restore already in progress; waiting for next auth callback');
+              return;
+            }
+
+            this._linkedInSessionRestoreInFlight = true;
+            try {
+              // Wait for the SDK restore attempt to resolve before deciding this is a signed-out state.
+              // A successful restore will trigger a second onAuthStateChanged callback with the SDK user.
+              const provider = new OAuthProvider('oidc.linkedin.com');
+              const credential = provider.credential({ idToken: storedOidcToken });
+              await signInWithCredential(auth, credential);
               console.log('✅ Signed into Firebase SDK using stored LinkedIn OIDC token');
-              // onAuthStateChanged will fire again with the SDK user
-            }).catch((err) => {
+              return;
+            } catch (err) {
               console.warn('Could not restore SDK auth with stored OIDC token:', err);
               // SDK sign-in failed - fallback to plain object by checking tokens
               const idToken = getIdTokenSync();
@@ -645,18 +653,14 @@ class AuthManager {
                   const uid = payload.user_id || payload.sub;
                   const email = payload.email || '';
                   if (email && email.trim() !== '') {
-                    // Set currentUser directly since onAuthStateChanged won't fire again
-                    this.currentUser = { uid, email };
-                    if (window.FirebaseAuthManager) {
-                      window.FirebaseAuthManager.currentUser = this.currentUser;
-                    }
+                    effectiveUser = { uid, email };
                     console.log('✅ Restored LinkedIn session from sessionStorage tokens (fallback)');
                   }
                 }
               }
-            });
-            // Don't set effectiveUser here - wait for SDK sign-in result
-            // If SDK sign-in fails, the catch handler will set currentUser directly
+            } finally {
+              this._linkedInSessionRestoreInFlight = false;
+            }
           } else {
             // No OIDC token stored - fall back to plain object (legacy behavior)
             const idToken = getIdTokenSync();
