@@ -131,32 +131,7 @@
   <!-- Verification Flow Script -->
   <script src="js/verify-email.js" type="module"></script>
   <script src="js/logo-link-env.js" defer></script>
-  <script>
-    (function scheduleFeedbackWidget() {
-      function loadFeedbackWidget() {
-        if (document.querySelector('script[data-jh-feedback-widget]')) return;
-        const script = document.createElement('script');
-        script.src = 'js/feedback-widget.js?v=20260303-1';
-        script.defer = true;
-        script.dataset.jhFeedbackWidget = 'true';
-        document.body.appendChild(script);
-      }
-
-      function queueLoad() {
-        if ('requestIdleCallback' in window) {
-          requestIdleCallback(loadFeedbackWidget, { timeout: 3000 });
-        } else {
-          setTimeout(loadFeedbackWidget, 1200);
-        }
-      }
-
-      if (document.readyState === 'complete') {
-        queueLoad();
-      } else {
-        window.addEventListener('load', queueLoad, { once: true });
-      }
-    })();
-  </script>
+  <script src="js/schedule-feedback-widget.js" defer></script>
 </body>
 </html>
 

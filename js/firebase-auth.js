@@ -72,7 +72,8 @@ function setAuthCookies(plan, isVerified = true) {
     const secure = '; Secure';
     const authValue = isVerified ? '1' : '0';
     document.cookie = `jhai_auth=${authValue}; domain=${domain}; path=/; max-age=${maxAge}; SameSite=Lax${secure}`;
-    document.cookie = `jhai_plan=; domain=${domain}; path=/; max-age=0; SameSite=Lax${secure}`;
+    const planCookie = encodeURIComponent(String(plan || 'free'));
+    document.cookie = `jhai_plan=${planCookie}; domain=${domain}; path=/; max-age=${maxAge}; SameSite=Lax${secure}`;
     // Clear legacy PII cookie if it exists from older builds.
     document.cookie = `jhai_name=; domain=${domain}; path=/; max-age=0`;
   } catch (e) { /* best-effort */ }

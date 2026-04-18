@@ -1142,7 +1142,11 @@ function setAuthState(isAuthenticated, plan = null) {
   navLog('info', 'setAuthState() called', { isAuthenticated, plan });
 
   try {
-    localStorage.setItem('user-authenticated', isAuthenticated ? 'true' : 'false');
+    const authFlag = isAuthenticated ? 'true' : 'false';
+    localStorage.setItem('user-authenticated', authFlag);
+    try {
+      sessionStorage.setItem('user-authenticated', authFlag);
+    } catch (_) {}
     // NOTE: Do NOT call clearUrlAuthHandoff() here. On the marketing site, Firebase has
     // no local session and fires onAuthStateChanged(null) which calls setAuthState(false).
     // Clearing the URL handoff here would undo the auth hint set by app.jobhackai.io.
