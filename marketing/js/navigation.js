@@ -511,7 +511,11 @@ window.stateManager = window.stateManager || (function() {
 })();
 
 // ----------------------- NAV HELPERS -----------------------
+const _authPersistence = window.JobHackAIAuthPersistence;
 function getAuthPersistenceStores() {
+  if (_authPersistence?.getAuthPersistenceStores) {
+    return _authPersistence.getAuthPersistenceStores();
+  }
   const stores = [];
   try {
     if (typeof sessionStorage !== 'undefined') stores.push(sessionStorage);
@@ -523,6 +527,9 @@ function getAuthPersistenceStores() {
 }
 
 function hasStoredAuthenticatedFlag() {
+  if (_authPersistence?.hasStoredAuthenticatedFlag) {
+    return _authPersistence.hasStoredAuthenticatedFlag();
+  }
   try {
     return getAuthPersistenceStores().some((store) => {
       try {
@@ -537,6 +544,9 @@ function hasStoredAuthenticatedFlag() {
 }
 
 function hasFirebaseAuthPersistence() {
+  if (_authPersistence?.hasFirebaseAuthPersistence) {
+    return _authPersistence.hasFirebaseAuthPersistence();
+  }
   try {
     return getAuthPersistenceStores().some((store) => {
       try {
@@ -1150,6 +1160,10 @@ function setAuthState(isAuthenticated, plan = null) {
       if (String(oldPlan) !== String(plan)) {
         localStorage.setItem('user-plan', plan);
         localStorage.setItem('dev-plan', plan);
+        try {
+          sessionStorage.setItem('user-plan', plan);
+          sessionStorage.setItem('dev-plan', plan);
+        } catch (_) {}
 
         // Dispatch planChanged event to notify other components (dashboard, account-settings, etc.)
         // This ensures immediate UI updates when plan changes, rather than waiting for polling
@@ -1168,6 +1182,8 @@ function setAuthState(isAuthenticated, plan = null) {
         try {
           localStorage.setItem('user-plan', plan);
           localStorage.setItem('dev-plan', plan);
+          sessionStorage.setItem('user-plan', plan);
+          sessionStorage.setItem('dev-plan', plan);
         } catch (_) {}
         navLog('debug', 'setAuthState: plan unchanged, skipping planChanged dispatch', { oldPlan, newPlan: plan });
       }

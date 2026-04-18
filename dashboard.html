@@ -798,6 +798,7 @@
   
   <!-- UX Enhancement Components -->
   <script src="js/state-persistence.js?v=20250115-1"></script>
+  <script src="js/auth-persistence.js"></script>
   <script>
     // --- CROSS-TAB LOGOUT SYNC ONLY ---
     (function(){
@@ -852,26 +853,13 @@
       return authManager.getCurrentUser?.() || null;
     }
 
-    function getDashboardStorageBackends() {
-      return [window.sessionStorage, window.localStorage].filter(Boolean);
-    }
-
+    const _dashboardAuthPersistence = window.JobHackAIAuthPersistence;
     function getDashboardStoredValue(key) {
-      for (const storage of getDashboardStorageBackends()) {
-        try {
-          const value = storage.getItem(key);
-          if (value !== null) return value;
-        } catch (_) {}
-      }
-      return null;
+      return _dashboardAuthPersistence.getCrossTabStoredValue(key);
     }
 
     function setDashboardStoredValue(key, value) {
-      for (const storage of getDashboardStorageBackends()) {
-        try {
-          storage.setItem(key, value);
-        } catch (_) {}
-      }
+      _dashboardAuthPersistence.setCrossTabStoredValue(key, value);
     }
 
     // --- ENHANCED AUTHENTICATION CHECK ---
@@ -3485,5 +3473,6 @@
     })();
   </script>
   <script src="js/schedule-feedback-widget.js" defer></script>
+  <script src="js/schedule-analytics.js" defer></script>
 </body>
 </html> 

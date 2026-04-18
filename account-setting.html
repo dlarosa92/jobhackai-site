@@ -18,9 +18,11 @@
       display: none !important;
     }
   </style>
+  <script src="js/auth-persistence.js"></script>
   <script>
+    const _accountSettingsAuthPersistence = window.JobHackAIAuthPersistence;
     function getAccountSettingsAuthStores() {
-      return [window.sessionStorage, window.localStorage].filter(Boolean);
+      return _accountSettingsAuthPersistence.getAuthPersistenceStores();
     }
 
     function getAccountSettingsStoreKeys(store) {
@@ -37,17 +39,7 @@
     }
 
     function getAccountSettingsStoredValue(key) {
-      for (const store of getAccountSettingsAuthStores()) {
-        try {
-          const value = store.getItem(key);
-          if (value !== null) {
-            return value;
-          }
-        } catch (error) {
-          console.warn(`Failed to read auth storage value for ${key}:`, error);
-        }
-      }
-      return null;
+      return _accountSettingsAuthPersistence.getCrossTabStoredValue(key);
     }
 
     function setAccountSettingsSessionValue(key, value) {
@@ -81,18 +73,7 @@
     }
 
     function hasAccountSettingsFirebaseAuthShard() {
-      return getAccountSettingsAuthStores().some(store => {
-        try {
-          return getAccountSettingsStoreKeys(store).some(key => {
-            if (!key.startsWith('firebase:authUser:')) return false;
-            const value = store.getItem(key);
-            return Boolean(value && value !== 'null' && value.length > 10);
-          });
-        } catch (error) {
-          console.warn('Failed to inspect Firebase auth shards:', error);
-          return false;
-        }
-      });
+      return _accountSettingsAuthPersistence.hasFirebaseAuthPersistence();
     }
 
     // CRITICAL: Remove account-protected class IMMEDIATELY if we have cached auth
