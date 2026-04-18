@@ -22,7 +22,7 @@ export default function Home() {
         <meta name="description" content="Redirecting to the JobHackAI app" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="robots" content="noindex, nofollow" />
-        <link rel="icon" type="image/png" href="/assets/jobhackai_icon_Favicon_128.png" />
+        <link rel="icon" type="image/png" sizes="128x128" href="/assets/jobhackai_icon_Favicon_128.png" />
         <link rel="apple-touch-icon" sizes="180x180" href="/assets/jobhackai_apple_touch_icon_180.png" />
       </Head>
       <main

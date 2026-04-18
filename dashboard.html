@@ -1209,7 +1209,7 @@
       // Set flag if user upgraded from free to trial/paid plan
       // Only set flag if previous-plan actually exists (not defaulting to 'free')
       // This prevents direct paid signups from being incorrectly marked as former free users
-      const previousPlan = localStorage.getItem('previous-plan');
+      const previousPlan = getDashboardStoredValue('previous-plan');
       
       // Fix Issue 1: Capture previousPlan before it's updated, store in sessionStorage for renderDashboard
       // This ensures trial→paid carry-over message can be displayed correctly
@@ -1218,12 +1218,12 @@
       }
       
       if (previousPlan === 'free' && (currentPlan === 'trial' || currentPlan === 'essential' || currentPlan === 'pro' || currentPlan === 'premium')) {
-        localStorage.setItem('was-free-user', 'true');
+        setDashboardStoredValue('was-free-user', 'true');
         // CRITICAL: Store flag indicating user had free ATS score at upgrade time
         // This ensures modal only shows if they had a score BEFORE upgrading
         const hadFreeATSScore = localStorage.getItem('lastATSScore') || sessionStorage.getItem('currentAtsScore');
         if (hadFreeATSScore) {
-          localStorage.setItem('had-free-ats-score-at-upgrade', 'true');
+          setDashboardStoredValue('had-free-ats-score-at-upgrade', 'true');
           console.log('✅ Marked user as former free user with ATS score (upgraded to', currentPlan + ')');
         } else {
           console.log('✅ Marked user as former free user without ATS score (upgraded to', currentPlan + ')');
@@ -1231,7 +1231,7 @@
       }
       // Update previous plan for next check (only if it changed)
       if (previousPlan !== currentPlan) {
-        localStorage.setItem('previous-plan', currentPlan);
+        setDashboardStoredValue('previous-plan', currentPlan);
       }
 
       // If coming from Stripe with ?paid=1 but KV says 'free', force sync
@@ -2124,8 +2124,8 @@
       // Phase 2.3: Show carry-over messages for upgrades
       // Fix Issue 1: Use sessionStorage value captured before localStorage update
       const previousPlanBeforeUpdate = sessionStorage.getItem('previous-plan-before-update');
-      const wasFreeUser = localStorage.getItem('was-free-user') === 'true';
-      const hadFreeATSScoreAtUpgrade = localStorage.getItem('had-free-ats-score-at-upgrade') === 'true';
+      const wasFreeUser = getDashboardStoredValue('was-free-user') === 'true';
+      const hadFreeATSScoreAtUpgrade = getDashboardStoredValue('had-free-ats-score-at-upgrade') === 'true';
       
       // Show carry-over message after free → trial/paid upgrade
       if (wasFreeUser && hadFreeATSScoreAtUpgrade && atsScore.percent !== null && 
