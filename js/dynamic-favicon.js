@@ -5,7 +5,7 @@
 (function() {
   'use strict';
 
-  const FALLBACK_FAVICON = 'assets/JobHackAI_Logo_favicon-32x32.png';
+  const FALLBACK_FAVICON = 'assets/jobhackai_icon_Favicon_128.png';
 
   function updateFavicon() {
     const existingIcon = document.querySelector('link[rel="icon"]');

@@ -385,8 +385,8 @@ export default function Dashboard() {
 
   // Keep the official logo favicon across color schemes
   useEffect(() => {
-    const FAVICON_LIGHT = '/assets/JobHackAI_Logo_favicon-32x32.png'
-    const FAVICON_DARK = '/assets/JobHackAI_Logo_favicon-32x32.png'
+    const FAVICON_LIGHT = '/assets/jobhackai_icon_Favicon_128.png'
+    const FAVICON_DARK = '/assets/jobhackai_icon_Favicon_128.png'
 
     const updateFavicon = (isDarkMode: boolean) => {
       const faviconPath = isDarkMode ? FAVICON_DARK : FAVICON_LIGHT
@@ -458,8 +458,8 @@ export default function Dashboard() {
         <link rel="stylesheet" href="/main.css" />
         <link rel="stylesheet" href="/header.css" />
         <link rel="stylesheet" href="/footer.css" />
-        <link rel="icon" type="image/png" href="/assets/JobHackAI_Logo_favicon-32x32.png" />
-        <link rel="apple-touch-icon" href="/assets/JobHackAI_Logo_favicon-32x32.png" />
+        <link rel="icon" type="image/png" href="/assets/jobhackai_icon_Favicon_128.png" />
+        <link rel="apple-touch-icon" href="/assets/jobhackai_icon_Favicon_128.png" />
         <script src="/js/welcome-popup.js" type="module"></script>
       </Head>
 
