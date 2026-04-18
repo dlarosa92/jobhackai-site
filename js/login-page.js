@@ -8,6 +8,26 @@ console.log('🔧 login-page.js VERSION: fix-auth-cache-loop-v1 - ' + new Date()
 
 import authManager, { waitForAuthReady, AUTH_PENDING } from './firebase-auth.js';
 
+function getStoredFirebaseAuthRecord() {
+  const storages = [sessionStorage, localStorage];
+  for (const storage of storages) {
+    try {
+      const firebaseKeys = Object.keys(storage).filter(k => k.startsWith('firebase:authUser:'));
+      for (const key of firebaseKeys) {
+        const raw = storage.getItem(key);
+        if (!raw || raw === 'null') continue;
+        const parsed = JSON.parse(raw);
+        if (parsed?.email) {
+          return parsed;
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to inspect Firebase auth storage:', error);
+    }
+  }
+  return null;
+}
+
 // Helper function to check if plan requires payment (only for NEW signups, not existing subscribers)
 function planRequiresPayment(plan) {
   // Only redirect to checkout if the user just selected a plan from pricing page
@@ -196,21 +216,9 @@ document.addEventListener('DOMContentLoaded', async function() {
     showSelectedPlanBanner(selectedPlan);
     
     // Auto-switch to signup form for new users with plan
-    // SECURITY: Check Firebase SDK keys (works before firebase-auth.js loads)
-    // FirebaseAuthManager.getCurrentUser() is null until onAuthStateChanged fires
-    function hasEmailFromFirebaseKeys() {
-      try {
-        const firebaseKeys = Object.keys(localStorage).filter(k => k.startsWith('firebase:authUser:'));
-        if (firebaseKeys.length > 0) {
-          const keyData = JSON.parse(localStorage.getItem(firebaseKeys[0]) || '{}');
-          return !!keyData.email;
-        }
-      } catch (e) {
-        console.warn('Failed to get email from Firebase keys:', e);
-      }
-      return false;
-    }
-    const hasEmail = hasEmailFromFirebaseKeys();
+    // SECURITY: Check Firebase SDK keys from sessionStorage first, then legacy localStorage.
+    // FirebaseAuthManager.getCurrentUser() is null until onAuthStateChanged fires.
+    const hasEmail = !!getStoredFirebaseAuthRecord()?.email;
     if (!hasEmail) {
       showSignupForm(selectedPlan, true); // Pass flag to skip banner (already shown)
     } else {

@@ -5,9 +5,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>JobHackAI</title>
-  <link rel="icon" type="image/png" href="assets/jobhackai_icon_only_128.png">
-  <link rel="apple-touch-icon" href="assets/jobhackai_icon_only_128.png">
-  <script src="js/dynamic-favicon.js?v=20250111-1"></script>
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/JobHackAI_Logo_favicon-32x32.png">
+  <link rel="apple-touch-icon" href="assets/JobHackAI_Logo_favicon-32x32.png">
+  <script src="js/dynamic-favicon.js?v=20250111-1" defer></script>
 
   <!-- Design tokens & global styles -->
   <link rel="stylesheet" href="css/tokens.css">
@@ -48,7 +48,7 @@
   </nav>
   <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
   <!-- Centralized mobile menu handler -->
-  <script src="js/mobile-menu.js?v=20250115-1"></script>
+  <script src="js/mobile-menu.js?v=20250115-1" defer></script>
   <!-- page content -->
   <main>
     <section class="pricing-section">
@@ -398,13 +398,12 @@
   <script src="js/firebase-config.js" type="module"></script>
   <script src="js/firebase-auth.js?v=20260207-2" type="module"></script>
   <!-- Load navigation system -->
-  <script src="js/navigation.js?v=20260208-1"></script>
-  <script src="js/universal-logout.js?v=20260208-1"></script>
+  <script src="js/navigation.js?v=20260208-1" defer></script>
+  <script src="js/universal-logout.js?v=20260208-1" defer></script>
   <!-- Load Stripe integration -->
-  <script src="js/stripe-integration.js"></script>
+  <script src="js/stripe-integration.js" defer></script>
   <!-- scripts -->
   <script src="js/main.js" type="module"></script>
-  <script src="js/analytics.js" type="module"></script>
   <script>
     let trialEligibilityState = { checked: false, eligible: true, plan: null, trialEndsAt: null, trialEligible: null, ineligibleReason: null };
 
@@ -482,6 +481,77 @@
       }
     }
 
+    function getStoredValue(key) {
+      try {
+        const sessionValue = sessionStorage.getItem(key);
+        if (sessionValue !== null) return sessionValue;
+      } catch (_) {}
+      try {
+        return localStorage.getItem(key);
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function getFirebaseAuthEntries() {
+      const entries = [];
+      [sessionStorage, localStorage].forEach((storage) => {
+        try {
+          Object.keys(storage)
+            .filter((key) => key.startsWith('firebase:authUser:'))
+            .forEach((key) => {
+              const value = storage.getItem(key);
+              if (value && value !== 'null' && value.length > 10) {
+                entries.push(value);
+              }
+            });
+        } catch (_) {}
+      });
+      return entries;
+    }
+
+    function getSessionFirstUserDB() {
+      try {
+        const sessionDb = sessionStorage.getItem('user-db');
+        if (sessionDb) return JSON.parse(sessionDb);
+      } catch (error) {
+        console.error('Error loading session user database:', error);
+      }
+      try {
+        const legacyDb = localStorage.getItem('user-db');
+        if (!legacyDb) return {};
+        const parsed = JSON.parse(legacyDb);
+        try {
+          sessionStorage.setItem('user-db', legacyDb);
+          sessionStorage.setItem('user-db-backup', localStorage.getItem('user-db-backup') || legacyDb);
+        } catch (_) {}
+        try {
+          localStorage.removeItem('user-db');
+          localStorage.removeItem('user-db-backup');
+        } catch (_) {}
+        return parsed;
+      } catch (error) {
+        console.error('Error loading local user database:', error);
+        return {};
+      }
+    }
+
+    function setSessionFirstUserDB(db) {
+      const serialized = JSON.stringify(db);
+      try {
+        sessionStorage.setItem('user-db', serialized);
+        sessionStorage.setItem('user-db-backup', serialized);
+      } catch (error) {
+        console.error('Error saving session user database:', error);
+      }
+      try {
+        localStorage.removeItem('user-db');
+        localStorage.removeItem('user-db-backup');
+      } catch (error) {
+        console.error('Error clearing legacy local user database:', error);
+      }
+    }
+
     async function fetchTrialEligibility() {
       try {
         const user = await window.FirebaseAuthManager?.waitForAuthReady?.() || window.FirebaseAuthManager?.currentUser;
@@ -492,7 +562,7 @@
         });
         if (!res.ok) return null;
         const data = await res.json();
-        const plan = data?.plan || localStorage.getItem('user-plan') || 'free';
+        const plan = data?.plan || sessionStorage.getItem('user-plan') || localStorage.getItem('user-plan') || 'free';
         const trialEndsAt = data?.trialEndsAt || null;
         const trialEligible = data?.trialEligible;
         let eligible = plan === 'free' && !trialEndsAt;
@@ -542,21 +612,16 @@
         // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
         function hasFirebaseAuthKeys() {
           try {
-            return Object.keys(localStorage).some(k => 
-              k.startsWith('firebase:authUser:') && 
-              localStorage.getItem(k) && 
-              localStorage.getItem(k) !== 'null' &&
-              localStorage.getItem(k).length > 10
-            );
+            return getFirebaseAuthEntries().length > 0;
           } catch (e) {
             return false;
           }
         }
         function getEmailFromFirebaseKeys() {
           try {
-            const firebaseKeys = Object.keys(localStorage).filter(k => k.startsWith('firebase:authUser:'));
-            if (firebaseKeys.length > 0) {
-              const keyData = JSON.parse(localStorage.getItem(firebaseKeys[0]) || '{}');
+            const firebaseEntries = getFirebaseAuthEntries();
+            if (firebaseEntries.length > 0) {
+              const keyData = JSON.parse(firebaseEntries[0] || '{}');
               return keyData.email || null;
             }
           } catch (e) {
@@ -564,7 +629,7 @@
           }
           return null;
         }
-        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+        const hasLocalStorageAuth = getStoredValue('user-authenticated') === 'true';
         const hasFirebaseKeys = hasFirebaseAuthKeys();
         const user = window.FirebaseAuthManager?.getCurrentUser?.();
         // Use FirebaseAuthManager email if available, otherwise fallback to Firebase SDK keys
@@ -572,7 +637,7 @@
         return {
           isAuthenticated: hasLocalStorageAuth || hasFirebaseKeys,
           userEmail: userEmail,
-          currentPlan: localStorage.getItem('user-plan') || 'free'
+          currentPlan: getStoredValue('user-plan') || 'free'
         };
       };
       
@@ -726,7 +791,7 @@
                     ...trialEligibilityState,
                     checked: true,
                     eligible: false,
-                    plan: trialEligibilityState.plan || localStorage.getItem('user-plan') || 'free',
+                    plan: trialEligibilityState.plan || getStoredValue('user-plan') || 'free',
                     ineligibleReason: inferredReason || trialEligibilityState.ineligibleReason
                   };
                 } else {
@@ -792,7 +857,7 @@
     });
     
     function userHasCard(userEmail) {
-      const db = JSON.parse(localStorage.getItem('user-db') || '{}');
+      const db = getSessionFirstUserDB();
       if (!db[userEmail]) return false;
       return Array.isArray(db[userEmail].cards) && db[userEmail].cards.length > 0;
     }
@@ -991,9 +1056,9 @@
       // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
       function getEmailFromFirebaseKeys() {
         try {
-          const firebaseKeys = Object.keys(localStorage).filter(k => k.startsWith('firebase:authUser:'));
-          if (firebaseKeys.length > 0) {
-            const keyData = JSON.parse(localStorage.getItem(firebaseKeys[0]) || '{}');
+          const firebaseEntries = getFirebaseAuthEntries();
+          if (firebaseEntries.length > 0) {
+            const keyData = JSON.parse(firebaseEntries[0] || '{}');
             return keyData.email || null;
           }
         } catch (e) {
@@ -1007,21 +1072,11 @@
         // INTEGRATION: STRIPE - Handle subscription upgrade here
         // For demo, just update the user's plan
         const getUserDB = () => {
-          try {
-            return JSON.parse(localStorage.getItem('user-db') || '{}');
-          } catch (error) {
-            console.error('Error loading user database:', error);
-            return {};
-          }
+          return getSessionFirstUserDB();
         };
         
         const setUserDB = (db) => {
-          try {
-            localStorage.setItem('user-db', JSON.stringify(db));
-            localStorage.setItem('user-db-backup', JSON.stringify(db));
-          } catch (error) {
-            console.error('Error saving user database:', error);
-          }
+          setSessionFirstUserDB(db);
         };
         
         const db = getUserDB();
@@ -1072,7 +1127,7 @@
             button.style.cursor = 'not-allowed';
           } else {
             // For non-free plans, show Dashboard button
-            const isAuthenticated = localStorage.getItem('user-authenticated') === 'true';
+            const isAuthenticated = getStoredValue('user-authenticated') === 'true';
             if (isAuthenticated) {
               button.textContent = 'Dashboard';
               button.onclick = () => window.location.href = 'dashboard.html';
@@ -1199,6 +1254,31 @@
     // Removed add-card modal; Stripe Portal handles payment methods
   </script>
   
-  <script src="js/feedback-widget.js?v=20260303-1" defer></script>
+  <script>
+    (function scheduleFeedbackWidget() {
+      function loadFeedbackWidget() {
+        if (document.querySelector('script[data-jh-feedback-widget]')) return;
+        const script = document.createElement('script');
+        script.src = 'js/feedback-widget.js?v=20260303-1';
+        script.defer = true;
+        script.dataset.jhFeedbackWidget = 'true';
+        document.body.appendChild(script);
+      }
+
+      function queueLoad() {
+        if ('requestIdleCallback' in window) {
+          requestIdleCallback(loadFeedbackWidget, { timeout: 3000 });
+        } else {
+          setTimeout(loadFeedbackWidget, 1200);
+        }
+      }
+
+      if (document.readyState === 'complete') {
+        queueLoad();
+      } else {
+        window.addEventListener('load', queueLoad, { once: true });
+      }
+    })();
+  </script>
 </body>
 </html>

@@ -64,6 +64,34 @@
   let resetTimerDebounce = null; // Debounce timer for operation resets
   let lastResetAt = 0; // Timestamp of the last timers reset (used to debounce resetTimers)
 
+  function hasFirebaseAuthKeys() {
+    return [sessionStorage, localStorage].some((storage) => {
+      try {
+        return Object.keys(storage).some((key) =>
+          key.startsWith('firebase:authUser:') &&
+          storage.getItem(key) &&
+          storage.getItem(key) !== 'null' &&
+          storage.getItem(key).length > 10
+        );
+      } catch (_) {
+        return false;
+      }
+    });
+  }
+
+  function clearFirebaseAuthKeys() {
+    for (const storage of [sessionStorage, localStorage]) {
+      try {
+        for (let i = storage.length - 1; i >= 0; i--) {
+          const key = storage.key(i);
+          if (key && key.startsWith('firebase:authUser:')) {
+            storage.removeItem(key);
+          }
+        }
+      } catch (_) {}
+    }
+  }
+
   /**
    * Check if user is authenticated - Firebase-first (matches navigation.js pattern)
    */
@@ -100,16 +128,11 @@
     
     if (!hasFirebaseManager) {
       try {
-        const authState = localStorage.getItem('user-authenticated');
+        const authState = localStorage.getItem('user-authenticated') || sessionStorage.getItem('user-authenticated');
         // Check Firebase SDK keys as fallback (more reliable than email)
         // SECURITY: Require BOTH flag AND Firebase keys to prevent stale flag from causing false positives
         // If only flag exists without keys, it's likely stale (user logged out)
-        const hasFirebaseKeys = Object.keys(localStorage).some(k => 
-          k.startsWith('firebase:authUser:') && 
-          localStorage.getItem(k) && 
-          localStorage.getItem(k) !== 'null' &&
-          localStorage.getItem(k).length > 10
-        );
+        const hasFirebaseKeys = hasFirebaseAuthKeys();
         // Require both conditions: flag must be true AND Firebase keys must exist
         // This prevents stale flags from incorrectly identifying logged-out users as authenticated
         return authState === 'true' && hasFirebaseKeys;
@@ -572,13 +595,8 @@
         localStorage.removeItem('user-email');
         localStorage.removeItem('user-plan');
         localStorage.removeItem('auth-user');
-        // Clear Firebase auth keys
-        for (let i = localStorage.length - 1; i >= 0; i--) {
-          const key = localStorage.key(i);
-          if (key && key.startsWith('firebase:authUser:')) {
-            localStorage.removeItem(key);
-          }
-        }
+        sessionStorage.removeItem('user-authenticated');
+        clearFirebaseAuthKeys();
       } catch (e) {
         console.warn('[INACTIVITY] Failed to clear storage:', e);
       }
@@ -919,4 +937,3 @@
 
   console.log('[INACTIVITY] Inactivity tracker module loaded');
 })();
-

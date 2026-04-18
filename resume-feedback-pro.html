@@ -1420,13 +1420,69 @@
       // Create demo user if needed for development
       // SECURITY: Do NOT write email to localStorage - get it from Firebase SDK keys instead
       const createDemoUserIfNeeded = () => {
+        function getResumeFeedbackStorages() {
+          return [window.sessionStorage, window.localStorage].filter(Boolean);
+        }
+
+        function getResumeFeedbackStoredValue(key) {
+          for (const storage of getResumeFeedbackStorages()) {
+            try {
+              const value = storage.getItem(key);
+              if (value !== null) return value;
+            } catch (_) {}
+          }
+          return null;
+        }
+
+        function getResumeFeedbackUserDb() {
+          try {
+            const sessionDb = sessionStorage.getItem('user-db');
+            if (sessionDb) return JSON.parse(sessionDb);
+          } catch (e) {
+            console.warn('Failed to read session user database:', e);
+          }
+          try {
+            const legacyDb = localStorage.getItem('user-db');
+            if (!legacyDb) return {};
+            const parsed = JSON.parse(legacyDb);
+            try {
+              sessionStorage.setItem('user-db', legacyDb);
+              sessionStorage.setItem('user-db-backup', localStorage.getItem('user-db-backup') || legacyDb);
+            } catch (_) {}
+            try {
+              localStorage.removeItem('user-db');
+              localStorage.removeItem('user-db-backup');
+            } catch (_) {}
+            return parsed;
+          } catch (e) {
+            console.warn('Failed to read legacy user database:', e);
+            return {};
+          }
+        }
+
+        function setResumeFeedbackUserDb(db) {
+          const serialized = JSON.stringify(db);
+          try {
+            sessionStorage.setItem('user-db', serialized);
+            sessionStorage.setItem('user-db-backup', serialized);
+          } catch (e) {
+            console.warn('Failed to store session user database:', e);
+          }
+          try {
+            localStorage.removeItem('user-db');
+            localStorage.removeItem('user-db-backup');
+          } catch (_) {}
+        }
+
         // Try to get email from Firebase SDK keys (works before firebase-auth.js loads)
         function getEmailFromFirebaseKeys() {
           try {
-            const firebaseKeys = Object.keys(localStorage).filter(k => k.startsWith('firebase:authUser:'));
-            if (firebaseKeys.length > 0) {
-              const keyData = JSON.parse(localStorage.getItem(firebaseKeys[0]) || '{}');
-              return keyData.email || null;
+            for (const storage of getResumeFeedbackStorages()) {
+              const firebaseKeys = Object.keys(storage).filter(k => k.startsWith('firebase:authUser:'));
+              if (firebaseKeys.length > 0) {
+                const keyData = JSON.parse(storage.getItem(firebaseKeys[0]) || '{}');
+                return keyData.email || null;
+              }
             }
           } catch (e) {
             console.warn('Failed to get email from Firebase keys:', e);
@@ -1442,17 +1498,17 @@
         if (!userEmail) {
           userEmail = getEmailFromFirebaseKeys();
         }
-        
+
         // SECURITY: If no email found, skip demo user creation - do NOT write email to localStorage
         // This prevents reintroducing the security vulnerability
-        if (!userEmail && localStorage.getItem('user-authenticated') === 'true') {
+        if (!userEmail && getResumeFeedbackStoredValue('user-authenticated') === 'true') {
           console.warn('[RESUME-FEEDBACK] User authenticated but no email found. Skipping demo user creation to maintain security.');
           return;
         }
-        
+
         // Only create demo user if we have a valid email from Firebase
         if (userEmail) {
-          const db = JSON.parse(localStorage.getItem('user-db') || '{}');
+          const db = getResumeFeedbackUserDb();
           if (!db[userEmail]) {
             db[userEmail] = {
               plan: 'free',
@@ -1461,7 +1517,7 @@
               cards: [],
               created: new Date().toISOString()
             };
-            localStorage.setItem('user-db', JSON.stringify(db));
+            setResumeFeedbackUserDb(db);
           }
         }
       };

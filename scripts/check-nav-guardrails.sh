@@ -38,6 +38,21 @@ require_match() {
   fi
 }
 
+forbid_match() {
+  local file="$1"
+  local pattern="$2"
+  local message="$3"
+
+  if [[ ! -f "$file" ]]; then
+    error "$message (missing file: $file)"
+    return
+  fi
+
+  if search_pattern "$pattern" "$file"; then
+    error "$message ($file)"
+  fi
+}
+
 echo "Running navigation/auth guardrails..."
 
 # Guardrail: root dashboard page must remain strongly protected.
@@ -66,6 +81,15 @@ require_match "marketing/js/navigation.js" \
 require_match "marketing/js/logo-link-env.js" \
   "return[[:space:]]+isDevOrQaHost[[:space:]]*\\?[[:space:]]*'/'[[:space:]]*:[[:space:]]*'https://jobhackai\\.io/'" \
   "marketing/js/logo-link-env.js must keep dev/QA logo links self-contained"
+
+# Guardrail: authenticated app navigation must not leak auth state via outbound
+# marketing URL query parameters.
+forbid_match "js/navigation.js" \
+  "url\\.searchParams\\.set\\(AUTH_HANDOFF_QUERY_(AUTH|PLAN|TS)" \
+  "js/navigation.js must not append auth-handoff query params to marketing links"
+forbid_match "marketing/js/navigation.js" \
+  "url\\.searchParams\\.set\\(AUTH_HANDOFF_QUERY_(AUTH|PLAN|TS)" \
+  "marketing/js/navigation.js must not append auth-handoff query params to marketing links"
 
 # Guardrail: prevent re-introducing the legacy dashboard copy.
 if [[ -f "app/public/dashboard.html" ]]; then

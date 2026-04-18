@@ -5,9 +5,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>JobHackAI</title>
-  <link rel="icon" type="image/png" href="assets/jobhackai_icon_only_128.png">
-  <link rel="apple-touch-icon" href="assets/jobhackai_icon_only_128.png">
-  <script src="js/dynamic-favicon.js?v=20250111-1"></script>
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/JobHackAI_Logo_favicon-32x32.png">
+  <link rel="apple-touch-icon" href="assets/JobHackAI_Logo_favicon-32x32.png">
+  <script src="js/dynamic-favicon.js?v=20250111-1" defer></script>
 
   <!-- Design tokens & global styles -->
   <link rel="stylesheet" href="css/tokens.css">
@@ -125,17 +125,40 @@
   </footer>
 
   <!-- Core scripts only (no navigation.js) -->
-  <script src="js/redirect-tracer.js?v=1"></script>
-  <script src="js/universal-logout.js?v=20260208-1"></script>
+  <script src="js/redirect-tracer.js?v=1" defer></script>
+  <script src="js/universal-logout.js?v=20260208-1" defer></script>
   <script src="js/main.js?v=20251006-1" type="module"></script>
-  <script src="js/analytics.js?v=20251006-1" type="module"></script>
   <!-- Verification Flow Script -->
   <script src="js/verify-email.js" type="module"></script>
-  <script src="js/logo-link-env.js"></script>
-  <script src="js/feedback-widget.js?v=20260303-1" defer></script>
+  <script src="js/logo-link-env.js" defer></script>
+  <script>
+    (function scheduleFeedbackWidget() {
+      function loadFeedbackWidget() {
+        if (document.querySelector('script[data-jh-feedback-widget]')) return;
+        const script = document.createElement('script');
+        script.src = 'js/feedback-widget.js?v=20260303-1';
+        script.defer = true;
+        script.dataset.jhFeedbackWidget = 'true';
+        document.body.appendChild(script);
+      }
+
+      function queueLoad() {
+        if ('requestIdleCallback' in window) {
+          requestIdleCallback(loadFeedbackWidget, { timeout: 3000 });
+        } else {
+          setTimeout(loadFeedbackWidget, 1200);
+        }
+      }
+
+      if (document.readyState === 'complete') {
+        queueLoad();
+      } else {
+        window.addEventListener('load', queueLoad, { once: true });
+      }
+    })();
+  </script>
 </body>
 </html>
-
 
 
 

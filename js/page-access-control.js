@@ -160,14 +160,21 @@ window.PageAccessControl = (function () {
       plan = window.JobHackAINavigation.getEffectivePlan();
     } else {
       var hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-      var hasFirebaseKeys = Object.keys(localStorage).some(function (k) {
-        return k.startsWith('firebase:authUser:') &&
-          localStorage.getItem(k) &&
-          localStorage.getItem(k) !== 'null' &&
-          localStorage.getItem(k).length > 10;
+      var hasSessionStorageAuth = sessionStorage.getItem('user-authenticated') === 'true';
+      var hasFirebaseKeys = [sessionStorage, localStorage].some(function (storage) {
+        try {
+          return Object.keys(storage).some(function (k) {
+            return k.startsWith('firebase:authUser:') &&
+              storage.getItem(k) &&
+              storage.getItem(k) !== 'null' &&
+              storage.getItem(k).length > 10;
+          });
+        } catch (_) {
+          return false;
+        }
       });
       // SECURITY: Require BOTH signals (matches head fast path + static-auth-guard.js)
-      isAuthenticated = hasLocalStorageAuth && hasFirebaseKeys;
+      isAuthenticated = (hasLocalStorageAuth || hasSessionStorageAuth) && hasFirebaseKeys;
       plan = localStorage.getItem('user-plan') || 'free';
     }
 

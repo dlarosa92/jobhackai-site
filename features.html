@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>JobHackAI</title>
-  <link rel="icon" type="image/png" href="assets/jobhackai_icon_only_128.png">
-  <link rel="apple-touch-icon" href="assets/jobhackai_icon_only_128.png">
-  <script src="js/dynamic-favicon.js?v=20250111-1"></script>
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/JobHackAI_Logo_favicon-32x32.png">
+  <link rel="apple-touch-icon" href="assets/JobHackAI_Logo_favicon-32x32.png">
+  <script src="js/dynamic-favicon.js?v=20250111-1" defer></script>
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/header.css">
@@ -92,7 +92,7 @@
 <nav class="mobile-nav" id="mobileNav"></nav>
 <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
 <!-- Centralized mobile menu handler -->
-<script src="js/mobile-menu.js?v=20250115-1"></script>
+<script src="js/mobile-menu.js?v=20250115-1" defer></script>
 <script>
   // Close dropdowns when clicking outside
   document.addEventListener('click', (e) => {
@@ -174,9 +174,33 @@
     </div>
 </footer>
 
-<script src="js/navigation.js?v=20260208-1"></script>
+<script src="js/navigation.js?v=20260208-1" defer></script>
 <script src="js/main.js" type="module"></script>
-<script src="js/analytics.js" type="module"></script>
-  <script src="js/feedback-widget.js?v=20260303-1" defer></script>
+  <script>
+    (function scheduleFeedbackWidget() {
+      function loadFeedbackWidget() {
+        if (document.querySelector('script[data-jh-feedback-widget]')) return;
+        const script = document.createElement('script');
+        script.src = 'js/feedback-widget.js?v=20260303-1';
+        script.defer = true;
+        script.dataset.jhFeedbackWidget = 'true';
+        document.body.appendChild(script);
+      }
+
+      function queueLoad() {
+        if ('requestIdleCallback' in window) {
+          requestIdleCallback(loadFeedbackWidget, { timeout: 3000 });
+        } else {
+          setTimeout(loadFeedbackWidget, 1200);
+        }
+      }
+
+      if (document.readyState === 'complete') {
+        queueLoad();
+      } else {
+        window.addEventListener('load', queueLoad, { once: true });
+      }
+    })();
+  </script>
 </body>
-</html> 
+</html>

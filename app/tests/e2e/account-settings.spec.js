@@ -14,6 +14,32 @@ test.describe('Account Settings', () => {
     await expect(page.locator('[data-action="logout"]')).toBeVisible({ timeout: 15000 });
   });
 
+  test('account settings initial load stays read-only', async ({ page }) => {
+    test.setTimeout(30000);
+    const syncRequests = [];
+
+    await page.route('**/api/sync-stripe-plan', async route => {
+      syncRequests.push({
+        method: route.request().method(),
+        url: route.request().url(),
+      });
+
+      await route.fulfill({
+        status: 204,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true }),
+      });
+    });
+
+    await page.goto('/account-setting.html');
+    await page.waitForLoadState('domcontentloaded');
+    await waitForAuthReady(page, 15000);
+    await expect(page.locator('#billing-section-dynamic')).toBeVisible({ timeout: 15000 });
+    await page.waitForTimeout(1500);
+
+    expect(syncRequests).toEqual([]);
+  });
+
   test('billing management opens Stripe portal', async ({ page, baseURL }) => {
     test.setTimeout(30000);
     await page.goto('/account-setting.html');

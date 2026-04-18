@@ -13,30 +13,42 @@
       return;
     }
 
+    function getFirebaseAuthStorages() {
+      return [sessionStorage, localStorage];
+    }
+
+    function hasFirebaseAuthShardInStorage(storage) {
+      if (!storage) return false;
+      try {
+        for (var i = 0; i < storage.length; i++) {
+          var key = storage.key(i);
+          var value = key ? storage.getItem(key) : null;
+          if (key && key.indexOf('firebase:authUser:') === 0 && value && value !== 'null' && value.length > 10) {
+            return true;
+          }
+        }
+      } catch (_) {}
+      return false;
+    }
+
     function hasFirebaseAuth() {
       try {
         // First check: Look for our auth state flag (set by firebase-auth.js)
-        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+        const hasAuthStateFlag = localStorage.getItem('user-authenticated') === 'true'
+          || sessionStorage.getItem('user-authenticated') === 'true';
         
-        // Second check: Look for Firebase SDK auth user shard (more reliable)
-        // Firebase SDK writes these keys synchronously on page load if user is authenticated
-        // SECURITY: Require BOTH flag AND Firebase keys to prevent XSS attacks from bypassing guard
-        // An attacker would need to set both values, not just one
         let hasFirebaseKeys = false;
-        for (var i = 0; i < localStorage.length; i++) {
-          var k = localStorage.key(i);
-          if (k && k.indexOf('firebase:authUser:') === 0) {
-            var userData = localStorage.getItem(k);
-            if (userData && userData !== 'null' && userData.length > 10) {
-              hasFirebaseKeys = true;
-              break;
-            }
+        var storages = getFirebaseAuthStorages();
+        for (var storageIndex = 0; storageIndex < storages.length; storageIndex++) {
+          if (hasFirebaseAuthShardInStorage(storages[storageIndex])) {
+            hasFirebaseKeys = true;
+            break;
           }
         }
         
         // Require both conditions: flag must be true AND Firebase keys must exist
         // This prevents stale flags or XSS attacks from incorrectly identifying users as authenticated
-        return hasLocalStorageAuth && hasFirebaseKeys;
+        return hasAuthStateFlag && hasFirebaseKeys;
       } catch (_) {}
       return false;
     }
@@ -130,4 +142,3 @@
     try { location.replace('/login.html'); } catch (_) {}
   }
 })();
-
