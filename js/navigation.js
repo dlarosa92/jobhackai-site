@@ -536,9 +536,10 @@ function getAuthPersistenceStores() {
 }
 
 function getAuthPersistenceValue(key) {
-  for (const store of getAuthPersistenceStores()) {
+  const stores = getAuthPersistenceStores();
+  for (let i = stores.length - 1; i >= 0; i--) {
     try {
-      const value = store.getItem(key);
+      const value = stores[i].getItem(key);
       if (value !== null) return value;
     } catch (_) {}
   }
