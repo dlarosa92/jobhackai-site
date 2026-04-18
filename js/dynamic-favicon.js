@@ -22,6 +22,7 @@
     const faviconLink = document.createElement('link');
     faviconLink.rel = 'icon';
     faviconLink.type = 'image/png';
+    faviconLink.sizes = '128x128';
     faviconLink.href = resolvedIconHref;
     document.head.appendChild(faviconLink);
 

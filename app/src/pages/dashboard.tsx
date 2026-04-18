@@ -419,7 +419,7 @@ export default function Dashboard() {
         <link rel="stylesheet" href="/main.css" />
         <link rel="stylesheet" href="/header.css" />
         <link rel="stylesheet" href="/footer.css" />
-        <link rel="icon" type="image/png" href="/assets/jobhackai_icon_Favicon_128.png" />
+        <link rel="icon" type="image/png" sizes="128x128" href="/assets/jobhackai_icon_Favicon_128.png" />
         <link rel="apple-touch-icon" sizes="180x180" href="/assets/jobhackai_apple_touch_icon_180.png" />
         <script src="/js/welcome-popup.js" type="module"></script>
       </Head>
