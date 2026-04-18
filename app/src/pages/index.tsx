@@ -22,8 +22,8 @@ export default function Home() {
         <meta name="description" content="Redirecting to the JobHackAI app" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="robots" content="noindex, nofollow" />
-        <link rel="icon" type="image/png" href="/assets/jobhackai_icon_only_128.png" />
-        <link rel="apple-touch-icon" href="/assets/jobhackai_icon_only_128.png" />
+        <link rel="icon" type="image/png" href="/assets/JobHackAI_Logo_favicon-32x32.png" />
+        <link rel="apple-touch-icon" href="/assets/JobHackAI_Logo_favicon-32x32.png" />
       </Head>
       <main
         style={{

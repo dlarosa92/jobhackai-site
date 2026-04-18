@@ -1,12 +1,11 @@
 /**
  * Dynamic Favicon Switcher
- * Uses the same favicon for all browser tabs (light and dark mode)
+ * Keeps the official logo favicon across all browser tabs
  */
 (function() {
   'use strict';
 
-  // Use the same favicon for all tabs
-  const FALLBACK_FAVICON = 'assets/jobhackai_icon_only_128.png';
+  const FALLBACK_FAVICON = 'assets/JobHackAI_Logo_favicon-32x32.png';
 
   function updateFavicon() {
     const existingIcon = document.querySelector('link[rel="icon"]');
@@ -44,4 +43,3 @@
     initDynamicFavicon();
   }
 })();
-
