@@ -1,4 +1,8 @@
-import { isProductionEnvironment, notFoundInProductionResponse } from './_lib/debug-access.js';
+import {
+  isProductionEnvironment,
+  notFoundInProductionResponse,
+  STANDARD_SECURITY_HEADERS
+} from './_lib/debug-access.js';
 
 const PRODUCTION_ONLY_DEBUG_PATHS = new Set([
   '/api/ats-health',
@@ -26,11 +30,10 @@ export async function onRequest({ request, next, env }) {
   const res = await next();
   const h = new Headers(res.headers);
 
-  // Security headers — applied on ALL environments
-  h.set('x-content-type-options', 'nosniff');
-  h.set('x-frame-options', 'DENY');
-  h.set('referrer-policy', 'strict-origin-when-cross-origin');
-  h.set('permissions-policy', 'camera=(), microphone=(), geolocation=()');
+  // Security headers — applied on ALL environments (shared with notFoundInProductionResponse)
+  for (const [name, value] of Object.entries(STANDARD_SECURITY_HEADERS)) {
+    h.set(name, value);
+  }
 
   // QA-only: prevent indexing and disable caching
   if (env.ENVIRONMENT === 'qa') {
