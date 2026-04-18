@@ -44,6 +44,10 @@ wrangler.local.toml
 *.swo
 *.iml
 
+# Local agent/worktree state
+.claude/settings.local.json
+.claude/worktrees/
+
 # OS/system files
 Thumbs.db
 Desktop.ini
