@@ -1,4 +1,28 @@
-export async function onRequest({ next, env }) {
+import { isProductionEnvironment, notFoundInProductionResponse } from './_lib/debug-access.js';
+
+const PRODUCTION_ONLY_DEBUG_PATHS = new Set([
+  '/api/ats-health',
+  '/api/test-openai',
+  '/auth-test',
+  '/auth-test.html',
+  '/dashboard-simple',
+  '/dashboard-simple.html',
+  '/debug-stripe',
+  '/env-test',
+  '/simple-test',
+  '/simple-test.html',
+  '/stripe-key-test',
+  '/stripe-test',
+  '/stripe-test.html'
+]);
+
+export async function onRequest({ request, next, env }) {
+  const pathname = request ? new URL(request.url).pathname.replace(/\/+$/, '') || '/' : null;
+
+  if (pathname && isProductionEnvironment(env) && PRODUCTION_ONLY_DEBUG_PATHS.has(pathname)) {
+    return notFoundInProductionResponse();
+  }
+
   const res = await next();
   const h = new Headers(res.headers);
 

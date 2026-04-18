@@ -9,88 +9,34 @@ export default function Home() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        // User is signed in, redirect to dashboard
-        router.push('/dashboard')
-      }
-      // If user is not signed in, stay on landing page
+      router.replace(user ? '/dashboard' : '/login')
     })
 
     return () => unsubscribe()
   }, [router])
 
-  // Use the same favicon for all tabs
-  useEffect(() => {
-    const FAVICON = '/assets/jobhackai_icon_only_128.png'
-
-    const updateFavicon = () => {
-      const existingFavicons = document.querySelectorAll('link[rel="icon"], link[rel="apple-touch-icon"]')
-      existingFavicons.forEach(link => link.remove())
-
-      const faviconLink = document.createElement('link')
-      faviconLink.rel = 'icon'
-      faviconLink.type = 'image/png'
-      faviconLink.href = FAVICON
-      document.head.appendChild(faviconLink)
-
-      const appleTouchLink = document.createElement('link')
-      appleTouchLink.rel = 'apple-touch-icon'
-      appleTouchLink.href = FAVICON
-      document.head.appendChild(appleTouchLink)
-    }
-
-    updateFavicon()
-  }, [])
-
   return (
     <>
       <Head>
-        <title>JobHackAI</title>
-        <meta name="description" content="Optimize your resume for ATS systems and land more interviews" />
+        <title>Redirecting | JobHackAI</title>
+        <meta name="description" content="Redirecting to the JobHackAI app" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="robots" content="noindex, nofollow" />
         <link rel="icon" type="image/png" href="/assets/jobhackai_icon_only_128.png" />
         <link rel="apple-touch-icon" href="/assets/jobhackai_icon_only_128.png" />
       </Head>
-      
-      <main className="container">
-        <div className="hero">
-          <h1>Welcome to JobHackAI</h1>
-          <p>Your ATS-optimized resume starts here</p>
-          
-          <div className="auth-section">
-            <button 
-              className="btn-primary"
-              onClick={() => router.push('/dashboard')}
-            >
-              Get Started
-            </button>
-            <button 
-              className="btn-secondary"
-              onClick={() => router.push('/dashboard')}
-            >
-              Sign In
-            </button>
-          </div>
-
-          <div className="features">
-            <div className="feature-card">
-              <h3>ATS Resume Scoring</h3>
-              <p>Get your resume scored for ATS compatibility and receive detailed feedback on how to improve.</p>
-            </div>
-            <div className="feature-card">
-              <h3>Resume Feedback</h3>
-              <p>AI-powered feedback system that helps you optimize your resume for maximum impact.</p>
-            </div>
-            <div className="feature-card">
-              <h3>Cover Letter Generator</h3>
-              <p>Create personalized cover letters for any job posting with our AI-powered generator.</p>
-            </div>
-            <div className="feature-card">
-              <h3>Interview Questions</h3>
-              <p>Practice with AI-generated interview questions tailored to your target role.</p>
-            </div>
-          </div>
-        </div>
+      <main
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+          color: '#1f2937',
+          background: '#f8fafc'
+        }}
+      >
+        <p>Redirecting to the app...</p>
       </main>
     </>
   )

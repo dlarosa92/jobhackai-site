@@ -1,6 +1,8 @@
 // ATS Health endpoint
 // Returns "ok" and verifies JOBHACKAI_KV is readable
 
+import { isProductionEnvironment, notFoundInProductionResponse } from '../_lib/debug-access.js';
+
 function corsHeaders(origin, env) {
   const allowedOrigins = [
     'https://dev.jobhackai.io',
@@ -35,6 +37,10 @@ function json(data, status = 200, origin, env) {
 export async function onRequest(context) {
   const { request, env } = context;
   const origin = request.headers.get('Origin') || '';
+
+  if (isProductionEnvironment(env)) {
+    return notFoundInProductionResponse();
+  }
 
   if (request.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders(origin, env) });
@@ -108,7 +114,6 @@ export async function onRequest(context) {
     }, 500, origin, env);
   }
 }
-
 
 
 
