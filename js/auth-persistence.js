@@ -77,6 +77,23 @@
     }
   }
 
+  function clearFirebaseAuthPersistence() {
+    var stores = getAuthPersistenceStores();
+    for (var s = 0; s < stores.length; s++) {
+      try {
+        var store = stores[s];
+        for (var i = store.length - 1; i >= 0; i--) {
+          try {
+            var key = store.key(i);
+            if (key && key.indexOf(FIREBASE_AUTH_STORAGE_KEY_PREFIX) === 0) {
+              store.removeItem(key);
+            }
+          } catch (_) {}
+        }
+      } catch (_) {}
+    }
+  }
+
   window.JobHackAIAuthPersistence = {
     FIREBASE_AUTH_STORAGE_KEY_PREFIX: FIREBASE_AUTH_STORAGE_KEY_PREFIX,
     getAuthPersistenceStores: getAuthPersistenceStores,
@@ -84,6 +101,7 @@
     getCrossTabStoredValue: getCrossTabStoredValue,
     setCrossTabStoredValue: setCrossTabStoredValue,
     hasStoredAuthenticatedFlag: hasStoredAuthenticatedFlag,
-    hasFirebaseAuthPersistence: hasFirebaseAuthPersistence
+    hasFirebaseAuthPersistence: hasFirebaseAuthPersistence,
+    clearFirebaseAuthPersistence: clearFirebaseAuthPersistence
   };
 })(window);

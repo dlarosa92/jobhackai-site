@@ -64,34 +64,6 @@
   let resetTimerDebounce = null; // Debounce timer for operation resets
   let lastResetAt = 0; // Timestamp of the last timers reset (used to debounce resetTimers)
 
-  function hasFirebaseAuthKeys() {
-    return [sessionStorage, localStorage].some((storage) => {
-      try {
-        return Object.keys(storage).some((key) =>
-          key.startsWith('firebase:authUser:') &&
-          storage.getItem(key) &&
-          storage.getItem(key) !== 'null' &&
-          storage.getItem(key).length > 10
-        );
-      } catch (_) {
-        return false;
-      }
-    });
-  }
-
-  function clearFirebaseAuthKeys() {
-    for (const storage of [sessionStorage, localStorage]) {
-      try {
-        for (let i = storage.length - 1; i >= 0; i--) {
-          const key = storage.key(i);
-          if (key && key.startsWith('firebase:authUser:')) {
-            storage.removeItem(key);
-          }
-        }
-      } catch (_) {}
-    }
-  }
-
   /**
    * Check if user is authenticated - Firebase-first (matches navigation.js pattern)
    */
@@ -128,14 +100,16 @@
     
     if (!hasFirebaseManager) {
       try {
-        const localValue = localStorage.getItem('user-authenticated');
-        const sessionValue = sessionStorage.getItem('user-authenticated');
-        const authStateIsTrue = !(localValue === 'false' || sessionValue === 'false')
-          && (localValue === 'true' || sessionValue === 'true');
+        const ap = window.JobHackAIAuthPersistence;
+        const authStateIsTrue = ap && typeof ap.hasStoredAuthenticatedFlag === 'function'
+          ? ap.hasStoredAuthenticatedFlag()
+          : false;
         // Check Firebase SDK keys as fallback (more reliable than email)
         // SECURITY: Require BOTH flag AND Firebase keys to prevent stale flag from causing false positives
         // If only flag exists without keys, it's likely stale (user logged out)
-        const hasFirebaseKeys = hasFirebaseAuthKeys();
+        const hasFirebaseKeys = ap && typeof ap.hasFirebaseAuthPersistence === 'function'
+          ? ap.hasFirebaseAuthPersistence()
+          : false;
         // Require both conditions: flag must be true AND Firebase keys must exist
         // This prevents stale flags from incorrectly identifying logged-out users as authenticated
         return authStateIsTrue && hasFirebaseKeys;
@@ -602,7 +576,9 @@
         sessionStorage.removeItem('user-email');
         sessionStorage.removeItem('user-plan');
         sessionStorage.removeItem('auth-user');
-        clearFirebaseAuthKeys();
+        if (window.JobHackAIAuthPersistence && typeof window.JobHackAIAuthPersistence.clearFirebaseAuthPersistence === 'function') {
+          window.JobHackAIAuthPersistence.clearFirebaseAuthPersistence();
+        }
       } catch (e) {
         console.warn('[INACTIVITY] Failed to clear storage:', e);
       }

@@ -115,26 +115,13 @@ function getAuthState() {
   }
   // Fallback: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
   // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
-  function hasFirebaseAuthKeys() {
-    return [sessionStorage, localStorage].some((storage) => {
-      try {
-        return Object.keys(storage).some(k =>
-          k.startsWith('firebase:authUser:') &&
-          storage.getItem(k) &&
-          storage.getItem(k) !== 'null' &&
-          storage.getItem(k).length > 10
-        );
-      } catch (e) {
-        return false;
-      }
-    });
-  }
-  const localValue = localStorage.getItem('user-authenticated');
-  const sessionValue = sessionStorage.getItem('user-authenticated');
-  const resolvedStoredAuth = (localValue === 'false' || sessionValue === 'false')
-    ? 'false'
-    : ((sessionValue === 'true' || localValue === 'true') ? 'true' : null);
-  const hasFirebaseKeys = hasFirebaseAuthKeys();
+  const ap = window.JobHackAIAuthPersistence;
+  const resolvedStoredAuth = ap && typeof ap.getResolvedStoredAuthFlagValue === 'function'
+    ? ap.getResolvedStoredAuthFlagValue()
+    : null;
+  const hasFirebaseKeys = ap && typeof ap.hasFirebaseAuthPersistence === 'function'
+    ? ap.hasFirebaseAuthPersistence()
+    : false;
   return {
     isAuthenticated: resolvedStoredAuth === 'true' || (resolvedStoredAuth !== 'false' && hasFirebaseKeys)
   };
