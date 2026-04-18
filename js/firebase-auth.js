@@ -449,7 +449,11 @@ class AuthManager {
   _clearStaleAuthStorage(reason = 'unauthenticated') {
     try {
       const cleared = [];
-      setStoredAuthFlag(false);
+      // Do not write user-authenticated=false to localStorage here: it is shared across tabs
+      // and would mask sessionStorage=true in an already-authenticated tab (getCrossTabStoredValue
+      // prefers localStorage). Remove the shared key and only mark this tab's session.
+      try { localStorage.removeItem('user-authenticated'); } catch (_) {}
+      try { sessionStorage.setItem('user-authenticated', 'false'); } catch (_) {}
       // NOTE: Do NOT call clearAuthCookies() here. On the marketing site, Firebase has no
       // local session and fires onAuthStateChanged(null) which calls this method. Clearing
       // the cross-domain cookie here would undo the auth hint set by app.jobhackai.io.

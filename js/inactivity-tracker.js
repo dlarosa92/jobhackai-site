@@ -597,6 +597,9 @@
         localStorage.removeItem('user-plan');
         localStorage.removeItem('auth-user');
         sessionStorage.removeItem('user-authenticated');
+        sessionStorage.removeItem('user-email');
+        sessionStorage.removeItem('user-plan');
+        sessionStorage.removeItem('auth-user');
         clearFirebaseAuthKeys();
       } catch (e) {
         console.warn('[INACTIVITY] Failed to clear storage:', e);
