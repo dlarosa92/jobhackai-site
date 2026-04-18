@@ -348,6 +348,7 @@ class AuthManager {
     this._redirectProcessing = false;
     this._pendingAuthUser = null;
     this._pendingAuthState = null;
+    this._explicitSignOutInProgress = false;
     this._initializeAuthReady();
     this._redirectProcessing = this._isGoogleRedirectInProgress();
     this.setupAuthStateListener();
@@ -377,10 +378,17 @@ class AuthManager {
   _clearStaleAuthStorage(reason = 'unauthenticated') {
     try {
       const cleared = [];
-      // Do not write user-authenticated=false to localStorage here: it is shared across tabs
-      // and would mask sessionStorage=true in an already-authenticated tab (getCrossTabStoredValue
-      // prefers localStorage). Remove the shared key and only mark this tab's session.
-      try { localStorage.removeItem('user-authenticated'); } catch (_) {}
+      // getCrossTabStoredValue prefers localStorage over sessionStorage. Removing the shared key
+      // lets other tabs fall back to stale sessionStorage=true after an explicit logout in this tab.
+      // For explicit sign-out only, reinforce localStorage=false; otherwise remove the key so we do
+      // not mask sessionStorage=true in tabs that remain signed in (heuristic stale cleanup).
+      try {
+        if (reason === 'firebase-auth-signed-out' && this._explicitSignOutInProgress) {
+          localStorage.setItem('user-authenticated', 'false');
+        } else {
+          localStorage.removeItem('user-authenticated');
+        }
+      } catch (_) {}
       try { sessionStorage.setItem('user-authenticated', 'false'); } catch (_) {}
       // NOTE: Do NOT call clearAuthCookies() here. On the marketing site, Firebase has no
       // local session and fires onAuthStateChanged(null) which calls this method. Clearing
@@ -1555,6 +1563,7 @@ class AuthManager {
     // Clear cross-domain cookies immediately (before async signOut) so marketing nav
     // reverts to visitor state even if Firebase sign-out throws a network error.
     clearAuthCookies();
+    this._explicitSignOutInProgress = true;
     try {
       await signOut(auth);
 
@@ -1594,6 +1603,8 @@ class AuthManager {
     } catch (error) {
       console.error('Sign out error:', error);
       return { success: false, error: this.getErrorMessage(error) };
+    } finally {
+      setTimeout(() => { this._explicitSignOutInProgress = false; }, 0);
     }
   }
 
