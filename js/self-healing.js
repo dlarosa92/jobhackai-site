@@ -136,13 +136,11 @@ window.selfHealing = {
     // Check localStorage - but don't flag as user-facing issues since these are auto-fixed
     // The keys are initialized by navigation.js and auto-fixed below, so missing keys
     // are normal for fresh sessions and don't warrant user alerts
-    const requiredKeys = ['user-authenticated', 'user-plan'];
+    const requiredKeys = ['user-plan'];
     requiredKeys.forEach(key => {
       if (!localStorage.getItem(key)) {
         // Auto-fix immediately without user alert
-        if (key === 'user-authenticated') {
-          localStorage.setItem(key, 'false');
-        } else if (key === 'user-plan') {
+        if (key === 'user-plan') {
           localStorage.setItem(key, 'free');
         }
       }
@@ -259,23 +257,16 @@ window.selfHealing = {
     }
     
     // Fix localStorage issues
-    if (!localStorage.getItem('user-authenticated')) {
-      localStorage.setItem('user-authenticated', 'false');
-      fixes.push('Set default authentication state');
-    }
-    
     if (!localStorage.getItem('user-plan')) {
       localStorage.setItem('user-plan', 'free');
       fixes.push('Set default user plan');
     }
     
     // Fix missing keys that are required by smoke tests
-    const requiredKeys = ['user-authenticated', 'user-plan'];
+    const requiredKeys = ['user-plan'];
     requiredKeys.forEach(key => {
       if (!localStorage.getItem(key)) {
-        if (key === 'user-authenticated') {
-          localStorage.setItem(key, 'false');
-        } else if (key === 'user-plan') {
+        if (key === 'user-plan') {
           localStorage.setItem(key, 'free');
         }
         fixes.push(`Set default ${key}`);
@@ -504,4 +495,4 @@ if (window.navDebug) {
 }
 
 // At end of file, assign to window
-window.selfHealing = selfHealing; 
+window.selfHealing = selfHealing;

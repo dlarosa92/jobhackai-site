@@ -100,19 +100,19 @@
     
     if (!hasFirebaseManager) {
       try {
-        const authState = localStorage.getItem('user-authenticated');
+        const ap = window.JobHackAIAuthPersistence;
+        const authStateIsTrue = ap && typeof ap.hasStoredAuthenticatedFlag === 'function'
+          ? ap.hasStoredAuthenticatedFlag()
+          : false;
         // Check Firebase SDK keys as fallback (more reliable than email)
         // SECURITY: Require BOTH flag AND Firebase keys to prevent stale flag from causing false positives
         // If only flag exists without keys, it's likely stale (user logged out)
-        const hasFirebaseKeys = Object.keys(localStorage).some(k => 
-          k.startsWith('firebase:authUser:') && 
-          localStorage.getItem(k) && 
-          localStorage.getItem(k) !== 'null' &&
-          localStorage.getItem(k).length > 10
-        );
+        const hasFirebaseKeys = ap && typeof ap.hasFirebaseAuthPersistence === 'function'
+          ? ap.hasFirebaseAuthPersistence()
+          : false;
         // Require both conditions: flag must be true AND Firebase keys must exist
         // This prevents stale flags from incorrectly identifying logged-out users as authenticated
-        return authState === 'true' && hasFirebaseKeys;
+        return authStateIsTrue && hasFirebaseKeys;
       } catch (e) {
         return false;
       }
@@ -572,12 +572,12 @@
         localStorage.removeItem('user-email');
         localStorage.removeItem('user-plan');
         localStorage.removeItem('auth-user');
-        // Clear Firebase auth keys
-        for (let i = localStorage.length - 1; i >= 0; i--) {
-          const key = localStorage.key(i);
-          if (key && key.startsWith('firebase:authUser:')) {
-            localStorage.removeItem(key);
-          }
+        sessionStorage.removeItem('user-authenticated');
+        sessionStorage.removeItem('user-email');
+        sessionStorage.removeItem('user-plan');
+        sessionStorage.removeItem('auth-user');
+        if (window.JobHackAIAuthPersistence && typeof window.JobHackAIAuthPersistence.clearFirebaseAuthPersistence === 'function') {
+          window.JobHackAIAuthPersistence.clearFirebaseAuthPersistence();
         }
       } catch (e) {
         console.warn('[INACTIVITY] Failed to clear storage:', e);
@@ -919,4 +919,3 @@
 
   console.log('[INACTIVITY] Inactivity tracker module loaded');
 })();
-

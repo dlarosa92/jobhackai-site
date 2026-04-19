@@ -18,26 +18,70 @@
       display: none !important;
     }
   </style>
+  <script src="js/auth-persistence.js"></script>
   <script>
+    const _accountSettingsAuthPersistence = window.JobHackAIAuthPersistence;
+    function getAccountSettingsAuthStores() {
+      return _accountSettingsAuthPersistence.getAuthPersistenceStores();
+    }
+
+    function getAccountSettingsStoreKeys(store) {
+      const keys = [];
+      try {
+        for (let index = 0; index < store.length; index++) {
+          const key = store.key(index);
+          if (key) keys.push(key);
+        }
+      } catch (error) {
+        console.warn('Failed to read auth storage keys:', error);
+      }
+      return keys;
+    }
+
+    function getAccountSettingsStoredValue(key) {
+      return _accountSettingsAuthPersistence.getCrossTabStoredValue(key);
+    }
+
+    function setAccountSettingsSessionValue(key, value) {
+      try {
+        sessionStorage.setItem(key, value);
+      } catch (_) {
+        try { localStorage.setItem(key, value); } catch (_) {}
+        return;
+      }
+      try { localStorage.removeItem(key); } catch (_) {}
+    }
+
+    function getAccountSettingsFirebaseAuthData() {
+      for (const store of getAccountSettingsAuthStores()) {
+        try {
+          const firebaseKey = getAccountSettingsStoreKeys(store).find(key => key.startsWith('firebase:authUser:'));
+          if (!firebaseKey) continue;
+
+          const rawValue = store.getItem(firebaseKey);
+          if (!rawValue || rawValue === 'null') continue;
+
+          const keyData = JSON.parse(rawValue);
+          if (keyData && typeof keyData === 'object') {
+            return keyData;
+          }
+        } catch (error) {
+          console.warn('Failed to parse Firebase auth data from storage:', error);
+        }
+      }
+      return null;
+    }
+
+    function hasAccountSettingsFirebaseAuthShard() {
+      return _accountSettingsAuthPersistence.hasFirebaseAuthPersistence();
+    }
+
     // CRITICAL: Remove account-protected class IMMEDIATELY if we have cached auth
     // This runs before any other scripts to show content instantly
     (function() {
-      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-      // SECURITY: Get email from Firebase SDK keys (works before firebase-auth.js loads)
-      function getEmailFromFirebaseKeys() {
-        try {
-          const firebaseKeys = Object.keys(localStorage).filter(k => k.startsWith('firebase:authUser:'));
-          if (firebaseKeys.length > 0) {
-            const keyData = JSON.parse(localStorage.getItem(firebaseKeys[0]) || '{}');
-            return keyData.email || null;
-          }
-        } catch (e) {
-          console.warn('Failed to get email from Firebase keys:', e);
-        }
-        return null;
-      }
-      const cachedEmail = getEmailFromFirebaseKeys();
-      if (hasLocalStorageAuth && cachedEmail) {
+      const hasCachedAuth = getAccountSettingsStoredValue('user-authenticated') === 'true';
+      const cachedEmail = getAccountSettingsFirebaseAuthData()?.email || null;
+      if (hasCachedAuth && cachedEmail) {
         // Use requestAnimationFrame to ensure DOM is ready
         if (document.body) {
           document.body.classList.remove("account-protected");
@@ -66,15 +110,11 @@
       const user = mgr ? mgr.getCurrentUser() : null;
       
       // Check if user is authenticated via multiple methods
-      // SECURITY: Check localStorage auth independently (works before Firebase loads)
-      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-      const hasFirebaseKeys = Object.keys(localStorage).some(k => 
-        k.startsWith('firebase:authUser:') && 
-        localStorage.getItem(k) && 
-        localStorage.getItem(k) !== 'null' &&
-        localStorage.getItem(k).length > 10
-      );
-      const hasAnyAuth = hasLocalStorageAuth || hasFirebaseKeys;
+      // SECURITY: Check both sessionStorage and localStorage so persistence mode changes
+      // do not hide valid auth state before Firebase finishes hydrating.
+      const hasCachedAuth = getAccountSettingsStoredValue('user-authenticated') === 'true';
+      const hasFirebaseKeys = hasAccountSettingsFirebaseAuthShard();
+      const hasAnyAuth = hasCachedAuth || hasFirebaseKeys;
       
       if (!user && !hasAnyAuth) {
         console.log('🔒 No authenticated user found, redirecting to login');
@@ -132,15 +172,11 @@
         authCheckComplete = true;
         const mgr = window.FirebaseAuthManager;
         const user = mgr ? mgr.getCurrentUser() : null;
-        // SECURITY: Check localStorage auth independently (works before Firebase loads)
-        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-        const hasFirebaseKeys = Object.keys(localStorage).some(k => 
-          k.startsWith('firebase:authUser:') && 
-          localStorage.getItem(k) && 
-          localStorage.getItem(k) !== 'null' &&
-          localStorage.getItem(k).length > 10
-        );
-        const hasAnyAuth = hasLocalStorageAuth || hasFirebaseKeys;
+        // SECURITY: Check both sessionStorage and localStorage so cached sessions
+        // survive a persistence-mode change before Firebase fully initializes.
+        const hasCachedAuth = getAccountSettingsStoredValue('user-authenticated') === 'true';
+        const hasFirebaseKeys = hasAccountSettingsFirebaseAuthShard();
+        const hasAnyAuth = hasCachedAuth || hasFirebaseKeys;
         
         if (!user && !hasAnyAuth) {
           console.log('🔒 Manual check: No auth found, redirecting to login');
@@ -163,25 +199,10 @@
     function addAccountProtectedClass() {
       if (document.body) {
         // Only add class if we don't have cached auth (to prevent race condition)
-        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-        // SECURITY: Get email from Firebase SDK keys (works before FirebaseAuthManager is ready)
-        // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
-        // Use the same approach as the inline script to maintain consistency
-        function getEmailFromFirebaseKeys() {
-          try {
-            const firebaseKeys = Object.keys(localStorage).filter(k => k.startsWith('firebase:authUser:'));
-            if (firebaseKeys.length > 0) {
-              const keyData = JSON.parse(localStorage.getItem(firebaseKeys[0]) || '{}');
-              return keyData.email || null;
-            }
-          } catch (e) {
-            console.warn('Failed to get email from Firebase keys:', e);
-          }
-          return null;
-        }
+        const hasCachedAuth = getAccountSettingsStoredValue('user-authenticated') === 'true';
         const user = window.FirebaseAuthManager?.getCurrentUser?.();
-        const cachedEmail = user?.email || getEmailFromFirebaseKeys();
-        if (!hasLocalStorageAuth || !cachedEmail) {
+        const cachedEmail = user?.email || getAccountSettingsFirebaseAuthData()?.email || null;
+        if (!hasCachedAuth || !cachedEmail) {
           document.body.classList.add("account-protected");
         }
       }
@@ -196,9 +217,9 @@
     }
   </script>
   <title>JobHackAI</title>
-  <link rel="icon" type="image/png" href="assets/jobhackai_icon_only_128.png">
-  <link rel="apple-touch-icon" href="assets/jobhackai_icon_only_128.png">
-  <script src="js/dynamic-favicon.js?v=20250111-1"></script>
+  <link rel="icon" type="image/png" sizes="128x128" href="assets/jobhackai_icon_Favicon_128.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/jobhackai_apple_touch_icon_180.png">
+  <script src="js/dynamic-favicon.js?v=20260418-3" defer></script>
   <script src="js/cookie-consent.js?v=20250128-1" defer></script>
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/main.css">
@@ -601,6 +622,8 @@
   <!-- Inactivity tracker - auto-logout after 30 minutes of inactivity -->
   <script src="js/inactivity-tracker.js?v=20250115-1"></script>
   <script>
+    window.__ACCOUNT_SETTINGS_READ_ONLY_LOAD__ = true;
+
     // DO NOT call initializeNavigation synchronously on auth-protected pages
     // Wait for DOMContentLoaded so Firebase auth module has time to load
     window.addEventListener('DOMContentLoaded', async function() {
@@ -611,42 +634,36 @@
         waitCount++;
       }
       
-      // CRITICAL FIX: Delay navigation initialization on account-settings to allow plan sync to complete first
-      // This prevents navigation from rendering with incorrect 'free' plan which causes upgrade modal bugs
+      // Hydrate navigation with the latest read-only billing status before it renders.
+      // Account settings should not mutate backend billing state on initial page load.
       const initNav = () => {
         if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
           window.JobHackAINavigation.initializeNavigation();
         }
       };
       
-      // Wait for plan sync to complete before initializing navigation
-      // Check if we need to sync plan first
+      // Read the current billing status before initializing navigation so plan badges
+      // render consistently without issuing any mutation requests on page visit.
       const user = window.FirebaseAuthManager?.getCurrentUser?.();
       if (user) {
-        // Try to get token and check plan
         user.getIdToken().then(token => {
           fetch('/api/billing-status?force=1', { headers: { Authorization: `Bearer ${token}` } })
             .then(res => res.ok ? res.json() : null)
             .then(data => {
               if (data?.ok && data?.plan) {
-                // Plan found, sync it before navigation
-                console.log('🔄 [ACCOUNT-SETTINGS] Syncing plan before navigation init:', data.plan);
+                console.log('🔄 [ACCOUNT-SETTINGS] Hydrating plan before navigation init:', data.plan);
                 localStorage.setItem('user-plan', data.plan);
                 localStorage.setItem('dev-plan', data.plan);
               }
-              // Initialize navigation after sync (or if sync fails)
               initNav();
             })
             .catch(() => {
-              // If sync check fails, initialize navigation anyway
               initNav();
             });
         }).catch(() => {
-          // If we can't get token, initialize navigation anyway
           initNav();
         });
       } else {
-        // No user yet, initialize navigation normally
         initNav();
       }
     });
@@ -740,11 +757,10 @@
         // Wait for Firebase auth to be ready (up to 5 seconds)
         let user = window.FirebaseAuthManager?.getCurrentUser?.();
         if (!user) {
-          // Check if we have localStorage auth as a backup signal
-          // SECURITY: Use Firebase auth check instead of email validation
-          const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
+          // Check if we have cached auth in sessionStorage or localStorage as a backup signal.
+          const hasCachedAuth = getAccountSettingsStoredValue('user-authenticated') === 'true';
           
-          if (hasLocalStorageAuth) {
+          if (hasCachedAuth) {
             // Wait for Firebase auth manager to initialize
             console.log('🔄 [ACCOUNT-SETTINGS] Waiting for Firebase auth to be ready...');
             for (let i = 0; i < 50 && !user; i++) { // Up to 5 seconds
@@ -809,54 +825,29 @@
         
         const plan = data.plan || 'free';
         const storedPlan = localStorage.getItem('user-plan');
-        
-        // CRITICAL FIX: Sync plan from billing-status to localStorage/KV (including free)
-        // This ensures navigation and other components have the correct plan
-        console.log(`🔄 [ACCOUNT-SETTINGS] Syncing plan from billing-status: ${plan}`);
+        const storedDevPlan = localStorage.getItem('dev-plan');
+        const planChanged = storedPlan !== plan || storedDevPlan !== plan;
+
+        console.log(`🔄 [ACCOUNT-SETTINGS] Applying billing-status plan locally: ${plan}`);
         try {
           if (storedPlan !== plan) {
             localStorage.setItem('user-plan', plan);
             localStorage.setItem('dev-plan', plan);
-          } else if (localStorage.getItem('dev-plan') !== plan) {
+          } else if (storedDevPlan !== plan) {
             localStorage.setItem('dev-plan', plan);
           }
 
-          const shouldSync = plan === 'free' || storedPlan !== plan;
-          if (window.JobHackAINavigation && shouldSync) {
-            // Trigger plan sync by calling sync-stripe-plan API
-            const syncRes = await fetch('/api/sync-stripe-plan', {
-              method: 'POST',
-              headers: { Authorization: `Bearer ${idToken}` }
-            });
-            if (syncRes.ok) {
-              console.log('✅ [ACCOUNT-SETTINGS] Plan synced to KV storage');
-              // Update navigation with new plan
-              const syncData = await syncRes.json().catch((err) => {
-                console.error('❌ [ACCOUNT-SETTINGS] Failed to parse sync-stripe-plan response JSON:', err);
-                return { ok: false };
-              });
-              if (syncData.ok && syncData.plan) {
-                if (localStorage.getItem('user-plan') !== syncData.plan) {
-                  localStorage.setItem('user-plan', syncData.plan);
-                  localStorage.setItem('dev-plan', syncData.plan);
-                } else if (localStorage.getItem('dev-plan') !== syncData.plan) {
-                  localStorage.setItem('dev-plan', syncData.plan);
-                }
-                // Trigger navigation update
-                window.dispatchEvent(new CustomEvent('planChanged', { detail: { newPlan: syncData.plan } }));
-                // CRITICAL: Re-initialize navigation to reflect new plan
-                if (window.JobHackAINavigation && typeof window.JobHackAINavigation.scheduleUpdateNavigation === 'function') {
-                  console.log('🔄 [ACCOUNT-SETTINGS] Re-initializing navigation with synced plan:', syncData.plan);
-                  window.JobHackAINavigation.scheduleUpdateNavigation(true);
-                } else if (window.JobHackAINavigation && typeof window.JobHackAINavigation.updateNavigation === 'function') {
-                  // fallback
-                  window.JobHackAINavigation.updateNavigation();
-                }
-              }
+          if (planChanged) {
+            window.dispatchEvent(new CustomEvent('planChanged', { detail: { newPlan: plan } }));
+            if (window.JobHackAINavigation && typeof window.JobHackAINavigation.scheduleUpdateNavigation === 'function') {
+              console.log('🔄 [ACCOUNT-SETTINGS] Updating navigation with billing-status plan:', plan);
+              window.JobHackAINavigation.scheduleUpdateNavigation(true);
+            } else if (window.JobHackAINavigation && typeof window.JobHackAINavigation.updateNavigation === 'function') {
+              window.JobHackAINavigation.updateNavigation();
             }
           }
         } catch (syncError) {
-          console.warn('⚠️ [ACCOUNT-SETTINGS] Failed to sync plan:', syncError);
+          console.warn('⚠️ [ACCOUNT-SETTINGS] Failed to apply plan locally:', syncError);
           // Non-critical, continue rendering
         }
         
@@ -1059,30 +1050,14 @@
     // Remove account-protected class immediately if we have cached auth data
     function initializeAccountSettingsImmediate() {
       // Check if we have cached auth data
-      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-      // SECURITY: Get email from Firebase SDK keys (works before firebase-auth.js loads)
-      function getEmailFromFirebaseKeys() {
-        try {
-          const firebaseKeys = Object.keys(localStorage).filter(k => k.startsWith('firebase:authUser:'));
-          if (firebaseKeys.length > 0) {
-            const keyData = JSON.parse(localStorage.getItem(firebaseKeys[0]) || '{}');
-            return {
-              email: keyData.email || null,
-              displayName: keyData.displayName || null
-            };
-          }
-        } catch (e) {
-          console.warn('Failed to get email from Firebase keys:', e);
-        }
-        return { email: null, displayName: null };
-      }
-      const firebaseData = getEmailFromFirebaseKeys();
-      const cachedEmail = firebaseData.email;
-      const cachedName = firebaseData.displayName || localStorage.getItem('user-name');
+      const hasCachedAuth = getAccountSettingsStoredValue('user-authenticated') === 'true';
+      const firebaseData = getAccountSettingsFirebaseAuthData() || {};
+      const cachedEmail = firebaseData.email || null;
+      const cachedName = firebaseData.displayName || getAccountSettingsStoredValue('user-name');
       
       // CRITICAL: Remove account-protected class immediately if we have cached auth
       // This allows content to show even before Firebase verification completes
-      if (hasLocalStorageAuth && cachedEmail) {
+      if (hasCachedAuth && cachedEmail) {
         document.body.classList.remove("account-protected");
         
         const email = cachedEmail;
@@ -1119,15 +1094,11 @@
     // Load fresh data in background (non-blocking)
     document.addEventListener('DOMContentLoaded', async () => {
       let user = window.FirebaseAuthManager?.getCurrentUser?.();
-      // SECURITY: Check localStorage auth independently (works before Firebase loads)
-      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-      const hasFirebaseKeys = Object.keys(localStorage).some(k => 
-        k.startsWith('firebase:authUser:') && 
-        localStorage.getItem(k) && 
-        localStorage.getItem(k) !== 'null' &&
-        localStorage.getItem(k).length > 10
-      );
-      const hasAnyAuth = hasLocalStorageAuth || hasFirebaseKeys;
+      // SECURITY: Check both sessionStorage and localStorage so cached auth survives
+      // whichever Firebase persistence mode is active.
+      const hasCachedAuth = getAccountSettingsStoredValue('user-authenticated') === 'true';
+      const hasFirebaseKeys = hasAccountSettingsFirebaseAuthShard();
+      const hasAnyAuth = hasCachedAuth || hasFirebaseKeys;
       
       if (!user && !hasAnyAuth) {
         // No auth at all - redirect handled by static-auth-guard or firebase-auth-ready handler
@@ -1151,63 +1122,21 @@
           return;
         }
         
-        // Run all async operations in parallel
-        const promises = [];
-        
-        // Plan sync (non-critical, runs in background, handle 404 gracefully)
-        if (user) {
-          promises.push((async () => {
-            try {
-              const currentToken = await user.getIdToken();
-              if (currentToken) {
-                const syncRes = await fetch('/api/sync-stripe-plan', {
-                  method: 'POST',
-                  headers: { Authorization: `Bearer ${currentToken}` }
-                });
-                // Handle 404 gracefully - endpoint might not be deployed yet
-                if (syncRes.ok) {
-                  const syncData = await syncRes.json();
-                  if (syncData.ok && syncData.plan && syncData.plan !== 'free') {
-                    localStorage.setItem('user-plan', syncData.plan);
-                    localStorage.setItem('dev-plan', syncData.plan);
-                    window.dispatchEvent(new CustomEvent('planChanged', { 
-                      detail: { newPlan: syncData.plan, oldPlan: 'free' } 
-                    }));
-                    if (window.JobHackAINavigation?.updateNavigation) {
-                      window.JobHackAINavigation.updateNavigation();
-                    }
-                  }
-                } else if (syncRes.status === 404) {
-                  console.log('ℹ️ [ACCOUNT-SETTINGS] sync-stripe-plan endpoint not available (404), skipping sync');
-                }
-              }
-            } catch (e) {
-              // Non-critical, ignore
-              console.log('ℹ️ [ACCOUNT-SETTINGS] Plan sync failed (non-critical):', e.message);
-            }
-          })());
-        }
-        
-        // Profile loading (non-critical, can fail gracefully)
-        if (user) {
-          promises.push((async () => {
-            try {
-              return await UserProfileManager.getProfile(user.uid);
-            } catch (error) {
-              return null;
-            }
-          })());
-        }
-        
-        // Billing section (non-critical, loads in background)
-        promises.push(renderBillingSection().catch(() => {}));
-        
-        // Wait for all to complete (don't block on failures)
-        const results = await Promise.allSettled(promises);
+        const profilePromise = user ? (async () => {
+          try {
+            return await UserProfileManager.getProfile(user.uid);
+          } catch (error) {
+            return null;
+          }
+        })() : Promise.resolve(null);
+
+        const billingPromise = renderBillingSection().catch(() => null);
+
+        const [profileResult] = await Promise.allSettled([profilePromise, billingPromise]);
         
         // Update profile name if we got better data
-        if (user && results[1]?.status === 'fulfilled' && results[1]?.value) {
-          const profile = results[1].value;
+        if (user && profileResult?.status === 'fulfilled' && profileResult?.value) {
+          const profile = profileResult.value;
           if (profile.success && profile.profile && !profile.isPermissionError) {
             const profileData = profile.profile;
             const userName = profileData.displayName || 
@@ -1220,7 +1149,7 @@
             if (profileNameEl) {
               profileNameEl.textContent = userName;
               // Cache for next time
-              localStorage.setItem('user-name', userName);
+              setAccountSettingsSessionValue('user-name', userName);
             }
           }
         }

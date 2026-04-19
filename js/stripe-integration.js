@@ -601,16 +601,18 @@ class JobHackAIStripe {
         // Fallback: Get user data from Firebase SDK keys (works synchronously)
         // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
         function getUserFromFirebaseKeys() {
-          try {
-            const firebaseKeys = Object.keys(localStorage).filter(k => k.startsWith('firebase:authUser:'));
-            if (firebaseKeys.length > 0) {
-              const keyData = JSON.parse(localStorage.getItem(firebaseKeys[0]) || '{}');
-              if (keyData.uid && keyData.email) {
-                return { uid: keyData.uid, email: keyData.email };
+          for (const storage of [sessionStorage, localStorage]) {
+            try {
+              const firebaseKeys = Object.keys(storage).filter(k => k.startsWith('firebase:authUser:'));
+              if (firebaseKeys.length > 0) {
+                const keyData = JSON.parse(storage.getItem(firebaseKeys[0]) || '{}');
+                if (keyData.uid && keyData.email) {
+                  return { uid: keyData.uid, email: keyData.email };
+                }
               }
+            } catch (e) {
+              console.warn('Failed to get user from Firebase keys:', e);
             }
-          } catch (e) {
-            console.warn('Failed to get user from Firebase keys:', e);
           }
           return null;
         }
@@ -668,14 +670,17 @@ class JobHackAIStripe {
       // Fallback: Get UID from Firebase SDK keys (works synchronously)
       // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
       if (!uid) {
-        try {
-          const firebaseKeys = Object.keys(localStorage).filter(k => k.startsWith('firebase:authUser:'));
-          if (firebaseKeys.length > 0) {
-            const keyData = JSON.parse(localStorage.getItem(firebaseKeys[0]) || '{}');
-            uid = keyData.uid || null;
+        for (const storage of [sessionStorage, localStorage]) {
+          try {
+            const firebaseKeys = Object.keys(storage).filter(k => k.startsWith('firebase:authUser:'));
+            if (firebaseKeys.length > 0) {
+              const keyData = JSON.parse(storage.getItem(firebaseKeys[0]) || '{}');
+              uid = keyData.uid || null;
+              if (uid) break;
+            }
+          } catch (e) {
+            console.warn('Failed to get UID from Firebase keys:', e);
           }
-        } catch (e) {
-          console.warn('Failed to get UID from Firebase keys:', e);
         }
       }
       if (!uid) {

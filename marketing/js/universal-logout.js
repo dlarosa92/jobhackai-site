@@ -32,5 +32,11 @@
       }
     };
   } catch (_) {}
+  try {
+    window.addEventListener('storage', function (e) {
+      if (e && e.key === 'user-authenticated' && e.newValue === 'false') {
+        location.replace('https://app.jobhackai.io/login');
+      }
+    });
+  } catch (_) {}
 })();
-
