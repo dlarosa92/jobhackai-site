@@ -855,66 +855,15 @@
 
     const _dashboardAuthPersistence = window.JobHackAIAuthPersistence;
     function getDashboardStoredValue(key) {
-      if (_dashboardAuthPersistence && typeof _dashboardAuthPersistence.getCrossTabStoredValue === 'function') {
-        return _dashboardAuthPersistence.getCrossTabStoredValue(key);
-      }
-      try {
-        if (key === 'user-authenticated') {
-          var sessionValue = null;
-          var localValue = null;
-          try { sessionValue = sessionStorage.getItem('user-authenticated'); } catch (_) {}
-          try { localValue = localStorage.getItem('user-authenticated'); } catch (_) {}
-          if (localValue === 'false' || sessionValue === 'false') return 'false';
-          if (sessionValue === 'true' || localValue === 'true') return 'true';
-          return null;
-        }
-        if (typeof localStorage !== 'undefined') {
-          try {
-            var lv = localStorage.getItem(key);
-            if (lv !== null) return lv;
-          } catch (_) {}
-        }
-        if (typeof sessionStorage !== 'undefined') {
-          try {
-            return sessionStorage.getItem(key);
-          } catch (_) {}
-        }
-      } catch (_) {}
-      return null;
+      return _dashboardAuthPersistence.getCrossTabStoredValue(key);
     }
 
     function setDashboardStoredValue(key, value) {
-      if (_dashboardAuthPersistence && typeof _dashboardAuthPersistence.setCrossTabStoredValue === 'function') {
-        _dashboardAuthPersistence.setCrossTabStoredValue(key, value);
-        return;
-      }
-      try {
-        if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(key, value);
-      } catch (_) {}
-      try {
-        if (typeof localStorage !== 'undefined') localStorage.setItem(key, value);
-      } catch (_) {}
+      _dashboardAuthPersistence.setCrossTabStoredValue(key, value);
     }
 
     function hasDashboardFirebaseAuthPersistence() {
-      if (_dashboardAuthPersistence && typeof _dashboardAuthPersistence.hasFirebaseAuthPersistence === 'function') {
-        return _dashboardAuthPersistence.hasFirebaseAuthPersistence();
-      }
-      const prefix = 'firebase:authUser:';
-      const stores = [];
-      try { stores.push(sessionStorage); } catch (_) {}
-      try { stores.push(localStorage); } catch (_) {}
-      return stores.some(function (store) {
-        try {
-          for (var i = 0; i < store.length; i++) {
-            var key = store.key(i);
-            if (!key || key.indexOf(prefix) !== 0) continue;
-            var value = store.getItem(key);
-            if (value && value !== 'null' && value.length > 10) return true;
-          }
-        } catch (_) {}
-        return false;
-      });
+      return _dashboardAuthPersistence.hasFirebaseAuthPersistence();
     }
 
     // --- ENHANCED AUTHENTICATION CHECK ---

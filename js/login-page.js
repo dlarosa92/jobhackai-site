@@ -9,13 +9,7 @@ console.log('🔧 login-page.js VERSION: fix-auth-cache-loop-v1 - ' + new Date()
 import authManager, { waitForAuthReady, AUTH_PENDING } from './firebase-auth.js';
 
 function getResolvedStoredAuthFlagValue() {
-  let sessionValue = null;
-  let localValue = null;
-  try { sessionValue = sessionStorage.getItem('user-authenticated'); } catch (_) {}
-  try { localValue = localStorage.getItem('user-authenticated'); } catch (_) {}
-  if (localValue === 'false' || sessionValue === 'false') return 'false';
-  if (sessionValue === 'true' || localValue === 'true') return 'true';
-  return null;
+  return window.JobHackAIAuthPersistence.getResolvedStoredAuthFlagValue();
 }
 
 function getStoredFirebaseAuthRecord() {

@@ -22,17 +22,7 @@
   <script>
     const _accountSettingsAuthPersistence = window.JobHackAIAuthPersistence;
     function getAccountSettingsAuthStores() {
-      if (_accountSettingsAuthPersistence && typeof _accountSettingsAuthPersistence.getAuthPersistenceStores === 'function') {
-        return _accountSettingsAuthPersistence.getAuthPersistenceStores();
-      }
-      const stores = [];
-      try {
-        if (typeof sessionStorage !== 'undefined') stores.push(sessionStorage);
-      } catch (_) {}
-      try {
-        if (typeof localStorage !== 'undefined') stores.push(localStorage);
-      } catch (_) {}
-      return stores;
+      return _accountSettingsAuthPersistence.getAuthPersistenceStores();
     }
 
     function getAccountSettingsStoreKeys(store) {
@@ -49,32 +39,7 @@
     }
 
     function getAccountSettingsStoredValue(key) {
-      if (_accountSettingsAuthPersistence && typeof _accountSettingsAuthPersistence.getCrossTabStoredValue === 'function') {
-        return _accountSettingsAuthPersistence.getCrossTabStoredValue(key);
-      }
-      try {
-        if (key === 'user-authenticated') {
-          let sessionValue = null;
-          let localValue = null;
-          try { sessionValue = sessionStorage.getItem('user-authenticated'); } catch (_) {}
-          try { localValue = localStorage.getItem('user-authenticated'); } catch (_) {}
-          if (localValue === 'false' || sessionValue === 'false') return 'false';
-          if (sessionValue === 'true' || localValue === 'true') return 'true';
-          return null;
-        }
-        if (typeof localStorage !== 'undefined') {
-          try {
-            const lv = localStorage.getItem(key);
-            if (lv !== null) return lv;
-          } catch (_) {}
-        }
-        if (typeof sessionStorage !== 'undefined') {
-          try {
-            return sessionStorage.getItem(key);
-          } catch (_) {}
-        }
-      } catch (_) {}
-      return null;
+      return _accountSettingsAuthPersistence.getCrossTabStoredValue(key);
     }
 
     function setAccountSettingsSessionValue(key, value) {
@@ -108,27 +73,7 @@
     }
 
     function hasAccountSettingsFirebaseAuthShard() {
-      if (_accountSettingsAuthPersistence && typeof _accountSettingsAuthPersistence.hasFirebaseAuthPersistence === 'function') {
-        return _accountSettingsAuthPersistence.hasFirebaseAuthPersistence();
-      }
-      const prefix = 'firebase:authUser:';
-      try {
-        return getAccountSettingsAuthStores().some(function (store) {
-          try {
-            for (let i = 0; i < store.length; i++) {
-              const key = store.key(i);
-              if (!key || key.indexOf(prefix) !== 0) continue;
-              const value = store.getItem(key);
-              if (value && value !== 'null' && value.length > 10) {
-                return true;
-              }
-            }
-          } catch (_) {}
-          return false;
-        });
-      } catch (_) {
-        return false;
-      }
+      return _accountSettingsAuthPersistence.hasFirebaseAuthPersistence();
     }
 
     // CRITICAL: Remove account-protected class IMMEDIATELY if we have cached auth
