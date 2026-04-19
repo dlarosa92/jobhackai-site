@@ -204,13 +204,35 @@ async function globalSetup() {
     if (!fs.existsSync(authDir)) {
       fs.mkdirSync(authDir, { recursive: true });
     }
-    
-    // Save auth state
-    await context.storageState({ 
-      path: path.join(authDir, 'user.json') 
+
+    // Save auth state (cookies + localStorage)
+    await context.storageState({
+      path: path.join(authDir, 'user.json')
     });
-    
-    console.log('✅ Authentication successful, state saved');
+
+    // Firebase uses browserSessionPersistence, so auth shards + tokens live in
+    // sessionStorage. Playwright's storageState() does not persist sessionStorage,
+    // so we capture it separately and restore it via auth-fixture.js on context
+    // creation. Without this, protected pages redirect to /login in test tabs
+    // because Firebase has no session to restore.
+    const sessionStorageEntries = await page.evaluate(() => {
+      const entries = [];
+      try {
+        for (let i = 0; i < sessionStorage.length; i++) {
+          const name = sessionStorage.key(i);
+          if (name == null) continue;
+          entries.push({ name, value: sessionStorage.getItem(name) || '' });
+        }
+      } catch (_) {}
+      return entries;
+    });
+    const sessionOrigin = new URL(page.url()).origin;
+    const sessionStoragePath = path.join(authDir, 'session-storage.json');
+    fs.writeFileSync(sessionStoragePath, JSON.stringify({
+      origins: [{ origin: sessionOrigin, sessionStorage: sessionStorageEntries }]
+    }, null, 2));
+
+    console.log(`✅ Authentication successful, state saved (${sessionStorageEntries.length} sessionStorage keys)`);
     
   } catch (error) {
     const currentURL = page.url();

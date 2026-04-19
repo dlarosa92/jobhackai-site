@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/auth-fixture');
 const { waitForAuthReady } = require('../helpers/auth-helpers');
 
 test.describe('Error Handling', () => {

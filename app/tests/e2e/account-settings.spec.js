@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/auth-fixture');
 const { waitForAuthReady, getAuthToken } = require('../helpers/auth-helpers');
 
 async function hasReadOnlyAccountSettingsBundle(page) {
