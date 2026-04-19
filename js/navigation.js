@@ -1285,6 +1285,11 @@ async function logout(e) {
           console.warn(`[LOGOUT] Failed to remove ${k}:`, keyError.message);
         }
       });
+      try {
+        localStorage.setItem('user-authenticated', 'false');
+      } catch (flagError) {
+        console.warn('[LOGOUT] Failed to publish explicit logged-out flag:', flagError.message);
+      }
       console.log('[LOGOUT] localStorage cleared');
     } catch (storageError) {
       console.error('[LOGOUT] localStorage cleanup failed:', storageError.message);

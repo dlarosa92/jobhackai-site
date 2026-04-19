@@ -19,15 +19,39 @@
         return;
       }
 
-      // SECURITY: Check auth state using localStorage flags and Firebase SDK keys
-      var hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-      var hasFirebaseKeys = Object.keys(localStorage).some(function (k) {
-        return k.startsWith('firebase:authUser:') &&
-          localStorage.getItem(k) &&
-          localStorage.getItem(k) !== 'null' &&
-          localStorage.getItem(k).length > 10;
-      });
-      var isAuthenticated = hasLocalStorageAuth && hasFirebaseKeys;
+      function getSessionAuthFlagValue() {
+        try { return sessionStorage.getItem('user-authenticated'); } catch (_) {}
+        return null;
+      }
+
+      function hasFirebaseAuthKeysInStorage(storage) {
+        try {
+          return Object.keys(storage).some(function (k) {
+            return k.startsWith('firebase:authUser:') &&
+              storage.getItem(k) &&
+              storage.getItem(k) !== 'null' &&
+              storage.getItem(k).length > 10;
+          });
+        } catch (_) {
+          return false;
+        }
+      }
+
+      function hasSameTabAuthEvidence() {
+        var sessionAuthFlag = getSessionAuthFlagValue();
+        if (sessionAuthFlag === 'false') return false;
+        try {
+          return hasFirebaseAuthKeysInStorage(sessionStorage);
+        } catch (_) {
+          return false;
+        }
+      }
+
+      window.JobHackAIResumeFeedbackAuth = {
+        hasSameTabAuthEvidence: hasSameTabAuthEvidence
+      };
+
+      var isAuthenticated = hasSameTabAuthEvidence();
       var allowedPlans = ['trial', 'essential', 'pro', 'premium'];
       window.__JOBHACKAI_RF_ALLOWED_PLANS__ = allowedPlans;
       var cachedPlan = localStorage.getItem('user-plan');
@@ -1276,19 +1300,6 @@
 
       // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
       // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
-      function hasFirebaseAuthKeys() {
-        try {
-          return Object.keys(localStorage).some(k =>
-            k.startsWith('firebase:authUser:') &&
-            localStorage.getItem(k) &&
-            localStorage.getItem(k) !== 'null' &&
-            localStorage.getItem(k).length > 10
-          );
-        } catch (e) {
-          return false;
-        }
-      }
-
       const loginRequiredHtml = `
           <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
             <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
@@ -1320,10 +1331,8 @@
         return true;
       }
 
-      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-      const hasFirebaseKeys = hasFirebaseAuthKeys();
-      // SECURITY: Require BOTH signals (matches head fast path + static-auth-guard.js)
-      const isAuthenticated = hasLocalStorageAuth && hasFirebaseKeys;
+      const rfAuth = window.JobHackAIResumeFeedbackAuth;
+      const isAuthenticated = !!(rfAuth && typeof rfAuth.hasSameTabAuthEvidence === 'function' && rfAuth.hasSameTabAuthEvidence());
       const mainContent = document.querySelector('main');
 
       if (!isAuthenticated) {
@@ -1611,23 +1620,8 @@
             isAuthenticated = authState && authState.isAuthenticated;
             plan = window.JobHackAINavigation.getEffectivePlan();
           } else {
-            // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
-            function hasFirebaseAuthKeys() {
-              try {
-                return Object.keys(localStorage).some(k => 
-                  k.startsWith('firebase:authUser:') && 
-                  localStorage.getItem(k) && 
-                  localStorage.getItem(k) !== 'null' &&
-                  localStorage.getItem(k).length > 10
-                );
-              } catch (e) {
-                return false;
-              }
-            }
-            const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-            const hasFirebaseKeys = hasFirebaseAuthKeys();
-            // SECURITY: Require BOTH signals (matches head fast path + static-auth-guard.js)
-            isAuthenticated = hasLocalStorageAuth && hasFirebaseKeys;
+            const rfAuth = window.JobHackAIResumeFeedbackAuth;
+            isAuthenticated = !!(rfAuth && typeof rfAuth.hasSameTabAuthEvidence === 'function' && rfAuth.hasSameTabAuthEvidence());
             plan = localStorage.getItem('user-plan') || 'free';
           }
         }
@@ -1638,23 +1632,8 @@
           isAuthenticated = authState.isAuthenticated;
           plan = window.JobHackAINavigation.getEffectivePlan();
         } else {
-          // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
-          function hasFirebaseAuthKeys() {
-            try {
-              return Object.keys(localStorage).some(k => 
-                k.startsWith('firebase:authUser:') && 
-                localStorage.getItem(k) && 
-                localStorage.getItem(k) !== 'null' &&
-                localStorage.getItem(k).length > 10
-              );
-            } catch (e) {
-              return false;
-            }
-          }
-          const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-          const hasFirebaseKeys = hasFirebaseAuthKeys();
-          // SECURITY: Require BOTH signals (matches head fast path + static-auth-guard.js)
-          isAuthenticated = hasLocalStorageAuth && hasFirebaseKeys;
+          const rfAuth = window.JobHackAIResumeFeedbackAuth;
+          isAuthenticated = !!(rfAuth && typeof rfAuth.hasSameTabAuthEvidence === 'function' && rfAuth.hasSameTabAuthEvidence());
           plan = localStorage.getItem('user-plan') || 'free';
         }
       }
@@ -9178,20 +9157,8 @@
       if (window.__JOBHACKAI_ACCESS_VERIFIED__) {
         isAuthenticated = true;
       } else {
-        // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
-        // Use same pattern as checkAuthentication() for consistency
-        var hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-        var hasFirebaseKeys = false;
-        try {
-          hasFirebaseKeys = Object.keys(localStorage).some(function(k) {
-            return k.startsWith('firebase:authUser:') &&
-              localStorage.getItem(k) &&
-              localStorage.getItem(k) !== 'null' &&
-              localStorage.getItem(k).length > 10;
-          });
-        } catch (e) { /* ignore */ }
-        // SECURITY: Require BOTH signals (same as checkAuthentication localStorage path)
-        isAuthenticated = hasLocalStorageAuth && hasFirebaseKeys;
+        var rfAuth = window.JobHackAIResumeFeedbackAuth;
+        isAuthenticated = !!(rfAuth && typeof rfAuth.hasSameTabAuthEvidence === 'function' && rfAuth.hasSameTabAuthEvidence());
       }
 
       if (!isAuthenticated) {

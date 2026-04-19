@@ -20,21 +20,31 @@
 
       var allowedPlans = ['trial', 'essential', 'pro', 'premium'];
 
-      // Synchronous fast path: check localStorage auth + cached plan BEFORE any async work.
-      // This sets __JOBHACKAI_ACCESS_VERIFIED__ immediately so the body guard never races.
-      // SECURITY: Require BOTH user-authenticated AND firebase:authUser: keys
-      // (matches static-auth-guard.js AND logic to prevent XSS single-key bypass)
-      var cachedPlan = localStorage.getItem('user-plan') || 'free';
-      var hasLocalAuth = localStorage.getItem('user-authenticated') === 'true';
-      var hasFBKeys = false;
-      for (var i = 0; i < localStorage.length; i++) {
-        var fk = localStorage.key(i);
-        if (fk && fk.indexOf('firebase:authUser:') === 0) {
-          var fd = localStorage.getItem(fk);
-          if (fd && fd !== 'null' && fd.length > 10) { hasFBKeys = true; break; }
-        }
+      function hasFirebaseAuthKeysInStorage(storage) {
+        try {
+          for (var i = 0; i < storage.length; i++) {
+            var key = storage.key(i);
+            if (!key || key.indexOf('firebase:authUser:') !== 0) continue;
+            var value = storage.getItem(key);
+            if (value && value !== 'null' && value.length > 10) return true;
+          }
+        } catch (_) {}
+        return false;
       }
-      if (hasLocalAuth && hasFBKeys && allowedPlans.includes(cachedPlan)) {
+
+      function hasSameTabAuthEvidence() {
+        var sessionAuth = null;
+        try { sessionAuth = sessionStorage.getItem('user-authenticated'); } catch (_) {}
+        if (sessionAuth === 'false') return false;
+        return hasFirebaseAuthKeysInStorage(sessionStorage);
+      }
+
+      // Synchronous fast path: check same-tab session auth + cached plan BEFORE any async work.
+      // This sets __JOBHACKAI_ACCESS_VERIFIED__ immediately so the body guard never races.
+      // With browserSessionPersistence, localStorage is only a cross-tab hint and should
+      // not unlock the page before Firebase has hydrated in this tab.
+      var cachedPlan = localStorage.getItem('user-plan') || 'free';
+      if (hasSameTabAuthEvidence() && allowedPlans.includes(cachedPlan)) {
         console.log('✅ [INTERVIEW-Q] Sync fast path: access granted for cached plan:', cachedPlan);
         window.__JOBHACKAI_ACCESS_VERIFIED__ = true;
         window.__JOBHACKAI_VERIFIED_PLAN__ = cachedPlan;
@@ -77,16 +87,7 @@
       // on timeout — a truthy non-user object. Exclude it.
       var isAuthenticated = !!user && !user._authPending;
       if (!isAuthenticated) {
-        // Fallback: check localStorage + Firebase SDK keys
-        var hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-        var hasFirebaseKeys = Object.keys(localStorage).some(function (k) {
-          return k.startsWith('firebase:authUser:') &&
-            localStorage.getItem(k) &&
-            localStorage.getItem(k) !== 'null' &&
-            localStorage.getItem(k).length > 10;
-        });
-        // SECURITY: Require BOTH signals (matches sync fast path + static-auth-guard.js)
-        isAuthenticated = hasLocalStorageAuth && hasFirebaseKeys;
+        isAuthenticated = hasSameTabAuthEvidence();
       }
 
       if (!isAuthenticated) {
@@ -1884,25 +1885,8 @@
         }
         return true;
       } else {
-        // Fallback to localStorage check if navigation system not available
-        // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
-        // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
-        function hasFirebaseAuthKeys() {
-          try {
-            return Object.keys(localStorage).some(k => 
-              k.startsWith('firebase:authUser:') && 
-              localStorage.getItem(k) && 
-              localStorage.getItem(k) !== 'null' &&
-              localStorage.getItem(k).length > 10
-            );
-          } catch (e) {
-            return false;
-          }
-        }
-        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-        const hasFirebaseKeys = hasFirebaseAuthKeys();
-        // SECURITY: Require BOTH signals (matches head fast path + static-auth-guard.js)
-        const isAuthenticated = hasLocalStorageAuth && hasFirebaseKeys;
+        // Fallback to same-tab session evidence if navigation isn't available yet.
+        const isAuthenticated = hasSameTabAuthEvidence();
         if (!isAuthenticated) {
           const mainContent = document.querySelector('main');
           mainContent.innerHTML = `

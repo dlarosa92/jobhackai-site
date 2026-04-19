@@ -138,6 +138,13 @@
     (function () {
       const cta = document.getElementById('primary-cta');
       if (!cta) return;
+      function safeGet(storage, key) {
+        try {
+          return storage.getItem(key);
+        } catch (e) {
+          return null;
+        }
+      }
       function hasFirebaseAuthKeysInStorage(storage) {
         try {
           return Object.keys(storage).some(k => {
@@ -151,8 +158,8 @@
       function hasFirebaseAuthKeys() {
         return hasFirebaseAuthKeysInStorage(localStorage) || hasFirebaseAuthKeysInStorage(sessionStorage);
       }
-      const localAuthFlag = localStorage.getItem('user-authenticated');
-      const sessionAuthFlag = sessionStorage.getItem('user-authenticated');
+      const localAuthFlag = safeGet(localStorage, 'user-authenticated');
+      const sessionAuthFlag = safeGet(sessionStorage, 'user-authenticated');
       const resolvedStoredAuth = (localAuthFlag === 'false' || sessionAuthFlag === 'false')
         ? 'false'
         : ((sessionAuthFlag === 'true' || localAuthFlag === 'true') ? 'true' : null);

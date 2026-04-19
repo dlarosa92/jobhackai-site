@@ -113,17 +113,24 @@ function getAuthState() {
   if (window.JobHackAINavigation?.getAuthState) {
     return window.JobHackAINavigation.getAuthState();
   }
-  // Fallback: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
-  // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
-  const ap = window.JobHackAIAuthPersistence;
-  const resolvedStoredAuth = ap && typeof ap.getResolvedStoredAuthFlagValue === 'function'
-    ? ap.getResolvedStoredAuthFlagValue()
-    : null;
-  const hasFirebaseKeys = ap && typeof ap.hasFirebaseAuthPersistence === 'function'
-    ? ap.hasFirebaseAuthPersistence()
-    : false;
+  // Fallback: with browserSessionPersistence, only trust same-tab session evidence
+  // until Firebase/nav finishes hydrating.
+  let sessionFlag = null;
+  let hasSessionFirebaseKeys = false;
+  try { sessionFlag = sessionStorage.getItem('user-authenticated'); } catch (_) {}
+  try {
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i);
+      if (!key || !key.startsWith('firebase:authUser:')) continue;
+      const value = sessionStorage.getItem(key);
+      if (value && value !== 'null' && value.length > 10) {
+        hasSessionFirebaseKeys = true;
+        break;
+      }
+    }
+  } catch (_) {}
   return {
-    isAuthenticated: resolvedStoredAuth === 'true' || (resolvedStoredAuth !== 'false' && hasFirebaseKeys)
+    isAuthenticated: sessionFlag !== 'false' && hasSessionFirebaseKeys
   };
 }
 

@@ -896,6 +896,27 @@
       } catch (_) {}
     }
 
+    function hasDashboardFirebaseAuthPersistence() {
+      if (_dashboardAuthPersistence && typeof _dashboardAuthPersistence.hasFirebaseAuthPersistence === 'function') {
+        return _dashboardAuthPersistence.hasFirebaseAuthPersistence();
+      }
+      const prefix = 'firebase:authUser:';
+      const stores = [];
+      try { stores.push(sessionStorage); } catch (_) {}
+      try { stores.push(localStorage); } catch (_) {}
+      return stores.some(function (store) {
+        try {
+          for (var i = 0; i < store.length; i++) {
+            var key = store.key(i);
+            if (!key || key.indexOf(prefix) !== 0) continue;
+            var value = store.getItem(key);
+            if (value && value !== 'null' && value.length > 10) return true;
+          }
+        } catch (_) {}
+        return false;
+      });
+    }
+
     // --- ENHANCED AUTHENTICATION CHECK ---
     async function checkAuthentication() {
       console.log('🔧 dashboard.html VERSION: fix-auth-cache-loop-v1 - ' + new Date().toISOString());
@@ -914,9 +935,11 @@
 
       const authManager = window.FirebaseAuthManager;
       let isAuthInStorage = false;
+      let hasPersistedFirebaseAuth = false;
       let hasTokens = false;
 
       isAuthInStorage = getDashboardStoredValue('user-authenticated') === 'true';
+      hasPersistedFirebaseAuth = hasDashboardFirebaseAuthPersistence();
 
       try {
         hasTokens = !!(
@@ -927,7 +950,7 @@
         );
       } catch (_) {}
 
-      if (isAuthInStorage || hasTokens) {
+      if (isAuthInStorage || hasPersistedFirebaseAuth || hasTokens) {
         await waitForFirebaseAuthReady(30000);
         await waitForFirebaseUser(authManager, 30000);
       } else {
@@ -937,7 +960,7 @@
       const user = authManager.getCurrentUser?.();
       if (!user || !user.email) {
         const authReady = authManager.isAuthReady?.() || window.__firebaseAuthReadyFired;
-        if (authReady || !isAuthInStorage) {
+        if (authReady || (!isAuthInStorage && !hasPersistedFirebaseAuth)) {
           console.error('❌ No Firebase user available');
           window.location.href = 'login.html';
           return false;

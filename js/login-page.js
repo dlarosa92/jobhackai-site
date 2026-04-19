@@ -8,7 +8,25 @@ console.log('🔧 login-page.js VERSION: fix-auth-cache-loop-v1 - ' + new Date()
 
 import authManager, { waitForAuthReady, AUTH_PENDING } from './firebase-auth.js';
 
+function getResolvedStoredAuthFlagValue() {
+  let sessionValue = null;
+  let localValue = null;
+  try { sessionValue = sessionStorage.getItem('user-authenticated'); } catch (_) {}
+  try { localValue = localStorage.getItem('user-authenticated'); } catch (_) {}
+  if (localValue === 'false' || sessionValue === 'false') return 'false';
+  if (sessionValue === 'true' || localValue === 'true') return 'true';
+  return null;
+}
+
 function getStoredFirebaseAuthRecord() {
+  try {
+    if (sessionStorage.getItem('logout-intent') === '1') {
+      return null;
+    }
+  } catch (_) {}
+  if (getResolvedStoredAuthFlagValue() !== 'true') {
+    return null;
+  }
   const storages = [sessionStorage, localStorage];
   for (const storage of storages) {
     try {

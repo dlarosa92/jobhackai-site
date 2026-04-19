@@ -1601,6 +1601,7 @@ class AuthManager {
         try { storage.removeItem('user-name'); } catch (_) {}
       }
       setStoredAuthFlag(false);
+      try { new BroadcastChannel('auth').postMessage({ type: 'logout' }); } catch (_) {}
       // Clear any pending plan selections from both storages
       try { sessionStorage.removeItem('selectedPlan'); } catch (_) {}
       try { localStorage.removeItem('selectedPlan'); } catch (_) {}
