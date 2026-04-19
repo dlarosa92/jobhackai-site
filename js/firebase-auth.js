@@ -468,7 +468,7 @@ class AuthManager {
       // Firebase does not use localStorage for the live session, but legacy local firebase:authUser:* keys
       // must be removed so static-auth-guard.js does not treat a new tab as authenticated.
       try {
-        if (reason === 'firebase-auth-signed-out') {
+        if (isExplicitSignOut) {
           localStorage.setItem('user-authenticated', 'false');
         }
       } catch (_) {}
