@@ -16,7 +16,8 @@
 
   /**
    * Resolve the effective stored auth flag for the current tab.
-   * Explicit false in either storage should win over stale shared true values.
+   * Same-tab session truth should win over a shared localStorage false from
+   * passive cleanup in another tab, while explicit false still wins otherwise.
    */
   function getResolvedStoredAuthFlagValue() {
     var sessionValue = null;
@@ -24,8 +25,10 @@
     try { sessionValue = sessionStorage.getItem('user-authenticated'); } catch (_) {}
     try { localValue = localStorage.getItem('user-authenticated'); } catch (_) {}
 
-    if (localValue === 'false' || sessionValue === 'false') return 'false';
-    if (sessionValue === 'true' || localValue === 'true') return 'true';
+    if (sessionValue === 'true') return 'true';
+    if (sessionValue === 'false') return 'false';
+    if (localValue === 'false') return 'false';
+    if (localValue === 'true') return 'true';
     return null;
   }
 

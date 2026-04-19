@@ -160,9 +160,13 @@
       }
       const localAuthFlag = safeGet(localStorage, 'user-authenticated');
       const sessionAuthFlag = safeGet(sessionStorage, 'user-authenticated');
-      const resolvedStoredAuth = (localAuthFlag === 'false' || sessionAuthFlag === 'false')
-        ? 'false'
-        : ((sessionAuthFlag === 'true' || localAuthFlag === 'true') ? 'true' : null);
+      const resolvedStoredAuth = sessionAuthFlag === 'true'
+        ? 'true'
+        : (sessionAuthFlag === 'false'
+            ? 'false'
+            : (localAuthFlag === 'false'
+                ? 'false'
+                : ((localAuthFlag === 'true') ? 'true' : null)));
       const isAuthenticated = resolvedStoredAuth === 'true' || (resolvedStoredAuth !== 'false' && hasFirebaseAuthKeys());
       if (isAuthenticated) {
         cta.textContent = 'Go to dashboard';
