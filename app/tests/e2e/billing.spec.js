@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/auth-fixture');
 const { getAuthToken, postStripeCheckout } = require('../helpers/auth-helpers');
 
 async function fetchPlanData(page, token) {

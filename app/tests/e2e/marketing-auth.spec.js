@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/auth-fixture');
 
 const MARKETING_BASE = process.env.MARKETING_BASE_URL || 'https://jobhackai.io';
 const AUTH_HANDOFF_SESSION_KEY = 'jhai_auth_handoff';
