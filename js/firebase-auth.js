@@ -734,7 +734,7 @@ class AuthManager {
               const credential = provider.credential({ idToken: storedOidcToken });
               await signInWithCredential(auth, credential);
               console.log('✅ Signed into Firebase SDK using stored LinkedIn OIDC token');
-              return;
+              effectiveUser = auth.currentUser;
             } catch (err) {
               console.warn('Could not restore SDK auth with stored OIDC token:', err);
               // SDK sign-in failed - fallback to plain object by checking tokens
