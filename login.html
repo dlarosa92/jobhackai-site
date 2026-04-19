@@ -5,9 +5,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>JobHackAI</title>
-  <link rel="icon" type="image/png" href="assets/jobhackai_icon_only_128.png">
-  <link rel="apple-touch-icon" href="assets/jobhackai_icon_only_128.png">
-  <script src="js/dynamic-favicon.js?v=20250111-1"></script>
+  <link rel="icon" type="image/png" sizes="128x128" href="assets/jobhackai_icon_Favicon_128.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/jobhackai_apple_touch_icon_180.png">
+  <script src="js/dynamic-favicon.js?v=20260418-3" defer></script>
 
   <!-- Design tokens & global styles -->
   <link rel="stylesheet" href="css/tokens.css">
@@ -298,7 +298,7 @@
   </nav>
   <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
   <!-- Centralized mobile menu handler -->
-  <script src="js/mobile-menu.js?v=20250115-1"></script>
+  <script src="js/mobile-menu.js?v=20250115-1" defer></script>
   <!-- INTEGRATION: Firebase Authentication for secure user login (see js/login-page.js) -->
   <!-- page content -->
   <main>
@@ -438,11 +438,11 @@
     </div>
   </footer>
   <!-- scripts -->
-  <script src="js/redirect-tracer.js?v=1"></script>
-  <script src="js/navigation.js?v=20260208-1"></script>
-  <script src="js/universal-logout.js?v=20260208-1"></script>
+  <script src="js/redirect-tracer.js?v=1" defer></script>
+  <script src="js/auth-persistence.js"></script>
+  <script src="js/navigation.js?v=20260208-1" defer></script>
+  <script src="js/universal-logout.js?v=20260208-1" defer></script>
   <script src="js/main.js?v=20251006-1" type="module"></script>
-  <script src="js/analytics.js?v=20251006-1" type="module"></script>
   <!-- Initialize navigation early to render correct visitor nav with CTA -->
   <script>
     if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
@@ -543,6 +543,6 @@
       </button>
     </div>
   </div>
-  <script src="js/feedback-widget.js?v=20260303-1" defer></script>
+  <script src="js/schedule-feedback-widget.js" defer></script>
 </body>
 </html>

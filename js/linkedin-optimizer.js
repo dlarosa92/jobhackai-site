@@ -113,24 +113,24 @@ function getAuthState() {
   if (window.JobHackAINavigation?.getAuthState) {
     return window.JobHackAINavigation.getAuthState();
   }
-  // Fallback: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
-  // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
-  function hasFirebaseAuthKeys() {
-    try {
-      return Object.keys(localStorage).some(k => 
-        k.startsWith('firebase:authUser:') && 
-        localStorage.getItem(k) && 
-        localStorage.getItem(k) !== 'null' &&
-        localStorage.getItem(k).length > 10
-      );
-    } catch (e) {
-      return false;
+  // Fallback: with browserSessionPersistence, only trust same-tab session evidence
+  // until Firebase/nav finishes hydrating.
+  let sessionFlag = null;
+  let hasSessionFirebaseKeys = false;
+  try { sessionFlag = sessionStorage.getItem('user-authenticated'); } catch (_) {}
+  try {
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i);
+      if (!key || !key.startsWith('firebase:authUser:')) continue;
+      const value = sessionStorage.getItem(key);
+      if (value && value !== 'null' && value.length > 10) {
+        hasSessionFirebaseKeys = true;
+        break;
+      }
     }
-  }
-  const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-  const hasFirebaseKeys = hasFirebaseAuthKeys();
+  } catch (_) {}
   return {
-    isAuthenticated: hasLocalStorageAuth || hasFirebaseKeys
+    isAuthenticated: sessionFlag !== 'false' && hasSessionFirebaseKeys
   };
 }
 
@@ -290,10 +290,10 @@ function resetForm() {
   if (els.experience) els.experience.value = '';
   if (els.skills) els.skills.value = '';
   if (els.recommendations) els.recommendations.value = '';
-  
+
   // Hide results
   setResultsVisible(false);
-  
+
   // Clear state
   currentRun = null;
   selectedHistoryId = null;
@@ -302,23 +302,23 @@ function resetForm() {
   currentAnalysisId = null;
   // Reset analyzing flag to allow new analysis to start immediately
   isAnalyzing = false;
-  
+
   // Cancel any in-flight regenerations
   // Clear regeneration tracking to prevent stale regeneration responses from reappearing
   regenBusy.clear();
   currentRegenRunId = null;
   // Reset regenQueue to a fresh promise to cancel any queued regenerations
   regenQueue = Promise.resolve();
-  
+
   // Re-render history to remove active state
   renderHistory();
-  
+
   // Clear any loading state
   setLoading(false);
-  
+
   // Reset score ring to 0
   setScoreRing(0);
-  
+
   // Focus on role field for better UX
   els.role?.focus();
 }
@@ -422,11 +422,11 @@ function attachDetailsListeners() {
     const section = button.dataset.section;
     const content = document.querySelector(`[data-optimized-content="${section}"]`);
     if (!content) return;
-    
+
     // Set initial text based on visibility
     const isVisible = !content.hidden;
     updateSummaryText(button, isVisible);
-    
+
     // Toggle visibility and update text
     button.addEventListener('click', () => {
       content.hidden = !content.hidden;
@@ -498,7 +498,7 @@ function renderSections(sections, originalInputsOverride) {
               </div>
             </div>
           </div>
-          
+
           <div class="lo-section-actions">
             <button class="btn-outline" type="button" data-action="toggle-optimized" data-section="${k}">
               View optimized (Before & After)
@@ -515,7 +515,7 @@ function renderSections(sections, originalInputsOverride) {
       `;
     })
     .join('');
-  
+
   // Attach listeners after rendering
   attachDetailsListeners();
 }
@@ -608,12 +608,12 @@ function closeAllHistoryMenus() {
 function renderHistory() {
   const listEl = document.getElementById('lo-history-list');
   const emptyEl = document.getElementById('lo-history-empty');
-  
+
   if (!listEl) return;
-  
+
   // Always hide loading when rendering
   setHistoryLoading(false);
-  
+
   if (!historyItems || historyItems.length === 0) {
     listEl.innerHTML = '';
     if (emptyEl) {
@@ -621,9 +621,9 @@ function renderHistory() {
     }
     return;
   }
-  
+
   if (emptyEl) emptyEl.hidden = true;
-  
+
   const visibleItems = getVisibleHistoryItems(historyItems);
 
   listEl.innerHTML = visibleItems.map(item => {
@@ -648,7 +648,7 @@ function renderHistory() {
 
     // Row secondary template: "{visibilityLabel} • {relativeDate}" or fallback "LinkedIn optimization • {relativeDate}"
     const visibilityLabel = normalizedScore !== null ? getRecruiterBoostLabel(normalizedScore) : '';
-    const secondaryLine = visibilityLabel 
+    const secondaryLine = visibilityLabel
       ? `${escapeHtml(visibilityLabel)} • ${escapeHtml(when)}`
       : `LinkedIn optimization • ${escapeHtml(when)}`;
 
@@ -812,7 +812,7 @@ async function fetchHistory() {
   setHistoryLoading(true);
   if (emptyEl) emptyEl.hidden = true;
   if (listEl) listEl.innerHTML = '';
-  
+
   try {
     const data = await apiFetch('/api/linkedin/history', { method: 'GET' });
     historyItems = Array.isArray(data?.items) ? data.items : [];
@@ -1408,19 +1408,19 @@ function bindEvents() {
   els.sections?.addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-action]');
     if (!btn) return;
-    
+
     const action = btn.dataset.action;
     const section = btn.dataset.section;
-    
+
     // Don't prevent default for toggle-optimized, let attachDetailsListeners handle it
     if (action === 'toggle-optimized') {
       // Handled by attachDetailsListeners
       return;
     }
-    
+
     e.preventDefault();
     e.stopPropagation();
-    
+
     if (action === 'copy') return void copyOptimized(section);
     if (action === 'regen') return void regenerate(section);
   });
@@ -1650,4 +1650,3 @@ if (document.readyState === 'loading') {
 } else {
   init();
 }
-

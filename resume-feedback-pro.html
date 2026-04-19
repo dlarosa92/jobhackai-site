@@ -19,15 +19,39 @@
         return;
       }
 
-      // SECURITY: Check auth state using localStorage flags and Firebase SDK keys
-      var hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-      var hasFirebaseKeys = Object.keys(localStorage).some(function (k) {
-        return k.startsWith('firebase:authUser:') &&
-          localStorage.getItem(k) &&
-          localStorage.getItem(k) !== 'null' &&
-          localStorage.getItem(k).length > 10;
-      });
-      var isAuthenticated = hasLocalStorageAuth && hasFirebaseKeys;
+      function getSessionAuthFlagValue() {
+        try { return sessionStorage.getItem('user-authenticated'); } catch (_) {}
+        return null;
+      }
+
+      function hasFirebaseAuthKeysInStorage(storage) {
+        try {
+          return Object.keys(storage).some(function (k) {
+            return k.startsWith('firebase:authUser:') &&
+              storage.getItem(k) &&
+              storage.getItem(k) !== 'null' &&
+              storage.getItem(k).length > 10;
+          });
+        } catch (_) {
+          return false;
+        }
+      }
+
+      function hasSameTabAuthEvidence() {
+        var sessionAuthFlag = getSessionAuthFlagValue();
+        if (sessionAuthFlag === 'false') return false;
+        try {
+          return hasFirebaseAuthKeysInStorage(sessionStorage);
+        } catch (_) {
+          return false;
+        }
+      }
+
+      window.JobHackAIResumeFeedbackAuth = {
+        hasSameTabAuthEvidence: hasSameTabAuthEvidence
+      };
+
+      var isAuthenticated = hasSameTabAuthEvidence();
       var allowedPlans = ['trial', 'essential', 'pro', 'premium'];
       window.__JOBHACKAI_RF_ALLOWED_PLANS__ = allowedPlans;
       var cachedPlan = localStorage.getItem('user-plan');
@@ -169,9 +193,9 @@
     })();
   </script>
   <title>JobHackAI</title>
-  <link rel="icon" type="image/png" href="assets/jobhackai_icon_only_128.png">
-  <link rel="apple-touch-icon" href="assets/jobhackai_icon_only_128.png">
-  <script src="js/dynamic-favicon.js?v=20250111-1"></script>
+  <link rel="icon" type="image/png" sizes="128x128" href="assets/jobhackai_icon_Favicon_128.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/jobhackai_apple_touch_icon_180.png">
+  <script src="js/dynamic-favicon.js?v=20260418-3" defer></script>
 
   <!-- Design tokens & global styles -->
   <link rel="stylesheet" href="css/tokens.css">
@@ -1199,6 +1223,7 @@
   <script type="module" src="js/firebase-auth.js?v=20260207-2"></script>
   
   <!-- DEV-ONLY PLAN TOGGLE will be added by navigation.js -->
+  <script src="js/auth-persistence.js"></script>
   <script src="js/navigation.js?v=20260208-1"></script>
   <script src="js/universal-logout.js?v=20260208-1"></script>
   <!-- Inactivity tracker - auto-logout after 30 minutes of inactivity -->
@@ -1275,19 +1300,6 @@
 
       // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
       // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
-      function hasFirebaseAuthKeys() {
-        try {
-          return Object.keys(localStorage).some(k =>
-            k.startsWith('firebase:authUser:') &&
-            localStorage.getItem(k) &&
-            localStorage.getItem(k) !== 'null' &&
-            localStorage.getItem(k).length > 10
-          );
-        } catch (e) {
-          return false;
-        }
-      }
-
       const loginRequiredHtml = `
           <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
             <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
@@ -1319,10 +1331,8 @@
         return true;
       }
 
-      const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-      const hasFirebaseKeys = hasFirebaseAuthKeys();
-      // SECURITY: Require BOTH signals (matches head fast path + static-auth-guard.js)
-      const isAuthenticated = hasLocalStorageAuth && hasFirebaseKeys;
+      const rfAuth = window.JobHackAIResumeFeedbackAuth;
+      const isAuthenticated = !!(rfAuth && typeof rfAuth.hasSameTabAuthEvidence === 'function' && rfAuth.hasSameTabAuthEvidence());
       const mainContent = document.querySelector('main');
 
       if (!isAuthenticated) {
@@ -1420,13 +1430,69 @@
       // Create demo user if needed for development
       // SECURITY: Do NOT write email to localStorage - get it from Firebase SDK keys instead
       const createDemoUserIfNeeded = () => {
+        function getResumeFeedbackStorages() {
+          return [window.sessionStorage, window.localStorage].filter(Boolean);
+        }
+
+        function getResumeFeedbackStoredValue(key) {
+          for (const storage of getResumeFeedbackStorages()) {
+            try {
+              const value = storage.getItem(key);
+              if (value !== null) return value;
+            } catch (_) {}
+          }
+          return null;
+        }
+
+        function getResumeFeedbackUserDb() {
+          try {
+            const sessionDb = sessionStorage.getItem('user-db');
+            if (sessionDb) return JSON.parse(sessionDb);
+          } catch (e) {
+            console.warn('Failed to read session user database:', e);
+          }
+          try {
+            const legacyDb = localStorage.getItem('user-db');
+            if (!legacyDb) return {};
+            const parsed = JSON.parse(legacyDb);
+            try {
+              sessionStorage.setItem('user-db', legacyDb);
+              sessionStorage.setItem('user-db-backup', localStorage.getItem('user-db-backup') || legacyDb);
+            } catch (_) {}
+            try {
+              localStorage.removeItem('user-db');
+              localStorage.removeItem('user-db-backup');
+            } catch (_) {}
+            return parsed;
+          } catch (e) {
+            console.warn('Failed to read legacy user database:', e);
+            return {};
+          }
+        }
+
+        function setResumeFeedbackUserDb(db) {
+          const serialized = JSON.stringify(db);
+          try {
+            sessionStorage.setItem('user-db', serialized);
+            sessionStorage.setItem('user-db-backup', serialized);
+          } catch (e) {
+            console.warn('Failed to store session user database:', e);
+          }
+          try {
+            localStorage.removeItem('user-db');
+            localStorage.removeItem('user-db-backup');
+          } catch (_) {}
+        }
+
         // Try to get email from Firebase SDK keys (works before firebase-auth.js loads)
         function getEmailFromFirebaseKeys() {
           try {
-            const firebaseKeys = Object.keys(localStorage).filter(k => k.startsWith('firebase:authUser:'));
-            if (firebaseKeys.length > 0) {
-              const keyData = JSON.parse(localStorage.getItem(firebaseKeys[0]) || '{}');
-              return keyData.email || null;
+            for (const storage of getResumeFeedbackStorages()) {
+              const firebaseKeys = Object.keys(storage).filter(k => k.startsWith('firebase:authUser:'));
+              if (firebaseKeys.length > 0) {
+                const keyData = JSON.parse(storage.getItem(firebaseKeys[0]) || '{}');
+                return keyData.email || null;
+              }
             }
           } catch (e) {
             console.warn('Failed to get email from Firebase keys:', e);
@@ -1442,17 +1508,17 @@
         if (!userEmail) {
           userEmail = getEmailFromFirebaseKeys();
         }
-        
+
         // SECURITY: If no email found, skip demo user creation - do NOT write email to localStorage
         // This prevents reintroducing the security vulnerability
-        if (!userEmail && localStorage.getItem('user-authenticated') === 'true') {
+        if (!userEmail && getResumeFeedbackStoredValue('user-authenticated') === 'true') {
           console.warn('[RESUME-FEEDBACK] User authenticated but no email found. Skipping demo user creation to maintain security.');
           return;
         }
-        
+
         // Only create demo user if we have a valid email from Firebase
         if (userEmail) {
-          const db = JSON.parse(localStorage.getItem('user-db') || '{}');
+          const db = getResumeFeedbackUserDb();
           if (!db[userEmail]) {
             db[userEmail] = {
               plan: 'free',
@@ -1461,7 +1527,7 @@
               cards: [],
               created: new Date().toISOString()
             };
-            localStorage.setItem('user-db', JSON.stringify(db));
+            setResumeFeedbackUserDb(db);
           }
         }
       };
@@ -1554,23 +1620,8 @@
             isAuthenticated = authState && authState.isAuthenticated;
             plan = window.JobHackAINavigation.getEffectivePlan();
           } else {
-            // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
-            function hasFirebaseAuthKeys() {
-              try {
-                return Object.keys(localStorage).some(k => 
-                  k.startsWith('firebase:authUser:') && 
-                  localStorage.getItem(k) && 
-                  localStorage.getItem(k) !== 'null' &&
-                  localStorage.getItem(k).length > 10
-                );
-              } catch (e) {
-                return false;
-              }
-            }
-            const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-            const hasFirebaseKeys = hasFirebaseAuthKeys();
-            // SECURITY: Require BOTH signals (matches head fast path + static-auth-guard.js)
-            isAuthenticated = hasLocalStorageAuth && hasFirebaseKeys;
+            const rfAuth = window.JobHackAIResumeFeedbackAuth;
+            isAuthenticated = !!(rfAuth && typeof rfAuth.hasSameTabAuthEvidence === 'function' && rfAuth.hasSameTabAuthEvidence());
             plan = localStorage.getItem('user-plan') || 'free';
           }
         }
@@ -1581,23 +1632,8 @@
           isAuthenticated = authState.isAuthenticated;
           plan = window.JobHackAINavigation.getEffectivePlan();
         } else {
-          // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
-          function hasFirebaseAuthKeys() {
-            try {
-              return Object.keys(localStorage).some(k => 
-                k.startsWith('firebase:authUser:') && 
-                localStorage.getItem(k) && 
-                localStorage.getItem(k) !== 'null' &&
-                localStorage.getItem(k).length > 10
-              );
-            } catch (e) {
-              return false;
-            }
-          }
-          const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-          const hasFirebaseKeys = hasFirebaseAuthKeys();
-          // SECURITY: Require BOTH signals (matches head fast path + static-auth-guard.js)
-          isAuthenticated = hasLocalStorageAuth && hasFirebaseKeys;
+          const rfAuth = window.JobHackAIResumeFeedbackAuth;
+          isAuthenticated = !!(rfAuth && typeof rfAuth.hasSameTabAuthEvidence === 'function' && rfAuth.hasSameTabAuthEvidence());
           plan = localStorage.getItem('user-plan') || 'free';
         }
       }
@@ -9121,20 +9157,8 @@
       if (window.__JOBHACKAI_ACCESS_VERIFIED__) {
         isAuthenticated = true;
       } else {
-        // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
-        // Use same pattern as checkAuthentication() for consistency
-        var hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-        var hasFirebaseKeys = false;
-        try {
-          hasFirebaseKeys = Object.keys(localStorage).some(function(k) {
-            return k.startsWith('firebase:authUser:') &&
-              localStorage.getItem(k) &&
-              localStorage.getItem(k) !== 'null' &&
-              localStorage.getItem(k).length > 10;
-          });
-        } catch (e) { /* ignore */ }
-        // SECURITY: Require BOTH signals (same as checkAuthentication localStorage path)
-        isAuthenticated = hasLocalStorageAuth && hasFirebaseKeys;
+        var rfAuth = window.JobHackAIResumeFeedbackAuth;
+        isAuthenticated = !!(rfAuth && typeof rfAuth.hasSameTabAuthEvidence === 'function' && rfAuth.hasSameTabAuthEvidence());
       }
 
       if (!isAuthenticated) {

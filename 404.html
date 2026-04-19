@@ -5,9 +5,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Page not found | JobHackAI</title>
-  <link rel="icon" type="image/png" href="/assets/jobhackai_icon_only_128.png">
-  <link rel="apple-touch-icon" href="/assets/jobhackai_icon_only_128.png">
-  <script src="/js/dynamic-favicon.js?v=20250111-1"></script>
+  <link rel="icon" type="image/png" sizes="128x128" href="/assets/jobhackai_icon_Favicon_128.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/jobhackai_apple_touch_icon_180.png">
+  <script src="/js/dynamic-favicon.js?v=20260418-3" defer></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/reset.css" />
   <link rel="stylesheet" href="/css/tokens.css" />
@@ -138,19 +138,32 @@
     (function () {
       const cta = document.getElementById('primary-cta');
       if (!cta) return;
-      function hasFirebaseAuthKeys() {
+      function safeGet(storage, key) {
         try {
-          return Object.keys(localStorage).some(k =>
-            k.startsWith('firebase:authUser:') &&
-            localStorage.getItem(k) &&
-            localStorage.getItem(k) !== 'null' &&
-            localStorage.getItem(k).length > 10
-          );
+          return storage.getItem(key);
+        } catch (e) {
+          return null;
+        }
+      }
+      function hasFirebaseAuthKeysInStorage(storage) {
+        try {
+          return Object.keys(storage).some(k => {
+            const v = storage.getItem(k);
+            return k.startsWith('firebase:authUser:') && v && v !== 'null' && v.length > 10;
+          });
         } catch (e) {
           return false;
         }
       }
-      const isAuthenticated = localStorage.getItem('user-authenticated') === 'true' || hasFirebaseAuthKeys();
+      function hasFirebaseAuthKeys() {
+        return hasFirebaseAuthKeysInStorage(localStorage) || hasFirebaseAuthKeysInStorage(sessionStorage);
+      }
+      const localAuthFlag = safeGet(localStorage, 'user-authenticated');
+      const sessionAuthFlag = safeGet(sessionStorage, 'user-authenticated');
+      const resolvedStoredAuth = (localAuthFlag === 'false' || sessionAuthFlag === 'false')
+        ? 'false'
+        : ((sessionAuthFlag === 'true' || localAuthFlag === 'true') ? 'true' : null);
+      const isAuthenticated = resolvedStoredAuth === 'true' || (resolvedStoredAuth !== 'false' && hasFirebaseAuthKeys());
       if (isAuthenticated) {
         cta.textContent = 'Go to dashboard';
         cta.setAttribute('href', '/dashboard.html');
@@ -166,6 +179,7 @@
   <script src="/js/plan-cache.js"></script>
   <script type="module" src="/js/firebase-auth.js?v=20260207-2"></script>
   <!-- Load navigation system -->
+  <script src="/js/auth-persistence.js"></script>
   <script src="/js/navigation.js?v=20260208-1"></script>
   <script src="/js/universal-logout.js?v=20260208-1"></script>
   <script>

@@ -13,32 +13,39 @@
       return;
     }
 
-    function hasFirebaseAuth() {
+    function getFirebaseAuthStorages() {
+      return [sessionStorage, localStorage];
+    }
+
+    function hasFirebaseAuthShardInStorage(storage) {
+      if (!storage) return false;
       try {
-        // First check: Look for our auth state flag (set by firebase-auth.js)
-        const hasLocalStorageAuth = localStorage.getItem('user-authenticated') === 'true';
-        
-        // Second check: Look for Firebase SDK auth user shard (more reliable)
-        // Firebase SDK writes these keys synchronously on page load if user is authenticated
-        // SECURITY: Require BOTH flag AND Firebase keys to prevent XSS attacks from bypassing guard
-        // An attacker would need to set both values, not just one
-        let hasFirebaseKeys = false;
-        for (var i = 0; i < localStorage.length; i++) {
-          var k = localStorage.key(i);
-          if (k && k.indexOf('firebase:authUser:') === 0) {
-            var userData = localStorage.getItem(k);
-            if (userData && userData !== 'null' && userData.length > 10) {
-              hasFirebaseKeys = true;
-              break;
-            }
+        for (var i = 0; i < storage.length; i++) {
+          var key = storage.key(i);
+          var value = key ? storage.getItem(key) : null;
+          if (key && key.indexOf('firebase:authUser:') === 0 && value && value !== 'null' && value.length > 10) {
+            return true;
           }
         }
-        
-        // Require both conditions: flag must be true AND Firebase keys must exist
-        // This prevents stale flags or XSS attacks from incorrectly identifying users as authenticated
-        return hasLocalStorageAuth && hasFirebaseKeys;
       } catch (_) {}
       return false;
+    }
+
+    function hasImmediateSameTabFirebaseAuth() {
+      try {
+        // With browserSessionPersistence, protected pages should only trust same-tab
+        // sessionStorage evidence before firebase-auth-ready fires. Shared localStorage
+        // can legitimately contain stale auth flags or old Firebase shards from another tab.
+        var sessionValue = null;
+        try { sessionValue = sessionStorage.getItem('user-authenticated'); } catch (_) {}
+        if (sessionValue === 'false') return false;
+        return hasFirebaseAuthShardInStorage(sessionStorage);
+      } catch (_) {}
+      return false;
+    }
+
+    function redirectToLoggedOutDestination() {
+      try { location.replace('/login.html'); } catch (_) {}
     }
 
     // Cross-tab logout sync
@@ -46,9 +53,22 @@
       var ch = new BroadcastChannel('auth');
       ch.onmessage = function (e) {
         if (e && (e.type === 'logout' || (e.data && e.data.type === 'logout'))) {
-          location.replace('/index.html');
+          redirectToLoggedOutDestination();
         }
       };
+    } catch (_) {}
+    try {
+      window.addEventListener('storage', function (e) {
+        if (!e) return;
+        if (e.key === 'user-authenticated' && e.newValue === 'false') {
+          redirectToLoggedOutDestination();
+          return;
+        }
+        if (e.key === 'force-logged-out') {
+          var logoutTs = parseInt(e.newValue || '0', 10);
+          if (logoutTs) redirectToLoggedOutDestination();
+        }
+      });
     } catch (_) {}
 
     // Decide after actively waiting for Firebase auth to appear
@@ -97,7 +117,7 @@
     function checkAndReveal() {
       if (resolved) return;
 
-      if (hasFirebaseAuth()) {
+      if (hasImmediateSameTabFirebaseAuth()) {
         resolveDecision(true);
         return;
       }
@@ -109,7 +129,7 @@
       var elapsed = Date.now() - startTime;
       if (elapsed >= maxWait) {
         // Final check before redirecting
-        if (hasFirebaseAuth()) {
+        if (hasImmediateSameTabFirebaseAuth()) {
           resolveDecision(true);
           return;
         }
@@ -130,4 +150,3 @@
     try { location.replace('/login.html'); } catch (_) {}
   }
 })();
-
