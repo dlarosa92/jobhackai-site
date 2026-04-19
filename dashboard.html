@@ -952,7 +952,22 @@
 
       if (isAuthInStorage || hasPersistedFirebaseAuth || hasTokens) {
         await waitForFirebaseAuthReady(30000);
-        await waitForFirebaseUser(authManager, 30000);
+        // Re-read after auth is ready: passive cleanup sets sessionStorage user-authenticated
+        // to false while localStorage can remain stale true (browserSessionPersistence / new tab).
+        const isAuthInStorageAfterReady = getDashboardStoredValue('user-authenticated') === 'true';
+        const hasPersistedFirebaseAuthAfterReady = hasDashboardFirebaseAuthPersistence();
+        let hasTokensAfterReady = false;
+        try {
+          hasTokensAfterReady = !!(
+            sessionStorage.getItem('firebase_id_token') ||
+            sessionStorage.getItem('firebase_refresh_token') ||
+            sessionStorage.getItem('linkedin_oidc_id_token') ||
+            sessionStorage.getItem('linkedin_pending_init')
+          );
+        } catch (_) {}
+        if (isAuthInStorageAfterReady || hasPersistedFirebaseAuthAfterReady || hasTokensAfterReady) {
+          await waitForFirebaseUser(authManager, 30000);
+        }
       } else {
         await waitForFirebaseAuthReady(5000);
       }
