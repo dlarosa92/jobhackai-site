@@ -855,11 +855,45 @@
 
     const _dashboardAuthPersistence = window.JobHackAIAuthPersistence;
     function getDashboardStoredValue(key) {
-      return _dashboardAuthPersistence.getCrossTabStoredValue(key);
+      if (_dashboardAuthPersistence && typeof _dashboardAuthPersistence.getCrossTabStoredValue === 'function') {
+        return _dashboardAuthPersistence.getCrossTabStoredValue(key);
+      }
+      try {
+        if (key === 'user-authenticated') {
+          var sessionValue = null;
+          var localValue = null;
+          try { sessionValue = sessionStorage.getItem('user-authenticated'); } catch (_) {}
+          try { localValue = localStorage.getItem('user-authenticated'); } catch (_) {}
+          if (localValue === 'false' || sessionValue === 'false') return 'false';
+          if (sessionValue === 'true' || localValue === 'true') return 'true';
+          return null;
+        }
+        if (typeof localStorage !== 'undefined') {
+          try {
+            var lv = localStorage.getItem(key);
+            if (lv !== null) return lv;
+          } catch (_) {}
+        }
+        if (typeof sessionStorage !== 'undefined') {
+          try {
+            return sessionStorage.getItem(key);
+          } catch (_) {}
+        }
+      } catch (_) {}
+      return null;
     }
 
     function setDashboardStoredValue(key, value) {
-      _dashboardAuthPersistence.setCrossTabStoredValue(key, value);
+      if (_dashboardAuthPersistence && typeof _dashboardAuthPersistence.setCrossTabStoredValue === 'function') {
+        _dashboardAuthPersistence.setCrossTabStoredValue(key, value);
+        return;
+      }
+      try {
+        if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(key, value);
+      } catch (_) {}
+      try {
+        if (typeof localStorage !== 'undefined') localStorage.setItem(key, value);
+      } catch (_) {}
     }
 
     // --- ENHANCED AUTHENTICATION CHECK ---
