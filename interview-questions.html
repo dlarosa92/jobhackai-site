@@ -39,6 +39,10 @@
         return hasFirebaseAuthKeysInStorage(sessionStorage);
       }
 
+      window.JobHackAIInterviewQuestionsAuth = {
+        hasSameTabAuthEvidence: hasSameTabAuthEvidence
+      };
+
       // Synchronous fast path: check same-tab session auth + cached plan BEFORE any async work.
       // This sets __JOBHACKAI_ACCESS_VERIFIED__ immediately so the body guard never races.
       // With browserSessionPersistence, localStorage is only a cross-tab hint and should
@@ -1886,7 +1890,8 @@
         return true;
       } else {
         // Fallback to same-tab session evidence if navigation isn't available yet.
-        const isAuthenticated = hasSameTabAuthEvidence();
+        const iqAuth = window.JobHackAIInterviewQuestionsAuth;
+        const isAuthenticated = !!(iqAuth && typeof iqAuth.hasSameTabAuthEvidence === 'function' && iqAuth.hasSameTabAuthEvidence());
         if (!isAuthenticated) {
           const mainContent = document.querySelector('main');
           mainContent.innerHTML = `
