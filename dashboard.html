@@ -866,6 +866,19 @@
       return _dashboardAuthPersistence.hasFirebaseAuthPersistence();
     }
 
+    function hasSessionTokens() {
+      try {
+        return !!(
+          sessionStorage.getItem('firebase_id_token') ||
+          sessionStorage.getItem('firebase_refresh_token') ||
+          sessionStorage.getItem('linkedin_oidc_id_token') ||
+          sessionStorage.getItem('linkedin_pending_init')
+        );
+      } catch (_) {
+        return false;
+      }
+    }
+
     // --- ENHANCED AUTHENTICATION CHECK ---
     async function checkAuthentication() {
       console.log('🔧 dashboard.html VERSION: fix-auth-cache-loop-v1 - ' + new Date().toISOString());
@@ -883,27 +896,14 @@
       }
 
       const authManager = window.FirebaseAuthManager;
-      let isAuthInStorage = false;
-      let hasPersistedFirebaseAuth = false;
-      let hasTokens = false;
-      let currentIsAuthInStorage = false;
-      let currentHasPersistedFirebaseAuth = false;
-      let currentHasTokens = false;
 
-      isAuthInStorage = getDashboardStoredValue('user-authenticated') === 'true';
-      hasPersistedFirebaseAuth = hasDashboardFirebaseAuthPersistence();
+      const isAuthInStorage = getDashboardStoredValue('user-authenticated') === 'true';
+      const hasPersistedFirebaseAuth = hasDashboardFirebaseAuthPersistence();
+      const hasTokens = hasSessionTokens();
 
-      try {
-        hasTokens = !!(
-          sessionStorage.getItem('firebase_id_token') ||
-          sessionStorage.getItem('firebase_refresh_token') ||
-          sessionStorage.getItem('linkedin_oidc_id_token') ||
-          sessionStorage.getItem('linkedin_pending_init')
-        );
-      } catch (_) {}
-      currentIsAuthInStorage = isAuthInStorage;
-      currentHasPersistedFirebaseAuth = hasPersistedFirebaseAuth;
-      currentHasTokens = hasTokens;
+      let currentIsAuthInStorage = isAuthInStorage;
+      let currentHasPersistedFirebaseAuth = hasPersistedFirebaseAuth;
+      let currentHasTokens = hasTokens;
 
       if (isAuthInStorage || hasPersistedFirebaseAuth || hasTokens) {
         await waitForFirebaseAuthReady(30000);
@@ -911,15 +911,7 @@
         // to false while localStorage can remain stale true (browserSessionPersistence / new tab).
         currentIsAuthInStorage = getDashboardStoredValue('user-authenticated') === 'true';
         currentHasPersistedFirebaseAuth = hasDashboardFirebaseAuthPersistence();
-        currentHasTokens = false;
-        try {
-          currentHasTokens = !!(
-            sessionStorage.getItem('firebase_id_token') ||
-            sessionStorage.getItem('firebase_refresh_token') ||
-            sessionStorage.getItem('linkedin_oidc_id_token') ||
-            sessionStorage.getItem('linkedin_pending_init')
-          );
-        } catch (_) {}
+        currentHasTokens = hasSessionTokens();
         if (currentIsAuthInStorage || currentHasPersistedFirebaseAuth || currentHasTokens) {
           await waitForFirebaseUser(authManager, 30000);
         }
@@ -927,15 +919,7 @@
         await waitForFirebaseAuthReady(5000);
         currentIsAuthInStorage = getDashboardStoredValue('user-authenticated') === 'true';
         currentHasPersistedFirebaseAuth = hasDashboardFirebaseAuthPersistence();
-        currentHasTokens = false;
-        try {
-          currentHasTokens = !!(
-            sessionStorage.getItem('firebase_id_token') ||
-            sessionStorage.getItem('firebase_refresh_token') ||
-            sessionStorage.getItem('linkedin_oidc_id_token') ||
-            sessionStorage.getItem('linkedin_pending_init')
-          );
-        } catch (_) {}
+        currentHasTokens = hasSessionTokens();
       }
 
       const user = authManager.getCurrentUser?.();
