@@ -312,6 +312,14 @@ class UserDatabase {
     } catch (_) {}
   }
 
+  static shouldClearLegacyLocalCopies(primaryStorage) {
+    try {
+      return primaryStorage === sessionStorage;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static getDB() {
     try {
       const primaryStorage = this.getPrimaryStorage();
@@ -329,8 +337,10 @@ class UserDatabase {
       try {
         primaryStorage.setItem(this.DB_KEY, legacyData);
         primaryStorage.setItem(this.BACKUP_KEY, localStorage.getItem(this.BACKUP_KEY) || legacyData);
+        if (this.shouldClearLegacyLocalCopies(primaryStorage)) {
+          this.clearLegacyLocalCopies();
+        }
       } catch (_) {}
-      this.clearLegacyLocalCopies();
       return parsed;
     } catch (error) {
       console.error('Error loading user database:', error);
@@ -344,7 +354,9 @@ class UserDatabase {
       const primaryStorage = this.getPrimaryStorage();
       primaryStorage.setItem(this.DB_KEY, serialized);
       primaryStorage.setItem(this.BACKUP_KEY, serialized);
-      this.clearLegacyLocalCopies();
+      if (this.shouldClearLegacyLocalCopies(primaryStorage)) {
+        this.clearLegacyLocalCopies();
+      }
     } catch (error) {
       console.error('Error saving user database:', error);
     }
@@ -904,7 +916,9 @@ class AuthManager {
         if (clearedLegacyAuthKeys.length > 0) {
           console.log('🧹 Cleared legacy local Firebase auth shards after session restore:', clearedLegacyAuthKeys);
         }
-        UserDatabase.clearLegacyLocalCopies();
+        if (UserDatabase.shouldClearLegacyLocalCopies(UserDatabase.getPrimaryStorage())) {
+          UserDatabase.clearLegacyLocalCopies();
+        }
 
         // Notify listeners
         this.notifyAuthStateChange(user, userRecord);
