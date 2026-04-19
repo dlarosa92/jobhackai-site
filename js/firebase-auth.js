@@ -464,11 +464,12 @@ class AuthManager {
     try {
       const cleared = [];
       const isExplicitSignOut = reason === 'firebase-auth-signed-out' && this._explicitSignOutInProgress;
-      // Passive onAuthStateChanged(null) clears this tab's sessionStorage; with browserSessionPersistence,
-      // Firebase does not use localStorage for the live session, but legacy local firebase:authUser:* keys
-      // must be removed so static-auth-guard.js does not treat a new tab as authenticated.
+      // Only explicit sign-out should write localStorage 'user-authenticated' = 'false'. Passive
+      // onAuthStateChanged(null) (e.g., a new tab under browserSessionPersistence with no session)
+      // must not mutate the shared key, because static-auth-guard.js redirects every other tab to
+      // /login.html on that storage event, logging authenticated users out of protected pages.
       try {
-        if (reason === 'firebase-auth-signed-out') {
+        if (isExplicitSignOut) {
           localStorage.setItem('user-authenticated', 'false');
         }
       } catch (_) {}
