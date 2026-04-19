@@ -418,6 +418,12 @@ class AuthManager {
       for (const storage of storagesToClear) {
         cleared.push(...clearFirebaseAuthShards(storage));
       }
+      if (!isExplicitSignOut) {
+        // Session persistence stores live Firebase auth shards in sessionStorage.
+        // Any localStorage auth shards seen during passive cleanup are stale leftovers and
+        // can safely be removed without affecting other tabs' active sessions.
+        cleared.push(...clearFirebaseAuthShards(localStorage));
+      }
       if (isExplicitSignOut) {
         try {
           sessionStorage.removeItem(UserDatabase.DB_KEY);
