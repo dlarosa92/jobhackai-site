@@ -467,7 +467,7 @@ class AuthManager {
       cleared.push('user-authenticated');
 
       const storagesToClear = isExplicitSignOut ? getStorageBackends() : [sessionStorage];
-      ['user-email', 'auth-user', 'user-plan', 'dev-plan', 'user-name'].forEach((key) => {
+      ['user-email', 'auth-user'].forEach((key) => {
         for (const storage of storagesToClear) {
           try {
             storage.removeItem(key);
@@ -476,14 +476,25 @@ class AuthManager {
         }
       });
 
+      if (isExplicitSignOut) {
+        ['user-plan', 'dev-plan', 'user-name'].forEach((key) => {
+          for (const storage of storagesToClear) {
+            try {
+              storage.removeItem(key);
+              cleared.push(key);
+            } catch (_) {}
+          }
+        });
+      }
+
       for (const storage of storagesToClear) {
         cleared.push(...clearFirebaseAuthShards(storage));
       }
-      try {
-        sessionStorage.removeItem(UserDatabase.DB_KEY);
-        sessionStorage.removeItem(UserDatabase.BACKUP_KEY);
-      } catch (_) {}
       if (isExplicitSignOut) {
+        try {
+          sessionStorage.removeItem(UserDatabase.DB_KEY);
+          sessionStorage.removeItem(UserDatabase.BACKUP_KEY);
+        } catch (_) {}
         UserDatabase.clearLegacyLocalCopies();
       }
 
