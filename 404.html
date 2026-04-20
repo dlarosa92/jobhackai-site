@@ -167,7 +167,10 @@
             : (localAuthFlag === 'false'
                 ? 'false'
                 : ((localAuthFlag === 'true') ? 'true' : null)));
-      const isAuthenticated = resolvedStoredAuth === 'true' || (resolvedStoredAuth !== 'false' && hasFirebaseAuthKeys());
+      // Require Firebase auth evidence in addition to the stored flag so a stale
+      // localStorage 'true' left behind by a passive sign-out in another tab doesn't
+      // falsely promote the CTA to "Go to dashboard" for unauthenticated visitors.
+      const isAuthenticated = resolvedStoredAuth !== 'false' && hasFirebaseAuthKeys();
       if (isAuthenticated) {
         cta.textContent = 'Go to dashboard';
         cta.setAttribute('href', '/dashboard.html');
