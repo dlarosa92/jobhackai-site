@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/auth-fixture');
 const { submitForm, waitForAuthReady } = require('../helpers/auth-helpers');
 
 function generateUniqueSignupEmail() {
@@ -26,6 +26,22 @@ test.describe('Authentication', () => {
     try {
       const page = await context.newPage();
 
+      // Surface browser-side errors in CI logs so a regression in login-page.js
+      // (silently-caught init errors, module fetch failures) is never invisible
+      // again.
+      page.on('pageerror', (err) => {
+        console.log('[BROWSER pageerror]', err.message, '\n', err.stack);
+      });
+      page.on('console', (msg) => {
+        const type = msg.type();
+        if (type === 'error' || type === 'warning') {
+          console.log(`[BROWSER ${type}]`, msg.text());
+        }
+      });
+      page.on('requestfailed', (req) => {
+        console.log('[BROWSER requestfailed]', req.url(), req.failure()?.errorText);
+      });
+
       await page.goto('/login');
 
       // Wait for login form using actual selector
@@ -37,6 +53,35 @@ test.describe('Authentication', () => {
 
       if (!TEST_EMAIL || !TEST_PASSWORD) {
         throw new Error('TEST_EMAIL and TEST_PASSWORD environment variables must be set');
+      }
+
+      // Ensure login-page.js actually executed. On fresh browser contexts,
+      // Cloudflare Pages' injected Early Hints preload uses credentials:include
+      // while <script type="module"> fetches with credentials:omit; on a cold
+      // CDN connection the mismatch can cause Chromium to abort the module
+      // fetch (net::ERR_ABORTED). The DOM still shows the form, but no submit
+      // handler is attached, so requestSubmit() falls back to a native GET with
+      // credentials in the URL. Reload once if the auth module didn't load --
+      // on the second visit CF has a warm connection and the script loads.
+      const authModuleLoaded = async () => {
+        try {
+          await page.waitForFunction(
+            () => typeof window.FirebaseAuthManager !== 'undefined',
+            null,
+            { timeout: 8000 }
+          );
+          return true;
+        } catch (_) {
+          return false;
+        }
+      };
+      if (!(await authModuleLoaded())) {
+        console.warn('[LOGIN TEST] FirebaseAuthManager missing after first load; reloading to recover from aborted module fetch');
+        await page.reload();
+        await page.waitForSelector('#loginEmail');
+        if (!(await authModuleLoaded())) {
+          throw new Error('login-page.js did not initialize after reload; submit handler not attached');
+        }
       }
 
       // Fill credentials

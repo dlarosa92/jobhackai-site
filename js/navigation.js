@@ -557,8 +557,10 @@ function getResolvedStoredAuthFlagValue() {
   let localValue = null;
   try { sessionValue = sessionStorage.getItem('user-authenticated'); } catch (_) {}
   try { localValue = localStorage.getItem('user-authenticated'); } catch (_) {}
-  if (localValue === 'false' || sessionValue === 'false') return 'false';
-  if (sessionValue === 'true' || localValue === 'true') return 'true';
+  if (sessionValue === 'true') return 'true';
+  if (sessionValue === 'false') return 'false';
+  if (localValue === 'false') return 'false';
+  if (localValue === 'true') return 'true';
   return null;
 }
 

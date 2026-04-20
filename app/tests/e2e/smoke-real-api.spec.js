@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/auth-fixture');
 const { getAuthToken, waitForAuthReady } = require('../helpers/auth-helpers');
 
 const ALLOWED_PLANS = new Set(['free', 'trial', 'essential', 'pro', 'premium']);
