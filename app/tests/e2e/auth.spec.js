@@ -26,6 +26,22 @@ test.describe('Authentication', () => {
     try {
       const page = await context.newPage();
 
+      // DEBUG: surface any JS errors / console output from the login page so
+      // failures like a silently-caught init error in login-page.js show up in
+      // CI logs instead of only manifesting as a native GET form submission.
+      page.on('pageerror', (err) => {
+        console.log('[BROWSER pageerror]', err.message, '\n', err.stack);
+      });
+      page.on('console', (msg) => {
+        const type = msg.type();
+        if (type === 'error' || type === 'warning') {
+          console.log(`[BROWSER ${type}]`, msg.text());
+        }
+      });
+      page.on('requestfailed', (req) => {
+        console.log('[BROWSER requestfailed]', req.url(), req.failure()?.errorText);
+      });
+
       await page.goto('/login');
 
       // Wait for login form using actual selector
@@ -38,6 +54,21 @@ test.describe('Authentication', () => {
       if (!TEST_EMAIL || !TEST_PASSWORD) {
         throw new Error('TEST_EMAIL and TEST_PASSWORD environment variables must be set');
       }
+
+      // DEBUG: report whether login-page.js actually attached its submit
+      // handler. If `hasSubmitHandler` is false at submit time, the form will
+      // fall back to a native GET and credentials will land in the URL.
+      const preSubmitState = await page.evaluate(() => {
+        const form = document.getElementById('loginForm');
+        return {
+          formExists: !!form,
+          formDisplay: form ? getComputedStyle(form).display : null,
+          hasFirebaseAuthManager: typeof window.FirebaseAuthManager !== 'undefined',
+          hasAuthPersistence: typeof window.JobHackAIAuthPersistence !== 'undefined',
+          readyState: document.readyState,
+        };
+      });
+      console.log('[LOGIN TEST] pre-submit state:', JSON.stringify(preSubmitState));
 
       // Fill credentials
       await page.fill('#loginEmail', TEST_EMAIL);
