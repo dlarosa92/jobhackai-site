@@ -127,9 +127,10 @@
   <!-- Core scripts only (no navigation.js) -->
   <script src="js/redirect-tracer.js?v=1" defer></script>
   <script src="js/universal-logout.js?v=20260208-1" defer></script>
-  <script src="js/main.js?v=20251006-1" type="module"></script>
+  <!-- crossorigin matches Cloudflare Pages' injected Early Hints preload credentials mode; without it, modules on fresh contexts intermittently fetch as ERR_ABORTED. -->
+  <script src="js/main.js?v=20251006-1" type="module" crossorigin="anonymous"></script>
   <!-- Verification Flow Script -->
-  <script src="js/verify-email.js" type="module"></script>
+  <script src="js/verify-email.js" type="module" crossorigin="anonymous"></script>
   <script src="js/logo-link-env.js" defer></script>
   <script src="js/schedule-feedback-widget.js" defer></script>
 </body>

@@ -26,9 +26,9 @@ test.describe('Authentication', () => {
     try {
       const page = await context.newPage();
 
-      // DEBUG: surface any JS errors / console output from the login page so
-      // failures like a silently-caught init error in login-page.js show up in
-      // CI logs instead of only manifesting as a native GET form submission.
+      // Surface browser-side errors in CI logs so a regression in login-page.js
+      // (silently-caught init errors, module fetch failures) is never invisible
+      // again.
       page.on('pageerror', (err) => {
         console.log('[BROWSER pageerror]', err.message, '\n', err.stack);
       });
@@ -55,20 +55,34 @@ test.describe('Authentication', () => {
         throw new Error('TEST_EMAIL and TEST_PASSWORD environment variables must be set');
       }
 
-      // DEBUG: report whether login-page.js actually attached its submit
-      // handler. If `hasSubmitHandler` is false at submit time, the form will
-      // fall back to a native GET and credentials will land in the URL.
-      const preSubmitState = await page.evaluate(() => {
-        const form = document.getElementById('loginForm');
-        return {
-          formExists: !!form,
-          formDisplay: form ? getComputedStyle(form).display : null,
-          hasFirebaseAuthManager: typeof window.FirebaseAuthManager !== 'undefined',
-          hasAuthPersistence: typeof window.JobHackAIAuthPersistence !== 'undefined',
-          readyState: document.readyState,
-        };
-      });
-      console.log('[LOGIN TEST] pre-submit state:', JSON.stringify(preSubmitState));
+      // Ensure login-page.js actually executed. On fresh browser contexts,
+      // Cloudflare Pages' injected Early Hints preload uses credentials:include
+      // while <script type="module"> fetches with credentials:omit; on a cold
+      // CDN connection the mismatch can cause Chromium to abort the module
+      // fetch (net::ERR_ABORTED). The DOM still shows the form, but no submit
+      // handler is attached, so requestSubmit() falls back to a native GET with
+      // credentials in the URL. Reload once if the auth module didn't load --
+      // on the second visit CF has a warm connection and the script loads.
+      const authModuleLoaded = async () => {
+        try {
+          await page.waitForFunction(
+            () => typeof window.FirebaseAuthManager !== 'undefined',
+            null,
+            { timeout: 8000 }
+          );
+          return true;
+        } catch (_) {
+          return false;
+        }
+      };
+      if (!(await authModuleLoaded())) {
+        console.warn('[LOGIN TEST] FirebaseAuthManager missing after first load; reloading to recover from aborted module fetch');
+        await page.reload();
+        await page.waitForSelector('#loginEmail');
+        if (!(await authModuleLoaded())) {
+          throw new Error('login-page.js did not initialize after reload; submit handler not attached');
+        }
+      }
 
       // Fill credentials
       await page.fill('#loginEmail', TEST_EMAIL);
