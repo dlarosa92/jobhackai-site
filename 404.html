@@ -167,7 +167,12 @@
             : (localAuthFlag === 'false'
                 ? 'false'
                 : ((localAuthFlag === 'true') ? 'true' : null)));
-      const isAuthenticated = resolvedStoredAuth === 'true' || (resolvedStoredAuth !== 'false' && hasFirebaseAuthKeys());
+      // Require both an explicit stored 'true' flag and Firebase auth evidence so a
+      // stale localStorage 'true' left behind by a passive sign-out in another tab
+      // doesn't falsely promote the CTA, and a lone surviving Firebase shard (after a
+      // partial cleanup that removed the flag) doesn't either. Matches the strict
+      // hasStoredAuth && hasFirebaseKeys pattern used in js/page-access-control.js:187.
+      const isAuthenticated = resolvedStoredAuth === 'true' && hasFirebaseAuthKeys();
       if (isAuthenticated) {
         cta.textContent = 'Go to dashboard';
         cta.setAttribute('href', '/dashboard.html');
