@@ -511,6 +511,17 @@ class AuthManager {
         try {
           cleared.push(...clearFirebaseAuthShards(window.localStorage));
         } catch (_) {}
+        // Remove the stale localStorage 'user-authenticated' flag so new tabs with empty
+        // sessionStorage don't read a permanently stale 'true'. Use removeItem (not
+        // setItem('false')) because static-auth-guard.js and universal-logout.js only
+        // redirect on storage events where newValue === 'false'; a null newValue is a
+        // no-op for those listeners and therefore safe for other authenticated tabs.
+        try {
+          if (localStorage.getItem('user-authenticated') !== null) {
+            localStorage.removeItem('user-authenticated');
+            cleared.push('user-authenticated:local-removed');
+          }
+        } catch (_) {}
       }
       if (isExplicitSignOut) {
         try {
