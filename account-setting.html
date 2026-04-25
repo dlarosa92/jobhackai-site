@@ -81,6 +81,10 @@
     }
 
     function getAccountSettingsFirebaseAuthData() {
+      const ap = window.JobHackAIAuthPersistence;
+      if (ap && typeof ap.getStoredFirebaseAuthRecord === 'function') {
+        return ap.getStoredFirebaseAuthRecord();
+      }
       for (const store of getAccountSettingsAuthStores()) {
         try {
           const firebaseKey = getAccountSettingsStoreKeys(store).find(key => key.startsWith('firebase:authUser:'));
