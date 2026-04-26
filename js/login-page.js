@@ -9,7 +9,20 @@ console.log('🔧 login-page.js VERSION: fix-auth-cache-loop-v1 - ' + new Date()
 import authManager, { waitForAuthReady, AUTH_PENDING } from './firebase-auth.js';
 
 function getResolvedStoredAuthFlagValue() {
-  return window.JobHackAIAuthPersistence.getResolvedStoredAuthFlagValue();
+  const ap = window.JobHackAIAuthPersistence;
+  if (ap && typeof ap.getResolvedStoredAuthFlagValue === 'function') {
+    return ap.getResolvedStoredAuthFlagValue();
+  }
+  let sessionValue = null;
+  let localValue = null;
+  try { sessionValue = sessionStorage.getItem('user-authenticated'); } catch (_) {}
+  try { localValue = localStorage.getItem('user-authenticated'); } catch (_) {}
+
+  if (sessionValue === 'true') return 'true';
+  if (sessionValue === 'false') return 'false';
+  if (localValue === 'false') return 'false';
+  if (localValue === 'true') return 'true';
+  return null;
 }
 
 function getStoredFirebaseAuthRecord() {
@@ -20,6 +33,11 @@ function getStoredFirebaseAuthRecord() {
   } catch (_) {}
   if (getResolvedStoredAuthFlagValue() !== 'true') {
     return null;
+  }
+  const ap = window.JobHackAIAuthPersistence;
+  if (ap && typeof ap.getStoredFirebaseAuthRecord === 'function') {
+    const record = ap.getStoredFirebaseAuthRecord();
+    if (record?.email) return record;
   }
   const storages = [sessionStorage, localStorage];
   for (const storage of storages) {

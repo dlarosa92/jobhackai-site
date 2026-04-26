@@ -77,6 +77,26 @@
     }
   }
 
+  function getStoredFirebaseAuthRecord() {
+    var stores = getAuthPersistenceStores();
+    for (var s = 0; s < stores.length; s++) {
+      try {
+        var store = stores[s];
+        for (var i = 0; i < store.length; i++) {
+          var key = store.key(i);
+          if (!key || key.indexOf(FIREBASE_AUTH_STORAGE_KEY_PREFIX) !== 0) continue;
+          var value = store.getItem(key);
+          if (!value || value === 'null') continue;
+          var parsed = JSON.parse(value);
+          if (parsed && typeof parsed === 'object') {
+            return parsed;
+          }
+        }
+      } catch (_) {}
+    }
+    return null;
+  }
+
   window.JobHackAIAuthPersistence = {
     FIREBASE_AUTH_STORAGE_KEY_PREFIX: FIREBASE_AUTH_STORAGE_KEY_PREFIX,
     getAuthPersistenceStores: getAuthPersistenceStores,
@@ -84,6 +104,7 @@
     getCrossTabStoredValue: getCrossTabStoredValue,
     setCrossTabStoredValue: setCrossTabStoredValue,
     hasStoredAuthenticatedFlag: hasStoredAuthenticatedFlag,
-    hasFirebaseAuthPersistence: hasFirebaseAuthPersistence
+    hasFirebaseAuthPersistence: hasFirebaseAuthPersistence,
+    getStoredFirebaseAuthRecord: getStoredFirebaseAuthRecord
   };
 })(window);
