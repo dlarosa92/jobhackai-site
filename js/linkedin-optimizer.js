@@ -130,9 +130,8 @@ function getAuthState() {
     }
   } catch (_) {}
 
-  // Fallback while Firebase/nav hydrates. Same-tab session true still needs matching
-  // Firebase evidence, but a shared explicit true flag can avoid a locked-state flash
-  // in fresh tabs where browserSessionPersistence has not restored sessionStorage yet.
+  // Fallback while Firebase/nav hydrates. Never trust the shared localStorage flag
+  // by itself; it can outlive the session under browserSessionPersistence.
   let sessionFlag = null;
   let localFlag = null;
   let hasSessionFirebaseKeys = false;
@@ -156,7 +155,7 @@ function getAuthState() {
     return { isAuthenticated: false };
   }
   return {
-    isAuthenticated: localFlag === 'true'
+    isAuthenticated: localFlag === 'true' && hasSessionFirebaseKeys
   };
 }
 
