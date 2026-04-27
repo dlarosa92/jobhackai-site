@@ -91,6 +91,22 @@ forbid_match "marketing/js/navigation.js" \
   "url\\.searchParams\\.set\\(AUTH_HANDOFF_QUERY_(AUTH|PLAN|TS)" \
   "marketing/js/navigation.js must not append auth-handoff query params to marketing links"
 
+# Guardrail: passive Firebase null callbacks must not clear shared localStorage
+# Firebase auth shards from cold tabs. Only tabs that already had sessionStorage
+# Firebase evidence may retire legacy localStorage shards.
+require_match "js/firebase-auth.js" \
+  "hadSessionFirebaseAuthShard[[:space:]]*=[[:space:]]*hasFirebaseAuthShard\\(window\\.sessionStorage\\)" \
+  "js/firebase-auth.js must record session Firebase evidence before passive cleanup"
+require_match "js/firebase-auth.js" \
+  "reason === 'firebase-auth-signed-out' && hadSessionFirebaseAuthShard" \
+  "js/firebase-auth.js passive local shard cleanup must require session Firebase evidence"
+require_match "marketing/js/firebase-auth.js" \
+  "hadSessionFirebaseAuthShard[[:space:]]*=[[:space:]]*hasFirebaseAuthShard\\(window\\.sessionStorage\\)" \
+  "marketing/js/firebase-auth.js must record session Firebase evidence before passive cleanup"
+require_match "marketing/js/firebase-auth.js" \
+  "reason === 'firebase-auth-signed-out' && hadSessionFirebaseAuthShard" \
+  "marketing/js/firebase-auth.js passive local shard cleanup must require session Firebase evidence"
+
 # Guardrail: prevent re-introducing the legacy dashboard copy.
 if [[ -f "app/public/dashboard.html" ]]; then
   error "Legacy file app/public/dashboard.html must not be present"

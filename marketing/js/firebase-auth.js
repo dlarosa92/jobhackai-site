@@ -406,6 +406,10 @@ class AuthManager {
     try {
       const cleared = [];
       const isExplicitSignOut = reason === 'firebase-auth-signed-out' && this._explicitSignOutInProgress;
+      let hadSessionFirebaseAuthShard = false;
+      try {
+        hadSessionFirebaseAuthShard = hasFirebaseAuthShard(window.sessionStorage);
+      } catch (_) {}
       // Only explicit sign-out should mutate the shared localStorage auth flag. Passive
       // onAuthStateChanged(null) is tab-local under browserSessionPersistence; changing the
       // shared flag would perturb auth checks in other tabs.
@@ -445,10 +449,10 @@ class AuthManager {
       for (const storage of storagesToClear) {
         cleared.push(...clearFirebaseAuthShards(storage));
       }
-      if (!isExplicitSignOut && reason === 'firebase-auth-signed-out') {
-        // Session persistence stores live Firebase auth shards in sessionStorage.
-        // Any localStorage auth shards seen during passive cleanup are stale leftovers and
-        // can safely be removed without affecting other tabs' active sessions.
+      if (!isExplicitSignOut && reason === 'firebase-auth-signed-out' && hadSessionFirebaseAuthShard) {
+        // Only clear legacy localStorage shards when this tab already had session
+        // Firebase evidence. A cold passive null auth callback must not erase the
+        // shared fallback evidence other tabs and static pages can still inspect.
         try {
           cleared.push(...clearFirebaseAuthShards(window.localStorage));
         } catch (_) {}
