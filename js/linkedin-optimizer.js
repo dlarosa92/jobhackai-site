@@ -113,11 +113,30 @@ function getAuthState() {
   if (window.JobHackAINavigation?.getAuthState) {
     return window.JobHackAINavigation.getAuthState();
   }
-  // Fallback: with browserSessionPersistence, only trust same-tab session evidence
-  // until Firebase/nav finishes hydrating.
+  try {
+    if (sessionStorage.getItem('logout-intent') === '1') {
+      return { isAuthenticated: false };
+    }
+  } catch (_) {}
+
+  try {
+    const authReady = !!(
+      window.__REAL_AUTH_READY ||
+      window.__firebaseAuthReadyFired ||
+      window.FirebaseAuthManager?.isAuthReady?.()
+    );
+    if (authReady && typeof window.FirebaseAuthManager?.getCurrentUser === 'function') {
+      return { isAuthenticated: !!window.FirebaseAuthManager.getCurrentUser() };
+    }
+  } catch (_) {}
+
+  // Fallback while Firebase/nav hydrates. Never trust the shared localStorage flag
+  // by itself; it can outlive the session under browserSessionPersistence.
   let sessionFlag = null;
+  let localFlag = null;
   let hasSessionFirebaseKeys = false;
   try { sessionFlag = sessionStorage.getItem('user-authenticated'); } catch (_) {}
+  try { localFlag = localStorage.getItem('user-authenticated'); } catch (_) {}
   try {
     for (let i = 0; i < sessionStorage.length; i++) {
       const key = sessionStorage.key(i);
@@ -129,8 +148,14 @@ function getAuthState() {
       }
     }
   } catch (_) {}
+  if (sessionFlag === 'true') {
+    return { isAuthenticated: hasSessionFirebaseKeys };
+  }
+  if (sessionFlag === 'false' || localFlag === 'false') {
+    return { isAuthenticated: false };
+  }
   return {
-    isAuthenticated: sessionFlag === 'true' && hasSessionFirebaseKeys
+    isAuthenticated: localFlag === 'true' && hasSessionFirebaseKeys
   };
 }
 
