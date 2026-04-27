@@ -130,7 +130,7 @@ function getAuthState() {
     }
   } catch (_) {}
   return {
-    isAuthenticated: sessionFlag !== 'false' && hasSessionFirebaseKeys
+    isAuthenticated: sessionFlag === 'true' && hasSessionFirebaseKeys
   };
 }
 

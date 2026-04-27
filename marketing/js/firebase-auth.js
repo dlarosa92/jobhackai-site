@@ -333,6 +333,31 @@ function decodeJwtPayload(token) {
   }
 }
 
+function restoreLinkedInUserFromStoredTokens(context = 'fallback') {
+  const candidates = [];
+  try {
+    const firebaseIdToken = getIdTokenSync();
+    if (firebaseIdToken) candidates.push(firebaseIdToken);
+  } catch (_) {}
+  try {
+    const oidcToken = sessionStorage.getItem('linkedin_oidc_id_token');
+    if (oidcToken && !candidates.includes(oidcToken)) candidates.push(oidcToken);
+  } catch (_) {}
+
+  for (const token of candidates) {
+    const payload = decodeJwtPayload(token);
+    if (!payload || !(payload.user_id || payload.sub)) continue;
+    const uid = payload.user_id || payload.sub;
+    const email = payload.email || '';
+    if (email && email.trim() !== '') {
+      console.log(`✅ Restored LinkedIn session from stored tokens (${context})`);
+      return { uid, email };
+    }
+  }
+
+  return null;
+}
+
 /**
  * Authentication Manager
  */
@@ -350,6 +375,7 @@ class AuthManager {
     this._pendingAuthState = null;
     this._explicitSignOutInProgress = false;
     this._linkedInSessionRestoreInFlight = false;
+    this._linkedInSessionRestorePromise = null;
     this._initializeAuthReady();
     this._redirectProcessing = this._isGoogleRedirectInProgress();
     this.setupAuthStateListener();
@@ -380,9 +406,9 @@ class AuthManager {
     try {
       const cleared = [];
       const isExplicitSignOut = reason === 'firebase-auth-signed-out' && this._explicitSignOutInProgress;
-      // Passive onAuthStateChanged(null) clears this tab's sessionStorage; with browserSessionPersistence,
-      // Firebase does not use localStorage for the live session, but legacy local firebase:authUser:* keys
-      // must be removed so static-auth-guard.js does not treat a new tab as authenticated.
+      // Only explicit sign-out should mutate the shared localStorage auth flag. Passive
+      // onAuthStateChanged(null) is tab-local under browserSessionPersistence; changing the
+      // shared flag would perturb auth checks in other tabs.
       try {
         if (isExplicitSignOut) {
           localStorage.setItem('user-authenticated', 'false');
@@ -425,17 +451,6 @@ class AuthManager {
         // can safely be removed without affecting other tabs' active sessions.
         try {
           cleared.push(...clearFirebaseAuthShards(window.localStorage));
-        } catch (_) {}
-        // Remove the stale localStorage 'user-authenticated' flag so new tabs with empty
-        // sessionStorage don't read a permanently stale 'true'. Use removeItem (not
-        // setItem('false')) because static-auth-guard.js and universal-logout.js only
-        // redirect on storage events where newValue === 'false'; a null newValue is a
-        // no-op for those listeners and therefore safe for other authenticated tabs.
-        try {
-          if (localStorage.getItem('user-authenticated') !== null) {
-            localStorage.removeItem('user-authenticated');
-            cleared.push('user-authenticated:local-removed');
-          }
         } catch (_) {}
       }
       if (isExplicitSignOut) {
@@ -661,51 +676,37 @@ class AuthManager {
           const storedOidcToken = sessionStorage.getItem('linkedin_oidc_id_token');
           if (storedOidcToken) {
             if (this._linkedInSessionRestoreInFlight) {
-              console.log('⏳ LinkedIn SDK restore already in progress; waiting for next auth callback');
-              return;
-            }
-
-            this._linkedInSessionRestoreInFlight = true;
-            try {
-              // Wait for the SDK restore attempt to resolve before deciding this is a signed-out state.
-              // A successful restore will trigger a second onAuthStateChanged callback with the SDK user.
-              const provider = new OAuthProvider('oidc.linkedin.com');
-              const credential = provider.credential({ idToken: storedOidcToken });
-              await signInWithCredential(auth, credential);
-              console.log('✅ Signed into Firebase SDK using stored LinkedIn OIDC token');
-              effectiveUser = auth.currentUser;
-            } catch (err) {
-              console.warn('Could not restore SDK auth with stored OIDC token:', err);
-              // SDK sign-in failed - fallback to plain object by checking tokens
-              const idToken = getIdTokenSync();
-              if (idToken) {
-                const payload = decodeJwtPayload(idToken);
-                if (payload && (payload.user_id || payload.sub)) {
-                  const uid = payload.user_id || payload.sub;
-                  const email = payload.email || '';
-                  if (email && email.trim() !== '') {
-                    effectiveUser = { uid, email };
-                    console.log('✅ Restored LinkedIn session from sessionStorage tokens (fallback)');
-                  }
-                }
+              console.log('⏳ LinkedIn SDK restore already in progress; waiting for restore result');
+              const restorePromise = this._linkedInSessionRestorePromise;
+              try {
+                const result = restorePromise ? await restorePromise : null;
+                effectiveUser = result?.user || auth.currentUser || restoreLinkedInUserFromStoredTokens('restore in flight');
+              } catch (err) {
+                console.warn('LinkedIn SDK restore in flight failed:', err);
+                effectiveUser = restoreLinkedInUserFromStoredTokens('restore in flight fallback');
               }
-            } finally {
-              this._linkedInSessionRestoreInFlight = false;
+            } else {
+              this._linkedInSessionRestoreInFlight = true;
+              try {
+                // Wait for the SDK restore attempt to resolve before deciding this is a signed-out state.
+                // A successful restore will trigger a second onAuthStateChanged callback with the SDK user.
+                const provider = new OAuthProvider('oidc.linkedin.com');
+                const credential = provider.credential({ idToken: storedOidcToken });
+                this._linkedInSessionRestorePromise = signInWithCredential(auth, credential);
+                const result = await this._linkedInSessionRestorePromise;
+                console.log('✅ Signed into Firebase SDK using stored LinkedIn OIDC token');
+                effectiveUser = result?.user || auth.currentUser;
+              } catch (err) {
+                console.warn('Could not restore SDK auth with stored OIDC token:', err);
+                effectiveUser = restoreLinkedInUserFromStoredTokens('fallback');
+              } finally {
+                this._linkedInSessionRestoreInFlight = false;
+                this._linkedInSessionRestorePromise = null;
+              }
             }
           } else {
             // No OIDC token stored - fall back to plain object (legacy behavior)
-            const idToken = getIdTokenSync();
-            if (idToken) {
-              const payload = decodeJwtPayload(idToken);
-              if (payload && (payload.user_id || payload.sub)) {
-                const uid = payload.user_id || payload.sub;
-                const email = payload.email || '';
-                if (email && email.trim() !== '') {
-                  effectiveUser = { uid, email };
-                  console.log('✅ Restored LinkedIn session from sessionStorage tokens (plain object fallback)');
-                }
-              }
-            }
+            effectiveUser = restoreLinkedInUserFromStoredTokens('plain object fallback');
           }
         }
       }
