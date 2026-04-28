@@ -13,6 +13,26 @@
 
 window.BLOG_POSTS = [
   {
+    slug: 'below-1-0-leverage-gap-resume',
+    title: 'Below 1.0: How the New Leverage Gap Is Rewriting the Rules of Your Resume',
+    excerpt: 'The job market has tilted back toward employers. Learn why generic resumes get filtered out faster and how ATS-friendly resume optimization helps candidates adapt.',
+    category: 'Resume',
+    date: '2026-04-28',
+    readTime: 6,
+    author: 'JobHackAI Team',
+    featured: true,
+  },
+  {
+    slug: '68-5-days-response-gap-job-search-burnout',
+    title: '68.5 Days of Nothing: The Psychological Toll of the 2026 Response Gap',
+    excerpt: 'Long hiring timelines can drain job seekers before interviews even begin. Learn how to protect your momentum, improve ATS alignment, and prepare while you wait.',
+    category: 'Job Search',
+    date: '2026-04-28',
+    readTime: 6,
+    author: 'JobHackAI Team',
+    featured: false,
+  },
+  {
     slug: 'behavioral-interview-anxiety',
     title: 'Behavioral Interview Anxiety: Why 85% of Job Seekers Feel Unprepared (And the Fix)',
     excerpt: 'The gap between your achievements and your ability to articulate them under pressure is where careers stall. Learn the SAO framework and text-based practice method that closes the Experience Gap.',
@@ -20,7 +40,7 @@ window.BLOG_POSTS = [
     date: '2026-04-05',
     readTime: 7,
     author: 'JobHackAI Team',
-    featured: true,
+    featured: false,
   },
   {
     slug: 'the-2-percent-rule',
