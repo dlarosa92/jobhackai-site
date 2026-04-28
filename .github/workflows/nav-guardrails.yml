@@ -5,8 +5,10 @@ on:
     branches: [main, dev0, develop]
     paths:
       - "dashboard.html"
+      - "js/firebase-auth.js"
       - "js/navigation.js"
       - "js/logo-link-env.js"
+      - "marketing/js/firebase-auth.js"
       - "marketing/js/navigation.js"
       - "marketing/js/logo-link-env.js"
       - "scripts/check-nav-guardrails.sh"
@@ -16,8 +18,10 @@ on:
     branches: [main, dev0, develop]
     paths:
       - "dashboard.html"
+      - "js/firebase-auth.js"
       - "js/navigation.js"
       - "js/logo-link-env.js"
+      - "marketing/js/firebase-auth.js"
       - "marketing/js/navigation.js"
       - "marketing/js/logo-link-env.js"
       - "scripts/check-nav-guardrails.sh"

@@ -13,9 +13,9 @@ import UserProfileManager from './firestore-profiles.js';
 import { storeTokens, clearTokens, isAuthenticated as tokenManagerIsAuthenticated, getIdTokenSync } from './token-manager.js';
 import { apiFetchJSON } from './api-fetch.js';
 // Import Firebase Auth functions
-import { 
-  getAuth, 
-  signInWithEmailAndPassword, 
+import {
+  getAuth,
+  signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
   signInWithRedirect,
@@ -26,7 +26,7 @@ import {
   sendPasswordResetEmail,
   updateProfile,
   setPersistence,
-  browserLocalPersistence,
+  browserSessionPersistence,
   inMemoryPersistence,
   sendEmailVerification,
   applyActionCode,
@@ -52,6 +52,8 @@ const AUTH_PENDING = Object.freeze({ _authPending: true });
 const PROD_COOKIE_HOSTS = ['app.jobhackai.io', 'jobhackai.io', 'www.jobhackai.io'];
 const VERIFICATION_ACTION_PATH = '/auth/action';
 const PROD_APP_ORIGIN = 'https://app.jobhackai.io';
+const FIREBASE_AUTH_STORAGE_KEY_PREFIX = 'firebase:authUser:';
+const AUTH_COOKIE_ALLOWED_PLANS = new Set(['free', 'trial', 'essential', 'pro', 'premium', 'pending']);
 const ACTION_SETTINGS_RECOVERABLE_CODES = new Set([
   'auth/invalid-continue-uri',
   'auth/missing-continue-uri',
@@ -63,6 +65,11 @@ function isProdHost() {
   try { return PROD_COOKIE_HOSTS.includes(window.location.hostname || ''); } catch (_) { return false; }
 }
 
+function normalizeAuthCookiePlan(plan) {
+  const normalized = String(plan || '').trim().toLowerCase();
+  return AUTH_COOKIE_ALLOWED_PLANS.has(normalized) ? normalized : 'free';
+}
+
 function setAuthCookies(plan, isVerified = true) {
   try {
     if (!isProdHost()) return;
@@ -70,8 +77,9 @@ function setAuthCookies(plan, isVerified = true) {
     const maxAge = 60 * 60 * 24 * 30; // 30 days
     const secure = '; Secure';
     const authValue = isVerified ? '1' : '0';
+    const planValue = encodeURIComponent(normalizeAuthCookiePlan(plan));
     document.cookie = `jhai_auth=${authValue}; domain=${domain}; path=/; max-age=${maxAge}; SameSite=Lax${secure}`;
-    document.cookie = `jhai_plan=${encodeURIComponent(plan || 'free')}; domain=${domain}; path=/; max-age=${maxAge}; SameSite=Lax${secure}`;
+    document.cookie = `jhai_plan=${planValue}; domain=${domain}; path=/; max-age=${maxAge}; SameSite=Lax${secure}`;
     // Clear legacy PII cookie if it exists from older builds.
     document.cookie = `jhai_name=; domain=${domain}; path=/; max-age=0`;
   } catch (e) { /* best-effort */ }
@@ -90,6 +98,75 @@ function clearAuthCookies() {
     document.cookie = `jhai_name=; domain=${domain}; path=/; max-age=0`;
     document.cookie = `jhai_plan=; domain=${domain}; path=/; max-age=0`;
   } catch (e) { /* best-effort */ }
+}
+
+function getStorageBackends() {
+  const storages = [];
+  try {
+    if (window.sessionStorage) storages.push(window.sessionStorage);
+  } catch (_) {}
+  try {
+    if (window.localStorage) storages.push(window.localStorage);
+  } catch (_) {}
+  return storages;
+}
+
+function hasFirebaseAuthShard(storage) {
+  if (!storage) return false;
+  try {
+    for (let i = 0; i < storage.length; i++) {
+      const key = storage.key(i);
+      const value = key ? storage.getItem(key) : null;
+      if (key && key.startsWith(FIREBASE_AUTH_STORAGE_KEY_PREFIX) && value && value !== 'null' && value.length > 10) {
+        return true;
+      }
+    }
+  } catch (_) {}
+  return false;
+}
+
+function clearFirebaseAuthShards(storage) {
+  const cleared = [];
+  if (!storage) return cleared;
+  try {
+    for (let i = storage.length - 1; i >= 0; i--) {
+      const key = storage.key(i);
+      if (key && key.startsWith(FIREBASE_AUTH_STORAGE_KEY_PREFIX)) {
+        storage.removeItem(key);
+        cleared.push(key);
+      }
+    }
+  } catch (_) {}
+  return cleared;
+}
+
+function clearLegacyLocalFirebaseAuthShards() {
+  try {
+    if (!hasFirebaseAuthShard(window.sessionStorage)) return [];
+    return clearFirebaseAuthShards(window.localStorage);
+  } catch (_) {
+    return [];
+  }
+}
+
+function setStoredAuthFlag(isAuthenticated) {
+  const value = isAuthenticated ? 'true' : 'false';
+  for (const storage of getStorageBackends()) {
+    try {
+      storage.setItem('user-authenticated', value);
+    } catch (_) {}
+  }
+}
+
+function setStoredUserName(displayName) {
+  if (!displayName) return;
+  try {
+    sessionStorage.setItem('user-name', displayName);
+  } catch (_) {
+    try { localStorage.setItem('user-name', displayName); } catch (_) {}
+    return;
+  }
+  try { localStorage.removeItem('user-name'); } catch (_) {}
 }
 
 // --- DIRECT PLAN FETCH FROM D1 VIA API (navigation-independent) ---
@@ -194,9 +271,9 @@ function isRecoverableActionSettingsError(error) {
 // Set persistence once; fallback to in-memory if browser persistence fails (e.g., IndexedDB blocked)
 (async () => {
   try {
-    await setPersistence(auth, browserLocalPersistence);
+    await setPersistence(auth, browserSessionPersistence);
   } catch (error) {
-    console.error('Error setting persistence (browserLocalPersistence). Falling back to inMemoryPersistence:', error);
+    console.error('Error setting persistence (browserSessionPersistence). Falling back to inMemoryPersistence:', error);
     try {
       await setPersistence(auth, inMemoryPersistence);
       console.log('✅ Using in-memory persistence fallback');
@@ -220,10 +297,51 @@ class UserDatabase {
   static DB_KEY = 'user-db';
   static BACKUP_KEY = 'user-db-backup';
 
+  static getPrimaryStorage() {
+    try {
+      return sessionStorage;
+    } catch (_) {
+      return localStorage;
+    }
+  }
+
+  static clearLegacyLocalCopies() {
+    try {
+      localStorage.removeItem(this.DB_KEY);
+      localStorage.removeItem(this.BACKUP_KEY);
+    } catch (_) {}
+  }
+
+  static shouldClearLegacyLocalCopies(primaryStorage) {
+    try {
+      return primaryStorage === sessionStorage;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static getDB() {
     try {
-      const data = localStorage.getItem(this.DB_KEY);
-      return data ? JSON.parse(data) : {};
+      const primaryStorage = this.getPrimaryStorage();
+      const primaryData = primaryStorage.getItem(this.DB_KEY);
+      if (primaryData) {
+        return JSON.parse(primaryData);
+      }
+
+      const legacyData = localStorage.getItem(this.DB_KEY);
+      if (!legacyData) {
+        return {};
+      }
+
+      const parsed = JSON.parse(legacyData);
+      try {
+        primaryStorage.setItem(this.DB_KEY, legacyData);
+        primaryStorage.setItem(this.BACKUP_KEY, localStorage.getItem(this.BACKUP_KEY) || legacyData);
+        if (this.shouldClearLegacyLocalCopies(primaryStorage)) {
+          this.clearLegacyLocalCopies();
+        }
+      } catch (_) {}
+      return parsed;
     } catch (error) {
       console.error('Error loading user database:', error);
       return {};
@@ -232,8 +350,13 @@ class UserDatabase {
 
   static saveDB(db) {
     try {
-      localStorage.setItem(this.DB_KEY, JSON.stringify(db));
-      localStorage.setItem(this.BACKUP_KEY, JSON.stringify(db));
+      const serialized = JSON.stringify(db);
+      const primaryStorage = this.getPrimaryStorage();
+      primaryStorage.setItem(this.DB_KEY, serialized);
+      primaryStorage.setItem(this.BACKUP_KEY, serialized);
+      if (this.shouldClearLegacyLocalCopies(primaryStorage)) {
+        this.clearLegacyLocalCopies();
+      }
     } catch (error) {
       console.error('Error saving user database:', error);
     }
@@ -241,7 +364,7 @@ class UserDatabase {
 
   static createOrUpdateUser(email, userData = {}) {
     const db = this.getDB();
-    
+
     if (!db[email]) {
       // Create new user
       db[email] = {
@@ -261,7 +384,7 @@ class UserDatabase {
       if (userData.uid) db[email].firebaseUid = userData.uid;
       if (userData.plan) db[email].plan = userData.plan;
     }
-    
+
     this.saveDB(db);
     return db[email];
   }
@@ -294,6 +417,31 @@ function decodeJwtPayload(token) {
   }
 }
 
+function restoreLinkedInUserFromStoredTokens(context = 'fallback') {
+  const candidates = [];
+  try {
+    const firebaseIdToken = getIdTokenSync();
+    if (firebaseIdToken) candidates.push(firebaseIdToken);
+  } catch (_) {}
+  try {
+    const oidcToken = sessionStorage.getItem('linkedin_oidc_id_token');
+    if (oidcToken && !candidates.includes(oidcToken)) candidates.push(oidcToken);
+  } catch (_) {}
+
+  for (const token of candidates) {
+    const payload = decodeJwtPayload(token);
+    if (!payload || !(payload.user_id || payload.sub)) continue;
+    const uid = payload.user_id || payload.sub;
+    const email = payload.email || '';
+    if (email && email.trim() !== '') {
+      console.log(`✅ Restored LinkedIn session from stored tokens (${context})`);
+      return { uid, email };
+    }
+  }
+
+  return null;
+}
+
 /**
  * Authentication Manager
  */
@@ -309,13 +457,16 @@ class AuthManager {
     this._redirectProcessing = false;
     this._pendingAuthUser = null;
     this._pendingAuthState = null;
+    this._explicitSignOutInProgress = false;
+    this._linkedInSessionRestoreInFlight = false;
+    this._linkedInSessionRestorePromise = null;
     this._initializeAuthReady();
     this._redirectProcessing = this._isGoogleRedirectInProgress();
     this.setupAuthStateListener();
     this._redirectResultHandled = false;
     this._handleRedirectResult();
     // Expose globally for consumers that can't import modules
-    try { 
+    try {
       window.FirebaseAuthManager = this;
       // Also expose currentUser directly for easier access
       window.FirebaseAuthManager.currentUser = this.currentUser;
@@ -338,32 +489,66 @@ class AuthManager {
   _clearStaleAuthStorage(reason = 'unauthenticated') {
     try {
       const cleared = [];
-      localStorage.setItem('user-authenticated', 'false');
+      const isExplicitSignOut = reason === 'firebase-auth-signed-out' && this._explicitSignOutInProgress;
+      let hadSessionFirebaseAuthShard = false;
+      try {
+        hadSessionFirebaseAuthShard = hasFirebaseAuthShard(window.sessionStorage);
+      } catch (_) {}
+      // Only explicit sign-out should mutate the shared localStorage auth flag. Passive
+      // onAuthStateChanged(null) is tab-local under browserSessionPersistence; changing the
+      // shared flag would perturb auth checks in other tabs.
+      try {
+        if (isExplicitSignOut) {
+          localStorage.setItem('user-authenticated', 'false');
+        }
+      } catch (_) {}
+      try { sessionStorage.setItem('user-authenticated', 'false'); } catch (_) {}
       // NOTE: Do NOT call clearAuthCookies() here. On the marketing site, Firebase has no
       // local session and fires onAuthStateChanged(null) which calls this method. Clearing
       // the cross-domain cookie here would undo the auth hint set by app.jobhackai.io.
       // Cookies are only cleared on explicit logout in signOutUser().
       cleared.push('user-authenticated');
-      
-      ['user-email', 'auth-user', 'user-plan', 'dev-plan', 'user-name'].forEach((key) => {
-        try {
-          localStorage.removeItem(key);
-          cleared.push(key);
-        } catch (_) {}
-      });
-      
-      for (let i = localStorage.length - 1; i >= 0; i--) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith('firebase:authUser:')) {
+
+      const storagesToClear = isExplicitSignOut ? getStorageBackends() : [sessionStorage];
+      ['user-email', 'auth-user'].forEach((key) => {
+        for (const storage of storagesToClear) {
           try {
-            localStorage.removeItem(key);
+            storage.removeItem(key);
             cleared.push(key);
-          } catch (e) {
-            console.warn('[AUTH] Failed to remove Firebase auth key:', key, e?.message);
-          }
+          } catch (_) {}
         }
+      });
+
+      if (isExplicitSignOut) {
+        ['user-plan', 'dev-plan', 'user-name'].forEach((key) => {
+          for (const storage of storagesToClear) {
+            try {
+              storage.removeItem(key);
+              cleared.push(key);
+            } catch (_) {}
+          }
+        });
       }
-      
+
+      for (const storage of storagesToClear) {
+        cleared.push(...clearFirebaseAuthShards(storage));
+      }
+      if (!isExplicitSignOut && reason === 'firebase-auth-signed-out' && hadSessionFirebaseAuthShard) {
+        // Only clear legacy localStorage shards when this tab already had session
+        // Firebase evidence. A cold passive null auth callback must not erase the
+        // shared fallback evidence other tabs and static pages can still inspect.
+        try {
+          cleared.push(...clearFirebaseAuthShards(window.localStorage));
+        } catch (_) {}
+      }
+      if (isExplicitSignOut) {
+        try {
+          sessionStorage.removeItem(UserDatabase.DB_KEY);
+          sessionStorage.removeItem(UserDatabase.BACKUP_KEY);
+        } catch (_) {}
+        UserDatabase.clearLegacyLocalCopies();
+      }
+
       if (cleared.length > 0) {
         console.log(`[AUTH] Cleared stale auth storage (${reason}):`, cleared);
       }
@@ -533,17 +718,17 @@ class AuthManager {
       // Check if credit already initialized
       const creditKey = `creditsByUid:${uid}`;
       const existing = localStorage.getItem(creditKey);
-      
+
       if (existing) {
         console.log('✅ ATS credit already initialized');
         return JSON.parse(existing);
       }
-      
+
       // Initialize 1 lifetime credit
       const credits = { ats_free_lifetime: 1 };
       localStorage.setItem(creditKey, JSON.stringify(credits));
       console.log('✅ Initialized 1 free lifetime ATS credit');
-      
+
       return credits;
     } catch (e) {
       console.warn('Failed to initialize ATS credit:', e);
@@ -554,7 +739,7 @@ class AuthManager {
   setupAuthStateListener() {
     onAuthStateChanged(auth, async (user) => {
       console.log('🔥 Firebase auth state changed:', user ? `User: ${user.email}` : 'No user');
-      
+
       // ✅ CRITICAL: Check for logout-intent FIRST before setting currentUser or dispatching event
       // This prevents race conditions where Firebase auth persistence restores user during logout
       let effectiveUser = user;
@@ -565,7 +750,7 @@ class AuthManager {
           effectiveUser = null; // Treat as logged out for this callback
         }
       }
-      
+
       // ✅ LinkedIn token restoration: If Firebase SDK sees no user but LinkedIn tokens exist, restore session
       // Check logout-intent FIRST to prevent restoration during logout
       // Note: If SDK sign-in succeeded during initial auth, Firebase SDK auth persistence will handle restoration automatically
@@ -578,53 +763,42 @@ class AuthManager {
           // Try to restore SDK auth state using stored LinkedIn OIDC id_token if available
           const storedOidcToken = sessionStorage.getItem('linkedin_oidc_id_token');
           if (storedOidcToken) {
-            // Attempt SDK sign-in asynchronously
-            // onAuthStateChanged will fire again when SDK sign-in completes
-            const provider = new OAuthProvider('oidc.linkedin.com');
-            const credential = provider.credential({ idToken: storedOidcToken });
-            signInWithCredential(auth, credential).then((result) => {
-              console.log('✅ Signed into Firebase SDK using stored LinkedIn OIDC token');
-              // onAuthStateChanged will fire again with the SDK user
-            }).catch((err) => {
-              console.warn('Could not restore SDK auth with stored OIDC token:', err);
-              // SDK sign-in failed - fallback to plain object by checking tokens
-              const idToken = getIdTokenSync();
-              if (idToken) {
-                const payload = decodeJwtPayload(idToken);
-                if (payload && (payload.user_id || payload.sub)) {
-                  const uid = payload.user_id || payload.sub;
-                  const email = payload.email || '';
-                  if (email && email.trim() !== '') {
-                    // Set currentUser directly since onAuthStateChanged won't fire again
-                    this.currentUser = { uid, email };
-                    if (window.FirebaseAuthManager) {
-                      window.FirebaseAuthManager.currentUser = this.currentUser;
-                    }
-                    console.log('✅ Restored LinkedIn session from sessionStorage tokens (fallback)');
-                  }
-                }
+            if (this._linkedInSessionRestoreInFlight) {
+              console.log('⏳ LinkedIn SDK restore already in progress; waiting for restore result');
+              const restorePromise = this._linkedInSessionRestorePromise;
+              try {
+                const result = restorePromise ? await restorePromise : null;
+                effectiveUser = result?.user || auth.currentUser || restoreLinkedInUserFromStoredTokens('restore in flight');
+              } catch (err) {
+                console.warn('LinkedIn SDK restore in flight failed:', err);
+                effectiveUser = restoreLinkedInUserFromStoredTokens('restore in flight fallback');
               }
-            });
-            // Don't set effectiveUser here - wait for SDK sign-in result
-            // If SDK sign-in fails, the catch handler will set currentUser directly
-          } else {
-            // No OIDC token stored - fall back to plain object (legacy behavior)
-            const idToken = getIdTokenSync();
-            if (idToken) {
-              const payload = decodeJwtPayload(idToken);
-              if (payload && (payload.user_id || payload.sub)) {
-                const uid = payload.user_id || payload.sub;
-                const email = payload.email || '';
-                if (email && email.trim() !== '') {
-                  effectiveUser = { uid, email };
-                  console.log('✅ Restored LinkedIn session from sessionStorage tokens (plain object fallback)');
-                }
+            } else {
+              this._linkedInSessionRestoreInFlight = true;
+              try {
+                // Wait for the SDK restore attempt to resolve before deciding this is a signed-out state.
+                // A successful restore will trigger a second onAuthStateChanged callback with the SDK user.
+                const provider = new OAuthProvider('oidc.linkedin.com');
+                const credential = provider.credential({ idToken: storedOidcToken });
+                this._linkedInSessionRestorePromise = signInWithCredential(auth, credential);
+                const result = await this._linkedInSessionRestorePromise;
+                console.log('✅ Signed into Firebase SDK using stored LinkedIn OIDC token');
+                effectiveUser = result?.user || auth.currentUser;
+              } catch (err) {
+                console.warn('Could not restore SDK auth with stored OIDC token:', err);
+                effectiveUser = restoreLinkedInUserFromStoredTokens('fallback');
+              } finally {
+                this._linkedInSessionRestoreInFlight = false;
+                this._linkedInSessionRestorePromise = null;
               }
             }
+          } else {
+            // No OIDC token stored - fall back to plain object (legacy behavior)
+            effectiveUser = restoreLinkedInUserFromStoredTokens('plain object fallback');
           }
         }
       }
-      
+
       // ✅ CRITICAL FIX: Set currentUser BEFORE dispatching event to prevent race condition
       // This ensures getCurrentUser() returns the correct value when navigation event handler runs
       this.currentUser = effectiveUser;
@@ -633,7 +807,7 @@ class AuthManager {
         window.FirebaseAuthManager.currentUser = effectiveUser;
         console.log('🔥 Updated window.FirebaseAuthManager.currentUser:', effectiveUser ? `User: ${effectiveUser.email}` : 'null');
       }
-      
+
       // ✅ TRI-STATE PATTERN: Mark auth as ready on first onAuthStateChanged call
       // This ensures waitForAuthReady() resolves even if user is null
       if (!this._authReadyDispatched) {
@@ -647,47 +821,47 @@ class AuthManager {
           this._finalizeAuthReady(effectiveUser);
         }
       }
-      
+
       // If logout-intent was detected, stop processing here
       if (effectiveUser === null && user !== null) {
         // Event already dispatched above with null user, so pages can proceed
         return;
       }
-      
+
       // effectiveUser is now guaranteed to match this.currentUser
-      
+
       if (effectiveUser && typeof effectiveUser.reload === 'function') {
         // Firebase SDK user (Google/Email auth)
         const user = effectiveUser;
-        
+
         // ✅ CRITICAL: Set localStorage IMMEDIATELY (sync, before any await)
         // This prevents race conditions with static-auth-guard.js
-        localStorage.setItem('user-authenticated', 'true');
+        setStoredAuthFlag(true);
         // SECURITY: Do NOT store email, uid, or auth-user object in localStorage
         // Email/UID available via Firebase auth.currentUser when needed
         // Cache user name for account settings page performance
         if (user.displayName) {
-          localStorage.setItem('user-name', user.displayName);
+          setStoredUserName(user.displayName);
         }
         console.log('✅ localStorage synced immediately for auth guards');
-        
+
         // User is signed in - now do async operations
         // Initialize free ATS credit for new users
         await this.initializeFreeATSCredit(user.uid);
-        
+
         const userData = {
           uid: user.uid,
           email: user.email,
           firstName: user.displayName ? user.displayName.split(' ')[0] : '',
           lastName: user.displayName ? user.displayName.split(' ').slice(1).join(' ') : '',
         };
-        
-        
+
+
         // Sync with Firestore (update last login) - non-blocking, errors handled internally
         UserProfileManager.updateLastLogin(user.uid).catch(() => {
           // Error already handled in updateLastLogin - silence this to reduce console noise
         });
-        
+
         // CRITICAL: Prioritize fresh plan selections over existing plans
         let pendingSelection = null;
         let pendingTs = 0;
@@ -702,9 +876,9 @@ class AuthManager {
           console.warn('Failed to parse selectedPlan from sessionStorage:', e);
         }
         const isFreshSelection = Date.now() - pendingTs < 2 * 60 * 1000; // 2 minutes
-        
+
         let actualPlan = 'free';
-        
+
         if (pendingSelection && pendingSelection !== 'free' && isFreshSelection) {
           actualPlan = pendingSelection === 'trial' ? 'pending' : pendingSelection;
           console.log('✅ Using fresh plan selection in auth listener:', actualPlan);
@@ -740,13 +914,13 @@ class AuthManager {
             }
           }
         }
-        
+
         // Update local database with correct plan
         const userRecord = UserDatabase.createOrUpdateUser(user.email, {
           ...userData,
           plan: actualPlan
         });
-        
+
         // Update navigation state with correct plan
         if (window.JobHackAINavigation) {
           window.JobHackAINavigation.setAuthState(true, actualPlan);
@@ -754,14 +928,21 @@ class AuthManager {
 
         // Set cross-subdomain auth cookies for marketing site nav
         setAuthCookies(actualPlan, user.emailVerified === true);
+        const clearedLegacyAuthKeys = clearLegacyLocalFirebaseAuthShards();
+        if (clearedLegacyAuthKeys.length > 0) {
+          console.log('🧹 Cleared legacy local Firebase auth shards after session restore:', clearedLegacyAuthKeys);
+        }
+        if (UserDatabase.shouldClearLegacyLocalCopies(UserDatabase.getPrimaryStorage())) {
+          UserDatabase.clearLegacyLocalCopies();
+        }
 
         // Notify listeners
         this.notifyAuthStateChange(user, userRecord);
       } else if (effectiveUser) {
         // LinkedIn token-based user (plain object, not Firebase SDK user)
         // Set localStorage and navigation state
-        localStorage.setItem('user-authenticated', 'true');
-        
+        setStoredAuthFlag(true);
+
         // Check if this is a same-window fallback that needs user initialization
         const pendingInit = sessionStorage.getItem('linkedin_pending_init');
         if (pendingInit === '1') {
@@ -769,7 +950,7 @@ class AuthManager {
           sessionStorage.removeItem('linkedin_pending_init');
           const uid = effectiveUser.uid;
           const email = effectiveUser.email;
-          
+
           try {
             // CRITICAL: Prioritize newly selected plan over existing plans (same as popup flow)
             const selectedPlan = this.getSelectedPlan();
@@ -794,29 +975,29 @@ class AuthManager {
                 console.log('✅ Fetched plan from API during LinkedIn sign-in (same-window):', actualPlan);
               }
             }
-            
+
             // Extract name from email (LinkedIn doesn't provide displayName in REST response)
             const emailParts = email.split('@')[0].split('.');
             const firstName = emailParts[0] || '';
             const lastName = emailParts.slice(1).join(' ') || '';
-            
+
             const userData = {
               uid,
               firstName,
               lastName,
               plan: actualPlan
             };
-            
+
             // Update local database
             UserDatabase.createOrUpdateUser(email, userData);
-            
+
             // Initialize free account tracking for new free users
             if (actualPlan === 'free') {
               if (window.freeAccountManager) {
                 window.freeAccountManager.initializeForNewUser();
               }
             }
-            
+
             // Create or update Firestore profile
             const firestoreData = {
               email,
@@ -828,13 +1009,13 @@ class AuthManager {
               signupSource: 'linkedin_oauth',
               pendingPlan: selectedPlan === 'trial' ? 'trial' : null
             };
-            
+
             try {
               await UserProfileManager.upsertProfile(uid, firestoreData);
             } catch (err) {
               console.warn('Could not sync Firestore profile:', err);
             }
-            
+
             if (window.JobHackAINavigation) {
               window.JobHackAINavigation.setAuthState(true, actualPlan);
             }
@@ -877,11 +1058,11 @@ class AuthManager {
       } else {
         // User is signed out - clear immediately
         this._clearStaleAuthStorage('firebase-auth-signed-out');
-        
+
         if (window.JobHackAINavigation) {
           window.JobHackAINavigation.setAuthState(false, 'visitor');
         }
-        
+
         this.notifyAuthStateChange(null, null);
       }
     });
@@ -904,7 +1085,7 @@ class AuthManager {
 
   onAuthStateChange(callback) {
     this.authStateListeners.push(callback);
-    
+
     // Immediately call with current state
     if (this.currentUser && !this._redirectProcessing) {
       // Note: UserDatabase.getUser is only for non-plan data (name, etc.)
@@ -948,7 +1129,7 @@ class AuthManager {
         lastName: lastName || '',
         plan: selectedPlan || 'free'
       };
-      
+
       UserDatabase.createOrUpdateUser(email, userData);
 
       // Initialize free account tracking for new free users
@@ -997,7 +1178,7 @@ class AuthManager {
 
       // CRITICAL: Retrieve user's actual plan from KV first, then Firestore
       let actualPlan = 'free'; // default fallback
-      
+
       // FIX: Wait for auth to be ready before fetching plan to prevent race condition
       let kvPlan = null;
       try {
@@ -1032,16 +1213,16 @@ class AuthManager {
       }
 
       // Update local database with correct plan
-      UserDatabase.createOrUpdateUser(email, { 
+      UserDatabase.createOrUpdateUser(email, {
         uid: user.uid,
         plan: actualPlan
       });
 
       // Persist auth state immediately
-      localStorage.setItem('user-authenticated', 'true');
+      setStoredAuthFlag(true);
       // SECURITY: Do NOT store email in localStorage
       if (user.displayName) {
-        localStorage.setItem('user-name', user.displayName);
+        setStoredUserName(user.displayName);
       }
       setAuthCookies(actualPlan, user.emailVerified === true);
       // Update navigation state with correct plan
@@ -1062,7 +1243,7 @@ class AuthManager {
   async _completeGoogleSignIn(user) {
     // Extract name from display name
     const nameParts = user.displayName ? user.displayName.split(' ') : ['', ''];
-    
+
     // CRITICAL: Prioritize newly selected plan over existing plans
     const selectedPlan = this.getSelectedPlan();
     let actualPlan = 'free';
@@ -1102,7 +1283,7 @@ class AuthManager {
         }
       }
     }
-    
+
     const userData = {
       uid: user.uid,
       firstName: nameParts[0] || '',
@@ -1114,10 +1295,10 @@ class AuthManager {
 
     // Ensure navigation/auth state is updated immediately (avoid redirect race)
     try {
-      localStorage.setItem('user-authenticated', 'true');
+      setStoredAuthFlag(true);
       // SECURITY: Do NOT store email in localStorage
       if (user.displayName) {
-        localStorage.setItem('user-name', user.displayName);
+        setStoredUserName(user.displayName);
       }
       setAuthCookies(actualPlan, user.emailVerified === true);
       if (window.JobHackAINavigation) {
@@ -1145,7 +1326,7 @@ class AuthManager {
       signupSource: 'google_oauth',
       pendingPlan: selectedPlan === 'trial' ? 'trial' : null // Track what they selected
     };
-    
+
     try {
       await UserProfileManager.upsertProfile(user.uid, firestoreData);
     } catch (err) {
@@ -1168,12 +1349,12 @@ class AuthManager {
           return { success: false, error: null };
         }
       }
-      
+
       // Handle popup closed by user
       if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
         return { success: false, error: null }; // Silent failure
       }
-      
+
       return { success: false, error: this.getErrorMessage(error) };
     }
   }
@@ -1222,7 +1403,7 @@ class AuthManager {
           'http://localhost:8787',
           'http://localhost:8788'
         ];
-        
+
         if (!allowedOrigins.includes(event.origin)) {
           console.warn('Ignored message from unauthorized origin:', event.origin);
           return;
@@ -1257,7 +1438,7 @@ class AuthManager {
 
             // Store tokens in sessionStorage (after validation)
             storeTokens(idToken, refreshToken, parseInt(expiresIn || '3600', 10));
-            
+
             // Store LinkedIn OIDC id_token for SDK sign-in restoration (if available)
             const linkedinOidcIdToken = event.data.linkedinOidcIdToken;
             if (linkedinOidcIdToken) {
@@ -1304,12 +1485,12 @@ class AuthManager {
                 }
               }
             }
-            
+
             // Extract name from email (LinkedIn doesn't provide displayName in REST response)
             const emailParts = email.split('@')[0].split('.');
             const firstName = emailParts[0] || '';
             const lastName = emailParts.slice(1).join(' ') || '';
-            
+
             const userData = {
               uid,
               firstName,
@@ -1322,7 +1503,7 @@ class AuthManager {
 
             // Persist auth state immediately
             try {
-              localStorage.setItem('user-authenticated', 'true');
+              setStoredAuthFlag(true);
               setAuthCookies(actualPlan);
               if (window.JobHackAINavigation) {
                 window.JobHackAINavigation.setAuthState(true, actualPlan);
@@ -1349,7 +1530,7 @@ class AuthManager {
               signupSource: 'linkedin_oauth',
               pendingPlan: selectedPlan === 'trial' ? 'trial' : null
             };
-            
+
             try {
               await UserProfileManager.upsertProfile(uid, firestoreData);
             } catch (err) {
@@ -1438,27 +1619,34 @@ class AuthManager {
     // Clear cross-domain cookies immediately (before async signOut) so marketing nav
     // reverts to visitor state even if Firebase sign-out throws a network error.
     clearAuthCookies();
+    this._explicitSignOutInProgress = true;
     try {
       await signOut(auth);
 
-      // Clear local storage
-      localStorage.removeItem('auth-user');
-      localStorage.removeItem('user-plan');
-      localStorage.removeItem('user-email');
-      localStorage.setItem('user-authenticated', 'false');
+      // Clear cached client-side auth/profile state from both session and local storage.
+      for (const storage of getStorageBackends()) {
+        try { storage.removeItem('auth-user'); } catch (_) {}
+        try { storage.removeItem('user-plan'); } catch (_) {}
+        try { storage.removeItem('user-email'); } catch (_) {}
+        try { storage.removeItem('user-name'); } catch (_) {}
+      }
+      setStoredAuthFlag(false);
+      try { new BroadcastChannel('auth').postMessage({ type: 'logout' }); } catch (_) {}
       // Clear any pending plan selections from both storages
       try { sessionStorage.removeItem('selectedPlan'); } catch (_) {}
       try { localStorage.removeItem('selectedPlan'); } catch (_) {}
 
       // Remove Firebase SDK cached user keys to avoid automatic re-login from persistence
       try {
-        for (let i = localStorage.length - 1; i >= 0; i--) {
-          const key = localStorage.key(i);
-          if (key && key.startsWith('firebase:authUser:')) {
-            localStorage.removeItem(key);
-          }
+        for (const storage of getStorageBackends()) {
+          clearFirebaseAuthShards(storage);
         }
       } catch (_) { /* no-op */ }
+      try {
+        sessionStorage.removeItem(UserDatabase.DB_KEY);
+        sessionStorage.removeItem(UserDatabase.BACKUP_KEY);
+      } catch (_) {}
+      UserDatabase.clearLegacyLocalCopies();
 
       // Clear LinkedIn tokens from sessionStorage
       clearTokens();
@@ -1467,11 +1655,13 @@ class AuthManager {
       if (window.JobHackAINavigation && typeof window.JobHackAINavigation.setAuthState === 'function') {
         window.JobHackAINavigation.setAuthState(false, 'visitor');
       }
-      
+
       return { success: true };
     } catch (error) {
       console.error('Sign out error:', error);
       return { success: false, error: this.getErrorMessage(error) };
+    } finally {
+      setTimeout(() => { this._explicitSignOutInProgress = false; }, 0);
     }
   }
 
@@ -1516,7 +1706,7 @@ class AuthManager {
     const urlParams = new URLSearchParams(window.location.search);
     const urlPlan = urlParams.get('plan');
     if (urlPlan) return urlPlan;
-    
+
     // Check sessionStorage for plan (pricing page stores it here as JSON)
     try {
       const stored = sessionStorage.getItem('selectedPlan');
@@ -1527,7 +1717,7 @@ class AuthManager {
     } catch (e) {
       console.warn('Failed to parse selectedPlan from sessionStorage:', e);
     }
-    
+
     return null;
   }
 
@@ -1572,14 +1762,14 @@ class AuthManager {
    */
   async waitForAuthReady(timeoutMs = 10000) {
     console.log('🔥 waitForAuthReady started, authReady:', this._authReady, 'currentUser:', this.currentUser);
-    
+
     // Check logout-intent immediately - if logout is in progress, return null
     const logoutIntent = sessionStorage.getItem('logout-intent');
     if (logoutIntent === '1') {
       console.log('🚫 Logout in progress, waitForAuthReady returning null');
       return null;
     }
-    
+
     // If already ready, return immediately
     if (this._authReady) {
       const finalLogoutIntent = sessionStorage.getItem('logout-intent');
@@ -1590,25 +1780,25 @@ class AuthManager {
       console.log('🔥 waitForAuthReady finished (already ready), currentUser:', this.currentUser);
       return this.currentUser;
     }
-    
+
     // Wait for auth to be ready with timeout
     try {
-      const timeoutPromise = new Promise((resolve) => 
+      const timeoutPromise = new Promise((resolve) =>
         setTimeout(() => resolve(AUTH_PENDING), timeoutMs)
       );
-      
+
       const user = await Promise.race([
         this._authReadyPromise,
         timeoutPromise
       ]);
-      
+
       // Final check before returning
       const finalLogoutIntent = sessionStorage.getItem('logout-intent');
       if (finalLogoutIntent === '1') {
         console.log('🚫 Logout in progress, waitForAuthReady returning null (final check)');
         return null;
       }
-      
+
       if (user === AUTH_PENDING) {
         console.warn('🔥 waitForAuthReady timeout after', timeoutMs, 'ms, Firebase not ready yet');
       } else {
@@ -1685,13 +1875,13 @@ class AuthManager {
         window.location.href = '/login.html';
         return false;
       }
-      
+
       if (!user || user === AUTH_PENDING) {
         console.log('No authenticated user, redirecting to login');
         window.location.href = '/login.html';
         return false;
       }
-      
+
       // Handle plain object users (LinkedIn token-based auth) vs Firebase SDK users
       if (typeof user.reload === 'function') {
         // Firebase SDK user - reload to get latest verification status
@@ -1707,7 +1897,7 @@ class AuthManager {
         // If verification is required, we'd need to store emailVerified in sessionStorage
         console.log('LinkedIn token-based user, allowing access (LinkedIn emails are verified)');
       }
-      
+
       console.log('User verified, allowing access');
       return true;
     } catch (error) {

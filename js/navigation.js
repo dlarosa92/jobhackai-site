@@ -297,9 +297,9 @@ function parseCrossDomainCookies() {
   return null;
 }
 
-// URL auth-handoff fallback — used when cross-domain cookies are unavailable.
-// Flow: app.jobhackai.io appends a short-lived hint to marketing links, and
-// marketing pages persist it in sessionStorage for the current tab/session.
+// Legacy URL auth-handoff fallback — consume-only for backward compatibility.
+// Production app -> marketing navigation should rely on shared cookies instead
+// of leaking auth state through outbound URL query parameters.
 const PROD_APP_HOST = 'app.jobhackai.io';
 const PROD_MARKETING_HOSTS = ['jobhackai.io', 'www.jobhackai.io'];
 const AUTH_HANDOFF_QUERY_AUTH = 'jhai_auth';
@@ -421,29 +421,7 @@ function clearUrlAuthHandoff() {
 }
 
 function buildAuthHandoffHref(href, isAuthenticated, plan) {
-  if (!isAuthenticated || !isProdAppHost()) return href;
-  // Never propagate authenticated handoff from app -> marketing for unverified
-  // Firebase email/password users.
-  try {
-    if (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
-      const currentUser = window.FirebaseAuthManager.getCurrentUser();
-      if (currentUser && typeof currentUser.emailVerified === 'boolean' && !currentUser.emailVerified) {
-        return href;
-      }
-    }
-  } catch (_) {}
-  try {
-    const url = new URL(href, window.location.origin);
-    if (!isProdMarketingHostName(url.hostname)) return href;
-    if (url.protocol !== 'https:' && url.protocol !== 'http:') return href;
-    const normalizedPlan = normalizeHandoffPlan(plan) || 'free';
-    url.searchParams.set(AUTH_HANDOFF_QUERY_AUTH, '1');
-    url.searchParams.set(AUTH_HANDOFF_QUERY_PLAN, normalizedPlan);
-    url.searchParams.set(AUTH_HANDOFF_QUERY_TS, String(Date.now()));
-    return url.toString();
-  } catch (_) {
-    return href;
-  }
+  return href;
 }
 
 // Consume auth handoff from URL as early as possible on marketing pages.
@@ -542,18 +520,109 @@ window.stateManager = window.stateManager || (function() {
 })();
 
 // ----------------------- NAV HELPERS -----------------------
-// Detect whether auth may be in-flight: localStorage suggests auth but Firebase not ready yet.
+const _authPersistence = window.JobHackAIAuthPersistence;
+function getAuthPersistenceStores() {
+  if (_authPersistence?.getAuthPersistenceStores) {
+    return _authPersistence.getAuthPersistenceStores();
+  }
+  const stores = [];
+  try {
+    if (typeof sessionStorage !== 'undefined') stores.push(sessionStorage);
+  } catch (_) {}
+  try {
+    if (typeof localStorage !== 'undefined') stores.push(localStorage);
+  } catch (_) {}
+  return stores;
+}
+
+function getAuthPersistenceValue(key) {
+  if (key === 'user-authenticated') {
+    return getResolvedStoredAuthFlagValue();
+  }
+  const stores = getAuthPersistenceStores();
+  for (let i = stores.length - 1; i >= 0; i--) {
+    try {
+      const value = stores[i].getItem(key);
+      if (value !== null) return value;
+    } catch (_) {}
+  }
+  return null;
+}
+
+function getResolvedStoredAuthFlagValue() {
+  if (_authPersistence?.getResolvedStoredAuthFlagValue) {
+    return _authPersistence.getResolvedStoredAuthFlagValue();
+  }
+  let sessionValue = null;
+  let localValue = null;
+  try { sessionValue = sessionStorage.getItem('user-authenticated'); } catch (_) {}
+  try { localValue = localStorage.getItem('user-authenticated'); } catch (_) {}
+  if (sessionValue === 'true') return 'true';
+  if (sessionValue === 'false') return 'false';
+  if (localValue === 'false') return 'false';
+  if (localValue === 'true') return 'true';
+  return null;
+}
+
+function setAuthPersistenceValue(key, value) {
+  for (const store of getAuthPersistenceStores()) {
+    try {
+      store.setItem(key, value);
+    } catch (_) {}
+  }
+}
+
+function getAuthPlanValue(key) {
+  let sessionValue = null;
+  let localValue = null;
+
+  try { sessionValue = sessionStorage.getItem(key); } catch (_) {}
+  try { localValue = localStorage.getItem(key); } catch (_) {}
+
+  if (localValue !== null && localValue !== sessionValue) {
+    try { sessionStorage.setItem(key, localValue); } catch (_) {}
+    return localValue;
+  }
+
+  return sessionValue !== null ? sessionValue : localValue;
+}
+
+function hasStoredAuthenticatedFlag() {
+  if (_authPersistence?.hasStoredAuthenticatedFlag) {
+    return _authPersistence.hasStoredAuthenticatedFlag();
+  }
+  return getResolvedStoredAuthFlagValue() === 'true';
+}
+
+function hasFirebaseAuthPersistence() {
+  if (_authPersistence?.hasFirebaseAuthPersistence) {
+    return _authPersistence.hasFirebaseAuthPersistence();
+  }
+  try {
+    return getAuthPersistenceStores().some((store) => {
+      try {
+        for (let i = 0; i < store.length; i++) {
+          const key = store.key(i);
+          if (!key || !key.startsWith('firebase:authUser:')) continue;
+          const value = store.getItem(key);
+          if (value && value !== 'null' && value.length > 10) {
+            return true;
+          }
+        }
+      } catch (_) {}
+      return false;
+    });
+  } catch (_) {
+    return false;
+  }
+}
+
+// Detect whether auth may be in-flight: stored auth hints exist but Firebase is not ready yet.
 function isAuthPossiblyPending() {
   try {
-    const lsAuth = localStorage.getItem('user-authenticated');
-    if (lsAuth !== 'true') return false;
-    // Helper: check for Firebase SDK persistence keys (same pattern used by getAuthState)
-    const hasFirebaseKeys = Object.keys(localStorage).some(k =>
-      k.startsWith('firebase:authUser:') &&
-      localStorage.getItem(k) &&
-      localStorage.getItem(k) !== 'null' &&
-      localStorage.getItem(k).length > 10
-    );
+    const storedAuth = hasStoredAuthenticatedFlag();
+    if (!storedAuth) return false;
+    const hasFirebaseKeys = hasFirebaseAuthPersistence();
 
     // If auth already marked ready (either event flag or global fallback), not pending
     if (isRealAuthReady()) return false;
@@ -728,13 +797,8 @@ function confidentlyAuthenticatedForNav() {
     // 3) If firebase-auth-ready has fired, we can use localStorage heuristics safely
     try {
       if (typeof window !== 'undefined' && isRealAuthReady()) {
-        const storedAuth = (typeof localStorage !== 'undefined' && localStorage.getItem('user-authenticated') === 'true');
-        const hasFirebaseKeys = (typeof localStorage !== 'undefined') && Object.keys(localStorage).some(k =>
-          k.startsWith('firebase:authUser:') &&
-          localStorage.getItem(k) &&
-          localStorage.getItem(k) !== 'null' &&
-          localStorage.getItem(k).length > 10
-        );
+        const storedAuth = hasStoredAuthenticatedFlag();
+        const hasFirebaseKeys = hasFirebaseAuthPersistence();
         return storedAuth && hasFirebaseKeys;
       }
     } catch (_) {}
@@ -775,30 +839,30 @@ const DEBUG = {
 
 function navLog(level, message, data = null) {
   if (!DEBUG.enabled) return;
-  
+
   const levels = { debug: 0, info: 1, warn: 2, error: 3 };
   if (levels[level] < levels[DEBUG.level]) return;
-  
+
   // Auto-enable debug logging when issues are detected
   if (DEBUG.autoDebug.enabled) {
     const now = Date.now();
-    
+
     // Reset counters if enough time has passed
     if (now - DEBUG.autoDebug.lastReset > DEBUG.autoDebug.resetInterval) {
       DEBUG.autoDebug.errorCount = 0;
       DEBUG.autoDebug.warningCount = 0;
       DEBUG.autoDebug.lastReset = now;
     }
-    
+
     // Count errors and warnings
     if (level === 'error') {
       DEBUG.autoDebug.errorCount++;
     } else if (level === 'warn') {
       DEBUG.autoDebug.warningCount++;
     }
-    
+
     // Auto-enable debug logging if too many issues
-    if (DEBUG.autoDebug.errorCount >= DEBUG.autoDebug.maxErrors || 
+    if (DEBUG.autoDebug.errorCount >= DEBUG.autoDebug.maxErrors ||
         DEBUG.autoDebug.warningCount >= DEBUG.autoDebug.maxWarnings) {
       if (DEBUG.level !== 'debug') {
         DEBUG.level = 'debug';
@@ -807,7 +871,7 @@ function navLog(level, message, data = null) {
       }
     }
   }
-  
+
   // Rate limiting to prevent spam
   const logKey = `${level}:${message}`;
   const now = Date.now();
@@ -815,10 +879,10 @@ function navLog(level, message, data = null) {
     return; // Skip if logged recently
   }
   DEBUG.rateLimit.lastLog[logKey] = now;
-  
+
   const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
   const logMessage = `${DEBUG.prefix} [${timestamp}] [${level.toUpperCase()}] ${message}`;
-  
+
   if (data) {
     console.group(logMessage);
     console.log('Data:', data);
@@ -831,68 +895,63 @@ function navLog(level, message, data = null) {
 // --- AUTOMATIC ISSUE DETECTION ---
 function detectNavigationIssues() {
   const issues = [];
-  
+
   // Check if required DOM elements exist
   const navGroup = document.querySelector('.nav-group');
   const navLinks = document.querySelector('.nav-links');
   const mobileNav = document.getElementById('mobileNav');
-  
+
   if (!navGroup) {
     issues.push('Missing .nav-group element');
     navLog('error', 'Navigation issue detected: Missing .nav-group element');
   }
-  
+
   if (!navLinks) {
     issues.push('Missing .nav-links element');
     navLog('error', 'Navigation issue detected: Missing .nav-links element');
   }
-  
+
   if (!mobileNav) {
     issues.push('Missing #mobileNav element');
     navLog('error', 'Navigation issue detected: Missing #mobileNav element');
   }
-  
+
   // Check if navigation was rendered
   if (navLinks && navLinks.children.length === 0) {
     issues.push('Navigation links not rendered');
     navLog('warn', 'Navigation issue detected: No navigation links rendered');
   }
-  
+
   // Check if plan detection is working
   const currentPlan = getEffectivePlan();
   if (!currentPlan || !PLANS[currentPlan]) {
     issues.push('Invalid plan detected');
     navLog('error', 'Navigation issue detected: Invalid plan', { currentPlan });
   }
-  
+
   // Check if authentication state is consistent
   const authState = getAuthState();
-  const storedAuth = localStorage.getItem('user-authenticated');
+  const storedAuth = hasStoredAuthenticatedFlag();
   // Check Firebase SDK keys as additional validation (more reliable than email)
   // SECURITY: Require BOTH flag AND Firebase keys to match getAuthState() logic
   // This prevents false inconsistency warnings and matches security requirements
-  const hasFirebaseKeys = Object.keys(localStorage).some(k => 
-    k.startsWith('firebase:authUser:') && 
-    localStorage.getItem(k) && 
-    localStorage.getItem(k) !== 'null' &&
-    localStorage.getItem(k).length > 10
-  );
+  const hasFirebaseKeys = hasFirebaseAuthPersistence();
   // Require both conditions: flag must be true AND Firebase keys must exist
-  const isAuthenticated = storedAuth === 'true' && hasFirebaseKeys;
+  const isAuthenticated = storedAuth && hasFirebaseKeys;
   if (authState.isAuthenticated !== isAuthenticated) {
     issues.push('Authentication state inconsistency');
-    navLog('warn', 'Navigation issue detected: Auth state inconsistency', { 
-      authState: authState.isAuthenticated, 
-      localStorage: isAuthenticated 
+    navLog('warn', 'Navigation issue detected: Auth state inconsistency', {
+      authState: authState.isAuthenticated,
+      storage: isAuthenticated
     });
   }
-  
+
   return issues;
 }
 
 function autoEnableDebugIfNeeded() {
   const issues = detectNavigationIssues();
-  
+
   if (issues.length > 0) {
     // Auto-enable debug logging
     if (DEBUG.level !== 'debug') {
@@ -900,7 +959,7 @@ function autoEnableDebugIfNeeded() {
       console.log('🔧 [NAV DEBUG] Auto-enabled debug logging due to detected issues:');
       issues.forEach(issue => console.log('  -', issue));
     }
-    
+
     // Log the issues
     navLog('warn', 'Navigation issues detected', { issues, count: issues.length });
   }
@@ -911,7 +970,7 @@ function getAuthState() {
   // CRITICAL SECURITY FIX: Check Firebase auth state FIRST (source of truth)
   // This prevents dangerous "self-heal" logic that can restore auth state after logout
   const logoutIntent = sessionStorage.getItem('logout-intent');
-  
+
   // If logout is in progress, always return unauthenticated
   if (logoutIntent === '1') {
     console.log('[AUTH] getAuthState: Logout in progress, returning unauthenticated');
@@ -921,13 +980,13 @@ function getAuthState() {
       devPlan: null
     };
   }
-  
+
   // EDGE CASE FIX: Safely get Firebase user with error handling
   let firebaseUser = null;
   let firebaseError = null;
   let firebaseManagerExists = !!window.FirebaseAuthManager;
   let getCurrentUserExists = false;
-  
+
   try {
     if (window.FirebaseAuthManager) {
       getCurrentUserExists = typeof window.FirebaseAuthManager.getCurrentUser === 'function';
@@ -941,35 +1000,30 @@ function getAuthState() {
     firebaseError = error;
     console.error('[AUTH] getAuthState: Error calling getCurrentUser():', error.message);
   }
-  
+
   const isAuthenticatedFromFirebase = !!firebaseUser;
-  
-  // EDGE CASE FIX: Only fall back to localStorage if Firebase hasn't initialized yet
+
+  // EDGE CASE FIX: Only fall back to persisted browser storage if Firebase hasn't initialized yet
   // AND we're sure Firebase isn't available (not just an error)
   let fallbackAuth = false;
   const hasFirebaseManager = firebaseManagerExists && getCurrentUserExists;
-  
+
   if (!hasFirebaseManager && !firebaseUser) {
-    // Firebase not initialized - use localStorage as fallback (for initial page load)
+    // Firebase not initialized - use persisted storage fallback (for initial page load)
     try {
-      const storedAuth = localStorage.getItem('user-authenticated');
-      // Check Firebase SDK keys as additional validation (more reliable than email)
+      const storedAuth = hasStoredAuthenticatedFlag();
+      // Check Firebase SDK keys in session/local storage as additional validation
       // SECURITY: Require BOTH flag AND Firebase keys to prevent stale flags or XSS attacks
       // This matches the pattern used in inactivity-tracker.js and static-auth-guard.js
-      const hasFirebaseKeys = Object.keys(localStorage).some(k => 
-        k.startsWith('firebase:authUser:') && 
-        localStorage.getItem(k) && 
-        localStorage.getItem(k) !== 'null' &&
-        localStorage.getItem(k).length > 10
-      );
-      
+      const hasFirebaseKeys = hasFirebaseAuthPersistence();
+
       // Require both conditions: flag must be true AND Firebase keys must exist
-      if (storedAuth === 'true' && hasFirebaseKeys) {
+      if (storedAuth && hasFirebaseKeys) {
         fallbackAuth = true;
-        console.log('[AUTH] getAuthState: Using localStorage fallback (Firebase not initialized)');
+        console.log('[AUTH] getAuthState: Using storage fallback (Firebase not initialized)');
       }
     } catch (storageError) {
-      console.error('[AUTH] getAuthState: localStorage access error:', storageError.message);
+      console.error('[AUTH] getAuthState: storage access error:', storageError.message);
     }
   }
 
@@ -995,31 +1049,26 @@ function getAuthState() {
   }
 
   const actualAuth = isAuthenticatedFromFirebase || fallbackAuth;
-  
+
   // EDGE CASE FIX: If Firebase is initialized and says logged out, trust Firebase
-  // This handles cases where logout cleared Firebase but localStorage is stale
-  // SECURITY FIX: Check localStorage directly instead of actualAuth, since actualAuth
-  // will be false when Firebase says logged out, preventing cleanup of stale localStorage
-  // CRITICAL FIX: Don't clear localStorage if firebase-auth-ready hasn't fired yet
+  // This handles cases where logout cleared Firebase but persisted storage is stale
+  // SECURITY FIX: Check persisted storage directly instead of actualAuth, since actualAuth
+  // will be false when Firebase says logged out, preventing cleanup of stale auth markers
+  // CRITICAL FIX: Don't clear persisted storage if firebase-auth-ready hasn't fired yet
   // Firebase may still be restoring the session during initialization
     if (hasFirebaseManager && !firebaseUser) {
     // If firebase-auth-ready hasn't fired yet, Firebase may still be restoring session
-    // Use localStorage fallback temporarily instead of clearing it
+    // Use persisted storage fallback temporarily instead of clearing it
     if (!isRealAuthReady()) {
-      console.log('[AUTH] getAuthState: Firebase not ready yet, using localStorage fallback');
+      console.log('[AUTH] getAuthState: Firebase not ready yet, using storage fallback');
       try {
-        const storedAuth = localStorage.getItem('user-authenticated');
-        // Check Firebase SDK keys as additional validation (more reliable than email)
+        const storedAuth = hasStoredAuthenticatedFlag();
+        // Check Firebase SDK keys in session/local storage as additional validation
         // SECURITY: Require BOTH flag AND Firebase keys to prevent XSS attacks
         // This matches the pattern used in static-auth-guard.js and inactivity-tracker.js
-        const hasFirebaseKeys = Object.keys(localStorage).some(k => 
-          k.startsWith('firebase:authUser:') && 
-          localStorage.getItem(k) && 
-          localStorage.getItem(k) !== 'null' &&
-          localStorage.getItem(k).length > 10
-        );
+        const hasFirebaseKeys = hasFirebaseAuthPersistence();
         // Require both conditions: flag must be true AND Firebase keys must exist
-        if (storedAuth === 'true' && hasFirebaseKeys) {
+        if (storedAuth && hasFirebaseKeys) {
           const fallbackPlan = localStorage.getItem('user-plan') || 'free';
           return {
             isAuthenticated: true,
@@ -1030,7 +1079,7 @@ function getAuthState() {
       } catch (e) {
         // Fall through to return unauthenticated
       }
-      // If fallback didn't return, Firebase says logged out and localStorage doesn't have valid auth
+      // If fallback didn't return, Firebase says logged out and storage doesn't have valid auth
       // Check cross-domain cookie before returning unauthenticated
       // Option E: If logout cookie is present, distrust and clear stale URL handoff
       if (hasCrossDomainLogoutCookie()) {
@@ -1041,7 +1090,7 @@ function getAuthState() {
         const cp = cookiePlan || 'free';
         return { isAuthenticated: true, userPlan: cp, devPlan: cp };
       }
-      // Don't clear localStorage yet - wait for firebase-auth-ready to fire
+      // Don't clear persisted storage yet - wait for firebase-auth-ready to fire
       return {
         isAuthenticated: false,
         userPlan: null,
@@ -1049,7 +1098,7 @@ function getAuthState() {
       };
     }
 
-    // Only clear localStorage if firebase-auth-ready has fired AND Firebase says logged out
+    // Only clear persisted storage if firebase-auth-ready has fired AND Firebase says logged out
     // CRITICAL FIX: Check firebaseAuthReadyFired (or global fallback) before clearing to prevent premature clearing
     if (isRealAuthReady()) {
       // Check cross-domain cookie: if user is authenticated on app subdomain, trust the cookie
@@ -1063,11 +1112,11 @@ function getAuthState() {
         return { isAuthenticated: true, userPlan: cp, devPlan: cp };
       }
       try {
-        const storedAuth = localStorage.getItem('user-authenticated');
-        if (storedAuth === 'true') {
-          // Firebase is initialized and says logged out, but localStorage is stale - sync localStorage
-          navLog('error', 'Firebase says logged out but localStorage is stale, syncing localStorage');
-          localStorage.setItem('user-authenticated', 'false');
+        const storedAuth = hasStoredAuthenticatedFlag();
+        if (storedAuth) {
+          // Firebase is initialized and says logged out, but persisted auth state is stale - sync localStorage
+          navLog('error', 'Firebase says logged out but persisted auth state is stale, syncing localStorage');
+          setAuthPersistenceValue('user-authenticated', 'false');
           localStorage.removeItem('user-email');
           return {
             isAuthenticated: false,
@@ -1076,20 +1125,20 @@ function getAuthState() {
           };
         }
       } catch (storageError) {
-        navLog('error', 'Failed to check localStorage for stale auth state', storageError.message);
+        navLog('error', 'Failed to check persisted auth state', storageError.message);
       }
     }
   }
-  
+
   // EDGE CASE FIX: Safe plan retrieval with validation
   let userPlan = null;
   let devPlan = null;
-  
+
   if (actualAuth) {
     try {
-      const storedPlan = localStorage.getItem('user-plan');
-      const storedDevPlan = localStorage.getItem('dev-plan');
-      
+      const storedPlan = getAuthPlanValue('user-plan');
+      const storedDevPlan = getAuthPlanValue('dev-plan');
+
       // Validate plan values are in allowed list
       // SECURITY FIX: Include 'pending' as legitimate plan state for trial users waiting for webhook confirmation
       const allowedPlans = ['free', 'trial', 'essential', 'pro', 'premium', 'visitor', 'pending'];
@@ -1106,7 +1155,7 @@ function getAuthState() {
       } else {
         userPlan = 'free';
       }
-      
+
       if (storedDevPlan && allowedPlans.includes(storedDevPlan)) {
         devPlan = storedDevPlan;
       }
@@ -1123,41 +1172,41 @@ function getAuthState() {
     userPlan,
     devPlan
   };
-  
+
   // Log errors for debugging (only errors, not debug info)
-  if (!actualAuth && localStorage.getItem('user-authenticated') === 'true') {
-    navLog('error', 'Auth state mismatch: localStorage says authenticated but Firebase says not', {
+  if (!actualAuth && hasStoredAuthenticatedFlag()) {
+    navLog('error', 'Auth state mismatch: persisted storage says authenticated but Firebase says not', {
       firebaseManagerExists,
       getCurrentUserExists,
       firebaseError: firebaseError?.message,
       firebaseUser: !!firebaseUser
     });
   }
-  
+
   // EDGE CASE: Log if we had an error but still determined auth state
   if (firebaseError && actualAuth) {
     console.warn('[AUTH] getAuthState: Used fallback auth despite Firebase error');
   }
-  
+
   return authState;
 }
 
 function setAuthState(isAuthenticated, plan = null) {
   navLog('info', 'setAuthState() called', { isAuthenticated, plan });
-  
+
   try {
-    localStorage.setItem('user-authenticated', isAuthenticated ? 'true' : 'false');
+    setAuthPersistenceValue('user-authenticated', isAuthenticated ? 'true' : 'false');
     // NOTE: Do NOT call clearUrlAuthHandoff() here. On the marketing site, Firebase has
     // no local session and fires onAuthStateChanged(null) which calls setAuthState(false).
     // Clearing the URL handoff here would undo the auth hint set by app.jobhackai.io.
     // URL handoff is only cleared on explicit logout in logout().
     if (plan) {
-      const oldPlan = localStorage.getItem('user-plan') || localStorage.getItem('dev-plan');
+      const oldPlan = getAuthPlanValue('user-plan') || getAuthPlanValue('dev-plan');
       // Only update and dispatch if the plan actually changed
       if (String(oldPlan) !== String(plan)) {
-        localStorage.setItem('user-plan', plan);
-        localStorage.setItem('dev-plan', plan);
-        
+        setAuthPersistenceValue('user-plan', plan);
+        setAuthPersistenceValue('dev-plan', plan);
+
         // Dispatch planChanged event to notify other components (dashboard, account-settings, etc.)
         // This ensures immediate UI updates when plan changes, rather than waiting for polling
         try {
@@ -1171,25 +1220,25 @@ function setAuthState(isAuthenticated, plan = null) {
           navLog('warn', 'setAuthState: Failed to dispatch planChanged event', { message: eventError?.message });
         }
       } else {
-        // Keep localStorage consistent even if no event dispatched (ensure value exists)
+        // Keep persisted auth state consistent even if no event dispatched.
         try {
-          localStorage.setItem('user-plan', plan);
-          localStorage.setItem('dev-plan', plan);
+          setAuthPersistenceValue('user-plan', plan);
+          setAuthPersistenceValue('dev-plan', plan);
         } catch (_) {}
         navLog('debug', 'setAuthState: plan unchanged, skipping planChanged dispatch', { oldPlan, newPlan: plan });
       }
     }
   } catch (e) {
-    navLog('warn', 'Failed to set auth state in localStorage', { message: e?.message });
+    navLog('warn', 'Failed to set auth state in persisted storage', { message: e?.message });
   }
-  
+
   // Only log on debug level to reduce spam
-  navLog('debug', 'Auth state updated in localStorage', {
-    'user-authenticated': localStorage.getItem('user-authenticated'),
-    'user-plan': localStorage.getItem('user-plan'),
-    'dev-plan': localStorage.getItem('dev-plan')
+  navLog('debug', 'Auth state updated in persisted storage', {
+    'user-authenticated': getAuthPersistenceValue('user-authenticated'),
+    'user-plan': getAuthPlanValue('user-plan'),
+    'dev-plan': getAuthPlanValue('dev-plan')
   });
-  
+
   // Trigger navigation update after state change
   // Trigger navigation update after state change (debounced to avoid flicker)
   setTimeout(() => {
@@ -1203,13 +1252,13 @@ let logoutInProgress = false;
 
 async function logout(e) {
   e?.preventDefault?.();
-  
+
   // EDGE CASE FIX: Debounce rapid logout clicks
   if (logoutInProgress) {
     console.log('[LOGOUT] Logout already in progress, ignoring duplicate call');
     return;
   }
-  
+
   logoutInProgress = true;
   console.log('[LOGOUT] logout() v2: triggered');
 
@@ -1238,6 +1287,11 @@ async function logout(e) {
           console.warn(`[LOGOUT] Failed to remove ${k}:`, keyError.message);
         }
       });
+      try {
+        localStorage.setItem('user-authenticated', 'false');
+      } catch (flagError) {
+        console.warn('[LOGOUT] Failed to publish explicit logged-out flag:', flagError.message);
+      }
       console.log('[LOGOUT] localStorage cleared');
     } catch (storageError) {
       console.error('[LOGOUT] localStorage cleanup failed:', storageError.message);
@@ -1264,7 +1318,7 @@ async function logout(e) {
     }
 
     // Clear session-scoped data IMMEDIATELY
-    try { 
+    try {
       sessionStorage.removeItem('selectedPlan');
       clearUrlAuthHandoff();
       // Fix: Clear plan state sync sessionStorage keys to prevent cross-user contamination
@@ -1293,13 +1347,13 @@ async function logout(e) {
 
     // Redirect to login
     // Clear logout-intent to avoid stale state on back/cached navigation
-    try { 
-      sessionStorage.removeItem('logout-intent'); 
+    try {
+      sessionStorage.removeItem('logout-intent');
       console.log('[LOGOUT] Logout intent flag cleared');
     } catch (sessionError) {
       console.warn('[LOGOUT] Failed to clear logout-intent:', sessionError.message);
     }
-    
+
     console.log('[LOGOUT] Redirecting to /login.html');
     location.replace('/login.html');
   } finally {
@@ -1482,7 +1536,7 @@ const NAVIGATION_CONFIG = {
       { text: 'Home', href: VISITOR_HOME_HREF },
       { text: 'Dashboard', href: APP_BASE_URL + '/dashboard.html' },
       { text: 'Blog', href: VISITOR_BLOG_HREF },
-      { 
+      {
         text: 'Resume Tools',
         isDropdown: true,
         items: [
@@ -1490,7 +1544,7 @@ const NAVIGATION_CONFIG = {
           { text: 'Cover Letter', href: APP_BASE_URL + '/cover-letter-generator.html' },
         ]
       },
-      { 
+      {
         text: 'Interview Prep',
         isDropdown: true,
         items: [
@@ -1512,7 +1566,7 @@ const NAVIGATION_CONFIG = {
       { text: 'Home', href: VISITOR_HOME_HREF },
       { text: 'Dashboard', href: APP_BASE_URL + '/dashboard.html' },
       { text: 'Blog', href: VISITOR_BLOG_HREF },
-      { 
+      {
         text: 'Resume Tools',
         isDropdown: true,
         items: [
@@ -1520,7 +1574,7 @@ const NAVIGATION_CONFIG = {
           { text: 'Cover Letter', href: APP_BASE_URL + '/cover-letter-generator.html' },
         ]
       },
-      { 
+      {
         text: 'Interview Prep',
         isDropdown: true,
         items: [
@@ -1623,19 +1677,19 @@ function attachPlanSelectionHandler(element, planId, source) {
 // --- UTILITY FUNCTIONS ---
 function getCurrentPlan() {
   const authState = getAuthState();
-  
+
   // If user is not authenticated, they are a visitor
   if (!authState.isAuthenticated) {
     navLog('debug', 'getCurrentPlan: User not authenticated, returning visitor');
     return 'visitor';
   }
-  
+
   // If user is authenticated, use their plan
   if (authState.userPlan && PLANS[authState.userPlan]) {
     navLog('debug', 'getCurrentPlan: User authenticated, returning plan', authState.userPlan);
     return authState.userPlan;
   }
-  
+
   // Fallback to free plan for authenticated users
   navLog('warn', 'getCurrentPlan: No valid plan found, falling back to free');
   return 'free';
@@ -1693,40 +1747,40 @@ function getEffectivePlan() {
   }
   // Otherwise use their actual plan
   let effectivePlan = authState.userPlan || 'free';
-  
+
   // Map 'pending' to 'trial' so in-flight trial signups get trial UX immediately
   if (effectivePlan === 'pending') {
     effectivePlan = 'trial';
     navLog('info', 'getEffectivePlan: Mapping pending to trial for navigation/feature access');
   }
-  
+
   navLog('info', 'getEffectivePlan: Using user plan', effectivePlan);
   return effectivePlan;
 }
 
 function setPlan(plan) {
   navLog('info', 'setPlan() called', { plan, validPlan: !!PLANS[plan] });
-  
+
   if (PLANS[plan]) {
     const oldPlan = localStorage.getItem('dev-plan');
     localStorage.setItem('dev-plan', plan);
-    
+
     // Update URL without page reload
     const url = new URL(window.location);
     url.searchParams.set('plan', plan);
     window.history.replaceState({}, '', url);
-    
+
     navLog('debug', 'setPlan: Updated localStorage and URL', {
       'dev-plan': localStorage.getItem('dev-plan'),
       newUrl: url.toString()
     });
-    
+
     // Trigger plan change event
     const planChangeEvent = new CustomEvent('planChanged', {
       detail: { oldPlan, newPlan: plan }
     });
     window.dispatchEvent(planChangeEvent);
-    
+
     scheduleUpdateNavigation();
     updateDevPlanToggle();
   } else {
@@ -1737,18 +1791,18 @@ function setPlan(plan) {
 function isFeatureUnlocked(featureKey) {
   const authState = getAuthState();
   const currentPlan = getEffectivePlan();
-  
+
   navLog('debug', 'isFeatureUnlocked() called', { featureKey, authState, currentPlan });
-  
+
   // Visitors can't access any features
   if (!authState.isAuthenticated && currentPlan === 'visitor') {
     navLog('info', 'isFeatureUnlocked: Visitor cannot access features', featureKey);
     return false;
   }
-  
+
   const planConfig = PLANS[currentPlan] || { features: [] };
   const isUnlocked = planConfig && planConfig.features.includes(featureKey);
-  
+
   // Additional check for free account usage limits
   if (isUnlocked && currentPlan === 'free' && featureKey === 'ats') {
     if (window.freeAccountManager) {
@@ -1759,14 +1813,14 @@ function isFeatureUnlocked(featureKey) {
       }
     }
   }
-  
+
   navLog('debug', 'isFeatureUnlocked: Feature access check', {
     featureKey,
     plan: currentPlan,
     planFeatures: planConfig?.features,
     isUnlocked
   });
-  
+
   return isUnlocked;
 }
 
@@ -1789,7 +1843,7 @@ function showUpgradeModal(targetPlan = 'premium') {
     justify-content: center;
     z-index: 10000;
   `;
-  
+
   modal.innerHTML = `
     <div style="
       background: white;
@@ -1826,9 +1880,9 @@ function showUpgradeModal(targetPlan = 'premium') {
       </div>
     </div>
   `;
-  
+
   document.body.appendChild(modal);
-  
+
   // Cancel button closes modal
   modal.querySelector('#upgrade-cancel-btn').addEventListener('click', () => {
     modal.remove();
@@ -1853,7 +1907,7 @@ function showUpgradeModal(targetPlan = 'premium') {
 // --- NAVIGATION RENDERING ---
 function updateNavigation() {
   navLog('info', '=== updateNavigation() START ===');
-  
+
   // Safety: if auth looks like it's still restoring, do not render full nav now.
   // scheduleUpdateNavigation will retry after auth becomes ready.
   try {
@@ -1873,14 +1927,14 @@ function updateNavigation() {
 
   // Auto-detect issues before starting
   autoEnableDebugIfNeeded();
-  
+
   const devOverride = getDevPlanOverride();
   const currentPlan = getEffectivePlan();
   const authState = getAuthState();
-  
+
   // The plan-only optimization is applied after we determine navConfig below,
   // so the pre-check has been moved to the post-navConfig section to avoid TDZ.
-  
+
   // Additional debugging for visitor state issues
   if (currentPlan !== 'visitor' && !authState.isAuthenticated) {
     navLog('warn', 'POTENTIAL ISSUE: User not authenticated but plan is not visitor', {
@@ -1892,21 +1946,21 @@ function updateNavigation() {
       'localStorage user-authenticated': localStorage.getItem('user-authenticated')
     });
   }
-  
-  navLog('info', 'Navigation state detected', { 
-    devOverride, 
-    currentPlan, 
+
+  navLog('info', 'Navigation state detected', {
+    devOverride,
+    currentPlan,
     authState,
-    url: window.location.href 
+    url: window.location.href
   });
-  
+
   const navConfig = NAVIGATION_CONFIG[currentPlan] || NAVIGATION_CONFIG.visitor;
-  navLog('info', 'Using navigation config', { 
-    plan: currentPlan, 
+  navLog('info', 'Using navigation config', {
+    plan: currentPlan,
     hasConfig: !!navConfig,
-    navItemsCount: navConfig?.navItems?.length || 0 
+    navItemsCount: navConfig?.navItems?.length || 0
   });
- 
+
   // --- Plan-only optimization: patch instead of full rebuild ---
   try {
     const oldNavActions = document.querySelector('.nav-actions');
@@ -1951,11 +2005,11 @@ function updateNavigation() {
     navLog('warn', 'patchNav pre-check failed', e);
   }
 
-  
+
   const navGroup = document.querySelector('.nav-group');
   const navLinks = document.querySelector('.nav-links');
   const mobileNav = document.getElementById('mobileNav');
-  
+
   navLog('debug', 'DOM elements found', {
     navGroup: !!navGroup,
     navLinks: !!navLinks,
@@ -2030,13 +2084,13 @@ function updateNavigation() {
     oldNavLinks.innerHTML = '';
     navLog('debug', 'Cleared nav-links');
   }
-  
+
   const oldNavActions = document.querySelector('.nav-actions');
   if (oldNavActions) {
     oldNavActions.remove();
     navLog('debug', 'Removed old nav-actions');
   }
-  
+
   if (mobileNav) {
     mobileNav.innerHTML = '';
     navLog('debug', 'Cleared mobile nav');
@@ -2044,14 +2098,14 @@ function updateNavigation() {
 
   // --- Build Nav Links (Desktop) ---
   if (navLinks && navConfig.navItems) {
-    navLog('info', 'Building desktop navigation links', { 
-      itemsCount: navConfig.navItems.length 
+    navLog('info', 'Building desktop navigation links', {
+      itemsCount: navConfig.navItems.length
     });
-    
+
     navConfig.navItems.forEach((item, index) => {
       if (item.isCTA) return; // Skip CTA in navItems for visitors
       // Removed verbose logging to prevent console spam
-      
+
       if (item.isDropdown) {
         navLog('info', 'Creating dropdown navigation', item);
         const dropdownContainer = document.createElement('div');
@@ -2061,7 +2115,7 @@ function updateNavigation() {
         toggle.href = '#';
         toggle.className = 'nav-dropdown-toggle';
         toggle.innerHTML = `${item.text} <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="dropdown-arrow"><path d="m6 9 6 6 6-6"/></svg>`;
-        
+
         const dropdownMenu = document.createElement('div');
         dropdownMenu.className = 'nav-dropdown-menu';
 
@@ -2084,11 +2138,11 @@ function updateNavigation() {
               e.preventDefault();
               e.stopPropagation();
               e.stopImmediatePropagation();
-              navLog('info', 'Locked dropdown link clicked', { 
-                text: dropdownItem.text, 
+              navLog('info', 'Locked dropdown link clicked', {
+                text: dropdownItem.text,
                 href: dropdownItem.href,
                 currentPlan,
-                url: window.location.href 
+                url: window.location.href
               });
               showUpgradeModal('essential');
               return false;
@@ -2103,7 +2157,7 @@ function updateNavigation() {
         dropdownContainer.appendChild(toggle);
         dropdownContainer.appendChild(dropdownMenu);
         navLinks.appendChild(dropdownContainer);
-        
+
         toggle.addEventListener('click', (e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -2113,10 +2167,10 @@ function updateNavigation() {
           dropdownContainer.classList.toggle('open');
           // Removed verbose logging to prevent console spam
         });
-        
-        navLog('info', 'Dropdown created', { 
-          text: item.text, 
-          itemsCount: item.items.length 
+
+        navLog('info', 'Dropdown created', {
+          text: item.text,
+          itemsCount: item.items.length
         });
       } else {
         // Removed verbose logging to prevent console spam
@@ -2186,21 +2240,21 @@ function updateNavigation() {
       navActions.appendChild(cta);
     }
   } else {
-    navLog('warn', 'Cannot build nav links', { 
-      hasNavLinks: !!navLinks, 
-      hasNavConfig: !!navConfig, 
-      hasNavItems: !!navConfig?.navItems 
+    navLog('warn', 'Cannot build nav links', {
+      hasNavLinks: !!navLinks,
+      hasNavConfig: !!navConfig,
+      hasNavItems: !!navConfig?.navItems
     });
   }
 
   // --- Build Mobile Nav ---
   if (mobileNav && navConfig.navItems) {
     navLog('info', 'Building mobile navigation', { itemsCount: navConfig.navItems.length });
-    
+
     navConfig.navItems.forEach((item, index) => {
       if (item.isCTA) return; // Skip CTA in navItems for visitors
       // Removed verbose logging to prevent console spam
-      
+
       if (item.isDropdown) {
         // Removed verbose logging to prevent console spam
         const group = document.createElement('div');
@@ -2211,7 +2265,7 @@ function updateNavigation() {
         trigger.setAttribute('aria-expanded', 'false');
         trigger.setAttribute('aria-controls', `mobile-submenu-${index}`);
         trigger.setAttribute('data-group-index', index.toString());
-        
+
         group.appendChild(trigger);
         const submenu = document.createElement('div');
         submenu.className = 'mobile-nav-submenu';
@@ -2292,7 +2346,7 @@ function updateNavigation() {
       const separator = document.createElement('div');
       separator.style.cssText = 'height: 1px; background: #E5E7EB; margin: 1rem 0;';
       mobileNav.appendChild(separator);
-      
+
       navConfig.userNav.menuItems.forEach((menuItem) => {
         const menuLink = document.createElement('a');
         if (menuItem.action === 'logout') {
@@ -2309,7 +2363,7 @@ function updateNavigation() {
         mobileNav.appendChild(menuLink);
       });
     }
-    
+
     // --- Always append CTA for authenticated plans in mobile nav (only once, after nav links) ---
     if (isAuthView && navConfig.userNav && navConfig.userNav.cta && mobileNav) {
       const cta = document.createElement('a');
@@ -2322,10 +2376,10 @@ function updateNavigation() {
       navLog('warn', 'mobileNav is null, cannot append CTA for authenticated plans');
     }
   } else {
-    navLog('warn', 'Cannot build mobile nav', { 
-      hasMobileNav: !!mobileNav, 
-      hasNavConfig: !!navConfig, 
-      hasNavItems: !!navConfig?.navItems 
+    navLog('warn', 'Cannot build mobile nav', {
+      hasMobileNav: !!mobileNav,
+      hasNavConfig: !!navConfig,
+      hasNavItems: !!navConfig?.navItems
     });
   }
 
@@ -2396,7 +2450,7 @@ function updateNavigation() {
       }
     }
   });
-  
+
   // Setup event delegation for mobile nav triggers (works even after navigation rebuilds)
   // After the DOM build, ensure nav-actions carries plan and signature so plan-only patches can be validated
   try {
@@ -2419,12 +2473,12 @@ function updateNavigation() {
     navLog('debug', 'Failed to set nav signature or plan dataset (post-build)', e);
   }
   setupMobileNavDelegation();
-  
+
   // Auto-detect issues after navigation update
   setTimeout(() => {
     autoEnableDebugIfNeeded();
   }, 100);
-  
+
   navLog('info', '=== updateNavigation() COMPLETE ===');
 }
 
@@ -2433,26 +2487,26 @@ function updateNavigation() {
 function setupMobileNavDelegation() {
   const mobileNav = document.getElementById('mobileNav');
   if (!mobileNav) return;
-  
+
   // Remove any existing delegation listener to avoid duplicates
   if (mobileNav._delegationHandler) {
     mobileNav.removeEventListener('click', mobileNav._delegationHandler);
   }
-  
+
   // Create new delegation handler
   mobileNav._delegationHandler = function(e) {
     // Check if click is on a mobile nav trigger button
     const trigger = e.target.closest('.mobile-nav-trigger');
     if (!trigger) return;
-    
+
     e.preventDefault();
     e.stopPropagation();
-    
+
     const group = trigger.closest('.mobile-nav-group');
     if (!group) return;
-    
+
     const isOpen = group.classList.contains('open');
-    
+
     // Close all other groups
     document.querySelectorAll('.mobile-nav-group.open').forEach(g => {
       if (g !== group) {
@@ -2461,7 +2515,7 @@ function setupMobileNavDelegation() {
         if (t) t.setAttribute('aria-expanded', 'false');
       }
     });
-    
+
     // Toggle current group
     if (isOpen) {
       group.classList.remove('open');
@@ -2471,7 +2525,7 @@ function setupMobileNavDelegation() {
       trigger.setAttribute('aria-expanded', 'true');
     }
   };
-  
+
   // Attach delegation listener
   mobileNav.addEventListener('click', mobileNav._delegationHandler);
   navLog('debug', 'Mobile nav delegation handler attached');
@@ -2492,13 +2546,13 @@ function updateDevPlanToggle() {
 // --- FEATURE ACCESS CONTROL ---
 function checkFeatureAccess(featureKey, targetPlan = 'premium') {
   navLog('debug', 'checkFeatureAccess() called', { featureKey, targetPlan });
-  
+
   if (!isFeatureUnlocked(featureKey)) {
     navLog('info', 'Feature access denied, showing upgrade modal', { featureKey, targetPlan });
     showUpgradeModal(targetPlan);
     return false;
   }
-  
+
   navLog('debug', 'Feature access granted', { featureKey });
   return true;
 }
@@ -2522,7 +2576,7 @@ async function initializeNavigation() {
     url: window.location.href,
     userAgent: navigator.userAgent.substring(0, 50) + '...'
   });
-  
+
   // Initialize required localStorage keys for smoke tests
   try {
     if (!localStorage.getItem('user-authenticated')) {
@@ -2540,7 +2594,7 @@ async function initializeNavigation() {
   // --- Plan persistence fix ---
   const authState = getAuthState();
   let devPlan = localStorage.getItem('dev-plan');
-  
+
   // Force clean visitor state for unauthenticated users
   if (!authState.isAuthenticated) {
     // Clear force flag if not needed anymore (kept until first init completes)
@@ -2552,7 +2606,7 @@ async function initializeNavigation() {
     localStorage.setItem('user-plan', 'free');
     localStorage.removeItem('dev-plan');
     devPlan = null;
-    
+
     navLog('info', 'Force-cleared plan data for unauthenticated user');
   } else {
     // If dev-plan is not set or matches visitor, always set to user-plan
@@ -2590,33 +2644,33 @@ async function initializeNavigation() {
       navLog('warn', 'Plan read failed (non-critical), continuing with navigation render:', planError);
     }
   }
-  
+
   // Update navigation (use scheduler to ensure revealNav runs and errors are handled)
   navLog('debug', 'Calling scheduleUpdateNavigation(true)');
   scheduleUpdateNavigation(true);
-  
+
   // Ensure mobile nav delegation is set up (in case updateNavigation runs before mobileNav exists)
   // This will be called again in updateNavigation, but this ensures it's ready
   setTimeout(() => {
     setupMobileNavDelegation();
   }, 100);
-  
+
   // REMOVED: Do NOT call reconcilePlanFromAPI() here - it causes race condition
   // Plan reconciliation will be handled by:
   // 1. Firebase auth's onAuthStateChanged listener (already implemented)
   // 2. Page-specific DOMContentLoaded handlers that wait for auth
   // 3. Manual calls with ?paid=1 parameter
-  
+
   // Only handle post-checkout activation polling (doesn't need immediate plan fetch)
   if (location.search.includes('paid=1')) {
     // This will be handled by dashboard.html's DOMContentLoaded after auth is confirmed
     navLog('info', 'Checkout flow detected, plan sync will be handled by page auth check');
   }
-  
+
   // Update quick plan switcher state
   navLog('debug', 'Updating quick plan switcher state');
   updateQuickPlanSwitcher();
-  
+
   // Signal that navigation system is ready
   navLog('info', 'Navigation system initialization complete, dispatching ready event');
   // Ensure nav is revealed (scheduler calls revealNav); call revealNav as a safe fallback
@@ -2632,7 +2686,7 @@ async function initializeNavigation() {
   navigationInitialized = true;
   const readyEvent = new CustomEvent('navigationReady');
   window.dispatchEvent(readyEvent);
-  
+
   // Listen for plan changes
   navLog('debug', 'Setting up storage event listener');
   window.addEventListener('storage', (e) => {
@@ -2653,7 +2707,7 @@ async function initializeNavigation() {
       navLog('warn', 'planChanged handler failed', err);
     }
   });
-  
+
   // SECURITY FIX: Listen to Firebase auth state changes to keep UI in sync
   // This ensures navigation updates immediately when user logs out in another tab
   // SECURITY FIX: Guard against duplicate registration - initializeNavigation() can be called multiple times
@@ -2662,14 +2716,14 @@ async function initializeNavigation() {
       if (typeof window.FirebaseAuthManager.onAuthStateChange === 'function') {
         navLog('debug', 'Setting up Firebase auth state listener');
         firebaseAuthListenerRegistered = true; // Mark as registered before adding listener
-        
+
         // EDGE CASE FIX: Wrap listener in try-catch to prevent errors from breaking navigation
         window.FirebaseAuthManager.onAuthStateChange((user, userRecord) => {
           try {
             const isAuthenticated = !!user;
             const currentAuthState = getAuthState();
             const hasMismatch = isAuthenticated !== currentAuthState.isAuthenticated;
-            
+
             // SECURITY FIX: Use navLog instead of console.log to respect log level filtering
             // Do not log email address to prevent information leakage
             navLog('debug', 'Auth state changed', {
@@ -2677,7 +2731,7 @@ async function initializeNavigation() {
               currentAuthState: currentAuthState.isAuthenticated,
               mismatch: hasMismatch
             });
-            
+
             // If Firebase says logged out but localStorage says logged in, trust Firebase
             if (!isAuthenticated && currentAuthState.isAuthenticated) {
               navLog('error', 'Firebase auth mismatch: Firebase says logged out, syncing localStorage');
@@ -2730,7 +2784,7 @@ async function initializeNavigation() {
             try {
               const isAuthenticated = !!user;
               const currentAuthState = getAuthState();
-              
+
               if (!isAuthenticated && currentAuthState.isAuthenticated) {
                 console.log('[AUTH-LISTENER] Firebase says logged out, syncing localStorage');
                 setAuthState(false, null);
@@ -2760,7 +2814,7 @@ async function initializeNavigation() {
   } else if (firebaseAuthListenerRegistered) {
     navLog('debug', 'Firebase auth listener already registered, skipping duplicate registration');
   }
-  
+
   navLog('info', '=== initializeNavigation() COMPLETE ===');
 }
 
@@ -2820,17 +2874,16 @@ async function fetchPlanFromAPI() {
         if (billingRes.ok) {
           const billingData = await billingRes.json();
           if (billingData.ok && billingData.plan && billingData.plan !== 'free') {
-            console.log(`🔄 fetchPlanFromAPI: Found plan ${billingData.plan} from billing-status, syncing to D1...`);
+            console.log(`🔄 fetchPlanFromAPI: Found plan ${billingData.plan} from billing-status, using it locally while server sync catches up...`);
             plan = billingData.plan;
             if (window.PlanCache) {
               const cachedPlan = window.PlanCache.getCachedPlan();
-              const trialEndsAt = cachedPlan ? cachedPlan.trialEndsAt : localStorage.getItem('trial-ends-at');
+              const trialEndsAt = billingData.trialEndsAt || (cachedPlan ? cachedPlan.trialEndsAt : localStorage.getItem('trial-ends-at'));
               window.PlanCache.setCachedPlan(plan, trialEndsAt);
             }
-            fetch('/api/sync-stripe-plan', {
-              method: 'POST',
-              headers: { Authorization: `Bearer ${idToken}` }
-            }).catch(err => console.warn('⚠️ fetchPlanFromAPI: Failed to sync plan to D1:', err));
+            if (billingData.trialEndsAt) {
+              localStorage.setItem('trial-ends-at', billingData.trialEndsAt);
+            }
           }
         }
       } catch (billingError) {
@@ -2853,13 +2906,13 @@ async function reconcilePlanFromAPI() {
     console.log('🔍 reconcilePlanFromAPI: User not authenticated, skipping');
     return;
   }
-  
+
   // Check if FirebaseAuthManager is loaded
   if (!window.FirebaseAuthManager) {
     console.log('🔍 reconcilePlanFromAPI: FirebaseAuthManager not loaded, skipping');
     return;
   }
-  
+
   console.log('🔍 reconcilePlanFromAPI: Starting plan reconciliation from D1...');
 
   // Single attempt — PlanCache handles deduplication; no retry cascade needed
@@ -2916,13 +2969,13 @@ window.JobHackAINavigation = {
 window.navDebug = {
   // Commands object for other scripts to add commands
   commands: {},
-  
+
   // Get current navigation state
   getState: () => {
     const authState = getAuthState();
     const currentPlan = getEffectivePlan();
     const devOverride = getDevPlanOverride();
-    
+
     console.group('🔍 Navigation Debug State');
     console.log('Auth State:', authState);
     console.log('Current Plan:', currentPlan);
@@ -2940,23 +2993,23 @@ window.navDebug = {
       warningCount: DEBUG.autoDebug.warningCount
     });
     console.groupEnd();
-    
+
     return { authState, currentPlan, devOverride };
   },
-  
+
   // Test navigation rendering
   testNav: () => {
     console.log('🔄 Testing navigation rendering...');
     updateNavigation();
     console.log('✅ Navigation update complete');
   },
-  
+
   // Set plan for testing
   setPlan: (plan) => {
     console.log(`🔄 Setting plan to: ${plan}`);
     setPlan(plan);
   },
-  
+
   // Clear all navigation state
   reset: () => {
     console.log('🔄 Resetting navigation state...');
@@ -2966,14 +3019,14 @@ window.navDebug = {
     updateNavigation();
     console.log('✅ Navigation state reset');
   },
-  
+
   // Check feature access
   checkFeature: (featureKey) => {
     const isUnlocked = isFeatureUnlocked(featureKey);
     console.log(`🔒 Feature "${featureKey}": ${isUnlocked ? 'UNLOCKED' : 'LOCKED'}`);
     return isUnlocked;
   },
-  
+
   // List all available features
   listFeatures: () => {
     console.group('📋 Available Features by Plan');
@@ -2982,7 +3035,7 @@ window.navDebug = {
     });
     console.groupEnd();
   },
-  
+
   // Enable/disable debug logging
   setLogLevel: (level) => {
     if (['debug', 'info', 'warn', 'error'].includes(level)) {
@@ -2992,7 +3045,7 @@ window.navDebug = {
       console.log('❌ Invalid log level. Use: debug, info, warn, error');
     }
   },
-  
+
   // Toggle debug logging on/off
   toggleLogging: () => {
     DEBUG.enabled = !DEBUG.enabled;
@@ -3212,10 +3265,10 @@ function applyNavForUser(user) {
       window.location.href = targetHref;
     };
   };
-  
+
   applyLogoTarget(logo);
   if (!desktopNav) return;
-  
+
   if (!user) {
     // On marketing, Firebase user may be null while cookie/handoff still indicates
     // authenticated state. Render verified nav immediately to avoid visitor flash.
@@ -3226,12 +3279,12 @@ function applyNavForUser(user) {
     }
     return;
   }
-  
+
   if (!user.emailVerified) {
     renderUnverifiedNav(desktopNav, mobileNav);
     return;
   }
-  
+
   renderVerifiedNav(desktopNav, mobileNav);
 }
 

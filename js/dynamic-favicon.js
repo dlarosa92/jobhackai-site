@@ -1,17 +1,18 @@
 /**
  * Dynamic Favicon Switcher
- * Uses the same favicon for all browser tabs (light and dark mode)
+ * Keeps the official logo favicon across all browser tabs
  */
 (function() {
   'use strict';
 
-  // Use the same favicon for all tabs
-  const FALLBACK_FAVICON = 'assets/jobhackai_icon_only_128.png';
+  const FALLBACK_FAVICON = 'assets/jobhackai_icon_Favicon_128.png';
+  const FALLBACK_APPLE_TOUCH_ICON = 'assets/jobhackai_apple_touch_icon_180.png';
 
   function updateFavicon() {
     const existingIcon = document.querySelector('link[rel="icon"]');
     const existingApple = document.querySelector('link[rel="apple-touch-icon"]');
-    const resolvedHref = (existingIcon && existingIcon.href) || (existingApple && existingApple.href) || FALLBACK_FAVICON;
+    const resolvedIconHref = (existingIcon && existingIcon.href) || FALLBACK_FAVICON;
+    const resolvedAppleHref = (existingApple && existingApple.href) || FALLBACK_APPLE_TOUCH_ICON;
 
     // Remove existing favicon links
     const existingFavicons = document.querySelectorAll('link[rel="icon"], link[rel="apple-touch-icon"]');
@@ -21,13 +22,15 @@
     const faviconLink = document.createElement('link');
     faviconLink.rel = 'icon';
     faviconLink.type = 'image/png';
-    faviconLink.href = resolvedHref;
+    faviconLink.sizes = '128x128';
+    faviconLink.href = resolvedIconHref;
     document.head.appendChild(faviconLink);
 
     // Create apple-touch-icon link
     const appleTouchLink = document.createElement('link');
     appleTouchLink.rel = 'apple-touch-icon';
-    appleTouchLink.href = resolvedHref;
+    appleTouchLink.sizes = '180x180';
+    appleTouchLink.href = resolvedAppleHref;
     document.head.appendChild(appleTouchLink);
   }
 
@@ -44,4 +47,3 @@
     initDynamicFavicon();
   }
 })();
-

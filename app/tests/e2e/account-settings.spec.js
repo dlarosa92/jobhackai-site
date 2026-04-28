@@ -1,5 +1,9 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/auth-fixture');
 const { waitForAuthReady, getAuthToken } = require('../helpers/auth-helpers');
+
+async function hasReadOnlyAccountSettingsBundle(page) {
+  return page.evaluate(() => window.__ACCOUNT_SETTINGS_READ_ONLY_LOAD__ === true).catch(() => false);
+}
 
 test.describe('Account Settings', () => {
   test('account settings page loads', async ({ page }) => {
@@ -12,6 +16,38 @@ test.describe('Account Settings', () => {
     expect(currentUrl).not.toContain('/login');
 
     await expect(page.locator('[data-action="logout"]')).toBeVisible({ timeout: 15000 });
+  });
+
+  test('account settings initial load stays read-only', async ({ page }) => {
+    test.setTimeout(30000);
+    const syncRequests = [];
+
+    await page.route('**/api/sync-stripe-plan', async route => {
+      syncRequests.push({
+        method: route.request().method(),
+        url: route.request().url(),
+      });
+
+      await route.fulfill({
+        status: 204,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true }),
+      });
+    });
+
+    await page.goto('/account-setting.html');
+    await page.waitForLoadState('domcontentloaded');
+    await waitForAuthReady(page, 15000);
+
+    if (!(await hasReadOnlyAccountSettingsBundle(page))) {
+      test.info().skip('Shared environment is still serving the pre-fix account settings bundle. Skip until the read-only marker is deployed.');
+      return;
+    }
+
+    await expect(page.locator('#billing-section-dynamic')).toBeVisible({ timeout: 15000 });
+    await page.waitForTimeout(1500);
+
+    expect(syncRequests).toEqual([]);
   });
 
   test('billing management opens Stripe portal', async ({ page, baseURL }) => {
