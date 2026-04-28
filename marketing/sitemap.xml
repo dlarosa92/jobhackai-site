@@ -18,12 +18,24 @@
   <!-- Blog listing -->
   <url>
     <loc>https://jobhackai.io/blog</loc>
-    <lastmod>2026-04-05</lastmod>
+    <lastmod>2026-04-28</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
 
   <!-- Blog posts — add a new <url> block for each post you publish -->
+  <url>
+    <loc>https://jobhackai.io/blog/below-1-0-leverage-gap-resume</loc>
+    <lastmod>2026-04-28</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://jobhackai.io/blog/68-5-days-response-gap-job-search-burnout</loc>
+    <lastmod>2026-04-28</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
   <url>
     <loc>https://jobhackai.io/blog/behavioral-interview-anxiety</loc>
     <lastmod>2026-04-05</lastmod>
