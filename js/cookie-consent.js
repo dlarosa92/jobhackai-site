@@ -9,8 +9,13 @@
 
   const CONSENT_KEY = 'jha_cookie_consent_v1';
   const CLIENT_ID_COOKIE = 'jha_client_id';
-  const GA_MEASUREMENT_ID = 'G-X48E90B00S'; // From console data
+  // Allow the GA ID to be overridden per-environment via window.JHA_CONFIG
+  // (set inline in the HTML head, e.g. <script>window.JHA_CONFIG={GA_ID:'G-...'}</script>),
+  // and fall back to the production property otherwise.
+  const GA_MEASUREMENT_ID = (window.JHA_CONFIG && window.JHA_CONFIG.GA_ID) || 'G-X48E90B00S';
   const GA_SCRIPT_URL = `https://www.googletagmanager.com/gtag/js?l=dataLayer&id=${GA_MEASUREMENT_ID}`;
+  // Microsoft Clarity project ID — optional; loads only if configured.
+  const CLARITY_PROJECT_ID = (window.JHA_CONFIG && window.JHA_CONFIG.CLARITY_ID) || '';
 
   // Domain-aware API routing: marketing site (jobhackai.io) routes API calls
   // to app.jobhackai.io so consent persists in D1 across both domains.
@@ -209,6 +214,20 @@
     };
   }
 
+  // Load Microsoft Clarity if a project ID is configured.
+  // Idempotent: safe to call after Clarity has already loaded.
+  function loadClarityScript() {
+    if (!CLARITY_PROJECT_ID || !hasAnalyticsConsent()) return;
+    if (window.clarity && window.clarity._loaded) return;
+    // Standard Clarity bootstrap snippet, inlined so we avoid an extra file.
+    (function(c,l,a,r,i,t,y){
+      c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+      t=l.createElement(r);t.async=1;t.src='https://www.clarity.ms/tag/'+i;
+      y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+    })(window, document, 'clarity', 'script', CLARITY_PROJECT_ID);
+    if (window.clarity) window.clarity._loaded = true;
+  }
+
   // Load GA script if consent granted
   function loadGAScript() {
     if (!hasAnalyticsConsent()) {
@@ -218,6 +237,8 @@
 
     // Check if already loaded
     if (document.querySelector(`script[src*="googletagmanager.com/gtag/js"]`)) {
+      // Still try to load Clarity if it hasn't loaded yet
+      loadClarityScript();
       return; // Already loaded
     }
 
@@ -233,7 +254,10 @@
     window.gtag = gtag;
     gtag('js', new Date());
     gtag('config', GA_MEASUREMENT_ID);
-    
+
+    // Load Microsoft Clarity alongside GA (consent-gated).
+    loadClarityScript();
+
     // Dispatch event for firebase-config.js to initialize Firebase Analytics
     window.dispatchEvent(new CustomEvent('cookie-consent-granted'));
   }
@@ -412,15 +436,61 @@
     getConsent
   };
 
-  // Safe analytics wrapper
-  window.JHA.trackEventSafe = function(category, action, label) {
-    if (hasAnalyticsConsent() && window.gtag) {
-      window.gtag('event', action, {
-        event_category: category,
-        event_label: label
+  // Safe analytics wrapper. Two call shapes are supported so both legacy and
+  // new code paths work without a migration:
+  //   trackEventSafe('Report', 'Download', 'LinkedIn Optimizer Report')
+  //   trackEventSafe('sign_up', { method: 'email', plan: 'trial' })
+  window.JHA.trackEventSafe = function(arg1, arg2, arg3) {
+    if (!hasAnalyticsConsent() || !window.gtag) return;
+    if (arg2 && typeof arg2 === 'object' && !Array.isArray(arg2)) {
+      // GA4-style: (eventName, params)
+      window.gtag('event', arg1, arg2);
+    } else {
+      // Legacy: (category, action, label)
+      window.gtag('event', arg2, {
+        event_category: arg1,
+        event_label: arg3
       });
     }
   };
+
+  // Site-wide delegated CTA click tracking. Any element with `data-cta` (or
+  // an ancestor with `data-cta`) fires a `cta_click` GA4 event. Capture phase
+  // so we still get the event even if the actual link/button stops the flow.
+  function installCtaTracker() {
+    if (window.JHA_CTA_TRACKER_INSTALLED) return;
+    window.JHA_CTA_TRACKER_INSTALLED = true;
+    document.addEventListener('click', function (e) {
+      try {
+        const el = e.target && e.target.closest && e.target.closest('[data-cta]');
+        if (!el) return;
+        const label = el.getAttribute('data-cta') || 'unknown';
+        const plan = el.getAttribute('data-plan') || undefined;
+        const path = (window.location.pathname || '').toLowerCase();
+        const variantMatch = path.match(/pricing-([ab])\.html$/);
+        if (window.JHA?.trackEventSafe) {
+          window.JHA.trackEventSafe('cta_click', {
+            cta_label: label,
+            cta_plan: plan,
+            page_path: window.location.pathname,
+            pricing_variant: variantMatch ? variantMatch[1] : undefined
+          });
+        }
+      } catch (_) {
+        // Never let analytics break a click handler
+      }
+    }, { capture: true });
+  }
+
+  // Fire pricing_variant_view exactly once per page load, on pricing-a/b.
+  function trackPricingVariantOnce() {
+    const path = (window.location.pathname || '').toLowerCase();
+    const m = path.match(/pricing-([ab])\.html$/);
+    if (!m) return;
+    if (window.JHA?.trackEventSafe) {
+      window.JHA.trackEventSafe('pricing_variant_view', { pricing_variant: m[1] });
+    }
+  }
 
   // Initialize
   async function init() {
@@ -444,6 +514,10 @@
 
     // Setup Account Settings button
     setupAccountSettingsButton();
+
+    // Wire site-wide tracking that doesn't need module loading.
+    installCtaTracker();
+    trackPricingVariantOnce();
   }
 
   // Auto-init

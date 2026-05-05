@@ -3,6 +3,36 @@ import { stripe, pickBestSubscription } from '../_lib/billing-utils.js';
 import { sendEmail } from '../_lib/email.js';
 import { subscriptionCancelledEmail, paymentFailedEmail } from '../_lib/email-templates.js';
 
+// GA4 Measurement Protocol: post a server-side conversion event so that
+// trial starts and paid subscriptions show up in GA4 alongside client-side
+// events. Requires GA4_MEASUREMENT_ID + GA4_API_SECRET to be configured in
+// the worker environment; silently no-ops otherwise so checkout never
+// fails when analytics is unconfigured (e.g. preview environments).
+async function sendGa4Event(env, { clientId, userId, name, params }) {
+  try {
+    const measurementId = env.GA4_MEASUREMENT_ID || env.NEXT_PUBLIC_GA_ID;
+    const apiSecret = env.GA4_API_SECRET;
+    if (!measurementId || !apiSecret || !clientId) return;
+    const url = `https://www.google-analytics.com/mp/collect?measurement_id=${encodeURIComponent(measurementId)}&api_secret=${encodeURIComponent(apiSecret)}`;
+    const body = {
+      client_id: clientId,
+      ...(userId ? { user_id: String(userId) } : {}),
+      events: [{ name, params }],
+      non_personalized_ads: false
+    };
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) {
+      console.warn(`[WEBHOOK] GA4 MP returned ${res.status} for event ${name}`);
+    }
+  } catch (mpErr) {
+    console.warn('[WEBHOOK] GA4 MP error (non-blocking):', mpErr?.message || mpErr);
+  }
+}
+
 export async function onRequest(context) {
   const { request, env } = context;
   const origin = env.FRONTEND_URL || 'https://dev.jobhackai.io';
@@ -206,6 +236,43 @@ export async function onRequest(context) {
           hasEverPaid: isPaidPlan(effectivePlan) ? 1 : undefined
         }, event.created);
         console.log(`✅ D1 WRITE SUCCESS: ${uid} → ${effectivePlan}`);
+
+        // GA4 conversion: trial_start for $0 trials, purchase for paid plans.
+        // Use a synthetic client_id keyed on uid (the user_id config from
+        // the browser merges these sessions in GA4's identity graph).
+        const planAmount = sess?.amount_total != null
+          ? Number(sess.amount_total) / 100
+          : (effectivePlan === 'essential' ? 29 : effectivePlan === 'pro' ? 59 : effectivePlan === 'premium' ? 99 : 0);
+        if (effectivePlan === 'trial') {
+          await sendGa4Event(env, {
+            clientId: `server.${uid}`,
+            userId: uid,
+            name: 'trial_start',
+            params: {
+              plan: 'trial',
+              source: 'stripe_checkout',
+              session_id: sessionId
+            }
+          });
+        } else if (isPaidPlan(effectivePlan)) {
+          await sendGa4Event(env, {
+            clientId: `server.${uid}`,
+            userId: uid,
+            name: 'purchase',
+            params: {
+              transaction_id: sessionId,
+              currency: (sess?.currency || 'usd').toUpperCase(),
+              value: planAmount,
+              plan: effectivePlan,
+              items: [{
+                item_id: priceId || effectivePlan,
+                item_name: effectivePlan,
+                price: planAmount,
+                quantity: 1
+              }]
+            }
+          });
+        }
       } else {
         console.warn(`⚠️ SKIPPED PLAN UPDATE: effectivePlan=${effectivePlan}, uid=${uid}`);
       }
@@ -383,7 +450,29 @@ export async function onRequest(context) {
       
       if (previousPlan === 'trial' && effectivePlan !== 'trial' && status === 'active') {
         console.log(`🎉 TRIAL CONVERTED: ${uid} → ${effectivePlan} (trial expired, subscription now active)`);
-        
+
+        // GA4 conversion: trial → paid is a real `purchase`. Without this
+        // event, blog/social attribution loses the highest-value step.
+        const convertedPlanAmount = effectivePlan === 'essential' ? 29 : effectivePlan === 'pro' ? 59 : effectivePlan === 'premium' ? 99 : 0;
+        await sendGa4Event(env, {
+          clientId: `server.${uid}`,
+          userId: uid,
+          name: 'purchase',
+          params: {
+            transaction_id: `${sub.id}.trial_converted`,
+            currency: 'USD',
+            value: convertedPlanAmount,
+            plan: effectivePlan,
+            converted_from: 'trial',
+            items: [{
+              item_id: pId || effectivePlan,
+              item_name: effectivePlan,
+              price: convertedPlanAmount,
+              quantity: 1
+            }]
+          }
+        });
+
         // Reset usage when converting from trial to paid plan
         // This ensures users get a fresh start with their new plan limits
         if (['essential', 'pro', 'premium'].includes(effectivePlan)) {

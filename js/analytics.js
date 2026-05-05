@@ -1,47 +1,77 @@
 // analytics.js
-// Google Analytics / GA4 or other tracking initialization
-// Only tracks if user has granted analytics consent
+// JobHackAI client-side analytics (GA4 + Microsoft Clarity).
+// All tracking is gated on the user's analytics consent; cookie-consent.js
+// owns loading/unloading the underlying scripts. This module provides a
+// single helper surface so the rest of the app can fire events without
+// caring about consent or which vendor is configured.
 
-/**
- * Check if analytics consent has been granted
- */
 function hasAnalyticsConsent() {
   return window.JHA?.cookieConsent?.hasAnalyticsConsent?.() === true;
 }
 
-/**
- * Tracks a page view event (only if consent granted).
- */
-export function trackPageView() {
-  if (!hasAnalyticsConsent()) {
-    return; // No consent, don't track
-  }
-  
-  if (window.ga) {
-    window.ga('send', 'pageview');
-  } else if (window.gtag) {
-    window.gtag('event', 'page_view');
+function gtagSafe(...args) {
+  if (!hasAnalyticsConsent()) return;
+  if (typeof window.gtag === 'function') {
+    window.gtag(...args);
   }
 }
 
 /**
- * Tracks a custom event (only if consent granted).
- * @param {string} category - Event category
- * @param {string} action - Event action
- * @param {string} label - Event label
+ * Tracks a page view (only if consent granted).
+ * GA4 fires this automatically on config; we also fire it explicitly so
+ * SPA-style navigations and manual triggers work.
+ */
+export function trackPageView() {
+  gtagSafe('event', 'page_view', {
+    page_location: window.location.href,
+    page_path: window.location.pathname + window.location.search,
+    page_title: document.title
+  });
+}
+
+/**
+ * Backwards-compat helper used by older call sites.
+ * Prefer gaEvent() for new code so we get GA4-style param objects.
  */
 export function trackEvent(category, action, label) {
-  if (!hasAnalyticsConsent()) {
-    return; // No consent, don't track
-  }
-  
-  if (window.ga) {
-    window.ga('send', 'event', category, action, label);
-  } else if (window.gtag) {
-    window.gtag('event', action, {
-      event_category: category,
-      event_label: label
-    });
+  gtagSafe('event', action, {
+    event_category: category,
+    event_label: label
+  });
+}
+
+/**
+ * Fires a GA4 event with a structured parameter object.
+ * Use the GA4 reserved event names (sign_up, login, purchase, ...) where
+ * possible so the standard reports work without extra mapping.
+ */
+export function gaEvent(name, params = {}) {
+  gtagSafe('event', name, params);
+}
+
+/**
+ * Tells GA4 which user is in the current session so events from this
+ * device can be joined with events from the user's other devices.
+ * Pass the Firebase UID — never an email address (PII).
+ */
+export function identifyUser(userId) {
+  if (!userId) return;
+  const id = String(userId);
+  gtagSafe('set', { user_id: id });
+  // Also identify in Microsoft Clarity for session-recording attribution.
+  if (typeof window.clarity === 'function' && hasAnalyticsConsent()) {
+    try { window.clarity('identify', id); } catch (_) { /* ignore */ }
   }
 }
-  
+
+// Expose the same surface to non-module scripts (HTML pages that include
+// individual <script> tags rather than importing main.js as a module).
+if (typeof window !== 'undefined') {
+  window.JHA = window.JHA || {};
+  window.JHA.analytics = {
+    trackPageView,
+    trackEvent,
+    gaEvent,
+    identifyUser
+  };
+}

@@ -714,26 +714,30 @@ document.addEventListener('DOMContentLoaded', async function() {
     const lastName = document.getElementById('lastName').value.trim();
     const email = document.getElementById('signupEmail').value.trim();
     const password = document.getElementById('signupPassword').value.trim();
-    const confirmPassword = document.getElementById('confirmPassword').value.trim();
+    // confirmPassword input is being phased out (see login.html); keep a
+    // defensive read so any stale cached page that still has the field
+    // continues to validate.
+    const confirmPasswordEl = document.getElementById('confirmPassword');
+    const confirmPassword = confirmPasswordEl ? confirmPasswordEl.value.trim() : null;
     const submitBtn = document.getElementById('signupContinueBtn');
-    
+
     // Validation
-    if (!firstName || !lastName || !email || !password || !confirmPassword) {
+    if (!firstName || !lastName || !email || !password) {
       showError(signupError, 'Please fill in all fields.');
       return;
     }
-    
+
     if (!isValidEmail(email)) {
       showError(signupError, 'Please enter a valid email address.');
       return;
     }
-    
+
     if (password.length < 8) {
       showError(signupError, 'Password must be at least 8 characters long.');
       return;
     }
-    
-    if (password !== confirmPassword) {
+
+    if (confirmPassword !== null && confirmPassword !== '' && password !== confirmPassword) {
       showError(signupError, 'Passwords do not match.');
       return;
     }
@@ -774,6 +778,30 @@ document.addEventListener('DOMContentLoaded', async function() {
         recordTermsAcceptance().catch(err => {
           console.warn('Terms acceptance recording failed:', err);
         });
+
+        // Fire GA4 sign_up event + tie GA session to Firebase UID. This is
+        // the single most important conversion event for the funnel; gating
+        // is handled inside trackEventSafe (no-op without consent).
+        try {
+          const newUser = result.user || authManager.getCurrentUser();
+          const uid = newUser?.uid;
+          let plan = selectedPlan || 'free';
+          try {
+            const stored = sessionStorage.getItem('selectedPlan');
+            if (stored) plan = JSON.parse(stored).planId || plan;
+          } catch (_) {}
+          if (window.JHA?.trackEventSafe) {
+            window.JHA.trackEventSafe('sign_up', {
+              method: 'email',
+              plan: plan
+            });
+          }
+          if (uid && window.gtag) {
+            window.gtag('set', { user_id: String(uid) });
+          }
+        } catch (analyticsErr) {
+          console.warn('Analytics sign_up event failed (non-blocking):', analyticsErr);
+        }
 
         const newUser = result.user || authManager.getCurrentUser();
         const emailForVerify = newUser?.email || email;
