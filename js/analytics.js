@@ -9,7 +9,16 @@ function hasAnalyticsConsent() {
   return window.JHA?.cookieConsent?.hasAnalyticsConsent?.() === true;
 }
 
+// Route through cookie-consent.js's queue-aware wrapper when present so
+// identity/config calls survive the GA-not-yet-loaded race; if it isn't
+// available (page didn't load cookie-consent.js), fall back to a direct
+// call gated on consent + gtag readiness.
 function gtagSafe(...args) {
+  if (typeof window === 'undefined') return;
+  if (window.JHA?.gtagSafe) {
+    window.JHA.gtagSafe(...args);
+    return;
+  }
   if (!hasAnalyticsConsent()) return;
   if (typeof window.gtag === 'function') {
     window.gtag(...args);

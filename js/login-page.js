@@ -791,16 +791,19 @@ document.addEventListener('DOMContentLoaded', async function() {
             const stored = sessionStorage.getItem('selectedPlan');
             if (stored) plan = JSON.parse(stored).planId || plan;
           } catch (_) {}
+          // identifyUser sets the GA `user_id` *and* calls
+          // clarity('identify', uid). Must fire BEFORE the sign_up event
+          // so GA4 attaches the user_id to that event — gtag('set', ...)
+          // only applies to subsequent events. Both calls now route
+          // through cookie-consent.js's queue, so even if GA hasn't
+          // loaded yet they're flushed in order.
+          if (uid) identifyUser(uid);
           if (window.JHA?.trackEventSafe) {
             window.JHA.trackEventSafe('sign_up', {
               method: 'email',
               plan: plan
             });
           }
-          // identifyUser sets the GA `user_id` *and* calls
-          // clarity('identify', uid) so session recordings of the most
-          // important conversion step are joined with the user.
-          if (uid) identifyUser(uid);
         } catch (analyticsErr) {
           console.warn('Analytics sign_up event failed (non-blocking):', analyticsErr);
         }
