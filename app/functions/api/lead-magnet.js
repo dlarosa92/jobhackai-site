@@ -65,25 +65,55 @@ function checklistHtml() {
   `;
 }
 
+// Module-level cache: workers reuse isolates across requests, so caching the
+// "table exists" decision keeps the hot path to a single INSERT instead of
+// a CREATE TABLE + INSERT (D1 DDL goes through the replication path and
+// roughly doubles the per-request op count).
+let _leadsTableEnsured = false;
+
+async function ensureLeadsTable(db) {
+  if (_leadsTableEnsured) return true;
+  try {
+    await db.prepare(
+      `CREATE TABLE IF NOT EXISTS leads (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         email TEXT NOT NULL,
+         asset TEXT NOT NULL,
+         source TEXT,
+         created_at TEXT NOT NULL DEFAULT (datetime('now'))
+       )`
+    ).run();
+    _leadsTableEnsured = true;
+    return true;
+  } catch (e) {
+    console.warn('[LEAD-MAGNET] Failed to ensure leads table:', e?.message || e);
+    return false;
+  }
+}
+
 async function recordLead(env, { email, asset, source }) {
-  // Best-effort persistence. D1 first if a leads table exists; KV fallback.
-  // Schema is intentionally minimal — we just need to know who asked for what.
+  // Best-effort persistence. D1 first; KV fallback. Schema is intentionally
+  // minimal — we just need to know who asked for what.
   try {
     const db = getDb(env);
     if (db) {
-      await db.prepare(
-        `CREATE TABLE IF NOT EXISTS leads (
-           id INTEGER PRIMARY KEY AUTOINCREMENT,
-           email TEXT NOT NULL,
-           asset TEXT NOT NULL,
-           source TEXT,
-           created_at TEXT NOT NULL DEFAULT (datetime('now'))
-         )`
-      ).run().catch(() => {});
-      await db.prepare(
-        `INSERT INTO leads (email, asset, source) VALUES (?, ?, ?)`
-      ).bind(email, asset, source || null).run();
-      return;
+      try {
+        await db.prepare(
+          `INSERT INTO leads (email, asset, source) VALUES (?, ?, ?)`
+        ).bind(email, asset, source || null).run();
+        return;
+      } catch (insertErr) {
+        // First-run case (or table dropped): create it once per isolate
+        // and retry. Subsequent requests skip the DDL entirely.
+        const ensured = await ensureLeadsTable(db);
+        if (ensured) {
+          await db.prepare(
+            `INSERT INTO leads (email, asset, source) VALUES (?, ?, ?)`
+          ).bind(email, asset, source || null).run();
+          return;
+        }
+        throw insertErr;
+      }
     }
   } catch (e) {
     console.warn('[LEAD-MAGNET] D1 insert failed, falling back to KV:', e?.message || e);

@@ -258,6 +258,11 @@
     // Load Microsoft Clarity alongside GA (consent-gated).
     loadClarityScript();
 
+    // Flush any events that arrived before gtag was available (e.g.
+    // blog-cta.js firing on DOMContentLoaded while init() awaits the
+    // consent fetch).
+    flushPendingAnalyticsEvents();
+
     // Dispatch event for firebase-config.js to initialize Firebase Analytics
     window.dispatchEvent(new CustomEvent('cookie-consent-granted'));
   }
@@ -440,8 +445,14 @@
   // new code paths work without a migration:
   //   trackEventSafe('Report', 'Download', 'LinkedIn Optimizer Report')
   //   trackEventSafe('sign_up', { method: 'email', plan: 'trial' })
-  window.JHA.trackEventSafe = function(arg1, arg2, arg3) {
-    if (!hasAnalyticsConsent() || !window.gtag) return;
+  //
+  // Events fired before the GA script finishes loading (e.g. blog-cta.js
+  // running on DOMContentLoaded while init() is still awaiting the
+  // server-side consent fetch) are queued and flushed by loadGAScript().
+  // We only queue when consent is granted; otherwise the event is dropped.
+  const _pendingAnalyticsEvents = [];
+  const MAX_PENDING_EVENTS = 50;
+  function _fireOne(arg1, arg2, arg3) {
     if (arg2 && typeof arg2 === 'object' && !Array.isArray(arg2)) {
       // GA4-style: (eventName, params)
       window.gtag('event', arg1, arg2);
@@ -452,6 +463,24 @@
         event_label: arg3
       });
     }
+  }
+  function flushPendingAnalyticsEvents() {
+    if (!hasAnalyticsConsent() || !window.gtag) return;
+    while (_pendingAnalyticsEvents.length) {
+      const ev = _pendingAnalyticsEvents.shift();
+      try { _fireOne(ev[0], ev[1], ev[2]); } catch (_) { /* ignore */ }
+    }
+  }
+  window.JHA.trackEventSafe = function(arg1, arg2, arg3) {
+    if (!hasAnalyticsConsent()) return;
+    if (!window.gtag) {
+      // GA hasn't loaded yet — buffer the event so it isn't silently lost.
+      if (_pendingAnalyticsEvents.length < MAX_PENDING_EVENTS) {
+        _pendingAnalyticsEvents.push([arg1, arg2, arg3]);
+      }
+      return;
+    }
+    _fireOne(arg1, arg2, arg3);
   };
 
   // Site-wide delegated CTA click tracking. Any element with `data-cta` (or

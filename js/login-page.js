@@ -7,6 +7,7 @@
 console.log('🔧 login-page.js VERSION: fix-auth-cache-loop-v1 - ' + new Date().toISOString());
 
 import authManager, { waitForAuthReady, AUTH_PENDING } from './firebase-auth.js';
+import { identifyUser } from './analytics.js';
 
 function getResolvedStoredAuthFlagValue() {
   const ap = window.JobHackAIAuthPersistence;
@@ -796,9 +797,10 @@ document.addEventListener('DOMContentLoaded', async function() {
               plan: plan
             });
           }
-          if (uid && window.gtag) {
-            window.gtag('set', { user_id: String(uid) });
-          }
+          // identifyUser sets the GA `user_id` *and* calls
+          // clarity('identify', uid) so session recordings of the most
+          // important conversion step are joined with the user.
+          if (uid) identifyUser(uid);
         } catch (analyticsErr) {
           console.warn('Analytics sign_up event failed (non-blocking):', analyticsErr);
         }
