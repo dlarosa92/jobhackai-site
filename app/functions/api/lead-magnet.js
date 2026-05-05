@@ -71,6 +71,65 @@ function checklistHtml() {
 // roughly doubles the per-request op count).
 let _leadsTableEnsured = false;
 
+// Rate-limit + duplicate-submission tuning. KV is the single source of truth
+// because Workers don't share memory across isolates; a single attacker
+// can't bypass these by hitting different colocations.
+const LEAD_MAGNET_IP_LIMIT = 5;            // requests per IP per hour
+const LEAD_MAGNET_IP_WINDOW_SECS = 60 * 60;
+const LEAD_MAGNET_EMAIL_DEDUP_SECS = 60 * 60 * 24; // one send per email per day
+
+function getClientIp(request) {
+  // Cloudflare always sets CF-Connecting-IP for incoming requests; fall back
+  // to the first XFF entry for environments that don't (e.g. local dev).
+  return (
+    request.headers.get('CF-Connecting-IP') ||
+    (request.headers.get('X-Forwarded-For') || '').split(',')[0].trim() ||
+    'unknown'
+  );
+}
+
+// Returns { ipBlocked, emailRecentlySent }. Never throws — if KV is
+// unavailable (e.g. local dev without KV binding) we let the request through
+// rather than fail closed, since this endpoint is best-effort lead capture.
+async function checkRateLimits(env, ip, email) {
+  const result = { ipBlocked: false, emailRecentlySent: false };
+  if (!env.JOBHACKAI_KV) return result;
+  try {
+    const ipKey = `lm:ip:${ip}`;
+    const emailKey = `lm:email:${email}`;
+    const [ipCountRaw, emailMark] = await Promise.all([
+      env.JOBHACKAI_KV.get(ipKey),
+      env.JOBHACKAI_KV.get(emailKey)
+    ]);
+    const ipCount = Number(ipCountRaw || 0);
+    if (ipCount >= LEAD_MAGNET_IP_LIMIT) {
+      result.ipBlocked = true;
+    } else {
+      // Count this request against the IP. We re-set with the same TTL each
+      // time so a sustained burst keeps the bucket alive — this is "leaky
+      // bucket-ish" and good enough for abuse prevention.
+      await env.JOBHACKAI_KV.put(ipKey, String(ipCount + 1), {
+        expirationTtl: LEAD_MAGNET_IP_WINDOW_SECS
+      });
+    }
+    if (emailMark) result.emailRecentlySent = true;
+  } catch (e) {
+    console.warn('[LEAD-MAGNET] Rate-limit check failed (allowing request):', e?.message || e);
+  }
+  return result;
+}
+
+async function markEmailSent(env, email) {
+  if (!env.JOBHACKAI_KV) return;
+  try {
+    await env.JOBHACKAI_KV.put(`lm:email:${email}`, '1', {
+      expirationTtl: LEAD_MAGNET_EMAIL_DEDUP_SECS
+    });
+  } catch (e) {
+    console.warn('[LEAD-MAGNET] Failed to mark email sent (non-blocking):', e?.message || e);
+  }
+}
+
 async function ensureLeadsTable(db) {
   if (_leadsTableEnsured) return true;
   try {
@@ -159,7 +218,26 @@ export async function onRequest(context) {
     return json({ ok: false, error: 'Unknown asset' }, 400, origin, env);
   }
 
+  const ip = getClientIp(request);
+  const { ipBlocked, emailRecentlySent } = await checkRateLimits(env, ip, email);
+
+  if (ipBlocked) {
+    // 429 is appropriate here; the visible behavior to a real user is "I
+    // already submitted this 5 times in an hour, that's fine."
+    console.warn(`[LEAD-MAGNET] Rate limit hit for IP ${ip}`);
+    return json({ ok: false, error: 'Too many requests, try again later.' }, 429, origin, env);
+  }
+
+  // Always record the lead so we don't lose attribution data, even if we
+  // skip the email send below.
   await recordLead(env, { email, asset, source });
+
+  if (emailRecentlySent) {
+    // Don't reveal that this address was already used (would let an attacker
+    // probe our customer list); respond with the same 200 OK as a fresh send.
+    console.log(`[LEAD-MAGNET] Skipping duplicate send for ${email} (sent within last 24h)`);
+    return json({ ok: true }, 200, origin, env);
+  }
 
   if (asset === 'ats-checklist') {
     const result = await sendEmail(env, {
@@ -167,7 +245,9 @@ export async function onRequest(context) {
       subject: 'Your 12-Point ATS Resume Checklist',
       html: checklistHtml()
     });
-    if (!result.ok) {
+    if (result.ok) {
+      await markEmailSent(env, email);
+    } else {
       // Email failed — still 200 so we don't surface the user's address to a
       // probe; we logged the lead and ops can resend manually if needed.
       console.warn('[LEAD-MAGNET] Resend failed for', email, result.error);
