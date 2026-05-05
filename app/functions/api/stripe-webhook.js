@@ -240,11 +240,13 @@ export async function onRequest(context) {
         // GA4 conversion: trial_start for $0 trials, purchase for paid plans.
         // Use a synthetic client_id keyed on uid (the user_id config from
         // the browser merges these sessions in GA4's identity graph).
+        // Telemetry is fire-and-forget via context.waitUntil so a slow GA4
+        // endpoint can't push the webhook past Stripe's ~20s timeout.
         const planAmount = sess?.amount_total != null
           ? Number(sess.amount_total) / 100
           : (effectivePlan === 'essential' ? 29 : effectivePlan === 'pro' ? 59 : effectivePlan === 'premium' ? 99 : 0);
         if (effectivePlan === 'trial') {
-          await sendGa4Event(env, {
+          context.waitUntil(sendGa4Event(env, {
             clientId: `server.${uid}`,
             userId: uid,
             name: 'trial_start',
@@ -253,9 +255,9 @@ export async function onRequest(context) {
               source: 'stripe_checkout',
               session_id: sessionId
             }
-          });
+          }));
         } else if (isPaidPlan(effectivePlan)) {
-          await sendGa4Event(env, {
+          context.waitUntil(sendGa4Event(env, {
             clientId: `server.${uid}`,
             userId: uid,
             name: 'purchase',
@@ -271,7 +273,7 @@ export async function onRequest(context) {
                 quantity: 1
               }]
             }
-          });
+          }));
         }
       } else {
         console.warn(`⚠️ SKIPPED PLAN UPDATE: effectivePlan=${effectivePlan}, uid=${uid}`);
@@ -453,8 +455,10 @@ export async function onRequest(context) {
 
         // GA4 conversion: trial → paid is a real `purchase`. Without this
         // event, blog/social attribution loses the highest-value step.
+        // Fire-and-forget via context.waitUntil so the webhook returns
+        // immediately and Stripe doesn't retry on a slow GA4 endpoint.
         const convertedPlanAmount = effectivePlan === 'essential' ? 29 : effectivePlan === 'pro' ? 59 : effectivePlan === 'premium' ? 99 : 0;
-        await sendGa4Event(env, {
+        context.waitUntil(sendGa4Event(env, {
           clientId: `server.${uid}`,
           userId: uid,
           name: 'purchase',
@@ -471,7 +475,7 @@ export async function onRequest(context) {
               quantity: 1
             }]
           }
-        });
+        }));
 
         // Reset usage when converting from trial to paid plan
         // This ensures users get a fresh start with their new plan limits
