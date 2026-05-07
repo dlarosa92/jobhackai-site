@@ -180,13 +180,35 @@
     return consent && consent.analytics === true;
   }
 
-  // GA Script Loading: Prevent if consent denied
+  // Stop and tear down Microsoft Clarity if it has already been injected.
+  // Clarity has no public stop() API, so we remove the script tag, neutralize
+  // window.clarity (its queue function and any loaded methods) so subsequent
+  // calls become no-ops, and clear the loaded flag so loadClarityScript stays
+  // idempotent if consent is later re-granted (a fresh script tag will be
+  // injected). Future script loads are blocked by the createElement wrapper
+  // below, which also matches clarity.ms.
+  function teardownClarity() {
+    try {
+      document.querySelectorAll('script[src*="clarity.ms/tag/"]').forEach(s => s.remove());
+      if (window.clarity) {
+        const noop = function() {};
+        noop.q = [];
+        noop._loaded = false;
+        window.clarity = noop;
+      }
+    } catch (_) { /* ignore */ }
+  }
+
+  // Analytics Script Loading: Prevent if consent denied (covers GA + Clarity)
   function preventGALoading() {
-    // Always remove GA script if it exists (needed when revoking after GA already loaded)
+    // Always remove tracker scripts if they exist (needed when revoking after
+    // they've already loaded). Clarity is torn down explicitly so any
+    // already-loaded queue stops processing for the rest of the session.
     const existingScript = document.querySelector(`script[src*="googletagmanager.com/gtag/js"]`);
     if (existingScript) {
       existingScript.remove();
     }
+    teardownClarity();
 
     // Guard: Only wrap createElement once to avoid nested wrappers,
     // but still allow script removal on subsequent calls.
@@ -195,16 +217,18 @@
     }
     gaLoadingPrevented = true;
 
-    // Prevent future GA script loads by intercepting createElement (only once)
+    // Prevent future analytics script loads by intercepting createElement (only once)
     const originalCreateElement = document.createElement;
     document.createElement = function(tagName) {
       const element = originalCreateElement.call(document, tagName);
       if (tagName.toLowerCase() === 'script' && !hasAnalyticsConsent()) {
         const originalSetAttribute = element.setAttribute;
         element.setAttribute = function(name, value) {
-          if (name === 'src' && typeof value === 'string' && 
-              (value.includes('googletagmanager.com') || value.includes('google-analytics'))) {
-            console.log('[COOKIE-CONSENT] Blocked GA script:', value);
+          if (name === 'src' && typeof value === 'string' &&
+              (value.includes('googletagmanager.com') ||
+               value.includes('google-analytics') ||
+               value.includes('clarity.ms'))) {
+            console.log('[COOKIE-CONSENT] Blocked analytics script:', value);
             return; // Don't set src
           }
           return originalSetAttribute.call(this, name, value);

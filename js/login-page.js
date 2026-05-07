@@ -780,11 +780,12 @@ document.addEventListener('DOMContentLoaded', async function() {
           console.warn('Terms acceptance recording failed:', err);
         });
 
+        const newUser = result.user || authManager.getCurrentUser();
+
         // Fire GA4 sign_up event + tie GA session to Firebase UID. This is
         // the single most important conversion event for the funnel; gating
         // is handled inside trackEventSafe (no-op without consent).
         try {
-          const newUser = result.user || authManager.getCurrentUser();
           const uid = newUser?.uid;
           let plan = selectedPlan || 'free';
           try {
@@ -808,7 +809,6 @@ document.addEventListener('DOMContentLoaded', async function() {
           console.warn('Analytics sign_up event failed (non-blocking):', analyticsErr);
         }
 
-        const newUser = result.user || authManager.getCurrentUser();
         const emailForVerify = newUser?.email || email;
         const verifyUrl = new URL('verify-email.html', window.location.href);
         if (emailForVerify) {
