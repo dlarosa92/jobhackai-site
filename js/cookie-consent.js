@@ -494,9 +494,18 @@
   // Wait until cookie-consent init() has created window.gtag (so queued
   // identify/event calls are flushed) before full-page navigation; otherwise
   // in-memory _pendingGtagCalls is lost when the document unloads.
+  // Cap the wait tightly: returning visitors with consent in localStorage
+  // can race init()'s server consent fetch — if gtag still isn't loaded,
+  // kick off loadGAScript() ourselves so we aren't stuck waiting on a
+  // network round-trip that will never produce gtag.
   function flushAnalyticsBeforeNavigate() {
     if (!hasAnalyticsConsent()) return Promise.resolve();
-    const timeoutMs = 8000;
+    if (typeof window.gtag === 'function') {
+      flushPendingGtagCalls();
+      return Promise.resolve();
+    }
+    try { loadGAScript(); } catch (_) { /* ignore */ }
+    const timeoutMs = 1500;
     const start = typeof performance !== 'undefined' && performance.now
       ? performance.now()
       : Date.now();
@@ -546,8 +555,12 @@
       // GA4-style: (eventName, params)
       window.JHA.gtagSafe('event', arg1, arg2);
     } else {
-      // Legacy: (category, action, label)
-      window.JHA.gtagSafe('event', arg2, {
+      // Legacy: (category, action, label). Guard against single-arg callers
+      // — if `action` is missing, fall back to `category` as the event name
+      // so GA4 never receives an event with name `undefined`.
+      const eventName = arg2 || arg1;
+      if (!eventName) return;
+      window.JHA.gtagSafe('event', eventName, {
         event_category: arg1,
         event_label: arg3
       });

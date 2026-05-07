@@ -59,7 +59,7 @@ function checklistHtml() {
         <li>No graphics, icons, or color blocks behind text</li>
         <li>Length: 1 page if &lt;10 yrs experience, 2 pages otherwise</li>
       </ol>
-      <p style="margin-top:1.5rem;">Want JobHackAI to score and rewrite your resume against any job description? <a href="https://jobhackai.io/pricing-a.html" style="color:#0077B5;">Start your free 3-day trial</a> — no credit card required.</p>
+      <p style="margin-top:1.5rem;">Want JobHackAI to score and rewrite your resume against any job description? <a href="https://jobhackai.io/pricing-a.html" style="color:#0077B5;">Start your free 3-day trial</a> — converts to $29/mo, cancel anytime.</p>
       <p style="font-size:0.8rem;color:#6B7280;margin-top:2rem;">Sent because you requested the checklist on jobhackai.io. Reply to this email if you didn't.</p>
     </div>
   `;
@@ -102,17 +102,20 @@ async function checkRateLimits(env, ip, email) {
       env.JOBHACKAI_KV.get(emailKey)
     ]);
     const ipCount = Number(ipCountRaw || 0);
+    if (emailMark) result.emailRecentlySent = true;
     if (ipCount >= LEAD_MAGNET_IP_LIMIT) {
       result.ipBlocked = true;
-    } else {
+    } else if (!result.emailRecentlySent) {
       // Count this request against the IP. We re-set with the same TTL each
       // time so a sustained burst keeps the bucket alive — this is "leaky
-      // bucket-ish" and good enough for abuse prevention.
+      // bucket-ish" and good enough for abuse prevention. Skip the
+      // increment when the email was already sent recently: the request
+      // will be a no-op on the email side, so it shouldn't burn the IP
+      // quota for a legitimate user resubmitting the same address.
       await env.JOBHACKAI_KV.put(ipKey, String(ipCount + 1), {
         expirationTtl: LEAD_MAGNET_IP_WINDOW_SECS
       });
     }
-    if (emailMark) result.emailRecentlySent = true;
   } catch (e) {
     console.warn('[LEAD-MAGNET] Rate-limit check failed (allowing request):', e?.message || e);
   }
