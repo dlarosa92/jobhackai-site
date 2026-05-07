@@ -243,14 +243,13 @@
   // Idempotent: safe to call after Clarity has already loaded.
   function loadClarityScript() {
     if (!CLARITY_PROJECT_ID || !hasAnalyticsConsent()) return;
-    if (window.clarity && window.clarity._loaded) return;
+    if (document.querySelector('script[src*="clarity.ms/tag/"]')) return;
     // Standard Clarity bootstrap snippet, inlined so we avoid an extra file.
     (function(c,l,a,r,i,t,y){
       c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
       t=l.createElement(r);t.async=1;t.src='https://www.clarity.ms/tag/'+i;
       y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
     })(window, document, 'clarity', 'script', CLARITY_PROJECT_ID);
-    if (window.clarity) window.clarity._loaded = true;
   }
 
   // Load GA script if consent granted
@@ -491,6 +490,39 @@
       try { window.gtag.apply(null, args); } catch (_) { /* ignore */ }
     }
   }
+
+  // Wait until cookie-consent init() has created window.gtag (so queued
+  // identify/event calls are flushed) before full-page navigation; otherwise
+  // in-memory _pendingGtagCalls is lost when the document unloads.
+  function flushAnalyticsBeforeNavigate() {
+    if (!hasAnalyticsConsent()) return Promise.resolve();
+    const timeoutMs = 8000;
+    const start = typeof performance !== 'undefined' && performance.now
+      ? performance.now()
+      : Date.now();
+    return new Promise((resolve) => {
+      function tick() {
+        if (!hasAnalyticsConsent()) {
+          resolve();
+          return;
+        }
+        if (typeof window.gtag === 'function') {
+          flushPendingGtagCalls();
+          resolve();
+          return;
+        }
+        const now = typeof performance !== 'undefined' && performance.now
+          ? performance.now()
+          : Date.now();
+        if (now - start >= timeoutMs) {
+          resolve();
+          return;
+        }
+        setTimeout(tick, 25);
+      }
+      tick();
+    });
+  }
   // Queue-aware generic gtag wrapper. All identity/event/config calls
   // should flow through this so they're applied in correct order
   // regardless of whether GA has finished loading.
@@ -521,6 +553,8 @@
       });
     }
   };
+
+  window.JHA.cookieConsent.flushAnalyticsBeforeNavigate = flushAnalyticsBeforeNavigate;
 
   // Site-wide delegated CTA click tracking. Any element with `data-cta` (or
   // an ancestor with `data-cta`) fires a `cta_click` GA4 event. Capture phase

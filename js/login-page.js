@@ -820,6 +820,11 @@ document.addEventListener('DOMContentLoaded', async function() {
         } else if (result.verificationEmailSent === true) {
           verifyUrl.searchParams.set('sent', '1');
         }
+        const flushAnalyticsBeforeNavigate =
+          window.JHA?.cookieConsent?.flushAnalyticsBeforeNavigate;
+        if (typeof flushAnalyticsBeforeNavigate === 'function') {
+          await flushAnalyticsBeforeNavigate();
+        }
         window.location.href = `${verifyUrl.pathname}${verifyUrl.search}`;
         return;
       } else {
