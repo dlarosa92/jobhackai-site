@@ -181,21 +181,22 @@
   }
 
   // Stop and tear down Microsoft Clarity if it has already been injected.
-  // Clarity has no public stop() API, so we remove the script tag, neutralize
-  // window.clarity (its queue function and any loaded methods) so subsequent
-  // calls become no-ops, and clear the loaded flag so loadClarityScript stays
-  // idempotent if consent is later re-granted (a fresh script tag will be
-  // injected). Future script loads are blocked by the createElement wrapper
-  // below, which also matches clarity.ms.
+  // Clarity has no public stop() API, so we remove the script tag and clear
+  // window.clarity so any further references resolve to undefined. Direct
+  // callers (analytics.js:identifyUser) gate on
+  // `typeof window.clarity === 'function' && hasAnalyticsConsent()`, so this
+  // turns those calls into no-ops without throwing. We deliberately DO NOT
+  // replace clarity with a truthy noop function — if consent is later
+  // re-granted, the standard Clarity bootstrap snippet does
+  // `c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)}`. A truthy
+  // noop short-circuits that `||`, so pre-load `clarity('identify', uid)`
+  // calls would silently drop instead of being queued for the loaded
+  // script to flush. Future script loads are blocked by the createElement
+  // wrapper below, which also matches clarity.ms.
   function teardownClarity() {
     try {
       document.querySelectorAll('script[src*="clarity.ms/tag/"]').forEach(s => s.remove());
-      if (window.clarity) {
-        const noop = function() {};
-        noop.q = [];
-        noop._loaded = false;
-        window.clarity = noop;
-      }
+      window.clarity = undefined;
     } catch (_) { /* ignore */ }
   }
 
