@@ -334,6 +334,7 @@
     };
 
     document.getElementById('jha-reject-all').onclick = () => {
+      _pendingGtagCalls.length = 0;
       setConsent({ version: 1, analytics: false, updatedAt: new Date().toISOString() });
       removeBanner();
       preventGALoading(); // Ensure GA doesn't load
@@ -400,6 +401,7 @@
       if (analytics) {
         loadGAScript();
       } else {
+        _pendingGtagCalls.length = 0;
         preventGALoading();
         // Notify other modules (firebase-config) that consent was revoked
         try {
@@ -476,8 +478,10 @@
   // server-side consent fetch, or identifyUser firing right before a
   // sign_up event) are queued and flushed by loadGAScript() in original
   // order, so 'set { user_id }' always lands before the next event that
-  // should carry it. We only queue when consent is granted; otherwise the
-  // call is dropped.
+  // should carry it. If the user has not stored a consent decision yet
+  // (getConsent() === null), calls are queued so they can fire after
+  // "Accept Analytics". If analytics was explicitly declined, the call
+  // is dropped. The pre-decision queue is cleared when the user rejects.
   const _pendingGtagCalls = [];
   const MAX_PENDING_CALLS = 50;
   function flushPendingGtagCalls() {
@@ -491,7 +495,12 @@
   // should flow through this so they're applied in correct order
   // regardless of whether GA has finished loading.
   window.JHA.gtagSafe = function(...args) {
-    if (!hasAnalyticsConsent()) return;
+    if (!hasAnalyticsConsent()) {
+      if (getConsent() === null && _pendingGtagCalls.length < MAX_PENDING_CALLS) {
+        _pendingGtagCalls.push(args);
+      }
+      return;
+    }
     if (!window.gtag) {
       if (_pendingGtagCalls.length < MAX_PENDING_CALLS) {
         _pendingGtagCalls.push(args);

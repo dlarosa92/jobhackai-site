@@ -802,7 +802,8 @@ document.addEventListener('DOMContentLoaded', async function() {
           if (window.JHA?.trackEventSafe) {
             window.JHA.trackEventSafe('sign_up', {
               method: 'email',
-              plan: plan
+              plan: plan,
+              transport_type: 'beacon'
             });
           }
         } catch (analyticsErr) {
