@@ -27,7 +27,7 @@
     wrap.style.cssText = 'background:#F0F7FF;border:1px solid #BBD9F4;border-radius:12px;padding:1.5rem;margin:2.5rem 0 1rem;text-align:center;';
     wrap.innerHTML = `
       <h3 style="margin:0 0 0.5rem;color:#0B3D91;font-size:1.15rem;">Ready to put this into practice?</h3>
-      <p style="margin:0 0 1rem;color:#1F2937;font-size:0.95rem;">${topic.label}. No credit card required.</p>
+      <p style="margin:0 0 1rem;color:#1F2937;font-size:0.95rem;">${topic.label}. Try 3 days free, then $29/mo. Cancel anytime.</p>
       <a class="btn-primary" href="https://jobhackai.io/pricing-a.html" data-cta="${topic.cta}" style="display:inline-block;">${topic.label}</a>
     `;
     return wrap;
