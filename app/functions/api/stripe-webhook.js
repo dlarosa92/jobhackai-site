@@ -484,26 +484,6 @@ export async function onRequest(context) {
 
       if (isTrialConversion) {
         console.log(`🎉 TRIAL CONVERTED: ${uid} → ${effectivePlan} (trial expired, subscription now active)`);
-
-        // Reset usage when converting from trial to paid plan
-        // This ensures users get a fresh start with their new plan limits
-        if (['essential', 'pro', 'premium'].includes(effectivePlan)) {
-          console.log('[WEBHOOK] Resetting usage for trial conversion', {
-            uid,
-            fromPlan: previousPlan,
-            toPlan: effectivePlan
-          });
-
-          // Reset interview questions usage (uses feature_daily_usage table)
-          await resetFeatureDailyUsage(env, uid, 'interview_questions').catch((error) => {
-            console.error('[WEBHOOK] Failed to reset interview questions usage (non-blocking):', error);
-          });
-
-          // Reset resume feedback usage (uses usage_events table)
-          await resetUsageEvents(env, uid, 'resume_feedback').catch((error) => {
-            console.error('[WEBHOOK] Failed to reset resume feedback usage (non-blocking):', error);
-          });
-        }
       }
 
       console.log(`✍️ UPDATING D1: users.plan = ${effectivePlan} for uid=${uid}`);
@@ -523,6 +503,30 @@ export async function onRequest(context) {
       console.log(`✅ D1 UPDATE ${planApplied ? 'SUCCESS' : 'SKIPPED (out-of-order)'}: ${uid} → ${effectivePlan}${trialEndsAtISO ? ` (trial ends: ${trialEndsAtISO})` : ''}`);
 
       if (planApplied && isTrialConversion) {
+        // Reset usage when converting from trial to paid plan
+        // This ensures users get a fresh start with their new plan limits.
+        // Gated on planApplied so a stale or replayed webhook (whose D1
+        // write was skipped by updatePlanInD1's ordering check) doesn't
+        // wipe out usage the user has legitimately accumulated since the
+        // real conversion was already processed.
+        if (['essential', 'pro', 'premium'].includes(effectivePlan)) {
+          console.log('[WEBHOOK] Resetting usage for trial conversion', {
+            uid,
+            fromPlan: previousPlan,
+            toPlan: effectivePlan
+          });
+
+          // Reset interview questions usage (uses feature_daily_usage table)
+          await resetFeatureDailyUsage(env, uid, 'interview_questions').catch((error) => {
+            console.error('[WEBHOOK] Failed to reset interview questions usage (non-blocking):', error);
+          });
+
+          // Reset resume feedback usage (uses usage_events table)
+          await resetUsageEvents(env, uid, 'resume_feedback').catch((error) => {
+            console.error('[WEBHOOK] Failed to reset resume feedback usage (non-blocking):', error);
+          });
+        }
+
         // GA4 conversion: trial → paid is a real `purchase`. Without this
         // event, blog/social attribution loses the highest-value step.
         // Fire-and-forget via context.waitUntil so the webhook returns
