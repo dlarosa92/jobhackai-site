@@ -263,6 +263,7 @@
     if (document.querySelector(`script[src*="googletagmanager.com/gtag/js"]`)) {
       // Still try to load Clarity if it hasn't loaded yet
       loadClarityScript();
+      flushPendingClarityIdentify();
       return; // Already loaded
     }
 
@@ -281,6 +282,7 @@
 
     // Load Microsoft Clarity alongside GA (consent-gated).
     loadClarityScript();
+    flushPendingClarityIdentify();
 
     // Flush any events that arrived before gtag was available (e.g.
     // blog-cta.js firing on DOMContentLoaded while init() awaits the
@@ -347,6 +349,7 @@
 
     document.getElementById('jha-reject-all').onclick = () => {
       _pendingGtagCalls.length = 0;
+      _pendingClarityIdentify.length = 0;
       setConsent({ version: 1, analytics: false, updatedAt: new Date().toISOString() });
       removeBanner();
       preventGALoading(); // Ensure GA doesn't load
@@ -414,6 +417,7 @@
         loadGAScript();
       } else {
         _pendingGtagCalls.length = 0;
+        _pendingClarityIdentify.length = 0;
         preventGALoading();
         // Notify other modules (firebase-config) that consent was revoked
         try {
@@ -495,6 +499,7 @@
   // "Accept Analytics". If analytics was explicitly declined, the call
   // is dropped. The pre-decision queue is cleared when the user rejects.
   const _pendingGtagCalls = [];
+  const _pendingClarityIdentify = [];
   const MAX_PENDING_CALLS = 50;
   function flushPendingGtagCalls() {
     if (!hasAnalyticsConsent() || !window.gtag) return false;
@@ -511,6 +516,16 @@
     return flushedPageView;
   }
 
+  function flushPendingClarityIdentify() {
+    if (!hasAnalyticsConsent() || typeof window.clarity !== 'function') return;
+    while (_pendingClarityIdentify.length) {
+      const id = _pendingClarityIdentify.shift();
+      try {
+        window.clarity('identify', id);
+      } catch (_) { /* ignore */ }
+    }
+  }
+
   // Wait until cookie-consent init() has created window.gtag (so queued
   // identify/event calls are flushed) before full-page navigation; otherwise
   // in-memory _pendingGtagCalls is lost when the document unloads.
@@ -522,6 +537,7 @@
     if (!hasAnalyticsConsent()) return Promise.resolve();
     if (typeof window.gtag === 'function') {
       flushPendingGtagCalls();
+      flushPendingClarityIdentify();
       return Promise.resolve();
     }
     try { loadGAScript(); } catch (_) { /* ignore */ }
@@ -537,6 +553,7 @@
         }
         if (typeof window.gtag === 'function') {
           flushPendingGtagCalls();
+          flushPendingClarityIdentify();
           resolve();
           return;
         }
@@ -569,6 +586,21 @@
       return;
     }
     window.gtag.apply(null, args);
+  };
+  // Queues / bootstraps Clarity like gtagSafe: init() may still be awaiting
+  // server consent when identifyUser runs, so window.clarity may not exist yet.
+  window.JHA.clarityIdentifySafe = function(userId) {
+    if (!userId || !hasAnalyticsConsent() || !CLARITY_PROJECT_ID) return;
+    const id = String(userId);
+    try { loadClarityScript(); } catch (_) { /* ignore */ }
+    if (typeof window.clarity === 'function') {
+      try { window.clarity('identify', id); } catch (_) { /* ignore */ }
+      flushPendingClarityIdentify();
+      return;
+    }
+    if (_pendingClarityIdentify.length < MAX_PENDING_CALLS) {
+      _pendingClarityIdentify.push(id);
+    }
   };
   window.JHA.trackEventSafe = function(arg1, arg2, arg3) {
     if (arg2 && typeof arg2 === 'object' && !Array.isArray(arg2)) {

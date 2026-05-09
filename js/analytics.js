@@ -68,6 +68,10 @@ export function identifyUser(userId) {
   const id = String(userId);
   gtagSafe('set', { user_id: id });
   // Also identify in Microsoft Clarity for session-recording attribution.
+  if (window.JHA?.clarityIdentifySafe) {
+    window.JHA.clarityIdentifySafe(id);
+    return;
+  }
   if (typeof window.clarity === 'function' && hasAnalyticsConsent()) {
     try { window.clarity('identify', id); } catch (_) { /* ignore */ }
   }

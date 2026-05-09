@@ -33,6 +33,19 @@ async function sendGa4Event(env, { clientId, userId, name, params }) {
   }
 }
 
+/** Subscription list price in dollars (Stripe `unit_amount` is cents); null if missing. */
+function subscriptionPriceAmountDollars(subscription) {
+  const cents = subscription?.items?.data?.[0]?.price?.unit_amount;
+  if (cents == null) return null;
+  const n = Number(cents);
+  if (!Number.isFinite(n)) return null;
+  return n / 100;
+}
+
+function hardcodedPlanAmountDollars(plan) {
+  return plan === 'essential' ? 29 : plan === 'pro' ? 59 : plan === 'premium' ? 99 : 0;
+}
+
 export async function onRequest(context) {
   const { request, env } = context;
   const origin = env.FRONTEND_URL || 'https://dev.jobhackai.io';
@@ -242,9 +255,17 @@ export async function onRequest(context) {
         // the browser merges these sessions in GA4's identity graph).
         // Telemetry is fire-and-forget via context.waitUntil so a slow GA4
         // endpoint can't push the webhook past Stripe's ~20s timeout.
-        const planAmount = sess?.amount_total != null
-          ? Number(sess.amount_total) / 100
-          : (effectivePlan === 'essential' ? 29 : effectivePlan === 'pro' ? 59 : effectivePlan === 'premium' ? 99 : 0);
+        let planAmount = null;
+        if (sess?.amount_total != null) {
+          const total = Number(sess.amount_total);
+          if (Number.isFinite(total)) planAmount = total / 100;
+        }
+        if (planAmount == null) {
+          planAmount = subscriptionPriceAmountDollars(subscription);
+        }
+        if (planAmount == null) {
+          planAmount = hardcodedPlanAmountDollars(effectivePlan);
+        }
         if (effectivePlan === 'trial') {
           context.waitUntil(sendGa4Event(env, {
             clientId: `server.${uid}`,
@@ -457,7 +478,8 @@ export async function onRequest(context) {
         // event, blog/social attribution loses the highest-value step.
         // Fire-and-forget via context.waitUntil so the webhook returns
         // immediately and Stripe doesn't retry on a slow GA4 endpoint.
-        const convertedPlanAmount = effectivePlan === 'essential' ? 29 : effectivePlan === 'pro' ? 59 : effectivePlan === 'premium' ? 99 : 0;
+        const convertedPlanAmount =
+          subscriptionPriceAmountDollars(sub) ?? hardcodedPlanAmountDollars(effectivePlan);
         context.waitUntil(sendGa4Event(env, {
           clientId: `server.${uid}`,
           userId: uid,
