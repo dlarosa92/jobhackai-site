@@ -12,7 +12,18 @@
   }
 
   function apiBase() {
-    return window.JHA.apiBase;
+    if (window.JHA && typeof window.JHA.apiBase === 'string') {
+      return window.JHA.apiBase;
+    }
+    // Fallback when cookie-consent.js failed to load (ad blocker, network
+    // error). Mirrors the logic there so the lead-magnet form still posts
+    // to the correct backend instead of throwing on `undefined.apiBase`.
+    const hostname = (window.location.hostname || '').toLowerCase();
+    const isAppDomain = hostname.startsWith('app.') ||
+      hostname.startsWith('dev.') ||
+      hostname.startsWith('qa.') ||
+      hostname === 'localhost';
+    return isAppDomain ? '' : 'https://app.jobhackai.io';
   }
 
   ready(function () {
