@@ -201,7 +201,7 @@ async function recordLead(env, { email, asset, source }) {
   }
   try {
     if (env.JOBHACKAI_KV) {
-      const key = `lead:${asset}:${Date.now()}:${email}`;
+      const key = `lead:${asset}:${Date.now()}:${crypto.randomUUID()}`;
       await env.JOBHACKAI_KV.put(key, JSON.stringify({ email, asset, source, ts: new Date().toISOString() }), {
         expirationTtl: 60 * 60 * 24 * 365 // 1 year
       });

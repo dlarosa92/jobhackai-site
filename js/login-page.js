@@ -823,7 +823,11 @@ document.addEventListener('DOMContentLoaded', async function() {
         const flushAnalyticsBeforeNavigate =
           window.JHA?.cookieConsent?.flushAnalyticsBeforeNavigate;
         if (typeof flushAnalyticsBeforeNavigate === 'function') {
-          await flushAnalyticsBeforeNavigate();
+          try {
+            await flushAnalyticsBeforeNavigate();
+          } catch (flushErr) {
+            console.warn('Analytics flush before navigate failed (non-blocking):', flushErr);
+          }
         }
         window.location.href = `${verifyUrl.pathname}${verifyUrl.search}`;
         return;
