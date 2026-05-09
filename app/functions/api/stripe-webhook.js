@@ -542,7 +542,7 @@ export async function onRequest(context) {
           name: 'purchase',
           params: {
             transaction_id: `${sub.id}.trial_converted`,
-            currency: 'USD',
+            currency: (sub?.currency || 'usd').toUpperCase(),
             value: convertedPlanAmount,
             plan: effectivePlan,
             converted_from: 'trial',
