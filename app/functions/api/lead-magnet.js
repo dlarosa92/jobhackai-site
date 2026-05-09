@@ -59,7 +59,7 @@ function checklistHtml() {
         <li>No graphics, icons, or color blocks behind text</li>
         <li>Length: 1 page if &lt;10 yrs experience, 2 pages otherwise</li>
       </ol>
-      <p style="margin-top:1.5rem;">Want JobHackAI to score and rewrite your resume against any job description? <a href="https://jobhackai.io/pricing-a.html" style="color:#0077B5;">Start your free 3-day trial</a> — converts to $29/mo, cancel anytime.</p>
+      <p style="margin-top:1.5rem;">Want JobHackAI to score and rewrite your resume against any job description? <a href="https://app.jobhackai.io/pricing-a" style="color:#0077B5;">Start your free 3-day trial</a> — converts to $29/mo, cancel anytime.</p>
       <p style="font-size:0.8rem;color:#6B7280;margin-top:2rem;">Sent because you requested the checklist on jobhackai.io. Reply to this email if you didn't.</p>
     </div>
   `;

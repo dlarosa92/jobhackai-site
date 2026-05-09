@@ -28,7 +28,7 @@
     wrap.innerHTML = `
       <h3 style="margin:0 0 0.5rem;color:#0B3D91;font-size:1.15rem;">Ready to put this into practice?</h3>
       <p style="margin:0 0 1rem;color:#1F2937;font-size:0.95rem;">${topic.label}. Try 3 days free, then $29/mo. Cancel anytime.</p>
-      <a class="btn-primary" href="https://jobhackai.io/pricing-a.html" data-cta="${topic.cta}" style="display:inline-block;">${topic.label}</a>
+      <a class="btn-primary" href="https://app.jobhackai.io/pricing-a" data-cta="${topic.cta}" style="display:inline-block;">${topic.label}</a>
     `;
     return wrap;
   }
