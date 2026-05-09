@@ -367,7 +367,7 @@ export async function onRequest(context) {
       });
       console.log(`✍️ WRITING TO D1: users.plan = ${effectivePlan} for uid=${uid}`);
       
-      await updatePlanInD1(uid, {
+      const planApplied = await updatePlanInD1(uid, {
         plan: effectivePlan,
         stripeCustomerId: customerId,
         stripeSubscriptionId: sub.id,
@@ -377,7 +377,7 @@ export async function onRequest(context) {
         hasEverPaid: isPaidPlan(effectivePlan) ? 1 : undefined
       }, event.created);
       
-      console.log(`✅ D1 WRITE SUCCESS: ${uid} → ${effectivePlan}${trialEndsAtISO ? ` (trial ends: ${trialEndsAtISO})` : ''}`);
+      console.log(`✅ D1 WRITE ${planApplied ? 'SUCCESS' : 'SKIPPED (out-of-order)'}: ${uid} → ${effectivePlan}${trialEndsAtISO ? ` (trial ends: ${trialEndsAtISO})` : ''}`);
     }
 
     if (event.type === 'customer.subscription.updated') {
