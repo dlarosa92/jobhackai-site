@@ -65,7 +65,14 @@
           })
         });
         if (!res.ok) {
-          throw new Error(`Request failed: ${res.status}`);
+          let msg = 'Something went wrong. Please try again in a moment.';
+          try {
+            const data = await res.json();
+            if (typeof data?.error === 'string' && data.error.trim()) {
+              msg = data.error.trim();
+            }
+          } catch (_) { /* ignore */ }
+          throw new Error(msg);
         }
         setStatus('Check your inbox — the checklist is on its way.', false);
         if (emailInput) emailInput.value = '';
@@ -78,7 +85,11 @@
         }
       } catch (err) {
         console.warn('lead-magnet submit failed:', err);
-        setStatus('Something went wrong. Please try again in a moment.', true);
+        const msg =
+          err instanceof Error && err.message
+            ? err.message
+            : 'Something went wrong. Please try again in a moment.';
+        setStatus(msg, true);
       } finally {
         if (submitBtn) {
           submitBtn.disabled = false;
