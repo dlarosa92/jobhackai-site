@@ -582,7 +582,7 @@
         const label = el.getAttribute('data-cta') || 'unknown';
         const plan = el.getAttribute('data-plan') || undefined;
         const path = (window.location.pathname || '').toLowerCase();
-        const variantMatch = path.match(/pricing-([ab])\.html$/);
+        const variantMatch = path.match(/pricing-([ab])(?:\.html)?\/?$/);
         if (window.JHA?.trackEventSafe) {
           window.JHA.trackEventSafe('cta_click', {
             cta_label: label,
@@ -600,7 +600,7 @@
   // Fire pricing_variant_view exactly once per page load, on pricing-a/b.
   function trackPricingVariantOnce() {
     const path = (window.location.pathname || '').toLowerCase();
-    const m = path.match(/pricing-([ab])\.html$/);
+    const m = path.match(/pricing-([ab])(?:\.html)?\/?$/);
     if (!m) return;
     if (window.JHA?.trackEventSafe) {
       window.JHA.trackEventSafe('pricing_variant_view', { pricing_variant: m[1] });
