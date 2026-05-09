@@ -165,8 +165,13 @@ async function recordLead(env, { email, asset, source }) {
         ).bind(email, asset, source || null).run();
         return;
       } catch (insertErr) {
-        // First-run case (or table dropped): create it once per isolate
-        // and retry. Subsequent requests skip the DDL entirely.
+        // First-run case (or table dropped externally): reset the cached
+        // flag so ensureLeadsTable re-runs the DDL, then retry the INSERT.
+        // Without the reset, a table dropped after the first successful
+        // ensure would never be recreated for the lifetime of the isolate
+        // (which can be hours), and every subsequent INSERT would silently
+        // fall back to KV.
+        _leadsTableEnsured = false;
         const ensured = await ensureLeadsTable(db);
         if (ensured) {
           await db.prepare(
