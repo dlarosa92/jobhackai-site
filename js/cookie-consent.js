@@ -285,7 +285,20 @@
     // Flush any events that arrived before gtag was available (e.g.
     // blog-cta.js firing on DOMContentLoaded while init() awaits the
     // consent fetch).
-    flushPendingGtagCalls();
+    const flushedPageView = flushPendingGtagCalls();
+    // Marketing (and other) pages that do not load analytics.js/main.js never
+    // call trackPageView(); with send_page_view: false they would emit no
+    // page_view. App pages queue page_view via main.js before gtag exists —
+    // flush above handles those without duplicating.
+    if (!flushedPageView) {
+      try {
+        window.gtag('event', 'page_view', {
+          page_location: window.location.href,
+          page_path: window.location.pathname + window.location.search,
+          page_title: document.title
+        });
+      } catch (_) { /* ignore */ }
+    }
 
     // Dispatch event for firebase-config.js to initialize Firebase Analytics
     window.dispatchEvent(new CustomEvent('cookie-consent-granted'));
@@ -484,11 +497,18 @@
   const _pendingGtagCalls = [];
   const MAX_PENDING_CALLS = 50;
   function flushPendingGtagCalls() {
-    if (!hasAnalyticsConsent() || !window.gtag) return;
+    if (!hasAnalyticsConsent() || !window.gtag) return false;
+    let flushedPageView = false;
     while (_pendingGtagCalls.length) {
       const args = _pendingGtagCalls.shift();
-      try { window.gtag.apply(null, args); } catch (_) { /* ignore */ }
+      try {
+        if (args[0] === 'event' && args[1] === 'page_view') {
+          flushedPageView = true;
+        }
+        window.gtag.apply(null, args);
+      } catch (_) { /* ignore */ }
     }
+    return flushedPageView;
   }
 
   // Wait until cookie-consent init() has created window.gtag (so queued
