@@ -11,13 +11,8 @@
     else document.addEventListener('DOMContentLoaded', fn);
   }
 
-  // Mirror the API routing logic from cookie-consent.js so the marketing
-  // domain (jobhackai.io) reaches the function on the app domain.
   function apiBase() {
-    const host = (window.location.hostname || '').toLowerCase();
-    const isAppDomain = host.startsWith('app.') || host.startsWith('dev.') ||
-      host.startsWith('qa.') || host === 'localhost';
-    return isAppDomain ? '' : 'https://app.jobhackai.io';
+    return window.JHA.apiBase;
   }
 
   ready(function () {

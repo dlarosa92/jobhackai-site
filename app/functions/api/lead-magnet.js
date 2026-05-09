@@ -40,6 +40,13 @@ function isValidEmail(email) {
   return typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+function redactEmailForLog(email) {
+  if (typeof email !== 'string') return '[invalid]';
+  const at = email.lastIndexOf('@');
+  if (at < 1) return '[invalid]';
+  return `***${email.slice(at)}`;
+}
+
 function checklistHtml() {
   return `
     <div style="font-family:Inter,system-ui,sans-serif;max-width:560px;margin:0 auto;color:#1F2937;">
@@ -243,7 +250,7 @@ export async function onRequest(context) {
   if (emailRecentlySent) {
     // Don't reveal that this address was already used (would let an attacker
     // probe our customer list); respond with the same 200 OK as a fresh send.
-    console.log(`[LEAD-MAGNET] Skipping duplicate send for ${email} (sent within last 24h)`);
+    console.log(`[LEAD-MAGNET] Skipping duplicate send for ${redactEmailForLog(email)} (sent within last 24h)`);
     return json({ ok: true }, 200, origin, env);
   }
 
@@ -258,7 +265,7 @@ export async function onRequest(context) {
     } else {
       // Email failed — still 200 so we don't surface the user's address to a
       // probe; we logged the lead and ops can resend manually if needed.
-      console.warn('[LEAD-MAGNET] Resend failed for', email, result.error);
+      console.warn('[LEAD-MAGNET] Resend failed for', redactEmailForLog(email), result.error);
     }
   }
 

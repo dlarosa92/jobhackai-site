@@ -22,6 +22,8 @@
   const hostname = (window.location.hostname || '').toLowerCase();
   const isAppDomain = hostname.startsWith('app.') || hostname.startsWith('dev.') || hostname.startsWith('qa.') || hostname === 'localhost';
   const API_BASE = isAppDomain ? '' : 'https://app.jobhackai.io';
+  window.JHA = window.JHA || {};
+  window.JHA.apiBase = API_BASE;
   // Cookie domain: use .jobhackai.io so the client_id cookie is shared across subdomains
   const COOKIE_DOMAIN = hostname.endsWith('jobhackai.io') ? '; Domain=.jobhackai.io' : '';
 
