@@ -590,8 +590,16 @@
   // Queues / bootstraps Clarity like gtagSafe: init() may still be awaiting
   // server consent when identifyUser runs, so window.clarity may not exist yet.
   window.JHA.clarityIdentifySafe = function(userId) {
-    if (!userId || !hasAnalyticsConsent() || !CLARITY_PROJECT_ID) return;
+    if (!userId || !CLARITY_PROJECT_ID) return;
     const id = String(userId);
+    if (!hasAnalyticsConsent()) {
+      // Consent undecided: queue so identify fires after "Accept Analytics".
+      // Explicit reject: drop. Reject-all clears _pendingClarityIdentify.
+      if (getConsent() === null && _pendingClarityIdentify.length < MAX_PENDING_CALLS) {
+        _pendingClarityIdentify.push(id);
+      }
+      return;
+    }
     try { loadClarityScript(); } catch (_) { /* ignore */ }
     if (typeof window.clarity === 'function') {
       try { window.clarity('identify', id); } catch (_) { /* ignore */ }
