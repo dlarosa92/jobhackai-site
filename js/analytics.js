@@ -40,22 +40,12 @@ export function trackPageView() {
 
 /**
  * Backwards-compat helper used by older call sites.
- * Prefer gaEvent() for new code so we get GA4-style param objects.
  */
 export function trackEvent(category, action, label) {
   gtagSafe('event', action, {
     event_category: category,
     event_label: label
   });
-}
-
-/**
- * Fires a GA4 event with a structured parameter object.
- * Use the GA4 reserved event names (sign_up, login, purchase, ...) where
- * possible so the standard reports work without extra mapping.
- */
-export function gaEvent(name, params = {}) {
-  gtagSafe('event', name, params);
 }
 
 /**
@@ -84,7 +74,6 @@ if (typeof window !== 'undefined') {
   window.JHA.analytics = {
     trackPageView,
     trackEvent,
-    gaEvent,
     identifyUser
   };
 }

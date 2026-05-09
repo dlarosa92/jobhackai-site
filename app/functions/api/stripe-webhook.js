@@ -533,27 +533,30 @@ export async function onRequest(context) {
         // immediately and Stripe doesn't retry on a slow GA4 endpoint.
         // Gated on planApplied so a stale or replayed webhook (whose D1
         // write was skipped by updatePlanInD1's ordering check) doesn't
-        // double-count the conversion in GA4.
-        const convertedPlanAmount =
-          subscriptionPriceAmountDollars(sub) ?? hardcodedPlanAmountDollars(effectivePlan);
-        context.waitUntil(sendGa4Event(env, {
-          clientId: `server.${uid}`,
-          userId: uid,
-          name: 'purchase',
-          params: {
-            transaction_id: `${sub.id}.trial_converted`,
-            currency: (sub?.currency || 'usd').toUpperCase(),
-            value: convertedPlanAmount,
-            plan: effectivePlan,
-            converted_from: 'trial',
-            items: [{
-              item_id: pId || effectivePlan,
-              item_name: effectivePlan,
-              price: convertedPlanAmount,
-              quantity: 1
-            }]
-          }
-        }));
+        // double-count the conversion in GA4. Match checkout.session:
+        // only emit purchase for paid tiers, not free-tier transitions.
+        if (isPaidPlan(effectivePlan)) {
+          const convertedPlanAmount =
+            subscriptionPriceAmountDollars(sub) ?? hardcodedPlanAmountDollars(effectivePlan);
+          context.waitUntil(sendGa4Event(env, {
+            clientId: `server.${uid}`,
+            userId: uid,
+            name: 'purchase',
+            params: {
+              transaction_id: `${sub.id}.trial_converted`,
+              currency: (sub?.currency || 'usd').toUpperCase(),
+              value: convertedPlanAmount,
+              plan: effectivePlan,
+              converted_from: 'trial',
+              items: [{
+                item_id: pId || effectivePlan,
+                item_name: effectivePlan,
+                price: convertedPlanAmount,
+                quantity: 1
+              }]
+            }
+          }));
+        }
       }
     }
 
