@@ -124,7 +124,7 @@ function safeFallbackInit() {
     if (banner) banner.style.display = 'none';
     
     // Minimal password toggle handlers (shows error on click)
-    ['toggleLoginPassword', 'toggleSignupPassword', 'toggleConfirmPassword'].forEach(id => {
+    ['toggleLoginPassword', 'toggleSignupPassword'].forEach(id => {
       const btn = document.getElementById(id);
       if (btn) {
         btn.onclick = () => {
@@ -1303,7 +1303,6 @@ document.addEventListener('DOMContentLoaded', async function() {
   // Setup toggles for all password fields
   setupPasswordToggle('toggleLoginPassword', 'loginPassword', 'loginPasswordEyeIcon');
   setupPasswordToggle('toggleSignupPassword', 'signupPassword', 'signupPasswordEyeIcon');
-  setupPasswordToggle('toggleConfirmPassword', 'confirmPassword', 'confirmPasswordEyeIcon');
   
   console.log('[AUTH INIT COMPLETE] All initialization successful');
   } catch (err) {

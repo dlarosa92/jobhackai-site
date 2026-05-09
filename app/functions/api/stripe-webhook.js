@@ -84,13 +84,17 @@ export async function onRequest(context) {
 
   // Helper to update plan in D1 (source of truth) with timestamp-based ordering protection
   // Prevents out-of-order webhooks from overwriting newer states with older data
+  // Returns true when the row was written, false when the update was skipped
+  // (no uid, or out-of-order event). Callers gate downstream side effects
+  // like GA4 conversion events on this return value so a stale or replayed
+  // webhook doesn't double-count conversions in GA4.
   const updatePlanInD1 = async (uid, planData, eventTimestampSeconds) => {
-    if (!uid) return;
+    if (!uid) return false;
     try {
       // Get current plan_updated_at timestamp for ordering check
       if (eventTimestampSeconds !== undefined && Number.isFinite(eventTimestampSeconds)) {
         const currentPlanData = await getUserPlanData(env, uid);
-        
+
         if (currentPlanData && currentPlanData.planUpdatedAt) {
           // Convert stored ISO 8601 datetime to Unix timestamp for comparison
           const storedTimestamp = Math.floor(new Date(currentPlanData.planUpdatedAt).getTime() / 1000);
@@ -98,7 +102,7 @@ export async function onRequest(context) {
 
           if (eventTimestamp < storedTimestamp) {
             console.log(`⏭️ [WEBHOOK] Skipping out-of-order event: event.created=${eventTimestamp} < stored=${storedTimestamp} for uid=${uid}`);
-            return; // Skip update - this event is older than what we already have
+            return false; // Skip update - this event is older than what we already have
           }
         }
       }
@@ -142,6 +146,7 @@ export async function onRequest(context) {
           console.warn('[WEBHOOK] KV cache invalidation error:', kvErr);
         }
       }
+      return true;
     } catch (error) {
       console.error('[WEBHOOK] Error updating plan in D1:', error);
       throw error;
@@ -239,7 +244,7 @@ export async function onRequest(context) {
         }
 
         console.log(`✍️ WRITING TO D1: users.plan = ${effectivePlan} for uid=${uid}`);
-        await updatePlanInD1(uid, {
+        const planApplied = await updatePlanInD1(uid, {
           plan: effectivePlan,
           stripeCustomerId: customerId,
           stripeSubscriptionId: subscriptionId,
@@ -248,53 +253,57 @@ export async function onRequest(context) {
           currentPeriodEnd: subscription?.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null,
           hasEverPaid: isPaidPlan(effectivePlan) ? 1 : undefined
         }, event.created);
-        console.log(`✅ D1 WRITE SUCCESS: ${uid} → ${effectivePlan}`);
+        console.log(`✅ D1 WRITE ${planApplied ? 'SUCCESS' : 'SKIPPED (out-of-order)'}: ${uid} → ${effectivePlan}`);
 
         // GA4 conversion: trial_start for $0 trials, purchase for paid plans.
         // Use a synthetic client_id keyed on uid (the user_id config from
         // the browser merges these sessions in GA4's identity graph).
         // Telemetry is fire-and-forget via context.waitUntil so a slow GA4
         // endpoint can't push the webhook past Stripe's ~20s timeout.
-        let planAmount = null;
-        if (sess?.amount_total != null) {
-          const total = Number(sess.amount_total);
-          if (Number.isFinite(total)) planAmount = total / 100;
-        }
-        if (planAmount == null) {
-          planAmount = subscriptionPriceAmountDollars(subscription);
-        }
-        if (planAmount == null) {
-          planAmount = hardcodedPlanAmountDollars(effectivePlan);
-        }
-        if (effectivePlan === 'trial') {
-          context.waitUntil(sendGa4Event(env, {
-            clientId: `server.${uid}`,
-            userId: uid,
-            name: 'trial_start',
-            params: {
-              plan: 'trial',
-              source: 'stripe_checkout',
-              session_id: sessionId
-            }
-          }));
-        } else if (isPaidPlan(effectivePlan)) {
-          context.waitUntil(sendGa4Event(env, {
-            clientId: `server.${uid}`,
-            userId: uid,
-            name: 'purchase',
-            params: {
-              transaction_id: sessionId,
-              currency: (sess?.currency || 'usd').toUpperCase(),
-              value: planAmount,
-              plan: effectivePlan,
-              items: [{
-                item_id: priceId || effectivePlan,
-                item_name: effectivePlan,
-                price: planAmount,
-                quantity: 1
-              }]
-            }
-          }));
+        // Skip on stale/replayed webhooks (planApplied === false) so we
+        // don't inflate trial_start / purchase counts in GA4.
+        if (planApplied) {
+          let planAmount = null;
+          if (sess?.amount_total != null) {
+            const total = Number(sess.amount_total);
+            if (Number.isFinite(total)) planAmount = total / 100;
+          }
+          if (planAmount == null) {
+            planAmount = subscriptionPriceAmountDollars(subscription);
+          }
+          if (planAmount == null) {
+            planAmount = hardcodedPlanAmountDollars(effectivePlan);
+          }
+          if (effectivePlan === 'trial') {
+            context.waitUntil(sendGa4Event(env, {
+              clientId: `server.${uid}`,
+              userId: uid,
+              name: 'trial_start',
+              params: {
+                plan: 'trial',
+                source: 'stripe_checkout',
+                session_id: sessionId
+              }
+            }));
+          } else if (isPaidPlan(effectivePlan)) {
+            context.waitUntil(sendGa4Event(env, {
+              clientId: `server.${uid}`,
+              userId: uid,
+              name: 'purchase',
+              params: {
+                transaction_id: sessionId,
+                currency: (sess?.currency || 'usd').toUpperCase(),
+                value: planAmount,
+                plan: effectivePlan,
+                items: [{
+                  item_id: priceId || effectivePlan,
+                  item_name: effectivePlan,
+                  price: planAmount,
+                  quantity: 1
+                }]
+              }
+            }));
+          }
         }
       } else {
         console.warn(`⚠️ SKIPPED PLAN UPDATE: effectivePlan=${effectivePlan}, uid=${uid}`);
@@ -471,13 +480,56 @@ export async function onRequest(context) {
         isTrialConversion: previousPlan === 'trial' && effectivePlan !== 'trial' && status === 'active'
       });
       
-      if (previousPlan === 'trial' && effectivePlan !== 'trial' && status === 'active') {
+      const isTrialConversion = previousPlan === 'trial' && effectivePlan !== 'trial' && status === 'active';
+
+      if (isTrialConversion) {
         console.log(`🎉 TRIAL CONVERTED: ${uid} → ${effectivePlan} (trial expired, subscription now active)`);
 
+        // Reset usage when converting from trial to paid plan
+        // This ensures users get a fresh start with their new plan limits
+        if (['essential', 'pro', 'premium'].includes(effectivePlan)) {
+          console.log('[WEBHOOK] Resetting usage for trial conversion', {
+            uid,
+            fromPlan: previousPlan,
+            toPlan: effectivePlan
+          });
+
+          // Reset interview questions usage (uses feature_daily_usage table)
+          await resetFeatureDailyUsage(env, uid, 'interview_questions').catch((error) => {
+            console.error('[WEBHOOK] Failed to reset interview questions usage (non-blocking):', error);
+          });
+
+          // Reset resume feedback usage (uses usage_events table)
+          await resetUsageEvents(env, uid, 'resume_feedback').catch((error) => {
+            console.error('[WEBHOOK] Failed to reset resume feedback usage (non-blocking):', error);
+          });
+        }
+      }
+
+      console.log(`✍️ UPDATING D1: users.plan = ${effectivePlan} for uid=${uid}`);
+      const planApplied = await updatePlanInD1(uid, {
+        plan: effectivePlan,
+        stripeCustomerId: customerId,
+        stripeSubscriptionId: sub.id,
+        subscriptionStatus: status,
+        trialEndsAt: trialEndsAtISO,
+        currentPeriodEnd: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
+        cancelAt: cancelAt || null, // null clears the field (undefined is skipped)
+        scheduledPlan: scheduledPlan || null, // null clears the field (undefined is skipped)
+        scheduledAt: scheduledAt || null, // null clears the field (undefined is skipped)
+        hasEverPaid: isPaidPlan(effectivePlan) ? 1 : undefined
+      }, event.created);
+
+      console.log(`✅ D1 UPDATE ${planApplied ? 'SUCCESS' : 'SKIPPED (out-of-order)'}: ${uid} → ${effectivePlan}${trialEndsAtISO ? ` (trial ends: ${trialEndsAtISO})` : ''}`);
+
+      if (planApplied && isTrialConversion) {
         // GA4 conversion: trial → paid is a real `purchase`. Without this
         // event, blog/social attribution loses the highest-value step.
         // Fire-and-forget via context.waitUntil so the webhook returns
         // immediately and Stripe doesn't retry on a slow GA4 endpoint.
+        // Gated on planApplied so a stale or replayed webhook (whose D1
+        // write was skipped by updatePlanInD1's ordering check) doesn't
+        // double-count the conversion in GA4.
         const convertedPlanAmount =
           subscriptionPriceAmountDollars(sub) ?? hardcodedPlanAmountDollars(effectivePlan);
         context.waitUntil(sendGa4Event(env, {
@@ -498,43 +550,7 @@ export async function onRequest(context) {
             }]
           }
         }));
-
-        // Reset usage when converting from trial to paid plan
-        // This ensures users get a fresh start with their new plan limits
-        if (['essential', 'pro', 'premium'].includes(effectivePlan)) {
-          console.log('[WEBHOOK] Resetting usage for trial conversion', {
-            uid,
-            fromPlan: previousPlan,
-            toPlan: effectivePlan
-          });
-          
-          // Reset interview questions usage (uses feature_daily_usage table)
-          await resetFeatureDailyUsage(env, uid, 'interview_questions').catch((error) => {
-            console.error('[WEBHOOK] Failed to reset interview questions usage (non-blocking):', error);
-          });
-          
-          // Reset resume feedback usage (uses usage_events table)
-          await resetUsageEvents(env, uid, 'resume_feedback').catch((error) => {
-            console.error('[WEBHOOK] Failed to reset resume feedback usage (non-blocking):', error);
-          });
-        }
       }
-      
-      console.log(`✍️ UPDATING D1: users.plan = ${effectivePlan} for uid=${uid}`);
-      await updatePlanInD1(uid, {
-        plan: effectivePlan,
-        stripeCustomerId: customerId,
-        stripeSubscriptionId: sub.id,
-        subscriptionStatus: status,
-        trialEndsAt: trialEndsAtISO,
-        currentPeriodEnd: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
-        cancelAt: cancelAt || null, // null clears the field (undefined is skipped)
-        scheduledPlan: scheduledPlan || null, // null clears the field (undefined is skipped)
-        scheduledAt: scheduledAt || null, // null clears the field (undefined is skipped)
-        hasEverPaid: isPaidPlan(effectivePlan) ? 1 : undefined
-      }, event.created);
-      
-      console.log(`✅ D1 UPDATE SUCCESS: ${uid} → ${effectivePlan}${trialEndsAtISO ? ` (trial ends: ${trialEndsAtISO})` : ''}`);
     }
 
     if (event.type === 'customer.subscription.deleted') {
