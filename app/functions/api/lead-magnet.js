@@ -85,6 +85,13 @@ const LEAD_MAGNET_IP_LIMIT = 5;            // requests per IP per hour
 const LEAD_MAGNET_IP_WINDOW_SECS = 60 * 60;
 const LEAD_MAGNET_EMAIL_DEDUP_SECS = 60 * 60 * 24; // one send per email per day
 
+async function emailDedupKvKey(email) {
+  const data = new TextEncoder().encode(email);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  const hex = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+  return `lm:email:${hex}`;
+}
+
 function getClientIp(request) {
   // Cloudflare always sets CF-Connecting-IP for incoming requests; fall back
   // to the first XFF entry for environments that don't (e.g. local dev).
@@ -103,7 +110,7 @@ async function checkRateLimits(env, ip, email) {
   if (!env.JOBHACKAI_KV) return result;
   try {
     const ipKey = `lm:ip:${ip}`;
-    const emailKey = `lm:email:${email}`;
+    const emailKey = await emailDedupKvKey(email);
     const [ipCountRaw, emailMark] = await Promise.all([
       env.JOBHACKAI_KV.get(ipKey),
       env.JOBHACKAI_KV.get(emailKey)
@@ -132,7 +139,7 @@ async function checkRateLimits(env, ip, email) {
 async function markEmailSent(env, email) {
   if (!env.JOBHACKAI_KV) return;
   try {
-    await env.JOBHACKAI_KV.put(`lm:email:${email}`, '1', {
+    await env.JOBHACKAI_KV.put(await emailDedupKvKey(email), '1', {
       expirationTtl: LEAD_MAGNET_EMAIL_DEDUP_SECS
     });
   } catch (e) {
@@ -255,18 +262,22 @@ export async function onRequest(context) {
   }
 
   if (asset === 'ats-checklist') {
-    const result = await sendEmail(env, {
-      to: email,
-      subject: 'Your 12-Point ATS Resume Checklist',
-      html: checklistHtml()
-    });
-    if (result.ok) {
-      await markEmailSent(env, email);
-    } else {
-      // Email failed — still 200 so we don't surface the user's address to a
-      // probe; we logged the lead and ops can resend manually if needed.
-      console.warn('[LEAD-MAGNET] Resend failed for', redactEmailForLog(email), result.error);
-    }
+    // Send off-thread so response latency matches the duplicate-send path
+    // (avoids timing probes against deduped addresses).
+    context.waitUntil((async () => {
+      const result = await sendEmail(env, {
+        to: email,
+        subject: 'Your 12-Point ATS Resume Checklist',
+        html: checklistHtml()
+      });
+      if (result.ok) {
+        await markEmailSent(env, email);
+      } else {
+        // Email failed — still 200 so we don't surface the user's address to a
+        // probe; we logged the lead and ops can resend manually if needed.
+        console.warn('[LEAD-MAGNET] Resend failed for', redactEmailForLog(email), result.error);
+      }
+    })());
   }
 
   return json({ ok: true }, 200, origin, env);
