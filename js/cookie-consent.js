@@ -222,20 +222,41 @@
 
     // Prevent future analytics script loads by intercepting createElement (only once)
     const originalCreateElement = document.createElement;
+    function shouldBlockAnalyticsScriptSrc(value) {
+      return typeof value === 'string' &&
+          (value.includes('googletagmanager.com') ||
+           value.includes('google-analytics') ||
+           value.includes('clarity.ms'));
+    }
     document.createElement = function(tagName) {
       const element = originalCreateElement.call(document, tagName);
       if (tagName.toLowerCase() === 'script' && !hasAnalyticsConsent()) {
         const originalSetAttribute = element.setAttribute;
         element.setAttribute = function(name, value) {
-          if (name === 'src' && typeof value === 'string' &&
-              (value.includes('googletagmanager.com') ||
-               value.includes('google-analytics') ||
-               value.includes('clarity.ms'))) {
+          if (name === 'src' && shouldBlockAnalyticsScriptSrc(value)) {
             console.log('[COOKIE-CONSENT] Blocked analytics script:', value);
             return; // Don't set src
           }
           return originalSetAttribute.call(this, name, value);
         };
+        const srcDesc = Object.getOwnPropertyDescriptor(
+          HTMLScriptElement.prototype, 'src');
+        if (srcDesc && typeof srcDesc.set === 'function') {
+          Object.defineProperty(element, 'src', {
+            configurable: true,
+            enumerable: srcDesc.enumerable,
+            get: function() {
+              return srcDesc.get.call(this);
+            },
+            set: function(v) {
+              if (shouldBlockAnalyticsScriptSrc(v)) {
+                console.log('[COOKIE-CONSENT] Blocked analytics script:', v);
+                return;
+              }
+              srcDesc.set.call(this, v);
+            }
+          });
+        }
       }
       return element;
     };
