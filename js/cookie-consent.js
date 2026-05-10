@@ -9,14 +9,21 @@
 
   const CONSENT_KEY = 'jha_cookie_consent_v1';
   const CLIENT_ID_COOKIE = 'jha_client_id';
-  const GA_MEASUREMENT_ID = 'G-X48E90B00S'; // From console data
+  // Allow the GA ID to be overridden per-environment via window.JHA_CONFIG
+  // (set inline in the HTML head, e.g. <script>window.JHA_CONFIG={GA_ID:'G-...'}</script>),
+  // and fall back to the production property otherwise.
+  const GA_MEASUREMENT_ID = (window.JHA_CONFIG && window.JHA_CONFIG.GA_ID) || 'G-X48E90B00S';
   const GA_SCRIPT_URL = `https://www.googletagmanager.com/gtag/js?l=dataLayer&id=${GA_MEASUREMENT_ID}`;
+  // Microsoft Clarity project ID — optional; loads only if configured.
+  const CLARITY_PROJECT_ID = (window.JHA_CONFIG && window.JHA_CONFIG.CLARITY_ID) || '';
 
   // Domain-aware API routing: marketing site (jobhackai.io) routes API calls
   // to app.jobhackai.io so consent persists in D1 across both domains.
   const hostname = (window.location.hostname || '').toLowerCase();
   const isAppDomain = hostname.startsWith('app.') || hostname.startsWith('dev.') || hostname.startsWith('qa.') || hostname === 'localhost';
   const API_BASE = isAppDomain ? '' : 'https://app.jobhackai.io';
+  window.JHA = window.JHA || {};
+  window.JHA.apiBase = API_BASE;
   // Cookie domain: use .jobhackai.io so the client_id cookie is shared across subdomains
   const COOKIE_DOMAIN = hostname.endsWith('jobhackai.io') ? '; Domain=.jobhackai.io' : '';
 
@@ -175,13 +182,36 @@
     return consent && consent.analytics === true;
   }
 
-  // GA Script Loading: Prevent if consent denied
+  // Stop and tear down Microsoft Clarity if it has already been injected.
+  // Clarity has no public stop() API, so we remove the script tag and clear
+  // window.clarity so any further references resolve to undefined. Direct
+  // callers (analytics.js:identifyUser) gate on
+  // `typeof window.clarity === 'function' && hasAnalyticsConsent()`, so this
+  // turns those calls into no-ops without throwing. We deliberately DO NOT
+  // replace clarity with a truthy noop function — if consent is later
+  // re-granted, the standard Clarity bootstrap snippet does
+  // `c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)}`. A truthy
+  // noop short-circuits that `||`, so pre-load `clarity('identify', uid)`
+  // calls would silently drop instead of being queued for the loaded
+  // script to flush. Future script loads are blocked by the createElement
+  // wrapper below, which also matches clarity.ms.
+  function teardownClarity() {
+    try {
+      document.querySelectorAll('script[src*="clarity.ms/tag/"]').forEach(s => s.remove());
+      window.clarity = undefined;
+    } catch (_) { /* ignore */ }
+  }
+
+  // Analytics Script Loading: Prevent if consent denied (covers GA + Clarity)
   function preventGALoading() {
-    // Always remove GA script if it exists (needed when revoking after GA already loaded)
+    // Always remove tracker scripts if they exist (needed when revoking after
+    // they've already loaded). Clarity is torn down explicitly so any
+    // already-loaded queue stops processing for the rest of the session.
     const existingScript = document.querySelector(`script[src*="googletagmanager.com/gtag/js"]`);
     if (existingScript) {
       existingScript.remove();
     }
+    teardownClarity();
 
     // Guard: Only wrap createElement once to avoid nested wrappers,
     // but still allow script removal on subsequent calls.
@@ -190,23 +220,59 @@
     }
     gaLoadingPrevented = true;
 
-    // Prevent future GA script loads by intercepting createElement (only once)
+    // Prevent future analytics script loads by intercepting createElement (only once)
     const originalCreateElement = document.createElement;
+    function shouldBlockAnalyticsScriptSrc(value) {
+      return typeof value === 'string' &&
+          (value.includes('googletagmanager.com') ||
+           value.includes('google-analytics') ||
+           value.includes('clarity.ms'));
+    }
     document.createElement = function(tagName) {
       const element = originalCreateElement.call(document, tagName);
       if (tagName.toLowerCase() === 'script' && !hasAnalyticsConsent()) {
         const originalSetAttribute = element.setAttribute;
         element.setAttribute = function(name, value) {
-          if (name === 'src' && typeof value === 'string' && 
-              (value.includes('googletagmanager.com') || value.includes('google-analytics'))) {
-            console.log('[COOKIE-CONSENT] Blocked GA script:', value);
+          if (name === 'src' && shouldBlockAnalyticsScriptSrc(value)) {
+            console.log('[COOKIE-CONSENT] Blocked analytics script:', value);
             return; // Don't set src
           }
           return originalSetAttribute.call(this, name, value);
         };
+        const srcDesc = Object.getOwnPropertyDescriptor(
+          HTMLScriptElement.prototype, 'src');
+        if (srcDesc && typeof srcDesc.set === 'function') {
+          Object.defineProperty(element, 'src', {
+            configurable: true,
+            enumerable: srcDesc.enumerable,
+            get: function() {
+              return srcDesc.get.call(this);
+            },
+            set: function(v) {
+              if (shouldBlockAnalyticsScriptSrc(v)) {
+                console.log('[COOKIE-CONSENT] Blocked analytics script:', v);
+                return;
+              }
+              srcDesc.set.call(this, v);
+            }
+          });
+        }
       }
       return element;
     };
+  }
+
+  // Load Microsoft Clarity if a project ID is configured.
+  // Idempotent: safe to call after Clarity has already loaded.
+  function loadClarityScript() {
+    if (!CLARITY_PROJECT_ID || !hasAnalyticsConsent()) return;
+    if (document.querySelector('script[src*="clarity.ms/tag/"]')) return;
+    // Standard Clarity bootstrap snippet, inlined so we avoid an extra file.
+    (function(c,l,a,r,i,t,y){
+      c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+      t=l.createElement(r);t.async=1;t.src='https://www.clarity.ms/tag/'+i;
+      y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+    })(window, document, 'clarity', 'script', CLARITY_PROJECT_ID);
   }
 
   // Load GA script if consent granted
@@ -218,6 +284,9 @@
 
     // Check if already loaded
     if (document.querySelector(`script[src*="googletagmanager.com/gtag/js"]`)) {
+      // Still try to load Clarity if it hasn't loaded yet
+      loadClarityScript();
+      flushPendingClarityIdentify();
       return; // Already loaded
     }
 
@@ -232,8 +301,37 @@
     function gtag(){dataLayer.push(arguments);}
     window.gtag = gtag;
     gtag('js', new Date());
-    gtag('config', GA_MEASUREMENT_ID);
-    
+    gtag('config', GA_MEASUREMENT_ID, { send_page_view: false });
+
+    // Load Microsoft Clarity alongside GA (consent-gated).
+    loadClarityScript();
+    flushPendingClarityIdentify();
+
+    // Flush any events that arrived before gtag was available (e.g.
+    // blog-cta.js firing on DOMContentLoaded while init() awaits the
+    // consent fetch).
+    const flushedPageView = flushPendingGtagCalls();
+    // Marketing (and other) pages that do not load analytics.js/main.js never
+    // call trackPageView(); with send_page_view: false they would emit no
+    // page_view. App pages queue page_view via later module scripts —
+    // flushPendingGtagCalls() above handles them when scripts run first.
+    // If consent resolves mid–defer-queue (cached/failed fetch), init can run
+    // before modules: defer this fallback past the defer queue + microtasks
+    // then re-flush so we don't double-fire alongside main.js/trackPageView.
+    if (!flushedPageView) {
+      window.setTimeout(function emitFallbackPageViewIfStillNeeded() {
+        if (!hasAnalyticsConsent()) return;
+        if (flushPendingGtagCalls()) return;
+        try {
+          window.gtag('event', 'page_view', {
+            page_location: window.location.href,
+            page_path: window.location.pathname + window.location.search,
+            page_title: document.title
+          });
+        } catch (_) { /* ignore */ }
+      }, 0);
+    }
+
     // Dispatch event for firebase-config.js to initialize Firebase Analytics
     window.dispatchEvent(new CustomEvent('cookie-consent-granted'));
   }
@@ -280,6 +378,8 @@
     };
 
     document.getElementById('jha-reject-all').onclick = () => {
+      _pendingGtagCalls.length = 0;
+      _pendingClarityIdentify.length = 0;
       setConsent({ version: 1, analytics: false, updatedAt: new Date().toISOString() });
       removeBanner();
       preventGALoading(); // Ensure GA doesn't load
@@ -346,6 +446,8 @@
       if (analytics) {
         loadGAScript();
       } else {
+        _pendingGtagCalls.length = 0;
+        _pendingClarityIdentify.length = 0;
         preventGALoading();
         // Notify other modules (firebase-config) that consent was revoked
         try {
@@ -412,15 +514,188 @@
     getConsent
   };
 
-  // Safe analytics wrapper
-  window.JHA.trackEventSafe = function(category, action, label) {
-    if (hasAnalyticsConsent() && window.gtag) {
-      window.gtag('event', action, {
-        event_category: category,
-        event_label: label
+  // Safe analytics wrapper. Two call shapes are supported so both legacy and
+  // new code paths work without a migration:
+  //   trackEventSafe('Report', 'Download', 'LinkedIn Optimizer Report')
+  //   trackEventSafe('sign_up', { method: 'email', plan: 'trial' })
+  //
+  // Calls fired before the GA script finishes loading (e.g. blog-cta.js
+  // running on DOMContentLoaded while init() is still awaiting the
+  // server-side consent fetch, or identifyUser firing right before a
+  // sign_up event) are queued and flushed by loadGAScript() in original
+  // order, so 'set { user_id }' always lands before the next event that
+  // should carry it. If the user has not stored a consent decision yet
+  // (getConsent() === null), calls are queued so they can fire after
+  // "Accept Analytics". If analytics was explicitly declined, the call
+  // is dropped. The pre-decision queue is cleared when the user rejects.
+  const _pendingGtagCalls = [];
+  const _pendingClarityIdentify = [];
+  const MAX_PENDING_CALLS = 50;
+  function flushPendingGtagCalls() {
+    if (!hasAnalyticsConsent() || !window.gtag) return false;
+    let flushedPageView = false;
+    while (_pendingGtagCalls.length) {
+      const args = _pendingGtagCalls.shift();
+      try {
+        if (args[0] === 'event' && args[1] === 'page_view') {
+          flushedPageView = true;
+        }
+        window.gtag.apply(null, args);
+      } catch (_) { /* ignore */ }
+    }
+    return flushedPageView;
+  }
+
+  function flushPendingClarityIdentify() {
+    if (!hasAnalyticsConsent() || typeof window.clarity !== 'function') return;
+    while (_pendingClarityIdentify.length) {
+      const id = _pendingClarityIdentify.shift();
+      try {
+        window.clarity('identify', id);
+      } catch (_) { /* ignore */ }
+    }
+  }
+
+  // Wait until cookie-consent init() has created window.gtag (so queued
+  // identify/event calls are flushed) before full-page navigation; otherwise
+  // in-memory _pendingGtagCalls is lost when the document unloads.
+  // Cap the wait tightly: returning visitors with consent in localStorage
+  // can race init()'s server consent fetch — if gtag still isn't loaded,
+  // kick off loadGAScript() ourselves so we aren't stuck waiting on a
+  // network round-trip that will never produce gtag.
+  function flushAnalyticsBeforeNavigate() {
+    if (!hasAnalyticsConsent()) return Promise.resolve();
+    if (typeof window.gtag === 'function') {
+      flushPendingGtagCalls();
+      flushPendingClarityIdentify();
+      return Promise.resolve();
+    }
+    try { loadGAScript(); } catch (_) { /* ignore */ }
+    const timeoutMs = 1500;
+    const start = typeof performance !== 'undefined' && performance.now
+      ? performance.now()
+      : Date.now();
+    return new Promise((resolve) => {
+      function tick() {
+        if (!hasAnalyticsConsent()) {
+          resolve();
+          return;
+        }
+        if (typeof window.gtag === 'function') {
+          flushPendingGtagCalls();
+          flushPendingClarityIdentify();
+          resolve();
+          return;
+        }
+        const now = typeof performance !== 'undefined' && performance.now
+          ? performance.now()
+          : Date.now();
+        if (now - start >= timeoutMs) {
+          resolve();
+          return;
+        }
+        setTimeout(tick, 25);
+      }
+      tick();
+    });
+  }
+  // Queue-aware generic gtag wrapper. All identity/event/config calls
+  // should flow through this so they're applied in correct order
+  // regardless of whether GA has finished loading.
+  window.JHA.gtagSafe = function(...args) {
+    if (!hasAnalyticsConsent()) {
+      if (getConsent() === null && _pendingGtagCalls.length < MAX_PENDING_CALLS) {
+        _pendingGtagCalls.push(args);
+      }
+      return;
+    }
+    if (!window.gtag) {
+      if (_pendingGtagCalls.length < MAX_PENDING_CALLS) {
+        _pendingGtagCalls.push(args);
+      }
+      return;
+    }
+    window.gtag.apply(null, args);
+  };
+  // Queues / bootstraps Clarity like gtagSafe: init() may still be awaiting
+  // server consent when identifyUser runs, so window.clarity may not exist yet.
+  window.JHA.clarityIdentifySafe = function(userId) {
+    if (!userId || !CLARITY_PROJECT_ID) return;
+    const id = String(userId);
+    if (!hasAnalyticsConsent()) {
+      // Consent undecided: queue so identify fires after "Accept Analytics".
+      // Explicit reject: drop. Reject-all clears _pendingClarityIdentify.
+      if (getConsent() === null && _pendingClarityIdentify.length < MAX_PENDING_CALLS) {
+        _pendingClarityIdentify.push(id);
+      }
+      return;
+    }
+    try { loadClarityScript(); } catch (_) { /* ignore */ }
+    if (typeof window.clarity === 'function') {
+      try { window.clarity('identify', id); } catch (_) { /* ignore */ }
+      flushPendingClarityIdentify();
+      return;
+    }
+    if (_pendingClarityIdentify.length < MAX_PENDING_CALLS) {
+      _pendingClarityIdentify.push(id);
+    }
+  };
+  window.JHA.trackEventSafe = function(arg1, arg2, arg3) {
+    if (arg2 && typeof arg2 === 'object' && !Array.isArray(arg2)) {
+      // GA4-style: (eventName, params)
+      window.JHA.gtagSafe('event', arg1, arg2);
+    } else {
+      // Legacy: (category, action, label). Guard against single-arg callers
+      // — if `action` is missing, fall back to `category` as the event name
+      // so GA4 never receives an event with name `undefined`.
+      const eventName = arg2 || arg1;
+      if (!eventName) return;
+      window.JHA.gtagSafe('event', eventName, {
+        event_category: arg1,
+        event_label: arg3
       });
     }
   };
+
+  window.JHA.cookieConsent.flushAnalyticsBeforeNavigate = flushAnalyticsBeforeNavigate;
+
+  // Site-wide delegated CTA click tracking. Any element with `data-cta` (or
+  // an ancestor with `data-cta`) fires a `cta_click` GA4 event. Capture phase
+  // so we still get the event even if the actual link/button stops the flow.
+  function installCtaTracker() {
+    if (window.JHA_CTA_TRACKER_INSTALLED) return;
+    window.JHA_CTA_TRACKER_INSTALLED = true;
+    document.addEventListener('click', function (e) {
+      try {
+        const el = e.target && e.target.closest && e.target.closest('[data-cta]');
+        if (!el) return;
+        const label = el.getAttribute('data-cta') || 'unknown';
+        const plan = el.getAttribute('data-plan') || undefined;
+        const path = (window.location.pathname || '').toLowerCase();
+        const variantMatch = path.match(/pricing-([ab])(?:\.html)?\/?$/);
+        if (window.JHA?.trackEventSafe) {
+          window.JHA.trackEventSafe('cta_click', {
+            cta_label: label,
+            cta_plan: plan,
+            page_path: window.location.pathname,
+            pricing_variant: variantMatch ? variantMatch[1] : undefined
+          });
+        }
+      } catch (_) {
+        // Never let analytics break a click handler
+      }
+    }, { capture: true });
+  }
+
+  // Fire pricing_variant_view exactly once per page load, on pricing-a/b.
+  function trackPricingVariantOnce() {
+    const path = (window.location.pathname || '').toLowerCase();
+    const m = path.match(/pricing-([ab])(?:\.html)?\/?$/);
+    if (!m) return;
+    if (window.JHA?.trackEventSafe) {
+      window.JHA.trackEventSafe('pricing_variant_view', { pricing_variant: m[1] });
+    }
+  }
 
   // Initialize
   async function init() {
@@ -444,6 +719,10 @@
 
     // Setup Account Settings button
     setupAccountSettingsButton();
+
+    // Wire site-wide tracking that doesn't need module loading.
+    installCtaTracker();
+    trackPricingVariantOnce();
   }
 
   // Auto-init

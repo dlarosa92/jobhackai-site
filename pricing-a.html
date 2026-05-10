@@ -8,6 +8,7 @@
   <link rel="icon" type="image/png" sizes="128x128" href="assets/jobhackai_icon_Favicon_128.png">
   <link rel="apple-touch-icon" sizes="180x180" href="assets/jobhackai_apple_touch_icon_180.png">
   <script src="js/dynamic-favicon.js?v=20260418-3" defer></script>
+  <script src="js/cookie-consent.js?v=20260506-1" defer></script>
 
   <!-- Design tokens & global styles -->
   <link rel="stylesheet" href="css/tokens.css">
@@ -134,15 +135,16 @@
             </tr>
             <tr class="pricing-signup-row">
               <td></td>
-              <td><button class="btn-primary stripe-checkout-btn" data-plan="free" data-amount="0">Create Free Account</button></td>
+              <td><button class="btn-primary stripe-checkout-btn" data-plan="free" data-amount="0" data-cta="pricing-table-free">Create Free Account</button></td>
               <td>
-                <button class="btn-primary stripe-checkout-btn" data-plan="trial" data-amount="0">Start Free Trial</button>
+                <span class="trial-no-card-badge" style="display:inline-block;background:#E6F4EA;color:#0B6B2E;font-weight:700;font-size:0.78rem;padding:3px 8px;border-radius:999px;margin-bottom:0.4rem;">No credit card required</span>
+                <button class="btn-primary stripe-checkout-btn" data-plan="trial" data-amount="0" data-cta="pricing-table-trial">Start Free Trial</button>
                 <div class="trial-subtext" aria-live="polite"></div>
                 <p style="font-size:0.75rem;color:#666;margin-top:0.35rem;">Converts to $29/mo after 3-day trial. Cancel anytime.</p>
               </td>
-              <td><button class="btn-primary stripe-checkout-btn" data-plan="essential" data-amount="2900">Get Essential Plan</button></td>
-              <td><button class="btn-primary stripe-checkout-btn" data-plan="pro" data-amount="5900">Get Pro Plan</button></td>
-              <td><button class="btn-primary stripe-checkout-btn" data-plan="premium" data-amount="9900">Get Premium Plan</button></td>
+              <td><button class="btn-primary stripe-checkout-btn" data-plan="essential" data-amount="2900" data-cta="pricing-table-essential">Get Essential Plan</button></td>
+              <td><button class="btn-primary stripe-checkout-btn" data-plan="pro" data-amount="5900" data-cta="pricing-table-pro">Get Pro Plan</button></td>
+              <td><button class="btn-primary stripe-checkout-btn" data-plan="premium" data-amount="9900" data-cta="pricing-table-premium">Get Premium Plan</button></td>
             </tr>
           </tbody>
         </table>
@@ -190,7 +192,7 @@
                 Priority Review
               </li>
             </ul>
-            <button class="btn-primary stripe-checkout-btn" data-plan="free" data-amount="0">Create Free Account</button>
+            <button class="btn-primary stripe-checkout-btn" data-plan="free" data-amount="0" data-cta="pricing-mobile-free">Create Free Account</button>
           </div>
 
           <!-- 3-Day Trial Card -->
@@ -233,7 +235,8 @@
                 Priority Review
               </li>
             </ul>
-            <button class="btn-primary stripe-checkout-btn" data-plan="trial" data-amount="0">Start Free Trial</button>
+            <span class="trial-no-card-badge" style="display:inline-block;background:#E6F4EA;color:#0B6B2E;font-weight:700;font-size:0.85rem;padding:4px 10px;border-radius:999px;margin-bottom:0.6rem;">No credit card required</span>
+            <button class="btn-primary stripe-checkout-btn" data-plan="trial" data-amount="0" data-cta="pricing-mobile-trial">Start Free Trial</button>
             <div class="trial-subtext" aria-live="polite"></div>
             <p style="font-size:0.75rem;color:#666;margin-top:0.35rem;">Converts to $29/mo after 3-day trial. Cancel anytime.</p>
           </div>
@@ -278,7 +281,7 @@
                 Priority Review
               </li>
             </ul>
-            <button class="btn-primary stripe-checkout-btn" data-plan="essential" data-amount="2900">Get Essential Plan</button>
+            <button class="btn-primary stripe-checkout-btn" data-plan="essential" data-amount="2900" data-cta="pricing-mobile-essential">Get Essential Plan</button>
           </div>
 
           <!-- Pro Plan Card -->
@@ -322,7 +325,7 @@
                 Priority Review
               </li>
             </ul>
-            <button class="btn-primary stripe-checkout-btn" data-plan="pro" data-amount="5900">Get Pro Plan</button>
+            <button class="btn-primary stripe-checkout-btn" data-plan="pro" data-amount="5900" data-cta="pricing-mobile-pro">Get Pro Plan</button>
           </div>
 
           <!-- Premium Plan Card -->
@@ -365,7 +368,7 @@
                 Priority Review
               </li>
             </ul>
-            <button class="btn-primary stripe-checkout-btn" data-plan="premium" data-amount="9900">Get Premium Plan</button>
+            <button class="btn-primary stripe-checkout-btn" data-plan="premium" data-amount="9900" data-cta="pricing-mobile-premium">Get Premium Plan</button>
           </div>
 
         </div>

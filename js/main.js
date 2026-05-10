@@ -7,6 +7,9 @@ import { trackPageView, trackEvent } from './analytics.js';
 // Initialize analytics tracking
 trackPageView();
 
+// Note: site-wide CTA click tracking and `pricing_variant_view` are wired in
+// cookie-consent.js so they work even on pages that don't load this module.
+
 // Initialize usage meters (mock-interview & feedback)
 document.addEventListener('DOMContentLoaded', () => {
   initUsageMeter({

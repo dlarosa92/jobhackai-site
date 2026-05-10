@@ -7,6 +7,7 @@
 console.log('🔧 login-page.js VERSION: fix-auth-cache-loop-v1 - ' + new Date().toISOString());
 
 import authManager, { waitForAuthReady, AUTH_PENDING } from './firebase-auth.js';
+import { identifyUser } from './analytics.js';
 
 function getResolvedStoredAuthFlagValue() {
   const ap = window.JobHackAIAuthPersistence;
@@ -123,7 +124,7 @@ function safeFallbackInit() {
     if (banner) banner.style.display = 'none';
     
     // Minimal password toggle handlers (shows error on click)
-    ['toggleLoginPassword', 'toggleSignupPassword', 'toggleConfirmPassword'].forEach(id => {
+    ['toggleLoginPassword', 'toggleSignupPassword'].forEach(id => {
       const btn = document.getElementById(id);
       if (btn) {
         btn.onclick = () => {
@@ -714,26 +715,30 @@ document.addEventListener('DOMContentLoaded', async function() {
     const lastName = document.getElementById('lastName').value.trim();
     const email = document.getElementById('signupEmail').value.trim();
     const password = document.getElementById('signupPassword').value.trim();
-    const confirmPassword = document.getElementById('confirmPassword').value.trim();
+    // confirmPassword input is being phased out (see login.html); keep a
+    // defensive read so any stale cached page that still has the field
+    // continues to validate.
+    const confirmPasswordEl = document.getElementById('confirmPassword');
+    const confirmPassword = confirmPasswordEl ? confirmPasswordEl.value.trim() : null;
     const submitBtn = document.getElementById('signupContinueBtn');
-    
+
     // Validation
-    if (!firstName || !lastName || !email || !password || !confirmPassword) {
+    if (!firstName || !lastName || !email || !password) {
       showError(signupError, 'Please fill in all fields.');
       return;
     }
-    
+
     if (!isValidEmail(email)) {
       showError(signupError, 'Please enter a valid email address.');
       return;
     }
-    
+
     if (password.length < 8) {
       showError(signupError, 'Password must be at least 8 characters long.');
       return;
     }
-    
-    if (password !== confirmPassword) {
+
+    if (confirmPassword !== null && confirmPassword !== '' && password !== confirmPassword) {
       showError(signupError, 'Passwords do not match.');
       return;
     }
@@ -776,6 +781,35 @@ document.addEventListener('DOMContentLoaded', async function() {
         });
 
         const newUser = result.user || authManager.getCurrentUser();
+
+        // Fire GA4 sign_up event + tie GA session to Firebase UID. This is
+        // the single most important conversion event for the funnel; gating
+        // is handled inside trackEventSafe (no-op without consent).
+        try {
+          const uid = newUser?.uid;
+          let plan = selectedPlan || 'free';
+          try {
+            const stored = sessionStorage.getItem('selectedPlan');
+            if (stored) plan = JSON.parse(stored).planId || plan;
+          } catch (_) {}
+          // identifyUser sets the GA `user_id` *and* calls
+          // clarity('identify', uid). Must fire BEFORE the sign_up event
+          // so GA4 attaches the user_id to that event — gtag('set', ...)
+          // only applies to subsequent events. Both calls now route
+          // through cookie-consent.js's queue, so even if GA hasn't
+          // loaded yet they're flushed in order.
+          if (uid) identifyUser(uid);
+          if (window.JHA?.trackEventSafe) {
+            window.JHA.trackEventSafe('sign_up', {
+              method: 'email',
+              plan: plan,
+              transport_type: 'beacon'
+            });
+          }
+        } catch (analyticsErr) {
+          console.warn('Analytics sign_up event failed (non-blocking):', analyticsErr);
+        }
+
         const emailForVerify = newUser?.email || email;
         const verifyUrl = new URL('verify-email.html', window.location.href);
         if (emailForVerify) {
@@ -785,6 +819,15 @@ document.addEventListener('DOMContentLoaded', async function() {
           verifyUrl.searchParams.set('sent', '0');
         } else if (result.verificationEmailSent === true) {
           verifyUrl.searchParams.set('sent', '1');
+        }
+        const flushAnalyticsBeforeNavigate =
+          window.JHA?.cookieConsent?.flushAnalyticsBeforeNavigate;
+        if (typeof flushAnalyticsBeforeNavigate === 'function') {
+          try {
+            await flushAnalyticsBeforeNavigate();
+          } catch (flushErr) {
+            console.warn('Analytics flush before navigate failed (non-blocking):', flushErr);
+          }
         }
         window.location.href = `${verifyUrl.pathname}${verifyUrl.search}`;
         return;
@@ -1260,7 +1303,6 @@ document.addEventListener('DOMContentLoaded', async function() {
   // Setup toggles for all password fields
   setupPasswordToggle('toggleLoginPassword', 'loginPassword', 'loginPasswordEyeIcon');
   setupPasswordToggle('toggleSignupPassword', 'signupPassword', 'signupPasswordEyeIcon');
-  setupPasswordToggle('toggleConfirmPassword', 'confirmPassword', 'confirmPasswordEyeIcon');
   
   console.log('[AUTH INIT COMPLETE] All initialization successful');
   } catch (err) {
