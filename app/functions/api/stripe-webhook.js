@@ -42,8 +42,14 @@ function subscriptionPriceAmountDollars(subscription) {
   return n / 100;
 }
 
+// Returns null for unrecognized plans so callers can detect a missing price
+// (e.g. a new paid plan added to isPaidPlan but not mapped here) instead of
+// silently sending value: 0 to GA4 and distorting revenue reports.
 function hardcodedPlanAmountDollars(plan) {
-  return plan === 'essential' ? 29 : plan === 'pro' ? 59 : plan === 'premium' ? 99 : 0;
+  if (plan === 'essential') return 29;
+  if (plan === 'pro') return 59;
+  if (plan === 'premium') return 99;
+  return null;
 }
 
 export async function onRequest(context) {
@@ -263,17 +269,15 @@ export async function onRequest(context) {
         // Skip on stale/replayed webhooks (planApplied === false) so we
         // don't inflate trial_start / purchase counts in GA4.
         if (planApplied) {
-          let planAmount = null;
+          let sessionAmount = null;
           if (sess?.amount_total != null) {
             const total = Number(sess.amount_total);
-            if (Number.isFinite(total)) planAmount = total / 100;
+            if (Number.isFinite(total)) sessionAmount = total / 100;
           }
-          if (planAmount == null) {
-            planAmount = subscriptionPriceAmountDollars(subscription);
-          }
-          if (planAmount == null) {
-            planAmount = hardcodedPlanAmountDollars(effectivePlan);
-          }
+          const planAmount =
+            sessionAmount ??
+            subscriptionPriceAmountDollars(subscription) ??
+            hardcodedPlanAmountDollars(effectivePlan);
           if (effectivePlan === 'trial') {
             context.waitUntil(sendGa4Event(env, {
               clientId: `server.${uid}`,
@@ -286,23 +290,27 @@ export async function onRequest(context) {
               }
             }));
           } else if (isPaidPlan(effectivePlan)) {
-            context.waitUntil(sendGa4Event(env, {
-              clientId: `server.${uid}`,
-              userId: uid,
-              name: 'purchase',
-              params: {
-                transaction_id: sessionId,
-                currency: (sess?.currency || 'usd').toUpperCase(),
-                value: planAmount,
-                plan: effectivePlan,
-                items: [{
-                  item_id: priceId || effectivePlan,
-                  item_name: effectivePlan,
-                  price: planAmount,
-                  quantity: 1
-                }]
-              }
-            }));
+            if (planAmount == null) {
+              console.warn(`[WEBHOOK] purchase event skipped: could not determine planAmount for plan=${effectivePlan} session=${sessionId}`);
+            } else {
+              context.waitUntil(sendGa4Event(env, {
+                clientId: `server.${uid}`,
+                userId: uid,
+                name: 'purchase',
+                params: {
+                  transaction_id: sessionId,
+                  currency: (sess?.currency || 'usd').toUpperCase(),
+                  value: planAmount,
+                  plan: effectivePlan,
+                  items: [{
+                    item_id: priceId || effectivePlan,
+                    item_name: effectivePlan,
+                    price: planAmount,
+                    quantity: 1
+                  }]
+                }
+              }));
+            }
           }
         }
       } else {
@@ -538,24 +546,28 @@ export async function onRequest(context) {
         if (isPaidPlan(effectivePlan)) {
           const convertedPlanAmount =
             subscriptionPriceAmountDollars(sub) ?? hardcodedPlanAmountDollars(effectivePlan);
-          context.waitUntil(sendGa4Event(env, {
-            clientId: `server.${uid}`,
-            userId: uid,
-            name: 'purchase',
-            params: {
-              transaction_id: `${sub.id}.trial_converted`,
-              currency: (sub?.currency || 'usd').toUpperCase(),
-              value: convertedPlanAmount,
-              plan: effectivePlan,
-              converted_from: 'trial',
-              items: [{
-                item_id: pId || effectivePlan,
-                item_name: effectivePlan,
-                price: convertedPlanAmount,
-                quantity: 1
-              }]
-            }
-          }));
+          if (convertedPlanAmount == null) {
+            console.warn(`[WEBHOOK] trial-conversion purchase event skipped: could not determine planAmount for plan=${effectivePlan} subId=${sub?.id}`);
+          } else {
+            context.waitUntil(sendGa4Event(env, {
+              clientId: `server.${uid}`,
+              userId: uid,
+              name: 'purchase',
+              params: {
+                transaction_id: `${sub.id}.trial_converted`,
+                currency: (sub?.currency || 'usd').toUpperCase(),
+                value: convertedPlanAmount,
+                plan: effectivePlan,
+                converted_from: 'trial',
+                items: [{
+                  item_id: pId || effectivePlan,
+                  item_name: effectivePlan,
+                  price: convertedPlanAmount,
+                  quantity: 1
+                }]
+              }
+            }));
+          }
         }
       }
     }

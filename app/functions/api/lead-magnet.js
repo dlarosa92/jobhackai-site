@@ -199,16 +199,21 @@ async function recordLead(env, { email, asset, source }) {
   } catch (e) {
     console.warn('[LEAD-MAGNET] D1 insert failed, falling back to KV:', e?.message || e);
   }
-  try {
-    if (env.JOBHACKAI_KV) {
+  if (env.JOBHACKAI_KV) {
+    try {
       const key = `lead:${asset}:${Date.now()}:${crypto.randomUUID()}`;
       await env.JOBHACKAI_KV.put(key, JSON.stringify({ email, asset, source, ts: new Date().toISOString() }), {
         expirationTtl: 60 * 60 * 24 * 365 // 1 year
       });
+      return;
+    } catch (e) {
+      console.warn('[LEAD-MAGNET] KV fallback failed (non-blocking):', e?.message || e);
+      return;
     }
-  } catch (e) {
-    console.warn('[LEAD-MAGNET] KV fallback failed (non-blocking):', e?.message || e);
   }
+  // Neither D1 nor KV is available — surface this so a misconfigured
+  // environment doesn't drop leads silently while still returning 200.
+  console.warn(`[LEAD-MAGNET] Lead dropped: no D1 or KV binding available (asset=${asset}, email=${redactEmailForLog(email)}, source=${source || 'unknown'})`);
 }
 
 export async function onRequest(context) {
