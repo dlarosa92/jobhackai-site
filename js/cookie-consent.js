@@ -313,16 +313,23 @@
     const flushedPageView = flushPendingGtagCalls();
     // Marketing (and other) pages that do not load analytics.js/main.js never
     // call trackPageView(); with send_page_view: false they would emit no
-    // page_view. App pages queue page_view via main.js before gtag exists —
-    // flush above handles those without duplicating.
+    // page_view. App pages queue page_view via later module scripts —
+    // flushPendingGtagCalls() above handles them when scripts run first.
+    // If consent resolves mid–defer-queue (cached/failed fetch), init can run
+    // before modules: defer this fallback past the defer queue + microtasks
+    // then re-flush so we don't double-fire alongside main.js/trackPageView.
     if (!flushedPageView) {
-      try {
-        window.gtag('event', 'page_view', {
-          page_location: window.location.href,
-          page_path: window.location.pathname + window.location.search,
-          page_title: document.title
-        });
-      } catch (_) { /* ignore */ }
+      window.setTimeout(function emitFallbackPageViewIfStillNeeded() {
+        if (!hasAnalyticsConsent()) return;
+        if (flushPendingGtagCalls()) return;
+        try {
+          window.gtag('event', 'page_view', {
+            page_location: window.location.href,
+            page_path: window.location.pathname + window.location.search,
+            page_title: document.title
+          });
+        } catch (_) { /* ignore */ }
+      }, 0);
     }
 
     // Dispatch event for firebase-config.js to initialize Firebase Analytics

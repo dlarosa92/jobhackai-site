@@ -66,14 +66,3 @@ export function identifyUser(userId) {
     try { window.clarity('identify', id); } catch (_) { /* ignore */ }
   }
 }
-
-// Expose the same surface to non-module scripts (HTML pages that include
-// individual <script> tags rather than importing main.js as a module).
-if (typeof window !== 'undefined') {
-  window.JHA = window.JHA || {};
-  window.JHA.analytics = {
-    trackPageView,
-    trackEvent,
-    identifyUser
-  };
-}
