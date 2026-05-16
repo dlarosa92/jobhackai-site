@@ -167,7 +167,6 @@ test.describe('Authentication', () => {
       await page.fill('#lastName', 'Signup');
       await page.fill('#signupEmail', signupEmail);
       await page.fill('#signupPassword', signupPassword);
-      await page.fill('#confirmPassword', signupPassword);
 
       // Accept Terms of Service
       await page.check('#acceptTerms');
