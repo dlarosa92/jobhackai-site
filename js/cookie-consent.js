@@ -15,7 +15,8 @@
   const GA_MEASUREMENT_ID = (window.JHA_CONFIG && window.JHA_CONFIG.GA_ID) || 'G-X48E90B00S';
   const GA_SCRIPT_URL = `https://www.googletagmanager.com/gtag/js?l=dataLayer&id=${GA_MEASUREMENT_ID}`;
   // Microsoft Clarity project ID — optional; loads only if configured.
-  const CLARITY_PROJECT_ID = (window.JHA_CONFIG && window.JHA_CONFIG.CLARITY_ID) || '';
+  // Override per-environment via window.JHA_CONFIG.CLARITY_ID, else use the production project.
+  const CLARITY_PROJECT_ID = (window.JHA_CONFIG && window.JHA_CONFIG.CLARITY_ID) || 'wskzma4clw';
 
   // Domain-aware API routing: marketing site (jobhackai.io) routes API calls
   // to app.jobhackai.io so consent persists in D1 across both domains.
