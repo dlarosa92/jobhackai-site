@@ -8,6 +8,7 @@
   <link rel="icon" type="image/png" sizes="128x128" href="assets/jobhackai_icon_Favicon_128.png">
   <link rel="apple-touch-icon" sizes="180x180" href="assets/jobhackai_apple_touch_icon_180.png">
   <script src="js/dynamic-favicon.js?v=20260418-3" defer></script>
+  <script src="js/cookie-consent.js?v=20260506-1" defer></script>
 
   <!-- Design tokens & global styles -->
   <link rel="stylesheet" href="css/tokens.css">
@@ -374,16 +375,6 @@
             </svg>
           </button>
         </div>
-        <label for="confirmPassword" class="sr-only">Confirm Password</label>
-        <div style="position: relative; width: 100%;">
-          <input type="password" id="confirmPassword" class="auth-input" name="confirmPassword" placeholder="Confirm Password" required autocomplete="new-password" minlength="8" style="padding-right: 45px;" />
-          <button type="button" class="password-toggle" id="toggleConfirmPassword" aria-label="Show password" aria-pressed="false" tabindex="0" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; padding: 4px; display: flex; align-items: center; color: #6B7280;">
-            <svg id="confirmPasswordEyeIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-              <circle cx="12" cy="12" r="3"/>
-            </svg>
-          </button>
-        </div>
         <!-- Terms of Service Acceptance -->
         <div class="terms-acceptance" style="margin-top:0.4rem; margin-bottom:0.2rem; width:100%;">
           <label style="display:flex; align-items:flex-start; gap:0.6rem; cursor:pointer; font-size:0.9rem; line-height:1.45; color:#4B5563;">
@@ -443,7 +434,7 @@
   <script src="js/navigation.js?v=20260208-1" defer></script>
   <script src="js/universal-logout.js?v=20260208-1" defer></script>
   <!-- crossorigin matches Cloudflare Pages' injected Early Hints preload credentials mode; without it, modules on fresh contexts intermittently fetch as ERR_ABORTED. -->
-  <script src="js/main.js?v=20251006-1" type="module" crossorigin="anonymous"></script>
+  <script src="js/main.js?v=20260505-2" type="module" crossorigin="anonymous"></script>
   <!-- Initialize navigation early to render correct visitor nav with CTA -->
   <script>
     if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
@@ -457,7 +448,7 @@
     }
   </script>
   <!-- Firebase Authentication -->
-  <script src="js/login-page.js?v=20251011-1" type="module" crossorigin="anonymous"></script>
+  <script src="js/login-page.js?v=20260505-2" type="module" crossorigin="anonymous"></script>
   
   <!-- Forgot Password Modal -->
   <div id="forgotPasswordOverlay" style="

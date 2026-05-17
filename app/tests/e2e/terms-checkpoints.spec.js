@@ -54,7 +54,6 @@ test.describe('Terms Checkpoints', () => {
       await page.fill('#lastName', 'Terms');
       await page.fill('#signupEmail', signupEmail);
       await page.fill('#signupPassword', signupPassword);
-      await page.fill('#confirmPassword', signupPassword);
 
       const acceptTermsCheckbox = page.locator('#acceptTerms');
       await expect(acceptTermsCheckbox).not.toBeChecked();
