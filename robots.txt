@@ -1,6 +1,5 @@
 User-agent: *
 Allow: /
-
 Disallow: /test-navigation.html
 Disallow: /test-user-flow.html
 Disallow: /demo-improved-flow.html
