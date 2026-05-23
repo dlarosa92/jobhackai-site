@@ -1,0 +1,23 @@
+User-agent: *
+Allow: /
+
+Disallow: /test-navigation.html
+Disallow: /test-user-flow.html
+Disallow: /demo-improved-flow.html
+Disallow: /skeleton-loading-mockup.html
+Disallow: /interview-questions-mockup.html
+Disallow: /resume-feedback-redesign-mockup.html
+Disallow: /resume-feedback-redesign-mockup-pro.html
+Disallow: /resume-feedback-redesign-mockup-pro-with-feedback.html
+Disallow: /resume-feedback-all-plans-mockup.html
+Disallow: /resume-feedback-ux-mockup.html
+Disallow: /resume-feedback-ux-improved.html
+Disallow: /pricing-b.html
+Disallow: /dashboard.html
+Disallow: /dashboard-trial.html
+Disallow: /account-setting.html
+Disallow: /verify-email.html
+Disallow: /login.html
+Disallow: /free-account-onboarding.html
+
+Sitemap: https://jobhackai.io/sitemap.xml
