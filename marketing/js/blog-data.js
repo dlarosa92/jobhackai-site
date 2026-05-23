@@ -13,6 +13,16 @@
 
 window.BLOG_POSTS = [
   {
+    slug: 'credibility-deficit-age-of-autocomplete',
+    title: 'The Credibility Deficit: How We Lost Our Voice in the Age of Autocomplete',
+    excerpt: 'AI-polished resumes get past ATS filters but fail in the interview. Learn how to break the autocomplete trap and stand out as a real, verifiable person.',
+    category: 'Resume',
+    date: '2026-05-23',
+    readTime: 7,
+    author: 'JobHackAI Team',
+    featured: true,
+  },
+  {
     slug: 'below-1-0-leverage-gap-resume',
     title: 'Below 1.0: How the New Leverage Gap Is Rewriting the Rules of Your Resume',
     excerpt: 'The job market has tilted back toward employers. Learn why generic resumes get filtered out faster and how ATS-friendly resume optimization helps candidates adapt.',
@@ -20,7 +30,7 @@ window.BLOG_POSTS = [
     date: '2026-04-28',
     readTime: 6,
     author: 'JobHackAI Team',
-    featured: true,
+    featured: false,
   },
   {
     slug: '68-5-days-response-gap-job-search-burnout',
