@@ -12,7 +12,7 @@
   // Allow the GA ID to be overridden per-environment via window.JHA_CONFIG
   // (set inline in the HTML head, e.g. <script>window.JHA_CONFIG={GA_ID:'G-...'}</script>),
   // and fall back to the production property otherwise.
-  const GA_MEASUREMENT_ID = (window.JHA_CONFIG && window.JHA_CONFIG.GA_ID) || 'G-X48E90B00S';
+  const GA_MEASUREMENT_ID = (window.JHA_CONFIG && window.JHA_CONFIG.GA_ID) || 'G-SQYSWPFM5X';
   const GA_SCRIPT_URL = `https://www.googletagmanager.com/gtag/js?l=dataLayer&id=${GA_MEASUREMENT_ID}`;
   // Microsoft Clarity project ID — optional; loads only if configured.
   // Override per-environment via window.JHA_CONFIG.CLARITY_ID, else use the production project.
@@ -302,7 +302,12 @@
     function gtag(){dataLayer.push(arguments);}
     window.gtag = gtag;
     gtag('js', new Date());
-    gtag('config', GA_MEASUREMENT_ID, { send_page_view: false });
+    gtag('config', GA_MEASUREMENT_ID, {
+      send_page_view: false,
+      // Cross-domain measurement: one session across the marketing site and
+      // the app (GA4 admin side configured in runbook Task 0).
+      linker: { domains: ['jobhackai.io', 'app.jobhackai.io'] }
+    });
 
     // Load Microsoft Clarity alongside GA (consent-gated).
     loadClarityScript();

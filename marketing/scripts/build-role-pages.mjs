@@ -239,7 +239,7 @@ ${JSON.stringify(breadcrumbLd, null, 2)}
   <link rel="stylesheet" href="../css/header.css">
   <link rel="stylesheet" href="../css/footer.css">
   <link rel="stylesheet" href="../css/marketing.css">
-  <script src="https://app.jobhackai.io/js/cookie-consent.js?v=20260506-1" defer></script>
+  <script src="https://app.jobhackai.io/js/cookie-consent.js?v=20260613-1" defer></script>
 ${pageStyles}
 </head>
 <body>
@@ -320,7 +320,7 @@ ${JSON.stringify(listLd, null, 2)}
   <link rel="stylesheet" href="../css/header.css">
   <link rel="stylesheet" href="../css/footer.css">
   <link rel="stylesheet" href="../css/marketing.css">
-  <script src="https://app.jobhackai.io/js/cookie-consent.js?v=20260506-1" defer></script>
+  <script src="https://app.jobhackai.io/js/cookie-consent.js?v=20260613-1" defer></script>
 ${pageStyles}
 </head>
 <body>
