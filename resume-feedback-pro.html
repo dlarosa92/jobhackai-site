@@ -5,6 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>html.auth-pending,html.plan-pending{visibility:hidden}</style>
+  <script>window.__JHA_ALLOW_PREVIEW__ = true; /* free tool: logged-out preview with signup gate */</script>
   <script src="js/static-auth-guard.js?v=20260125-1"></script>
   <script src="js/page-access-control.js?v=20260331-1"></script>
   <script>
@@ -105,6 +106,13 @@
           var authConfirmed = realUser || (navAuth && navAuth.isAuthenticated) || isAuthenticated;
 
           if (!authConfirmed) {
+            if (window.__JHA_ALLOW_PREVIEW__) {
+              window.__JHA_PREVIEW_MODE__ = true;
+              document.documentElement.classList.remove('auth-pending');
+              document.documentElement.classList.remove('plan-pending');
+              try { document.dispatchEvent(new CustomEvent('jha-preview-mode')); } catch (_) {}
+              return;
+            }
             window.location.href = 'login.html';
             return;
           }
@@ -1647,6 +1655,13 @@
       
       if (!isAuthenticated || !allowedPlans.includes(plan)) {
         if (!isAuthenticated) {
+          if (window.__JHA_PREVIEW_MODE__ || window.__JHA_ALLOW_PREVIEW__) {
+            window.__JHA_PREVIEW_MODE__ = true;
+            document.documentElement.classList.remove('auth-pending');
+            document.documentElement.classList.remove('plan-pending');
+            try { document.dispatchEvent(new CustomEvent('jha-preview-mode')); } catch (_) {}
+            return;
+          }
           window.location.href = 'login.html';
         } else {
           window.location.href = 'pricing.html?plan=essential';
@@ -9871,5 +9886,6 @@
     </div>
   </footer>
   <script src="js/feedback-widget.js?v=20260303-1" defer></script>
+  <script src="js/voice-cta.js?v=20260613-1" defer></script>
 </body>
 </html>

@@ -190,6 +190,13 @@ window.PageAccessControl = (function () {
 
     if (!isAuthenticated || allowedPlans.indexOf(plan) === -1) {
       if (!isAuthenticated) {
+        if (window.__JHA_ALLOW_PREVIEW__ || window.__JHA_PREVIEW_MODE__) {
+          window.__JHA_PREVIEW_MODE__ = true;
+          document.documentElement.classList.remove('auth-pending');
+          document.documentElement.classList.remove('plan-pending');
+          try { document.dispatchEvent(new CustomEvent('jha-preview-mode')); } catch (_) {}
+          return;
+        }
         window.location.href = 'login.html';
       } else {
         window.location.href = opts.deniedRedirect || 'pricing.html';
