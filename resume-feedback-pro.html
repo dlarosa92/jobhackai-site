@@ -52,7 +52,7 @@
       };
 
       var isAuthenticated = hasSameTabAuthEvidence();
-      var allowedPlans = ['trial', 'essential', 'pro', 'premium'];
+      var allowedPlans = ['free', 'trial', 'essential', 'pro', 'premium', 'weekly', 'monthly', 'pack']; // repositioning: free with signup
       window.__JOBHACKAI_RF_ALLOWED_PLANS__ = allowedPlans;
       var cachedPlan = localStorage.getItem('user-plan');
 
@@ -1254,7 +1254,7 @@
     // --- DEFERRED RE-VERIFICATION & PAGE ACCESS CONTROL ---
     // Delegated to shared page-access-control.js
     var _rfAccessOpts = {
-      allowedPlans: window.PageAccessControl ? window.PageAccessControl.PAID_PLANS : ['trial', 'essential', 'pro', 'premium'],
+      allowedPlans: ['free', 'trial', 'essential', 'pro', 'premium', 'weekly', 'monthly', 'pack'], // repositioning: free with signup
       logPrefix: '[RESUME-FEEDBACK]',
       onPlanChanged: function () { updateRfTileForPlan(); }
     };
@@ -1541,7 +1541,7 @@
 
     // --- ACCESS CONTROL (Uses Navigation System) ---
     function waitForNavigationAndEnforceAccess() {
-      const allowedPlans = window.__JOBHACKAI_RF_ALLOWED_PLANS__ || ['trial', 'essential', 'pro', 'premium'];
+      const allowedPlans = window.__JOBHACKAI_RF_ALLOWED_PLANS__ || ['free', 'trial', 'essential', 'pro', 'premium', 'weekly', 'monthly', 'pack'];
       
       // Wait for navigation system to be ready
       if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
@@ -2799,7 +2799,7 @@
       if (!rewrittenBox) return;
 
       // Entitlement check - Pro/Premium only
-      const allowedPlans = ['pro', 'premium'];
+      const allowedPlans = ['free', 'trial', 'essential', 'pro', 'premium', 'weekly', 'monthly', 'pack']; // repositioning: rewrite is free with signup
       let currentPlan = null;
       try {
         if (typeof getCurrentUserPlan === 'function') {

@@ -18,7 +18,7 @@
         return;
       }
 
-      var allowedPlans = ['pro', 'premium'];
+      var allowedPlans = ['free', 'trial', 'essential', 'pro', 'premium', 'weekly', 'monthly', 'pack']; // repositioning: typed mock interview is free with signup
 
       function hasFirebaseAuthKeysInStorage(storage) {
         try {
@@ -3183,7 +3183,7 @@
     // --- DEFERRED RE-VERIFICATION & PAGE ACCESS CONTROL ---
     // Delegated to shared page-access-control.js
     var _miAccessOpts = {
-      allowedPlans: ['pro', 'premium'],
+      allowedPlans: ['free', 'trial', 'essential', 'pro', 'premium', 'weekly', 'monthly', 'pack'], // repositioning: free with signup
       logPrefix: '[MOCK-INTERVIEW]',
       deniedRedirect: 'interview-questions.html?upgrade=mock-interview'
     };

@@ -33,7 +33,13 @@ CREATE TABLE IF NOT EXISTS users (
   -- Activity tracking for retention policy (migration 015)
   last_login_at TEXT,
   last_activity_at TEXT,
-  deletion_warning_sent_at TEXT
+  deletion_warning_sent_at TEXT,
+  -- Voice mock interview entitlements (migration 020)
+  -- Written only by Stripe webhooks / server code; clients have no write path.
+  voice_sessions_remaining INTEGER NOT NULL DEFAULT 0,
+  free_session_used INTEGER NOT NULL DEFAULT 0,
+  pack_expires_at TEXT,
+  voice_followup_email_sent_at TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_auth_id ON users(auth_id);
@@ -207,3 +213,43 @@ CREATE TABLE IF NOT EXISTS first_resume_snapshots (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_first_snapshot_user_id ON first_resume_snapshots(user_id);
+
+-- ============================================================
+-- STRIPE_EVENT_LOG TABLE (migration 020)
+-- Hard idempotency for credit-granting webhook events.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS stripe_event_log (
+  event_id TEXT PRIMARY KEY,
+  type TEXT,
+  processed_at TEXT DEFAULT (datetime('now'))
+);
+
+-- ============================================================
+-- VOICE_SESSIONS TABLE (migration 020)
+-- Voice mock interview lifecycle, transcript, scorecard, and
+-- per-session model cost for unit economics tracking.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS voice_sessions (
+  id TEXT PRIMARY KEY,                          -- UUID minted server-side
+  user_id INTEGER NOT NULL,
+  role TEXT,
+  seniority TEXT,
+  jd_excerpt TEXT,                              -- first ~2k chars of pasted JD
+  status TEXT NOT NULL DEFAULT 'created',       -- created | active | completed | abandoned
+  entitlement_mode TEXT,                        -- free | pack | subscription
+  started_at TEXT DEFAULT (datetime('now')),
+  ended_at TEXT,
+  duration_seconds INTEGER,
+  transcript_json TEXT,
+  scorecard_json TEXT,
+  model TEXT,
+  input_tokens INTEGER,
+  output_tokens INTEGER,
+  cost_usd REAL,                                -- computed per-session model cost
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_voice_sessions_user ON voice_sessions(user_id, started_at);
+CREATE INDEX IF NOT EXISTS idx_voice_sessions_status ON voice_sessions(status);

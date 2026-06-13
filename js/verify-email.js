@@ -399,7 +399,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (e) {}
     const plan = planParam || storedSelection || 'free';
 
-    function planRequiresPayment(p) { return ['essential', 'pro', 'premium', 'trial'].includes(p); }
+    function planRequiresPayment(p) { return ['essential', 'pro', 'premium', 'trial', 'weekly', 'monthly', 'pack'].includes(p); }
 
     if (planRequiresPayment(plan)) {
       try {

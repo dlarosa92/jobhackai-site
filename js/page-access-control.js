@@ -5,8 +5,8 @@
 window.PageAccessControl = (function () {
   'use strict';
 
-  var VALID_PLANS = ['visitor', 'free', 'trial', 'essential', 'pro', 'premium'];
-  var PAID_PLANS  = ['trial', 'essential', 'pro', 'premium'];
+  var VALID_PLANS = ['visitor', 'free', 'trial', 'essential', 'pro', 'premium', 'weekly', 'monthly', 'pack'];
+  var PAID_PLANS  = ['trial', 'essential', 'pro', 'premium', 'weekly', 'monthly', 'pack'];
 
   // ---- helpers ----
 

@@ -1,5 +1,6 @@
 import { updateUserPlan, getUserPlanData, resetFeatureDailyUsage, resetUsageEvents, getDb, getOrCreateUserByAuthId, isDeletedUser } from '../_lib/db.js';
-import { stripe, pickBestSubscription } from '../_lib/billing-utils.js';
+import { stripe, pickBestSubscription, invalidateBillingCaches } from '../_lib/billing-utils.js';
+import { grantPackCredits } from '../_lib/voice-entitlements.js';
 import { sendEmail } from '../_lib/email.js';
 import { subscriptionCancelledEmail, paymentFailedEmail } from '../_lib/email-templates.js';
 
@@ -46,6 +47,9 @@ function subscriptionPriceAmountDollars(subscription) {
 // (e.g. a new paid plan added to isPaidPlan but not mapped here) instead of
 // silently sending value: 0 to GA4 and distorting revenue reports.
 function hardcodedPlanAmountDollars(plan) {
+  if (plan === 'weekly') return 17;
+  if (plan === 'monthly') return 34;
+  if (plan === 'pack') return 39;
   if (plan === 'essential') return 29;
   if (plan === 'pro') return 59;
   if (plan === 'premium') return 99;
@@ -189,7 +193,57 @@ export async function onRequest(context) {
       const priceId = sess?.line_items?.data?.[0]?.price?.id || '';
       const customerId = sess?.customer || event.data?.object?.customer || null;
       const { uid, email: customerEmail } = await fetchCustomerInfo(customerId);
-      
+
+      // One-time Interview Pack purchase (mode=payment): grant voice session
+      // credits and return. The subscription plan-mapping path below must not
+      // run for one-time payments or its fallback would set plan='essential'.
+      const isPackPurchase = sess?.mode === 'payment' &&
+        (priceId === env.STRIPE_PRICE_PACK || originalPlan === 'pack');
+      if (isPackPurchase) {
+        if (!uid) {
+          console.warn(`⚠️ [WEBHOOK] Pack purchase without resolvable uid (customer=${customerId})`);
+          return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
+        }
+        const db = getDb(env);
+        const existingUser = db ? await db.prepare('SELECT id FROM users WHERE auth_id = ?').bind(uid).first() : null;
+        if (!existingUser) {
+          const d1Tombstone = await isDeletedUser(env, uid);
+          const kvTombstone = await env.JOBHACKAI_KV?.get(`deleted:${uid}`);
+          if (d1Tombstone || kvTombstone) {
+            console.log(`⏭️ [WEBHOOK] Skipping pack grant: user ${uid} was deleted (tombstone found)`);
+            return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
+          }
+          await getOrCreateUserByAuthId(env, uid, customerEmail, { updateActivity: false });
+        }
+        const { granted, duplicate } = await grantPackCredits(env, uid, event.id);
+        console.log(`✅ [WEBHOOK] Pack grant for ${uid}: granted=${granted}, duplicate=${duplicate}`);
+        if (granted) {
+          await invalidateBillingCaches(env, uid);
+          let packAmount = 39;
+          if (sess?.amount_total != null && Number.isFinite(Number(sess.amount_total))) {
+            packAmount = Number(sess.amount_total) / 100;
+          }
+          context.waitUntil(sendGa4Event(env, {
+            clientId: `server.${uid}`,
+            userId: uid,
+            name: 'purchase',
+            params: {
+              transaction_id: sessionId,
+              currency: (sess?.currency || 'usd').toUpperCase(),
+              value: packAmount,
+              plan: 'pack',
+              items: [{
+                item_id: priceId || 'pack',
+                item_name: 'pack',
+                price: packAmount,
+                quantity: 1
+              }]
+            }
+          }));
+        }
+        return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
+      }
+
       // Determine effective plan based on original plan and subscription status
       let effectivePlan = 'free';
       if (originalPlan === 'trial') {
@@ -761,7 +815,10 @@ async function verifyStripeWebhook(env, req, rawBody) {
 const kvPlanKey = (uid) => `planByUid:${uid}`;
 function priceToPlan(env, priceId) {
   if (!priceId) return null;
-  // Normalize env price IDs across naming variants
+  // New voice plans (repositioning)
+  if (priceId === env.STRIPE_PRICE_WEEKLY) return 'weekly';
+  if (priceId === env.STRIPE_PRICE_MONTHLY) return 'monthly';
+  // Normalize legacy env price IDs across naming variants
   const essential = env.STRIPE_PRICE_ESSENTIAL_MONTHLY || env.PRICE_ESSENTIAL_MONTHLY || env.STRIPE_PRICE_ESSENTIAL || env.PRICE_ESSENTIAL;
   const pro = env.STRIPE_PRICE_PRO_MONTHLY || env.PRICE_PRO_MONTHLY || env.STRIPE_PRICE_PRO || env.PRICE_PRO;
   const premium = env.STRIPE_PRICE_PREMIUM_MONTHLY || env.PRICE_PREMIUM_MONTHLY || env.STRIPE_PRICE_PREMIUM || env.PRICE_PREMIUM;
@@ -769,9 +826,11 @@ function priceToPlan(env, priceId) {
   if (priceId === essential) return 'essential';
   if (priceId === pro) return 'pro';
   if (priceId === premium) return 'premium';
+  // Unknown subscription price IDs fall through to the callers' 'essential'
+  // fallback, which the voice entitlement layer grandfathers as unlimited.
   return null;
 }
 
 function isPaidPlan(plan) {
-  return ['essential', 'pro', 'premium'].includes(plan);
+  return ['weekly', 'monthly', 'essential', 'pro', 'premium'].includes(plan);
 }

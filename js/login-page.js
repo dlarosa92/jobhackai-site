@@ -69,7 +69,7 @@ function planRequiresPayment(plan) {
       const data = JSON.parse(stored);
       const timestamp = data.timestamp || 0;
       const isFreshSelection = Date.now() - timestamp < 5 * 60 * 1000; // 5 minutes
-      if (isFreshSelection && ['essential', 'pro', 'premium', 'trial'].includes(plan)) {
+      if (isFreshSelection && ['essential', 'pro', 'premium', 'trial', 'weekly', 'monthly', 'pack'].includes(plan)) {
         return true;
       }
     }

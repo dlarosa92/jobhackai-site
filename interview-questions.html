@@ -18,7 +18,7 @@
         return;
       }
 
-      var allowedPlans = ['trial', 'essential', 'pro', 'premium'];
+      var allowedPlans = ['free', 'trial', 'essential', 'pro', 'premium', 'weekly', 'monthly', 'pack']; // repositioning: free with signup
 
       function hasFirebaseAuthKeysInStorage(storage) {
         try {
@@ -1921,7 +1921,7 @@
     }
 
     // --- USER PLAN LOGIC (delegated to shared page-access-control.js) ---
-    const IQ_ALLOWED_PLANS = window.PageAccessControl ? window.PageAccessControl.PAID_PLANS : ['trial', 'essential', 'pro', 'premium'];
+    const IQ_ALLOWED_PLANS = ['free', 'trial', 'essential', 'pro', 'premium', 'weekly', 'monthly', 'pack']; // repositioning: free with signup
 
     function getUserPlan() {
       if (window.PageAccessControl) return window.PageAccessControl.getCurrentUserPlan(IQ_ALLOWED_PLANS, '[INTERVIEW-Q]');

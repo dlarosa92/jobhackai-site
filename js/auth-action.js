@@ -139,7 +139,7 @@ function hideMessages() {
 
 // Helper function to check if plan requires payment
 function planRequiresPayment(plan) {
-  return ['essential', 'pro', 'premium', 'trial'].includes(plan);
+  return ['essential', 'pro', 'premium', 'trial', 'weekly', 'monthly', 'pack'].includes(plan);
 }
 
 function getSelectedPlanFromStorage() {
