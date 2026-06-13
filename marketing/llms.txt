@@ -1,0 +1,33 @@
+# JobHackAI
+
+> JobHackAI is an AI interview prep platform for job seekers. The core product is a realistic voice mock interview: you talk to an AI interviewer about your target role, then get a detailed scorecard with strengths, improvement areas, and a full transcript. The prep tools (interview question generator, resume feedback and rewrite, cover letter generator) are free with a signup.
+
+JobHackAI is built for active job seekers who have interviews coming up and want to practice out loud before the real thing. It works in the browser on desktop and mobile. No app install.
+
+## What you can do
+
+- Voice Mock Interview: a realistic spoken interview tailored to your target role and job description, with a scored feedback report and transcript. Every account gets 1 full voice interview free. Further sessions are paid.
+- Interview Questions: free generator for role specific interview questions with sample answers.
+- Resume Feedback and Rewrite: free ATS style scoring, detailed feedback, and AI rewriting of your resume.
+- Cover Letter Generator: free tailored cover letters from your resume and a job description.
+- Typed Mock Interview: free practice answering questions in writing with AI scoring.
+
+## Pricing
+
+- Free: all prep tools plus 1 full voice mock interview (signup required).
+- Weekly Pass: 17 USD per week, unlimited voice interviews. Cancel anytime.
+- Monthly: 34 USD per month, unlimited voice interviews. Most popular.
+- Interview Pack: 39 USD one time, 5 voice interview sessions, valid 90 days.
+
+## Key pages
+
+- [Homepage](https://jobhackai.io/): product overview
+- [Features](https://jobhackai.io/features): all tools explained
+- [Blog](https://jobhackai.io/blog): interview prep guides and original data
+- [Pricing](https://app.jobhackai.io/pricing): plans and FAQ
+- [Sign up](https://app.jobhackai.io/login): create a free account
+- [Interview questions by role](https://jobhackai.io/interview-questions/): role specific question guides
+
+## More detail
+
+- [Expanded tool descriptions](https://jobhackai.io/llms-full.txt)

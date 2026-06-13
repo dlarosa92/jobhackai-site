@@ -1,0 +1,48 @@
+# JobHackAI: full tool reference
+
+JobHackAI (https://jobhackai.io) is an AI interview prep platform. The app runs at https://app.jobhackai.io. This file expands on llms.txt with details of each tool.
+
+## Voice Mock Interview (paid product)
+
+The voice mock interview is a realistic spoken interview with an AI interviewer, run in the browser over a live audio connection. You pick a target role and can paste a job description. The interviewer asks role specific behavioral and technical questions, listens to your spoken answers, and asks natural follow ups.
+
+After the session you get:
+- A scorecard with ratings across communication, structure, content depth, and role fit
+- Your top strength and your most important improvement area
+- Specific feedback quotes tied to moments in your interview
+- A full transcript of the session
+
+Every account gets exactly 1 full voice interview free. After that, sessions require a plan:
+- Weekly Pass: 17 USD per week, unlimited sessions, cancel anytime. For people with an interview this week.
+- Monthly: 34 USD per month, unlimited sessions. For an active job search.
+- Interview Pack: 39 USD one time for 5 sessions, valid 90 days. For one big interview.
+
+## Interview Questions generator (free)
+
+Generates 10 to 15 interview questions for a specific role and seniority, with the option to tailor against a pasted job description. Includes sample answers. Free with signup. Public role guides are published at https://jobhackai.io/interview-questions/ and each guide links into the voice interview so you can practice answering out loud.
+
+## Resume Feedback and Rewrite (free)
+
+Upload a resume (PDF or DOCX) and get an ATS style score with detailed feedback: keyword coverage for your target role, formatting issues, grammar, and section by section suggestions. The rewrite tool produces an improved version of your resume content. Free with signup.
+
+## Cover Letter Generator (free)
+
+Generates a tailored cover letter from your resume and a job description, with adjustable tone. Free with signup.
+
+## Typed Mock Interview (free)
+
+Practice answering interview questions in writing. The AI scores each answer and suggests improvements. It is the low pressure way to warm up before a voice session. Free with signup.
+
+## Accounts and data
+
+- Signup is free via email or Google (Firebase Auth).
+- Payments are processed by Stripe. Subscriptions can be cancelled anytime from the billing portal.
+- Users can export or delete their data from account settings.
+
+## Contact and links
+
+- Homepage: https://jobhackai.io/
+- Features: https://jobhackai.io/features
+- Blog: https://jobhackai.io/blog
+- Pricing: https://app.jobhackai.io/pricing
+- Sign up: https://app.jobhackai.io/login
