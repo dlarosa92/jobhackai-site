@@ -95,7 +95,7 @@ async function handlePostAuthRedirect(plan) {
     } catch (error) {
       console.error('Checkout error:', error);
     }
-    window.location.href = 'pricing-a.html';
+    window.location.href = 'pricing.html';
   } else {
     sessionStorage.removeItem('selectedPlan');
     try { localStorage.removeItem('selectedPlan'); } catch (_) {}
@@ -519,7 +519,7 @@ document.addEventListener('DOMContentLoaded', async function() {
           } catch (error) {
             console.error('Checkout error:', error);
           }
-          window.location.href = 'pricing-a.html';
+          window.location.href = 'pricing.html';
         } else {
           // Existing user or free plan -> take user to dashboard
           sessionStorage.removeItem('selectedPlan');
@@ -625,7 +625,7 @@ document.addEventListener('DOMContentLoaded', async function() {
           } catch (error) {
             console.error('Checkout error:', error);
           }
-          window.location.href = 'pricing-a.html';
+          window.location.href = 'pricing.html';
         } else {
           // Existing user or free plan -> take user to dashboard
           sessionStorage.removeItem('selectedPlan');

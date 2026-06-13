@@ -138,7 +138,7 @@
       // Step 6: Final decision
       if (!allowedPlans.includes(plan)) {
         console.log('🚫 [INTERVIEW-Q] Access denied for plan:', plan);
-        window.location.href = 'pricing-a.html?plan=essential';
+        window.location.href = 'pricing.html?plan=essential';
         return;
       }
 
@@ -1387,7 +1387,7 @@
                 } catch (err) {
                   console.error('Checkout start error:', err);
                   if (window._currentLoadingOverlay) { window._currentLoadingOverlay(); window._currentLoadingOverlay = null; }
-                  window.location.href = `pricing-a.html?plan=${encodeURIComponent(plan)}`;
+                  window.location.href = `pricing.html?plan=${encodeURIComponent(plan)}`;
                 }
               }
               // Expose a global name expected by the inline onclick handler
@@ -1879,7 +1879,7 @@
                 <a href="login.html" class="btn-primary" style="text-decoration: none;">
                   Sign In
                 </a>
-                <a href="pricing-a.html" class="btn-outline" style="text-decoration: none;">
+                <a href="pricing.html" class="btn-outline" style="text-decoration: none;">
                   View Pricing
                 </a>
               </div>
@@ -1908,7 +1908,7 @@
                 <a href="login.html" class="btn-primary" style="text-decoration: none;">
                   Sign In
                 </a>
-                <a href="pricing-a.html" class="btn-outline" style="text-decoration: none;">
+                <a href="pricing.html" class="btn-outline" style="text-decoration: none;">
                   View Pricing
                 </a>
               </div>

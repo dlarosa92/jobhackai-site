@@ -414,7 +414,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       } catch (err) {
         console.error('Checkout error from verify-email flow:', err);
       }
-      window.location.href = 'pricing-a.html';
+      window.location.href = 'pricing.html';
       return true;
     } else {
       try {

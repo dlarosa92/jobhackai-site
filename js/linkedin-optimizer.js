@@ -269,7 +269,7 @@ function setLockedView(kind) {
       return;
     }
     if (kind === 'upgrade') {
-      window.location.replace('/pricing-a.html?redirect=' + encodeURIComponent(window.location.pathname));
+      window.location.replace('/pricing?redirect=' + encodeURIComponent(window.location.pathname));
       return;
     }
     // none: nothing to do if page UI is not present

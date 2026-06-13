@@ -306,7 +306,7 @@ async function routeAfterVerification() {
           }
         }, 500);
       }
-      window.location.replace('/pricing-a.html');
+      window.location.replace('/pricing');
     } catch (err) {
       console.error('Checkout error from email verification flow:', err);
       if (hasOpener) {
@@ -318,7 +318,7 @@ async function routeAfterVerification() {
           }
         }, 500);
       }
-      window.location.replace('/pricing-a.html');
+      window.location.replace('/pricing');
     }
   } else {
     // Free plan - redirect to dashboard

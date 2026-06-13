@@ -241,7 +241,7 @@ const IS_DEV_OR_QA_HOST = APP_BASE_URL === 'https://dev.jobhackai.io' || APP_BAS
 const VISITOR_HOME_HREF = IS_DEV_OR_QA_HOST ? 'index.html' : 'https://jobhackai.io/';
 const VISITOR_BLOG_HREF = IS_DEV_OR_QA_HOST ? 'index.html#blog' : 'https://jobhackai.io/blog';
 const VISITOR_FEATURES_HREF = IS_DEV_OR_QA_HOST ? 'features.html' : 'https://jobhackai.io/features';
-const VISITOR_PRICING_HREF = `${APP_BASE_URL}/pricing-a`;
+const VISITOR_PRICING_HREF = `${APP_BASE_URL}/pricing`;
 const VISITOR_LOGO_HREF = IS_DEV_OR_QA_HOST ? '/' : 'https://jobhackai.io/';
 
 // Cross-domain cookie helpers — only read on the MARKETING site (not the app subdomain).
@@ -1466,7 +1466,7 @@ const NAVIGATION_CONFIG = {
       { text: 'Home', href: VISITOR_HOME_HREF },
       { text: 'Blog', href: VISITOR_BLOG_HREF },
       { text: 'Features', href: VISITOR_FEATURES_HREF },
-      { text: 'Pricing', href: `${APP_BASE_URL}/pricing-a` },
+      { text: 'Pricing', href: `${APP_BASE_URL}/pricing` },
       { text: 'Login', href: `${APP_BASE_URL}/login` }
     ],
     cta: { text: 'Start Free Trial', href: `${APP_BASE_URL}/login?plan=trial`, isCTA: true, planId: 'trial' }
@@ -1883,7 +1883,7 @@ function showUpgradeModal(targetPlan = 'premium') {
       window.upgradePlan(targetPlan, { source: 'nav-upgrade', returnUrl: window.location.href });
       return;
     }
-    window.location.href = `${APP_BASE_URL}/pricing-a?plan=${encodeURIComponent(targetPlan)}`;
+    window.location.href = `${APP_BASE_URL}/pricing?plan=${encodeURIComponent(targetPlan)}`;
   });
   // Close on background click
   modal.addEventListener('click', (e) => {

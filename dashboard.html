@@ -2183,7 +2183,7 @@
   : user.plan === 'trial' && !user.trialEndsAt
   ? 'Trial' // Show "Trial" without days if date not available
   : user.plan.charAt(0).toUpperCase() + user.plan.slice(1)}</span>
-          ${(user.plan === 'cancelled') ? `<a href="pricing-a.html" class="upgrade-btn">Reactivate</a>` : ''}
+          ${(user.plan === 'cancelled') ? `<a href="pricing.html" class="upgrade-btn">Reactivate</a>` : ''}
         </div>
       </div>`;
       
@@ -2546,7 +2546,7 @@
               <button class="popup-ok-btn" id="free-account-upgrade-popup-cta" style="margin-bottom: 0.5rem;">Start Free Trial</button>
               <button class="popup-cancel-btn" id="free-account-upgrade-popup-cancel" style="background: transparent; color: #6B7280; border: 1px solid #D1D5DB; margin-top: 0;">Maybe Later</button>
               <div style="margin-top: 0.75rem; text-align: center;">
-                <a href="pricing-a.html" style="color: #007BFF; text-decoration: none; font-size: 0.875rem;">Compare Plans</a>
+                <a href="pricing.html" style="color: #007BFF; text-decoration: none; font-size: 0.875rem;">Compare Plans</a>
               </div>
             </div>
           </div>
@@ -2615,7 +2615,7 @@
             ctaBtn.disabled = false;
             ctaBtn.textContent = 'Start Free Trial';
             // Fallback to pricing page only if activation fails
-            window.location.href = 'pricing-a.html';
+            window.location.href = 'pricing.html';
           }
         });
         
@@ -3449,7 +3449,7 @@
         }
 
         // Fallback to pricing if upgrade helper is unavailable.
-        window.location.href = `pricing-a.html?plan=${targetPlan}`;
+        window.location.href = `pricing.html?plan=${targetPlan}`;
       }
 
       // Attach click handlers to all locked upgrade buttons

@@ -3,8 +3,11 @@
 /dashboard-simple/   /dashboard-simple/index.html    200
 
 # Stripe checkout redirects (preserve query params)
-# NOTE: /pricing-a is handled by functions/pricing-a.js to prevent redirect loops
-# Do NOT add a redirect rule here for /pricing-a
+# NOTE: /pricing-a is handled by functions/pricing-a.js (301 to /pricing) and
+# /pricing is served by functions/pricing.js, preventing redirect loops.
+# Do NOT add redirect rules here for /pricing-a or /pricing
+/pricing-a.html   /pricing   301
+/pricing.html   /pricing   301
 
 # Auth routes - Firebase sends /auth/action but Cloudflare needs /auth/action/
 /auth/action   /auth/action/index.html   200

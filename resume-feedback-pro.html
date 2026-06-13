@@ -145,7 +145,7 @@
           }
 
           if (!allowedPlans.includes(plan)) {
-            window.location.href = 'pricing-a.html?plan=essential';
+            window.location.href = 'pricing.html?plan=essential';
             return;
           }
 
@@ -1314,7 +1314,7 @@
               <a href="login.html" class="btn-primary" style="text-decoration: none;">
                 Sign In
               </a>
-              <a href="pricing-a.html" class="btn-outline" style="text-decoration: none;">
+              <a href="pricing.html" class="btn-outline" style="text-decoration: none;">
                 View Pricing
               </a>
             </div>
@@ -1649,7 +1649,7 @@
         if (!isAuthenticated) {
           window.location.href = 'login.html';
         } else {
-          window.location.href = 'pricing-a.html?plan=essential';
+          window.location.href = 'pricing.html?plan=essential';
         }
       } else {
         // Access granted - clear plan pending flag and class
@@ -2499,7 +2499,7 @@
         window._currentLoadingOverlay = null;
       }
       // Fallback to pricing page with plan hint
-      window.location.href = `pricing-a.html?plan=${encodeURIComponent(plan)}`;
+      window.location.href = `pricing.html?plan=${encodeURIComponent(plan)}`;
     }
   };
   // Expose globally for inline onclick handlers
@@ -2589,7 +2589,7 @@
               window._currentLoadingOverlay = null;
             }
             // Fallback to pricing page if checkout fails
-            window.location.href = 'pricing-a.html';
+            window.location.href = 'pricing.html';
           }
         };
 
@@ -2619,7 +2619,7 @@
       } else if (message.includes('Usage limit') || message.includes('limit reached')) {
         message = message + ' Upgrade to unlock more features.';
         messageWasModified = true;
-        action = () => window.location.href = 'pricing-a.html';
+        action = () => window.location.href = 'pricing.html';
         actionLabel = 'View Pricing';
       } else if (message.includes('Rate limit')) {
         message = message + ' Please try again in a moment.';
@@ -2627,7 +2627,7 @@
       } else if (message.includes('Feature locked') || message.includes('upgrade')) {
         message = message;
         messageWasModified = true;
-        action = () => window.location.href = 'pricing-a.html';
+        action = () => window.location.href = 'pricing.html';
         actionLabel = 'Upgrade Now';
       } else if (message.includes('timeout') || message.includes('took too long')) {
         message = 'Our AI took too long to respond. Please try again or simplify your file.';
@@ -2816,7 +2816,7 @@
           openUpgradeModal();
         } else {
           // Fallback to pricing page
-          window.location.href = 'pricing-a.html';
+          window.location.href = 'pricing.html';
         }
         return;
       }
@@ -4206,7 +4206,7 @@
                 handleApiError(new Error('You have used your 1 free lifetime ATS score. Upgrade to continue scoring unlimited resumes.'));
                 // Redirect to pricing page after showing error
                 setTimeout(() => {
-                  window.location.href = 'pricing-a.html?plan=essential';
+                  window.location.href = 'pricing.html?plan=essential';
                 }, 2000);
                 return;
               }
@@ -4298,7 +4298,7 @@
                 handleApiError(new Error('You have used your 1 free lifetime ATS score. Upgrade to continue scoring unlimited resumes.'));
                 // Redirect to pricing page after showing error
                 setTimeout(() => {
-                  window.location.href = 'pricing-a.html?plan=essential';
+                  window.location.href = 'pricing.html?plan=essential';
                 }, 2000);
                 return;
               }
@@ -4567,7 +4567,7 @@
                                 window._currentLoadingOverlay = null;
                               }
                               // Fallback to pricing page if checkout fails
-                              window.location.href = 'pricing-a.html';
+                              window.location.href = 'pricing.html';
                             }
                           },
                           upgradeButtonText: 'Upgrade to Pro',

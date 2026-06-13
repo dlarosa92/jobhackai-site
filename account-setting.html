@@ -527,7 +527,7 @@
         <nav class="nav-links" role="navigation">
           <a href="https://jobhackai.io/">Home</a>
           <a href="#what-you-get">What You Get</a>
-          <a href="/pricing-a">Pricing</a>
+          <a href="/pricing">Pricing</a>
           <a href="https://jobhackai.io/blog">Blog</a>
           <a href="login.html">Login</a>
         </nav>
@@ -630,7 +630,7 @@
       </div>
       <!-- Actions Row -->
       <div class="settings-actions-row" style="display:flex; gap:1rem; margin-bottom:2.2rem; flex-wrap:wrap;">
-        <a href="pricing-a.html" class="btn-link" aria-label="Compare subscription plans">Compare Plans</a>
+        <a href="pricing.html" class="btn-link" aria-label="Compare subscription plans">Compare Plans</a>
         <a href="mailto:support@jobhackai.io?subject=Account%20Settings%20Support" class="btn-link" aria-label="Contact support via email">Contact Support</a>
         <button class="btn-outline-grey" type="button" data-action="logout">Log Out</button>
       </div>
@@ -940,7 +940,7 @@
               <div style="color:#6B7280;font-size:0.98rem;margin-top:0.2rem;">Limited features • Upgrade anytime</div>
             </div>
             <div class="subscription-action-row">
-              <a href="/pricing-a" class="btn-primary" style="text-decoration:none;display:inline-block;">View Plans</a>
+              <a href="/pricing" class="btn-primary" style="text-decoration:none;display:inline-block;">View Plans</a>
               <span class="plan-badge free">${planBadgeText[plan]}</span>
             </div>
           `;
@@ -1027,7 +1027,7 @@
         });
         return;
       }
-      window.location.href = 'pricing-a.html?plan=essential';
+      window.location.href = 'pricing.html?plan=essential';
     }
     
     // CRITICAL FIX: Define refreshPlanData function for upgradePlan callback
