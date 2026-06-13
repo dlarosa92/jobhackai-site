@@ -1622,12 +1622,19 @@
     // Note: This is now handled in the DOMContentLoaded function above
 
     // --- FEATURE MATRIX ---
+    // Repositioning: the prep tools are free for every signed-in user; the
+    // paid product is the Voice Mock Interview (tile appears when the feature
+    // flag is on; every account includes 1 free voice session).
+    const ALL_FREE_TOOLS = ["ats", "feedback", "interview", "rewriting", "coverLetter", "mockInterview", "linkedin", "voice"];
     const featureMatrix = {
-      free:     ["ats"],
-      trial:    ["ats", "feedback", "interview"],
-      essential:["ats", "feedback", "interview"],
-      pro:      ["ats", "feedback", "interview", "rewriting", "coverLetter", "mockInterview"],
-      premium:  ["ats", "feedback", "interview", "rewriting", "coverLetter", "mockInterview", "linkedin", "priorityReview"]
+      free:     ALL_FREE_TOOLS,
+      trial:    ALL_FREE_TOOLS,
+      essential: ALL_FREE_TOOLS,
+      pro:      ALL_FREE_TOOLS,
+      premium:  [...ALL_FREE_TOOLS, "priorityReview"],
+      weekly:   ALL_FREE_TOOLS,
+      monthly:  ALL_FREE_TOOLS,
+      pack:     ALL_FREE_TOOLS
     };
     // --- FEATURE DEFINITIONS ---
     const features = [
@@ -1668,10 +1675,17 @@
       },
       {
         key: "mockInterview",
-        title: "Mock Interviews",
-        desc: "Practice real-time mock interviews with AI feedback to refine your answers and delivery.",
-        action: "Upgrade to Unlock",
-        included: false
+        title: "Typed Mock Interview",
+        desc: "Practice answering interview questions in writing with AI scoring. Free with your account.",
+        action: "Start Mock Interview",
+        included: true
+      },
+      {
+        key: "voice",
+        title: "Voice Mock Interview",
+        desc: "A realistic spoken interview for your target role, with a scored report. Your first session is free.",
+        action: "Start Voice Interview",
+        included: true
       },
       {
         key: "linkedin",
@@ -2281,7 +2295,7 @@
       const orderedFeatures = [atsFeature, ...otherFeatures];
       for (const feature of orderedFeatures) {
         const isUnlocked = unlocked.includes(feature.key);
-        featuresHtml += `<div class="feature-card${isUnlocked ? '' : ' locked'}" data-feature-key="${feature.key}">`;
+        featuresHtml += `<div class="feature-card${isUnlocked ? '' : ' locked'}" data-feature-key="${feature.key}"${feature.key === 'voice' ? ' style="display:none"' : ''}>`;
         featuresHtml += `<div class="feature-title">${feature.title}</div>`;
         featuresHtml += `<div class="feature-desc">${feature.desc}</div>`;
         if (feature.key === 'ats') {
@@ -2318,11 +2332,12 @@
             featuresHtml += `<div class="usage-indicator" data-feature="coverLetters" data-plan="${user.plan}"></div>`;
           }
         } else if (isUnlocked && feature.key === 'mockInterview') {
-          // Mock Interviews: link for Pro and Premium
+          // Typed mock interview: free with signup
           featuresHtml += `<a href="mock-interview.html" class="btn-primary">Start Mock Interview</a>`;
-          if (user.plan === 'pro' || user.plan === 'premium') {
-            featuresHtml += `<div class="usage-indicator" data-feature="mockInterviews" data-plan="${user.plan}"></div>`;
-          }
+          featuresHtml += `<div class="usage-indicator" data-feature="mockInterviews" data-plan="${user.plan}"></div>`;
+        } else if (isUnlocked && feature.key === 'voice') {
+          // Voice mock interview: the paid product; tile revealed when the flag is on
+          featuresHtml += `<a href="voice-interview.html" class="btn-primary">Start Voice Interview</a>`;
         } else if (isUnlocked && feature.key === 'linkedin') {
           // LinkedIn Optimizer: link for Premium
           featuresHtml += `<a href=\"linkedin-optimizer.html\" class=\"btn-primary\">Optimize LinkedIn</a>`;
@@ -2340,6 +2355,17 @@
       }
       featuresHtml += '</div>';
       root.innerHTML = banner + featuresHtml;
+
+      // Voice tile only when VOICE_INTERVIEW_ENABLED is on (via /api/plan/me)
+      (async function revealVoiceTile() {
+        try {
+          const planData = await fetchSubscriptionStatus();
+          if (planData && planData.voice && planData.voice.enabled) {
+            const voiceCard = root.querySelector('[data-feature-key="voice"]');
+            if (voiceCard) voiceCard.style.display = '';
+          }
+        } catch (_) { /* flag off or fetch failed: tile stays hidden */ }
+      })();
       
       // Render usage indicators using shared component
       (async function renderUsageIndicators() {
