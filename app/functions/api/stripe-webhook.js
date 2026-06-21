@@ -217,6 +217,13 @@ export async function onRequest(context) {
         }
         const { granted, duplicate } = await grantPackCredits(env, uid, event.id);
         console.log(`✅ [WEBHOOK] Pack grant for ${uid}: granted=${granted}, duplicate=${duplicate}`);
+        if (!granted && !duplicate) {
+          // Grant failed unexpectedly (e.g. the user row could not be resolved).
+          // grantPackCredits already released the idempotency lock; return 5xx so
+          // Stripe retries rather than leaving a paid customer without credits.
+          console.error(`❌ [WEBHOOK] Pack grant failed for ${uid}; returning 500 for Stripe retry`);
+          return new Response('pack grant failed', { status: 500, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
+        }
         if (granted) {
           await invalidateBillingCaches(env, uid);
           let packAmount = 39;

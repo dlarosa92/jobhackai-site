@@ -118,9 +118,12 @@ export async function generateAndStoreScorecard(env, sessionId) {
       feature: 'voice_scorecard'
     }, env);
 
-    const content = result?.choices?.[0]?.message?.content;
-    if (!content) throw new Error('Empty scorecard response');
-    const scorecard = JSON.parse(content);
+    // callOpenAI returns the model text on result.content (see openai-client.js),
+    // matching how interview-questions/generate.js and mock-interview/score.js read it.
+    if (!result || !result.content) throw new Error('Empty scorecard response');
+    const scorecard = typeof result.content === 'string'
+      ? JSON.parse(result.content)
+      : result.content;
 
     await db.prepare(
       `UPDATE voice_sessions SET scorecard_json = ?, updated_at = datetime('now') WHERE id = ?`

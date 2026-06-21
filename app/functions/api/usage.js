@@ -1,5 +1,5 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
-import { getOrCreateUserByAuthId, isD1Available, getFeatureDailyUsage } from '../_lib/db.js';
+import { getOrCreateUserByAuthId, isD1Available, getFeatureDailyUsage, getMockInterviewMonthlyUsage } from '../_lib/db.js';
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -261,33 +261,28 @@ export async function onRequest(context) {
       }
     }
     
-    // Check mock interview usage (Pro: 20/month, Premium: daily limit 5)
-    if (plan !== 'premium' && env.JOBHACKAI_KV) { // 20/month cap applies to all plans except Premium
-      const now = new Date();
-      const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-      const mockInterviewUsageKey = `mockInterviewUsage:${uid}:${monthKey}`;
-      const mockInterviewUsed = await env.JOBHACKAI_KV.get(mockInterviewUsageKey);
-      usage.mockInterviews.used = mockInterviewUsed ? parseInt(mockInterviewUsed, 10) : 0;
-      usage.mockInterviews.limit = 20; // Monthly limit
-      usage.mockInterviews.remaining = Math.max(0, 20 - usage.mockInterviews.used);
-    } else if (plan === 'premium' && env.JOBHACKAI_KV) {
-      // Premium: check daily limit (5/day)
-      const today = new Date().toISOString().split('T')[0];
-      const dailyKey = `mockInterviewDaily:${uid}:${today}`;
-      const dailyUsed = await env.JOBHACKAI_KV.get(dailyKey);
-      usage.mockInterviews.used = dailyUsed ? parseInt(dailyUsed, 10) : 0;
-      usage.mockInterviews.limit = null; // Unlimited but soft limit
-      usage.mockInterviews.remaining = null;
-      
-      // Check cooldown (1 hour throttle)
-      const hourlyKey = `mockInterviewThrottle:${uid}:hour`;
-      const lastHourly = await env.JOBHACKAI_KV.get(hourlyKey);
-      if (lastHourly) {
-        const lastHourlyTime = parseInt(lastHourly, 10);
-        const timeSinceLastHourly = Date.now() - lastHourlyTime;
-        if (timeSinceLastHourly < 3600000) {
-          usage.mockInterviews.cooldown = Math.ceil((3600000 - timeSinceLastHourly) / 1000); // seconds
+    // Mock interview usage: read from D1 mock_interview_usage, the same source
+    // mock-interview/score.js enforces against (getMockInterviewMonthlyUsage /
+    // incrementMockInterviewMonthlyUsage). The old code read a KV key that
+    // nothing increments, so the dashboard always showed a full quota while the
+    // server was actually counting in D1. 20/month for every plan except
+    // Premium (unlimited), matching SESSION_LIMITS in score.js.
+    if (isD1Available(env)) {
+      try {
+        const d1User = await getOrCreateUserByAuthId(env, uid, userEmail);
+        if (d1User && d1User.id) {
+          const mockUsed = await getMockInterviewMonthlyUsage(env, d1User.id);
+          usage.mockInterviews.used = mockUsed;
+          if (plan === 'premium') {
+            usage.mockInterviews.limit = null;
+            usage.mockInterviews.remaining = null;
+          } else {
+            usage.mockInterviews.limit = 20;
+            usage.mockInterviews.remaining = Math.max(0, 20 - mockUsed);
+          }
         }
+      } catch (mockErr) {
+        console.warn('[USAGE] Mock interview usage read failed (non-blocking):', mockErr?.message || mockErr);
       }
     }
 

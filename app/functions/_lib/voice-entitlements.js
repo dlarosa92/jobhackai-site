@@ -254,5 +254,14 @@ export async function grantPackCredits(env, uid, eventId) {
      WHERE auth_id = ?`
   ).bind(PACK_SESSION_COUNT, expires, uid).run();
 
-  return { granted: (res?.meta?.changes ?? 0) === 1, duplicate: false };
+  const granted = (res?.meta?.changes ?? 0) === 1;
+  if (!granted) {
+    // The user row was missing (or the write affected nothing), so no credits
+    // were added. Release the idempotency lock we just took so a Stripe retry
+    // can re-attempt the grant instead of being skipped as a duplicate. The
+    // caller returns a 5xx so Stripe schedules that retry.
+    await db.prepare('DELETE FROM stripe_event_log WHERE event_id = ?')
+      .bind(eventId).run().catch(() => {});
+  }
+  return { granted, duplicate: false };
 }

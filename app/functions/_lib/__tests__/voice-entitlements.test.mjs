@@ -67,6 +67,10 @@ function fakeDb(state) {
       state.eventLog.add(binds[0]);
       return { run: { meta: { changes: 1 } } };
     }
+    if (q.startsWith('DELETE FROM stripe_event_log')) {
+      const had = state.eventLog.delete(binds[0]);
+      return { run: { meta: { changes: had ? 1 : 0 } } };
+    }
     if (q.includes('voice_sessions_remaining = voice_sessions_remaining + ?')) {
       const [count, expires, uid] = binds;
       const row = state.users.get(uid);
@@ -181,6 +185,23 @@ await test('pack grant: exactly 5 credits, ~90 day expiry, plan set for free use
   const expiresMs = new Date(row.pack_expires_at).getTime();
   const expectedMs = Date.now() + PACK_EXPIRY_DAYS * 86400000;
   assert.ok(Math.abs(expiresMs - expectedMs) < 60000, 'expiry should be ~90 days out');
+});
+
+await test('pack grant on a missing user row releases the lock so a retry can succeed', async () => {
+  const state = { users: new Map(), eventLog: new Set(), sessionCount: 0 };
+  const env = makeEnv(state);
+
+  // User row not created yet (e.g. getOrCreateUserByAuthId failed transiently)
+  const r1 = await grantPackCredits(env, 'ghost', 'evt_missing');
+  assert.equal(r1.granted, false);
+  assert.equal(r1.duplicate, false, 'a failed grant must NOT report as duplicate');
+  assert.equal(state.eventLog.has('evt_missing'), false, 'idempotency lock must be released for retry');
+
+  // Stripe retries; this time the row exists and the grant succeeds
+  state.users.set('ghost', userRow());
+  const r2 = await grantPackCredits(env, 'ghost', 'evt_missing');
+  assert.equal(r2.granted, true);
+  assert.equal(state.users.get('ghost').voice_sessions_remaining, PACK_SESSION_COUNT);
 });
 
 await test('pack grant is idempotent on replayed event ids', async () => {
