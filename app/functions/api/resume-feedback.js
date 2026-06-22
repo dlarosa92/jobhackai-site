@@ -163,7 +163,7 @@ export async function onRequest(context) {
     const isDevEnvironment = env.ENVIRONMENT === 'dev' && isDevOrigin;
     
     let plan = await getUserPlan(env, uid);
-    const allowedPlans = ['free', 'trial', 'essential', 'pro', 'premium'];
+    const allowedPlans = ['free', 'trial', 'essential', 'pro', 'premium', 'weekly', 'monthly', 'pack'];
     if (!allowedPlans.includes(plan)) {
       console.warn('[RESUME-FEEDBACK] Invalid plan detected, normalizing to free', { requestId, uid, plan });
       plan = 'free';
@@ -245,39 +245,13 @@ export async function onRequest(context) {
     }
 
     // Plan gating: always enforce from D1 (cache is just a performance hint)
-    if (effectivePlan === 'free') {
-      // Old behavior: block all free resume feedback, uncomment if you want to revert
-      return errorResponse(
-        'Resume Feedback is available in Trial, Essential, Pro, or Premium plans.',
-        403,
-        origin,
-        env,
-        requestId,
-        { upgradeRequired: true }
-      );
-      
-      /*
-      // Or if you want a limited free tier (one run), use:
-      if (!isD1Available(env))
-        return errorResponse('Cannot verify free usage; please try again or contact support.', 500, origin, env, requestId);
-      const db = getDb(env);
-      const d1User = await getOrCreateUserByAuthId(env, uid, userEmail);
-      if (!db || !d1User)
-        return errorResponse('Cannot verify free usage; please try again or contact support.', 500, origin, env, requestId);
-      const res = await db.prepare(`SELECT COUNT(*) as count FROM usage_events WHERE user_id = ? AND feature = 'resume_feedback'`).bind(d1User.id).first();
-      const d1FreeCount = res?.count || 0;
-      if (d1FreeCount >= 1) {
-        return errorResponse(
-          'You have used your one free feedback. Please upgrade!',
-          403,
-          origin,
-          env,
-          requestId,
-          { upgradeRequired: true }
-        );
-      }
-      // KV can be used for quick check/caching (never as authority)
-      */
+    // Repositioning: resume feedback is free for every signed-in user.
+    // Quota tiers: free and pack accounts use the Essential monthly quota;
+    // voice subscribers (weekly/monthly) get the Pro tier (throttle, no cap).
+    if (effectivePlan === 'free' || effectivePlan === 'pack') {
+      effectivePlan = 'essential';
+    } else if (effectivePlan === 'weekly' || effectivePlan === 'monthly') {
+      effectivePlan = 'pro';
     }
 
     // Parse request body

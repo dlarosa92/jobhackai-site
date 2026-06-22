@@ -5,6 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>html.auth-pending,html.plan-pending{visibility:hidden}</style>
+  <script>window.__JHA_ALLOW_PREVIEW__ = true; /* free tool: logged-out preview with signup gate */</script>
   <script src="js/static-auth-guard.js?v=20260125-1"></script>
   <script src="js/page-access-control.js?v=20260331-1"></script>
   <script>
@@ -52,7 +53,7 @@
       };
 
       var isAuthenticated = hasSameTabAuthEvidence();
-      var allowedPlans = ['trial', 'essential', 'pro', 'premium'];
+      var allowedPlans = ['free', 'trial', 'essential', 'pro', 'premium', 'weekly', 'monthly', 'pack']; // repositioning: free with signup
       window.__JOBHACKAI_RF_ALLOWED_PLANS__ = allowedPlans;
       var cachedPlan = localStorage.getItem('user-plan');
 
@@ -105,6 +106,13 @@
           var authConfirmed = realUser || (navAuth && navAuth.isAuthenticated) || isAuthenticated;
 
           if (!authConfirmed) {
+            if (window.__JHA_ALLOW_PREVIEW__) {
+              window.__JHA_PREVIEW_MODE__ = true;
+              document.documentElement.classList.remove('auth-pending');
+              document.documentElement.classList.remove('plan-pending');
+              try { document.dispatchEvent(new CustomEvent('jha-preview-mode')); } catch (_) {}
+              return;
+            }
             window.location.href = 'login.html';
             return;
           }
@@ -145,7 +153,7 @@
           }
 
           if (!allowedPlans.includes(plan)) {
-            window.location.href = 'pricing-a.html?plan=essential';
+            window.location.href = 'pricing.html?plan=essential';
             return;
           }
 
@@ -1254,7 +1262,7 @@
     // --- DEFERRED RE-VERIFICATION & PAGE ACCESS CONTROL ---
     // Delegated to shared page-access-control.js
     var _rfAccessOpts = {
-      allowedPlans: window.PageAccessControl ? window.PageAccessControl.PAID_PLANS : ['trial', 'essential', 'pro', 'premium'],
+      allowedPlans: ['free', 'trial', 'essential', 'pro', 'premium', 'weekly', 'monthly', 'pack'], // repositioning: free with signup
       logPrefix: '[RESUME-FEEDBACK]',
       onPlanChanged: function () { updateRfTileForPlan(); }
     };
@@ -1314,7 +1322,7 @@
               <a href="login.html" class="btn-primary" style="text-decoration: none;">
                 Sign In
               </a>
-              <a href="pricing-a.html" class="btn-outline" style="text-decoration: none;">
+              <a href="pricing.html" class="btn-outline" style="text-decoration: none;">
                 View Pricing
               </a>
             </div>
@@ -1541,7 +1549,7 @@
 
     // --- ACCESS CONTROL (Uses Navigation System) ---
     function waitForNavigationAndEnforceAccess() {
-      const allowedPlans = window.__JOBHACKAI_RF_ALLOWED_PLANS__ || ['trial', 'essential', 'pro', 'premium'];
+      const allowedPlans = window.__JOBHACKAI_RF_ALLOWED_PLANS__ || ['free', 'trial', 'essential', 'pro', 'premium', 'weekly', 'monthly', 'pack'];
       
       // Wait for navigation system to be ready
       if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {
@@ -1647,9 +1655,16 @@
       
       if (!isAuthenticated || !allowedPlans.includes(plan)) {
         if (!isAuthenticated) {
+          if (window.__JHA_PREVIEW_MODE__ || window.__JHA_ALLOW_PREVIEW__) {
+            window.__JHA_PREVIEW_MODE__ = true;
+            document.documentElement.classList.remove('auth-pending');
+            document.documentElement.classList.remove('plan-pending');
+            try { document.dispatchEvent(new CustomEvent('jha-preview-mode')); } catch (_) {}
+            return;
+          }
           window.location.href = 'login.html';
         } else {
-          window.location.href = 'pricing-a.html?plan=essential';
+          window.location.href = 'pricing.html?plan=essential';
         }
       } else {
         // Access granted - clear plan pending flag and class
@@ -2499,7 +2514,7 @@
         window._currentLoadingOverlay = null;
       }
       // Fallback to pricing page with plan hint
-      window.location.href = `pricing-a.html?plan=${encodeURIComponent(plan)}`;
+      window.location.href = `pricing.html?plan=${encodeURIComponent(plan)}`;
     }
   };
   // Expose globally for inline onclick handlers
@@ -2589,7 +2604,7 @@
               window._currentLoadingOverlay = null;
             }
             // Fallback to pricing page if checkout fails
-            window.location.href = 'pricing-a.html';
+            window.location.href = 'pricing.html';
           }
         };
 
@@ -2619,7 +2634,7 @@
       } else if (message.includes('Usage limit') || message.includes('limit reached')) {
         message = message + ' Upgrade to unlock more features.';
         messageWasModified = true;
-        action = () => window.location.href = 'pricing-a.html';
+        action = () => window.location.href = 'pricing.html';
         actionLabel = 'View Pricing';
       } else if (message.includes('Rate limit')) {
         message = message + ' Please try again in a moment.';
@@ -2627,7 +2642,7 @@
       } else if (message.includes('Feature locked') || message.includes('upgrade')) {
         message = message;
         messageWasModified = true;
-        action = () => window.location.href = 'pricing-a.html';
+        action = () => window.location.href = 'pricing.html';
         actionLabel = 'Upgrade Now';
       } else if (message.includes('timeout') || message.includes('took too long')) {
         message = 'Our AI took too long to respond. Please try again or simplify your file.';
@@ -2799,7 +2814,7 @@
       if (!rewrittenBox) return;
 
       // Entitlement check - Pro/Premium only
-      const allowedPlans = ['pro', 'premium'];
+      const allowedPlans = ['free', 'trial', 'essential', 'pro', 'premium', 'weekly', 'monthly', 'pack']; // repositioning: rewrite is free with signup
       let currentPlan = null;
       try {
         if (typeof getCurrentUserPlan === 'function') {
@@ -2816,7 +2831,7 @@
           openUpgradeModal();
         } else {
           // Fallback to pricing page
-          window.location.href = 'pricing-a.html';
+          window.location.href = 'pricing.html';
         }
         return;
       }
@@ -4206,7 +4221,7 @@
                 handleApiError(new Error('You have used your 1 free lifetime ATS score. Upgrade to continue scoring unlimited resumes.'));
                 // Redirect to pricing page after showing error
                 setTimeout(() => {
-                  window.location.href = 'pricing-a.html?plan=essential';
+                  window.location.href = 'pricing.html?plan=essential';
                 }, 2000);
                 return;
               }
@@ -4298,7 +4313,7 @@
                 handleApiError(new Error('You have used your 1 free lifetime ATS score. Upgrade to continue scoring unlimited resumes.'));
                 // Redirect to pricing page after showing error
                 setTimeout(() => {
-                  window.location.href = 'pricing-a.html?plan=essential';
+                  window.location.href = 'pricing.html?plan=essential';
                 }, 2000);
                 return;
               }
@@ -4567,7 +4582,7 @@
                                 window._currentLoadingOverlay = null;
                               }
                               // Fallback to pricing page if checkout fails
-                              window.location.href = 'pricing-a.html';
+                              window.location.href = 'pricing.html';
                             }
                           },
                           upgradeButtonText: 'Upgrade to Pro',
@@ -9871,5 +9886,6 @@
     </div>
   </footer>
   <script src="js/feedback-widget.js?v=20260303-1" defer></script>
+  <script src="js/voice-cta.js?v=20260613-1" defer></script>
 </body>
 </html>

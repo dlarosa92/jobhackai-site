@@ -67,9 +67,9 @@ export async function onRequest(context) {
     const cooldownSeconds = 45;
     const kvTtlSeconds = 75;
 
-    if (plan !== 'pro' && plan !== 'premium') {
+    if (!['free', 'trial', 'essential', 'pro', 'premium', 'weekly', 'monthly', 'pack'].includes(plan)) { // repositioning: free with signup
       return errorResponse(
-        'Resume Rewriting is available in Pro or Premium plans only.',
+        'Resume Rewriting requires a free JobHackAI account.',
         403,
         origin,
         env,

@@ -3,5 +3,8 @@
   "private": true,
   "dependencies": {
     "jose": "^5.0.0"
+  },
+  "scripts": {
+    "build:roles": "node marketing/scripts/build-role-pages.mjs"
   }
 }

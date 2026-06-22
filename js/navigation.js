@@ -250,7 +250,7 @@ const IS_DEV_OR_QA_HOST = APP_BASE_URL === 'https://dev.jobhackai.io' || APP_BAS
 const VISITOR_HOME_HREF = IS_DEV_OR_QA_HOST ? 'index.html' : 'https://jobhackai.io/';
 const VISITOR_BLOG_HREF = IS_DEV_OR_QA_HOST ? 'index.html#blog' : 'https://jobhackai.io/blog';
 const VISITOR_FEATURES_HREF = IS_DEV_OR_QA_HOST ? 'features.html' : 'https://jobhackai.io/features';
-const VISITOR_PRICING_HREF = `${APP_BASE_URL}/pricing-a`;
+const VISITOR_PRICING_HREF = `${APP_BASE_URL}/pricing`;
 const VISITOR_LOGO_HREF = IS_DEV_OR_QA_HOST ? '/' : 'https://jobhackai.io/';
 
 // Cross-domain cookie helpers — only read on the MARKETING site (not the app subdomain).
@@ -307,7 +307,7 @@ const AUTH_HANDOFF_QUERY_PLAN = 'jhai_plan';
 const AUTH_HANDOFF_QUERY_TS = 'jhai_ts';
 const AUTH_HANDOFF_SESSION_KEY = 'jhai_auth_handoff';
 const AUTH_HANDOFF_MAX_AGE_MS = 5 * 60 * 1000;
-const AUTH_HANDOFF_ALLOWED_PLANS = ['free', 'trial', 'essential', 'pro', 'premium', 'pending'];
+const AUTH_HANDOFF_ALLOWED_PLANS = ['free', 'trial', 'essential', 'pro', 'premium', 'pending', 'weekly', 'monthly', 'pack'];
 
 function getHostnameSafe() {
   try { return (window.location.hostname || '').toLowerCase(); } catch (_) { return ''; }
@@ -1141,7 +1141,7 @@ function getAuthState() {
 
       // Validate plan values are in allowed list
       // SECURITY FIX: Include 'pending' as legitimate plan state for trial users waiting for webhook confirmation
-      const allowedPlans = ['free', 'trial', 'essential', 'pro', 'premium', 'visitor', 'pending'];
+      const allowedPlans = ['free', 'trial', 'essential', 'pro', 'premium', 'visitor', 'pending', 'weekly', 'monthly', 'pack'];
       // Prefer cookie/URL-handoff plan when present. On marketing hosts this is the
       // authoritative cross-domain signal during early hydration, while localStorage
       // may still contain stale defaults like "free" or "visitor".
@@ -1377,30 +1377,30 @@ const PLANS = {
     name: 'Free',
     color: '#6B7280',
     bgColor: '#F3F4F6',
-    icon: '🔒',
-    features: ['ats'],
-    description: '1 ATS score per month'
+    icon: '🆓',
+    features: ['ats', 'feedback', 'interview', 'rewriting', 'coverLetter', 'mockInterview', 'linkedin'],
+    description: 'All prep tools free, 1 voice interview included'
   },
   trial: {
     name: 'Trial',
     color: '#FF9100',
     bgColor: '#FFF7E6',
     icon: '⏰',
-    features: ['ats', 'feedback', 'interview']
+    features: ['ats', 'feedback', 'interview', 'rewriting', 'coverLetter', 'mockInterview', 'linkedin']
   },
   essential: {
     name: 'Essential',
     color: '#0077B5',
     bgColor: '#E3F2FD',
     icon: '📋',
-    features: ['ats', 'feedback', 'interview']
+    features: ['ats', 'feedback', 'interview', 'rewriting', 'coverLetter', 'mockInterview', 'linkedin']
   },
   pro: {
     name: 'Pro',
     color: '#388E3C',
     bgColor: '#E8F5E9',
     icon: '✅',
-    features: ['ats', 'feedback', 'interview', 'rewriting', 'coverLetter', 'mockInterview']
+    features: ['ats', 'feedback', 'interview', 'rewriting', 'coverLetter', 'mockInterview', 'linkedin']
   },
   premium: {
     name: 'Premium',
@@ -1408,6 +1408,27 @@ const PLANS = {
     bgColor: '#FFEBEE',
     icon: '⭐',
     features: ['ats', 'feedback', 'interview', 'rewriting', 'coverLetter', 'mockInterview', 'linkedin', 'priorityReview']
+  },
+  weekly: {
+    name: 'Weekly Pass',
+    color: '#00695C',
+    bgColor: '#E0F2F1',
+    icon: '🎤',
+    features: ['ats', 'feedback', 'interview', 'rewriting', 'coverLetter', 'mockInterview', 'linkedin', 'voice']
+  },
+  monthly: {
+    name: 'Monthly',
+    color: '#00695C',
+    bgColor: '#E0F2F1',
+    icon: '🎤',
+    features: ['ats', 'feedback', 'interview', 'rewriting', 'coverLetter', 'mockInterview', 'linkedin', 'voice']
+  },
+  pack: {
+    name: 'Interview Pack',
+    color: '#00695C',
+    bgColor: '#E0F2F1',
+    icon: '🎟️',
+    features: ['ats', 'feedback', 'interview', 'rewriting', 'coverLetter', 'mockInterview', 'linkedin', 'voice']
   }
 };
 
@@ -1470,6 +1491,37 @@ if (typeof document !== 'undefined') {
 }
 
 // --- NAVIGATION CONFIGURATION ---
+// Repositioning: every signed-in plan sees the full prep-tool nav (the tools
+// are free with signup); the paid product is the Voice Mock Interview.
+const signedInNavItems = () => ([
+  { text: 'Home', href: VISITOR_HOME_HREF },
+  { text: 'Dashboard', href: APP_BASE_URL + '/dashboard.html' },
+  { text: 'Blog', href: VISITOR_BLOG_HREF },
+  {
+    text: 'Resume Tools',
+    isDropdown: true,
+    items: [
+      { text: 'Resume Feedback', href: APP_BASE_URL + '/resume-feedback-pro.html' },
+      { text: 'Cover Letter', href: APP_BASE_URL + '/cover-letter-generator.html' },
+    ]
+  },
+  {
+    text: 'Interview Prep',
+    isDropdown: true,
+    items: [
+      { text: 'Interview Questions', href: APP_BASE_URL + '/interview-questions.html' },
+      { text: 'Mock Interviews', href: APP_BASE_URL + '/mock-interview.html' },
+    ]
+  },
+  { text: 'LinkedIn Optimizer', href: APP_BASE_URL + '/linkedin-optimizer.html' }
+]);
+const signedInUserNav = () => ({
+  menuItems: [
+    { text: 'Account', href: APP_BASE_URL + '/account-setting.html' },
+    { text: 'Logout', href: '#', action: 'logout' }
+  ]
+});
+
 const NAVIGATION_CONFIG = {
   // Logged-out / Visitor
   visitor: {
@@ -1477,120 +1529,22 @@ const NAVIGATION_CONFIG = {
       { text: 'Home', href: VISITOR_HOME_HREF },
       { text: 'Blog', href: VISITOR_BLOG_HREF },
       { text: 'Features', href: VISITOR_FEATURES_HREF },
-      { text: 'Pricing', href: `${APP_BASE_URL}/pricing-a` },
+      { text: 'Pricing', href: `${APP_BASE_URL}/pricing` },
       { text: 'Login', href: `${APP_BASE_URL}/login` }
     ],
-    cta: { text: 'Start Free Trial', href: `${APP_BASE_URL}/login?plan=trial`, isCTA: true, planId: 'trial' }
+    cta: { text: 'Sign Up Free', href: `${APP_BASE_URL}/login?mode=signup`, isCTA: true, planId: 'free' }
   },
-  // Free Account (no plan)
-  free: {
-    navItems: [
-      { text: 'Home', href: VISITOR_HOME_HREF },
-      { text: 'Dashboard', href: APP_BASE_URL + '/dashboard.html' },
-      { text: 'Blog', href: VISITOR_BLOG_HREF },
-      { text: 'Resume Feedback', href: APP_BASE_URL + '/resume-feedback-pro.html', locked: true },
-      { text: 'Interview Questions', href: APP_BASE_URL + '/interview-questions.html', locked: true }
-    ],
-    userNav: {
-      menuItems: [
-        { text: 'Account', href: APP_BASE_URL + '/account-setting.html' },
-        { text: 'Logout', href: '#', action: 'logout' }
-      ]
-    }
-  },
-  // 3-Day Trial
-  trial: {
-    navItems: [
-      { text: 'Home', href: VISITOR_HOME_HREF },
-      { text: 'Dashboard', href: APP_BASE_URL + '/dashboard.html' },
-      { text: 'Blog', href: VISITOR_BLOG_HREF },
-      { text: 'Resume Feedback', href: APP_BASE_URL + '/resume-feedback-pro.html' },
-      { text: 'Interview Questions', href: APP_BASE_URL + '/interview-questions.html' }
-    ],
-    userNav: {
-      menuItems: [
-        { text: 'Account', href: APP_BASE_URL + '/account-setting.html' },
-        { text: 'Logout', href: '#', action: 'logout' }
-      ]
-    }
-  },
-  // Basic $29
-  essential: {
-    navItems: [
-      { text: 'Home', href: VISITOR_HOME_HREF },
-      { text: 'Dashboard', href: APP_BASE_URL + '/dashboard.html' },
-      { text: 'Blog', href: VISITOR_BLOG_HREF },
-      { text: 'Resume Feedback', href: APP_BASE_URL + '/resume-feedback-pro.html' },
-      { text: 'Interview Questions', href: APP_BASE_URL + '/interview-questions.html' }
-    ],
-    userNav: {
-      menuItems: [
-        { text: 'Account', href: APP_BASE_URL + '/account-setting.html' },
-        { text: 'Logout', href: '#', action: 'logout' }
-      ]
-    }
-  },
-  // Pro $59
-  pro: {
-    navItems: [
-      { text: 'Home', href: VISITOR_HOME_HREF },
-      { text: 'Dashboard', href: APP_BASE_URL + '/dashboard.html' },
-      { text: 'Blog', href: VISITOR_BLOG_HREF },
-      {
-        text: 'Resume Tools',
-        isDropdown: true,
-        items: [
-          { text: 'Resume Feedback', href: APP_BASE_URL + '/resume-feedback-pro.html' },
-          { text: 'Cover Letter', href: APP_BASE_URL + '/cover-letter-generator.html' },
-        ]
-      },
-      {
-        text: 'Interview Prep',
-        isDropdown: true,
-        items: [
-          { text: 'Interview Questions', href: APP_BASE_URL + '/interview-questions.html' },
-          { text: 'Mock Interviews', href: APP_BASE_URL + '/mock-interview.html' },
-        ]
-      }
-    ],
-    userNav: {
-      menuItems: [
-        { text: 'Account', href: APP_BASE_URL + '/account-setting.html' },
-        { text: 'Logout', href: '#', action: 'logout' }
-      ]
-    }
-  },
-  // Premium $99
-  premium: {
-    navItems: [
-      { text: 'Home', href: VISITOR_HOME_HREF },
-      { text: 'Dashboard', href: APP_BASE_URL + '/dashboard.html' },
-      { text: 'Blog', href: VISITOR_BLOG_HREF },
-      {
-        text: 'Resume Tools',
-        isDropdown: true,
-        items: [
-          { text: 'Resume Feedback', href: APP_BASE_URL + '/resume-feedback-pro.html' },
-          { text: 'Cover Letter', href: APP_BASE_URL + '/cover-letter-generator.html' },
-        ]
-      },
-      {
-        text: 'Interview Prep',
-        isDropdown: true,
-        items: [
-          { text: 'Interview Questions', href: APP_BASE_URL + '/interview-questions.html' },
-          { text: 'Mock Interviews', href: APP_BASE_URL + '/mock-interview.html' },
-        ]
-      },
-      { text: 'LinkedIn Optimizer', href: APP_BASE_URL + '/linkedin-optimizer.html' }
-    ],
-    userNav: {
-      menuItems: [
-        { text: 'Account', href: APP_BASE_URL + '/account-setting.html' },
-        { text: 'Logout', href: '#', action: 'logout' }
-      ]
-    }
-  }
+  // Free account: full prep-tool access (voice interview is the paid product)
+  free: { navItems: signedInNavItems(), userNav: signedInUserNav() },
+  // Voice plans (repositioning)
+  weekly: { navItems: signedInNavItems(), userNav: signedInUserNav() },
+  monthly: { navItems: signedInNavItems(), userNav: signedInUserNav() },
+  pack: { navItems: signedInNavItems(), userNav: signedInUserNav() },
+  // Legacy plans (grandfathered)
+  trial: { navItems: signedInNavItems(), userNav: signedInUserNav() },
+  essential: { navItems: signedInNavItems(), userNav: signedInUserNav() },
+  pro: { navItems: signedInNavItems(), userNav: signedInUserNav() },
+  premium: { navItems: signedInNavItems(), userNav: signedInUserNav() }
 };
 
 const CTA_PLAN_METADATA = {
@@ -1609,6 +1563,18 @@ const CTA_PLAN_METADATA = {
   premium: {
     planName: 'Premium Plan',
     price: '$99/mo'
+  },
+  weekly: {
+    planName: 'Weekly Pass',
+    price: '$17/wk'
+  },
+  monthly: {
+    planName: 'Monthly Plan',
+    price: '$34/mo'
+  },
+  pack: {
+    planName: 'Interview Pack',
+    price: '$39 one time'
   }
 };
 
@@ -1894,7 +1860,7 @@ function showUpgradeModal(targetPlan = 'premium') {
       window.upgradePlan(targetPlan, { source: 'nav-upgrade', returnUrl: window.location.href });
       return;
     }
-    window.location.href = `${APP_BASE_URL}/pricing-a?plan=${encodeURIComponent(targetPlan)}`;
+    window.location.href = `${APP_BASE_URL}/pricing?plan=${encodeURIComponent(targetPlan)}`;
   });
   // Close on background click
   modal.addEventListener('click', (e) => {

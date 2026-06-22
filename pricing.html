@@ -1,0 +1,544 @@
+<!-- DO NOT EDIT HEADER OR FOOTER PER-PAGE. Use canonical snippet from docs/snippets.md. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JobHackAI Pricing: Voice Mock Interviews with Real Feedback</title>
+  <meta name="description" content="Practice your interview out loud with an AI interviewer and get a scored report. First voice interview free. Weekly Pass $17, Monthly $34, or a 5 session Interview Pack for $39. All prep tools free.">
+  <link rel="canonical" href="https://app.jobhackai.io/pricing">
+  <link rel="icon" type="image/png" sizes="128x128" href="assets/jobhackai_icon_Favicon_128.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/jobhackai_apple_touch_icon_180.png">
+  <script src="js/dynamic-favicon.js?v=20260418-3" defer></script>
+  <script src="js/cookie-consent.js?v=20260613-1" defer></script>
+
+  <!-- Design tokens & global styles -->
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/main.css">
+
+  <!-- Component overrides -->
+  <link rel="stylesheet" href="css/header.css">
+  <link rel="stylesheet" href="css/footer.css">
+
+  <!-- Structured Data: SoftwareApplication with offers -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "JobHackAI",
+    "url": "https://app.jobhackai.io/",
+    "operatingSystem": "Web",
+    "applicationCategory": "BusinessApplication",
+    "description": "AI interview prep platform: realistic voice mock interviews with detailed feedback, plus free resume feedback, resume rewrite, cover letter, and interview question tools.",
+    "offers": [
+      {
+        "@type": "Offer",
+        "name": "Free",
+        "price": "0",
+        "priceCurrency": "USD",
+        "description": "All prep tools free with signup, includes 1 voice mock interview",
+        "url": "https://app.jobhackai.io/pricing"
+      },
+      {
+        "@type": "Offer",
+        "name": "Weekly Pass",
+        "price": "17.00",
+        "priceCurrency": "USD",
+        "description": "Unlimited voice mock interviews, billed weekly, cancel anytime",
+        "url": "https://app.jobhackai.io/pricing"
+      },
+      {
+        "@type": "Offer",
+        "name": "Monthly",
+        "price": "34.00",
+        "priceCurrency": "USD",
+        "description": "Unlimited voice mock interviews, billed monthly",
+        "url": "https://app.jobhackai.io/pricing"
+      },
+      {
+        "@type": "Offer",
+        "name": "Interview Pack",
+        "price": "39.00",
+        "priceCurrency": "USD",
+        "description": "5 voice mock interview sessions, valid 90 days, one time payment",
+        "url": "https://app.jobhackai.io/pricing"
+      }
+    ]
+  }
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "How realistic is the voice mock interview?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "You speak with an AI interviewer in a live voice conversation. It asks questions tailored to your target role and job description, listens to your answers, and asks natural follow ups. Sessions run up to 20 minutes, like a real screening interview."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What does the feedback cover?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "After each session you get a scorecard covering communication, answer structure, content depth, and role fit. It highlights your top strength, your most important improvement area, and specific moments from your answers. You also get the full transcript."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Which tools are free?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "The interview question generator, resume feedback and rewrite, cover letter generator, and typed mock interview are all free with a JobHackAI account. Every account also includes 1 full voice mock interview."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What happens after my free voice interview?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "You see a partial scorecard with your top strength and one improvement area. The full report, transcript, and further sessions require a plan: the Weekly Pass, Monthly, or the Interview Pack."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I cancel anytime?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. You can cancel the Weekly Pass or Monthly plan anytime from your billing portal. You keep access until the end of the period you paid for. The Interview Pack is a one time purchase, so there is nothing to cancel."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Do you offer refunds?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "If something went wrong with your purchase, email support@jobhackai.io and we will sort it out. Subscriptions can always be cancelled so you are never billed again."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is my interview data private?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. Your sessions, transcripts, and reports are private to your account. You can export or delete your data anytime from account settings. Payments are processed by Stripe, and we never see your card number."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does it work on my phone?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. The voice interview runs in the browser on desktop and mobile. No app install. You just need a microphone and a quiet room."
+        }
+      }
+    ]
+  }
+  </script>
+
+  <style>
+    /* Voice pricing page styles (scoped, mobile first) */
+    .vp-main { background: var(--color-bg, #F9FAFB); }
+    .vp-section { max-width: 1080px; margin: 0 auto; padding: 2.5rem 1.25rem; }
+    .vp-hero { text-align: center; padding-top: 3rem; }
+    .vp-hero h1 { font-size: 2rem; line-height: 1.2; color: var(--color-text, #1F2937); margin: 0 0 0.75rem; }
+    .vp-hero p { font-size: 1.1rem; color: #4B5563; max-width: 620px; margin: 0 auto 1.5rem; }
+    .vp-hero .vp-hero-cta { display: inline-block; background: var(--color-cta, #00E676); color: #1F2937; font-weight: 700; padding: 0.85rem 2rem; border-radius: 8px; text-decoration: none; }
+    .vp-hero .vp-hero-sub { display: block; margin-top: 0.75rem; font-size: 0.95rem; color: #6B7280; }
+
+    .vp-h2 { text-align: center; font-size: 1.5rem; color: #1F2937; margin: 0 0 1.5rem; }
+
+    /* Comparison table */
+    .vp-compare-wrap { overflow-x: auto; }
+    .vp-compare { width: 100%; border-collapse: collapse; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .vp-compare th, .vp-compare td { padding: 0.8rem 1rem; text-align: center; border-bottom: 1px solid #E5E7EB; font-size: 0.95rem; }
+    .vp-compare th { background: #F3F4F6; color: #1F2937; }
+    .vp-compare td:first-child, .vp-compare th:first-child { text-align: left; font-weight: 500; }
+    .vp-compare .vp-yes { color: #00897B; font-weight: 700; }
+    .vp-compare .vp-no { color: #9CA3AF; }
+    .vp-compare .vp-note { font-size: 0.85rem; color: #4B5563; }
+
+    /* Plan cards */
+    .vp-cards { display: grid; grid-template-columns: 1fr; gap: 1.25rem; align-items: stretch; }
+    @media (min-width: 760px) { .vp-cards { grid-template-columns: 1fr 1.15fr 1fr; align-items: center; } }
+    .vp-card { background: #fff; border: 1px solid #E5E7EB; border-radius: 12px; padding: 1.5rem; display: flex; flex-direction: column; box-shadow: 0 1px 3px rgba(0,0,0,0.06); position: relative; }
+    .vp-card h3 { margin: 0 0 0.25rem; font-size: 1.15rem; color: #1F2937; }
+    .vp-card .vp-job { font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: #00897B; margin-bottom: 0.5rem; }
+    .vp-card .vp-price { font-size: 2rem; font-weight: 800; color: #1F2937; }
+    .vp-card .vp-price span { font-size: 0.95rem; font-weight: 500; color: #6B7280; }
+    .vp-card ul { list-style: none; padding: 0; margin: 1rem 0 1.5rem; color: #374151; font-size: 0.95rem; }
+    .vp-card ul li { padding: 0.3rem 0 0.3rem 1.4rem; position: relative; }
+    .vp-card ul li::before { content: "✓"; position: absolute; left: 0; color: #00897B; font-weight: 700; }
+    .vp-card .vp-buy { margin-top: auto; background: #1F2937; color: #fff; font-weight: 700; border: 0; border-radius: 8px; padding: 0.8rem 1rem; cursor: pointer; font-size: 1rem; }
+    .vp-card .vp-buy:hover { background: #111827; }
+    .vp-card.vp-popular { border: 2px solid var(--color-cta, #00E676); box-shadow: 0 6px 18px rgba(0,0,0,0.10); }
+    @media (min-width: 760px) { .vp-card.vp-popular { transform: scale(1.04); } }
+    .vp-card.vp-popular .vp-buy { background: var(--color-cta, #00E676); color: #1F2937; }
+    .vp-badge { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: var(--color-cta, #00E676); color: #1F2937; font-size: 0.75rem; font-weight: 700; padding: 0.2rem 0.8rem; border-radius: 999px; white-space: nowrap; }
+    .vp-free-note { text-align: center; margin-top: 1.25rem; color: #4B5563; font-size: 0.95rem; }
+    .vp-free-note a { color: #00897B; font-weight: 600; }
+
+    /* How it works */
+    .vp-steps { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+    @media (min-width: 760px) { .vp-steps { grid-template-columns: 1fr 1fr 1fr; } }
+    .vp-step { background: #fff; border: 1px solid #E5E7EB; border-radius: 12px; padding: 1.25rem; }
+    .vp-step .vp-step-num { display: inline-flex; width: 2rem; height: 2rem; border-radius: 50%; background: #E0F2F1; color: #00695C; font-weight: 700; align-items: center; justify-content: center; margin-bottom: 0.6rem; }
+    .vp-step h3 { margin: 0 0 0.4rem; font-size: 1.05rem; color: #1F2937; }
+    .vp-step p { margin: 0; color: #4B5563; font-size: 0.95rem; }
+
+    /* FAQ */
+    .vp-faq { max-width: 760px; margin: 0 auto; }
+    .vp-faq details { background: #fff; border: 1px solid #E5E7EB; border-radius: 10px; padding: 0.9rem 1.1rem; margin-bottom: 0.6rem; }
+    .vp-faq summary { font-weight: 600; color: #1F2937; cursor: pointer; }
+    .vp-faq p { color: #4B5563; margin: 0.6rem 0 0; font-size: 0.95rem; }
+
+    /* Trust strip */
+    .vp-trust { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; text-align: center; color: #4B5563; font-size: 0.95rem; padding-bottom: 3rem; }
+    .vp-trust span { background: #fff; border: 1px solid #E5E7EB; border-radius: 999px; padding: 0.5rem 1.1rem; }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header class="site-header">
+    <div class="container">
+      <a href="https://jobhackai.io/" class="nav-logo" aria-label="Go to homepage">
+        <svg width="24" height="24" fill="none" stroke="#1F2937" stroke-width="2" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="7" width="18" height="13" rx="2"/>
+          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/>
+        </svg>
+        <span>JOBHACKAI<sup>&trade;</sup></span>
+      </a>
+      <div class="nav-group">
+        <nav class="nav-links" role="navigation">
+          <!-- Navigation will be dynamically populated by navigation.js -->
+        </nav>
+      </div>
+      <button class="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+  </header>
+  <nav class="mobile-nav" id="mobileNav">
+    <!-- Mobile navigation will be dynamically populated by navigation.js -->
+  </nav>
+  <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
+  <script src="js/mobile-menu.js?v=20250115-1" defer></script>
+
+  <main class="vp-main">
+    <!-- Hero -->
+    <section class="vp-section vp-hero">
+      <h1>Walk into your interview having already done it.</h1>
+      <p>JobHackAI runs a realistic voice mock interview for your exact role. You talk, it listens, and you get a scored report with your strengths, your fixes, and a full transcript.</p>
+      <a class="vp-hero-cta" href="login.html?mode=signup">Try your first voice interview free</a>
+      <span class="vp-hero-sub">Free account required. No card needed for your first session.</span>
+    </section>
+
+    <!-- Free vs Pro comparison -->
+    <section class="vp-section">
+      <h2 class="vp-h2">Free with your account vs Pro</h2>
+      <div class="vp-compare-wrap">
+        <table class="vp-compare" role="table" aria-label="Free vs Pro comparison">
+          <thead>
+            <tr>
+              <th>What you get</th>
+              <th>Free</th>
+              <th>Pro</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>ATS resume score</td><td class="vp-yes">✓</td><td class="vp-yes">✓</td></tr>
+            <tr><td>Resume feedback and rewrite</td><td class="vp-yes">✓</td><td class="vp-yes">✓</td></tr>
+            <tr><td>Cover letter generator</td><td class="vp-yes">✓</td><td class="vp-yes">✓</td></tr>
+            <tr><td>Interview question generator</td><td class="vp-yes">✓</td><td class="vp-yes">✓</td></tr>
+            <tr><td>Typed mock interview</td><td class="vp-yes">✓</td><td class="vp-yes">✓</td></tr>
+            <tr><td>Voice mock interview</td><td class="vp-note">1 full session</td><td class="vp-note">Unlimited sessions</td></tr>
+            <tr><td>Scorecard and feedback report</td><td class="vp-note">Partial after your free session</td><td class="vp-note">Full report, every session</td></tr>
+            <tr><td>Interview transcripts</td><td class="vp-no">✕</td><td class="vp-yes">✓</td></tr>
+            <tr><td>Progress tracking across sessions</td><td class="vp-no">✕</td><td class="vp-yes">✓</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Plan cards -->
+    <section class="vp-section" id="plans">
+      <h2 class="vp-h2">Pick the plan that fits your week</h2>
+      <div class="vp-cards">
+        <div class="vp-card">
+          <div class="vp-job">Interview this week</div>
+          <h3>Weekly Pass</h3>
+          <div class="vp-price">$17 <span>per week</span></div>
+          <ul>
+            <li>Unlimited voice interviews</li>
+            <li>Full scorecards and transcripts</li>
+            <li>Cancel anytime</li>
+          </ul>
+          <button class="vp-buy" data-plan="weekly" data-cta="pricing-card-weekly">Get the Weekly Pass</button>
+        </div>
+        <div class="vp-card vp-popular">
+          <div class="vp-badge">Most popular</div>
+          <div class="vp-job">Active search</div>
+          <h3>Monthly</h3>
+          <div class="vp-price">$34 <span>per month</span></div>
+          <ul>
+            <li>Unlimited voice interviews</li>
+            <li>Full scorecards and transcripts</li>
+            <li>Progress tracking across sessions</li>
+            <li>Cancel anytime</li>
+          </ul>
+          <button class="vp-buy" data-plan="monthly" data-cta="pricing-card-monthly">Get Monthly</button>
+        </div>
+        <div class="vp-card">
+          <div class="vp-job">One big interview</div>
+          <h3>Interview Pack</h3>
+          <div class="vp-price">$39 <span>one time</span></div>
+          <ul>
+            <li>5 voice interview sessions</li>
+            <li>Full scorecards and transcripts</li>
+            <li>Valid for 90 days</li>
+            <li>No subscription</li>
+          </ul>
+          <button class="vp-buy" data-plan="pack" data-cta="pricing-card-pack">Get the Pack</button>
+        </div>
+      </div>
+      <p class="vp-free-note">Just exploring? The resume, cover letter, and interview question tools are <a href="login.html?mode=signup">free with an account</a>, and your first voice interview is on us.</p>
+    </section>
+
+    <!-- How it works -->
+    <section class="vp-section">
+      <h2 class="vp-h2">How it works</h2>
+      <div class="vp-steps">
+        <div class="vp-step">
+          <span class="vp-step-num">1</span>
+          <h3>Pick your role</h3>
+          <p>Choose your target role and seniority. Paste the job description if you have one. The interviewer preps for it.</p>
+        </div>
+        <div class="vp-step">
+          <span class="vp-step-num">2</span>
+          <h3>Talk it out</h3>
+          <p>Up to 20 minutes of live voice interview. Real questions, natural follow ups, no script in front of you.</p>
+        </div>
+        <div class="vp-step">
+          <span class="vp-step-num">3</span>
+          <h3>Get your scorecard</h3>
+          <p>See what worked and what to fix, with a full transcript. Run it again until the answers feel automatic.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="vp-section">
+      <h2 class="vp-h2">Questions, answered</h2>
+      <div class="vp-faq">
+        <details>
+          <summary>How realistic is the voice mock interview?</summary>
+          <p>You speak with an AI interviewer in a live voice conversation. It asks questions tailored to your target role and job description, listens to your answers, and asks natural follow ups. Sessions run up to 20 minutes, like a real screening interview.</p>
+        </details>
+        <details>
+          <summary>What does the feedback cover?</summary>
+          <p>After each session you get a scorecard covering communication, answer structure, content depth, and role fit. It highlights your top strength, your most important improvement area, and specific moments from your answers. You also get the full transcript.</p>
+        </details>
+        <details>
+          <summary>Which tools are free?</summary>
+          <p>The interview question generator, resume feedback and rewrite, cover letter generator, and typed mock interview are all free with a JobHackAI account. Every account also includes 1 full voice mock interview.</p>
+        </details>
+        <details>
+          <summary>What happens after my free voice interview?</summary>
+          <p>You see a partial scorecard with your top strength and one improvement area. The full report, transcript, and further sessions require a plan: the Weekly Pass, Monthly, or the Interview Pack.</p>
+        </details>
+        <details>
+          <summary>Can I cancel anytime?</summary>
+          <p>Yes. You can cancel the Weekly Pass or Monthly plan anytime from your billing portal. You keep access until the end of the period you paid for. The Interview Pack is a one time purchase, so there is nothing to cancel.</p>
+        </details>
+        <details>
+          <summary>Do you offer refunds?</summary>
+          <p>If something went wrong with your purchase, email support@jobhackai.io and we will sort it out. Subscriptions can always be cancelled so you are never billed again.</p>
+        </details>
+        <details>
+          <summary>Is my interview data private?</summary>
+          <p>Yes. Your sessions, transcripts, and reports are private to your account. You can export or delete your data anytime from account settings. Payments are processed by Stripe, and we never see your card number.</p>
+        </details>
+        <details>
+          <summary>Does it work on my phone?</summary>
+          <p>Yes. The voice interview runs in the browser on desktop and mobile. No app install. You just need a microphone and a quiet room.</p>
+        </details>
+      </div>
+    </section>
+
+    <!-- Trust strip -->
+    <section class="vp-trust">
+      <span>Cancel anytime</span>
+      <span>Secure checkout via Stripe</span>
+      <span>First voice interview free</span>
+      <span>Delete your data anytime</span>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="site-footer">
+    <div class="footer-container">
+      <div class="footer-brand">
+        <svg class="footer-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="7" width="18" height="13" rx="2" stroke="#1F2937" stroke-width="2"/>
+          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2" stroke="#1F2937" stroke-width="2"/>
+        </svg>
+        <span class="footer-name">JOBHACKAI<sup>&trade;</sup></span>
+      </div>
+      <div class="footer-legal">
+        <p>© 2026 JobHackAI. All rights reserved.</p>
+      </div>
+      <div class="footer-links">
+        <a href="help.html">Help</a>
+        <a href="privacy.html">Privacy</a>
+        <a href="terms.html">Terms</a>
+        <a href="cookies.html">Cookies</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Load Firebase auth modules -->
+  <script src="js/plan-cache.js"></script>
+  <script src="js/firebase-config.js" type="module"></script>
+  <script src="js/firebase-auth.js?v=20260207-2" type="module"></script>
+  <!-- Load navigation system -->
+  <script src="js/auth-persistence.js"></script>
+  <script src="js/navigation.js?v=20260208-1" defer></script>
+  <script src="js/universal-logout.js?v=20260208-1" defer></script>
+  <script src="js/analytics.js" defer></script>
+  <script src="js/main.js" type="module"></script>
+
+  <script>
+    (function () {
+      'use strict';
+
+      function isAuthenticated() {
+        try {
+          if (localStorage.getItem('user-authenticated') === 'true') return true;
+          var stores = [sessionStorage, localStorage];
+          for (var i = 0; i < stores.length; i++) {
+            var keys = Object.keys(stores[i]);
+            for (var k = 0; k < keys.length; k++) {
+              if (keys[k].indexOf('firebase:authUser:') === 0) {
+                var v = stores[i].getItem(keys[k]);
+                if (v && v !== 'null' && v.length > 10) return true;
+              }
+            }
+          }
+        } catch (_) {}
+        return false;
+      }
+
+      function trackBeginCheckout(plan, value) {
+        try {
+          var payload = { plan: plan, currency: 'USD', value: value, items: [{ item_id: plan, item_name: plan, price: value, quantity: 1 }] };
+          if (window.JHA && window.JHA.analytics && typeof window.JHA.analytics.track === 'function') {
+            window.JHA.analytics.track('begin_checkout', payload);
+          } else if (typeof window.gtag === 'function') {
+            window.gtag('event', 'begin_checkout', payload);
+          }
+        } catch (_) {}
+      }
+
+      var PLAN_META = {
+        weekly: { planName: 'Weekly Pass', price: '$17/wk', value: 17 },
+        monthly: { planName: 'Monthly', price: '$34/mo', value: 34 },
+        pack: { planName: 'Interview Pack', price: '$39 one time', value: 39 }
+      };
+
+      function rememberSelection(planId) {
+        var meta = PLAN_META[planId] || { planName: 'Selected Plan', price: '' };
+        var payload = {
+          planId: planId,
+          planName: meta.planName,
+          price: meta.price,
+          source: 'pricing-page',
+          timestamp: Date.now()
+        };
+        try { sessionStorage.setItem('selectedPlan', JSON.stringify(payload)); } catch (_) {}
+        try { localStorage.setItem('selectedPlan', JSON.stringify(payload)); } catch (_) {}
+      }
+
+      async function startCheckout(plan, button) {
+        var meta = PLAN_META[plan];
+        var original = button.textContent;
+        button.disabled = true;
+        button.textContent = 'Opening checkout...';
+        trackBeginCheckout(plan, meta ? meta.value : null);
+
+        if (!isAuthenticated()) {
+          rememberSelection(plan);
+          window.location.href = 'login.html?plan=' + encodeURIComponent(plan);
+          return;
+        }
+
+        try {
+          var user = null;
+          if (window.FirebaseAuthManager) {
+            if (typeof window.FirebaseAuthManager.waitForAuthReady === 'function') {
+              user = await window.FirebaseAuthManager.waitForAuthReady();
+            }
+            if (!user && typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
+              user = window.FirebaseAuthManager.getCurrentUser();
+            }
+          }
+          if (!user) throw new Error('not_authenticated');
+          var idToken = await user.getIdToken(true);
+
+          var res = await fetch('/api/stripe-checkout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + idToken },
+            body: JSON.stringify({ plan: plan })
+          });
+          var data = await res.json();
+
+          if (data && data.ok && data.url) {
+            window.location.href = data.url;
+            return;
+          }
+
+          if (data && data.code === 'ALREADY_SUBSCRIBED') {
+            // Existing subscribers manage plan changes from billing
+            if (typeof window.upgradePlan === 'function' && (plan === 'weekly' || plan === 'monthly')) {
+              await window.upgradePlan(plan, { source: 'pricing-page', returnUrl: window.location.href, button: button, skipConfirmation: false });
+              return;
+            }
+            alert('You already have an active plan. Manage it from Account Settings.');
+            window.location.href = 'account-setting.html';
+            return;
+          }
+
+          throw new Error((data && (data.error || data.code)) || 'checkout_failed');
+        } catch (err) {
+          if (err && err.message === 'not_authenticated') {
+            rememberSelection(plan);
+            window.location.href = 'login.html?plan=' + encodeURIComponent(plan);
+            return;
+          }
+          console.error('[PRICING] Checkout error:', err);
+          alert('Unable to start checkout. Please try again or contact support.');
+          button.disabled = false;
+          button.textContent = original;
+        }
+      }
+
+      document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('.vp-buy').forEach(function (button) {
+          button.addEventListener('click', function (e) {
+            e.preventDefault();
+            startCheckout(button.dataset.plan, button);
+          });
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

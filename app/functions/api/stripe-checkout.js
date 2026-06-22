@@ -288,10 +288,14 @@ export async function onRequest(context) {
       }
     }
 
+    // Interview Pack is a one-time payment, not a subscription: it can never
+    // duplicate-bill, so the active-subscription guard below does not apply.
+    const isOneTimePack = plan === 'pack';
+
     // Guard against duplicate subscriptions for paid plans.
     let subs = [];
     try {
-      subs = await listSubscriptions(env, customerId);
+      subs = isOneTimePack ? [] : await listSubscriptions(env, customerId);
     } catch (listErr) {
       console.error('[CHECKOUT] Failed to list subscriptions, blocking checkout to prevent duplicates:', listErr?.message || listErr);
       // Fail closed: cannot verify duplicate subscriptions, so block checkout
@@ -320,22 +324,24 @@ export async function onRequest(context) {
       }, 409, origin, env);
     }
 
-    // Create Checkout Session (subscription)
-    
-    // Prepare session body with trial support
+    // Create Checkout Session (subscription, or one-time payment for the pack)
     const sessionBody = {
-      mode: 'subscription',
+      mode: isOneTimePack ? 'payment' : 'subscription',
       customer: customerId,
       'line_items[0][price]': priceId,
       'line_items[0][quantity]': 1,
       success_url: (env.STRIPE_SUCCESS_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/dashboard.html?paid=1`),
-      cancel_url: (env.STRIPE_CANCEL_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/pricing-a`),
+      cancel_url: (env.STRIPE_CANCEL_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/pricing`),
       allow_promotion_codes: 'true',
-      payment_method_collection: 'always',
       'metadata[firebaseUid]': uid,
       'metadata[plan]': plan
     };
-    
+
+    // payment_method_collection only applies to subscription mode
+    if (!isOneTimePack) {
+      sessionBody.payment_method_collection = 'always';
+    }
+
     // Add trial period for trial plan
     if (plan === 'trial') {
       sessionBody['subscription_data[trial_period_days]'] = '3';

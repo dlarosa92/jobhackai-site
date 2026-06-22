@@ -76,7 +76,7 @@ async function ensureSchema(db) {
 
 async function requirePremium(env, uid) {
   const plan = await getUserPlan(env, uid);
-  if (plan !== 'premium') return { ok: false, plan };
+  if (!['free', 'trial', 'essential', 'pro', 'premium', 'weekly', 'monthly', 'pack'].includes(plan)) return { ok: false, plan }; // repositioning: free with signup
   return { ok: true, plan };
 }
 

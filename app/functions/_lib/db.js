@@ -321,7 +321,7 @@ export async function updateUserPlan(env, authId, {
       binds.push(scheduledAt);
     }
 
-    const paidPlans = new Set(['essential', 'pro', 'premium']);
+    const paidPlans = new Set(['weekly', 'monthly', 'essential', 'pro', 'premium']);
     const normalizedHasEverPaid = hasEverPaid !== undefined ? hasEverPaid : has_ever_paid;
     const shouldMarkEverPaid = (plan !== undefined && paidPlans.has(plan))
       || (normalizedHasEverPaid !== undefined && Number(normalizedHasEverPaid) === 1);

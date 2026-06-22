@@ -69,7 +69,7 @@ function planRequiresPayment(plan) {
       const data = JSON.parse(stored);
       const timestamp = data.timestamp || 0;
       const isFreshSelection = Date.now() - timestamp < 5 * 60 * 1000; // 5 minutes
-      if (isFreshSelection && ['essential', 'pro', 'premium', 'trial'].includes(plan)) {
+      if (isFreshSelection && ['essential', 'pro', 'premium', 'trial', 'weekly', 'monthly', 'pack'].includes(plan)) {
         return true;
       }
     }
@@ -95,7 +95,7 @@ async function handlePostAuthRedirect(plan) {
     } catch (error) {
       console.error('Checkout error:', error);
     }
-    window.location.href = 'pricing-a.html';
+    window.location.href = 'pricing.html';
   } else {
     sessionStorage.removeItem('selectedPlan');
     try { localStorage.removeItem('selectedPlan'); } catch (_) {}
@@ -519,7 +519,7 @@ document.addEventListener('DOMContentLoaded', async function() {
           } catch (error) {
             console.error('Checkout error:', error);
           }
-          window.location.href = 'pricing-a.html';
+          window.location.href = 'pricing.html';
         } else {
           // Existing user or free plan -> take user to dashboard
           sessionStorage.removeItem('selectedPlan');
@@ -625,7 +625,7 @@ document.addEventListener('DOMContentLoaded', async function() {
           } catch (error) {
             console.error('Checkout error:', error);
           }
-          window.location.href = 'pricing-a.html';
+          window.location.href = 'pricing.html';
         } else {
           // Existing user or free plan -> take user to dashboard
           sessionStorage.removeItem('selectedPlan');

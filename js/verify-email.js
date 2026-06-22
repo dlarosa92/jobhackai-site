@@ -399,7 +399,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (e) {}
     const plan = planParam || storedSelection || 'free';
 
-    function planRequiresPayment(p) { return ['essential', 'pro', 'premium', 'trial'].includes(p); }
+    function planRequiresPayment(p) { return ['essential', 'pro', 'premium', 'trial', 'weekly', 'monthly', 'pack'].includes(p); }
 
     if (planRequiresPayment(plan)) {
       try {
@@ -414,7 +414,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       } catch (err) {
         console.error('Checkout error from verify-email flow:', err);
       }
-      window.location.href = 'pricing-a.html';
+      window.location.href = 'pricing.html';
       return true;
     } else {
       try {

@@ -139,7 +139,7 @@ function hideMessages() {
 
 // Helper function to check if plan requires payment
 function planRequiresPayment(plan) {
-  return ['essential', 'pro', 'premium', 'trial'].includes(plan);
+  return ['essential', 'pro', 'premium', 'trial', 'weekly', 'monthly', 'pack'].includes(plan);
 }
 
 function getSelectedPlanFromStorage() {
@@ -306,7 +306,7 @@ async function routeAfterVerification() {
           }
         }, 500);
       }
-      window.location.replace('/pricing-a.html');
+      window.location.replace('/pricing');
     } catch (err) {
       console.error('Checkout error from email verification flow:', err);
       if (hasOpener) {
@@ -318,7 +318,7 @@ async function routeAfterVerification() {
           }
         }, 500);
       }
-      window.location.replace('/pricing-a.html');
+      window.location.replace('/pricing');
     }
   } else {
     // Free plan - redirect to dashboard
