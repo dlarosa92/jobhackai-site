@@ -237,50 +237,59 @@ export async function onRequest(context) {
         return errorResponse('Could not reserve a session. Please try again.', 409, origin, env, requestId);
       }
 
+      // After a successful consume the pack credit / free-taste flag is spent.
+      // Every failure path from here, whether a controlled return or a thrown
+      // error (e.g. mintClientSecret throwing on a network fault), must roll the
+      // consumption back and remove any orphaned session row. A single finally
+      // handles all of them, so there is exactly one refund site (no double
+      // refunds) and no way to burn a credit on a 500.
       const sessionId = crypto.randomUUID();
-      let insertResult;
+      let committed = false;
       try {
         // For subscription mode this insert enforces the fair-use cap atomically
         // (single conditional INSERT), closing the race where concurrent starts
         // each read the same sub-cap count and all proceed.
-        insertResult = await createVoiceSessionRow(env, {
+        const insertResult = await createVoiceSessionRow(env, {
           sessionId, userRowId: d1User.id, role, seniority: seniority || null,
           jd: jd || null, mode: ent.mode, model
         });
-      } catch (insertErr) {
-        await refundVoiceSession(env, uid, ent.mode);
-        throw insertErr;
-      }
-      if (!insertResult.inserted) {
-        // Only subscription mode can be blocked here (by the cap); it consumes
-        // no credit, so there is nothing to refund.
-        return errorResponse(
-          'You have reached this month\'s session limit. It resets at the start of next month.',
-          403, origin, env, requestId, { reason: 'limit_reached' }
-        );
-      }
+        if (!insertResult.inserted) {
+          // Only subscription mode reaches here (blocked by the cap); subscription
+          // consume is a no-op, so the rollback below is harmless.
+          return errorResponse(
+            'You have reached this month\'s session limit. It resets at the start of next month.',
+            403, origin, env, requestId, { reason: 'limit_reached' }
+          );
+        }
 
-      const minted = await mintClientSecret(env, {
-        model,
-        instructions: interviewerInstructions({ role, seniority, jd })
-      });
-      if (!minted) {
-        // Roll back: the user never got a session
-        await refundVoiceSession(env, uid, ent.mode);
-        await db.prepare(`DELETE FROM voice_sessions WHERE id = ?`).bind(sessionId).run().catch(() => {});
-        return errorResponse('Could not start the voice session. Please try again.', 502, origin, env, requestId);
-      }
+        const minted = await mintClientSecret(env, {
+          model,
+          instructions: interviewerInstructions({ role, seniority, jd })
+        });
+        if (!minted) {
+          return errorResponse('Could not start the voice session. Please try again.', 502, origin, env, requestId);
+        }
 
-      console.log(`[VOICE-SESSION] Created session ${sessionId} for uid=${uid} mode=${ent.mode} model=${model}`);
-      return successResponse({
-        sessionId,
-        clientSecret: minted.value,
-        expiresAt: minted.expiresAt,
-        model,
-        mode: ent.mode,
-        sessionsRemaining: ent.mode === 'pack' ? Math.max(0, ent.sessionsRemaining - 1) : null,
-        maxMinutes: MAX_SESSION_MINUTES
-      }, 200, origin, env, requestId);
+        committed = true;
+        console.log(`[VOICE-SESSION] Created session ${sessionId} for uid=${uid} mode=${ent.mode} model=${model}`);
+        return successResponse({
+          sessionId,
+          clientSecret: minted.value,
+          expiresAt: minted.expiresAt,
+          model,
+          mode: ent.mode,
+          sessionsRemaining: ent.mode === 'pack' ? Math.max(0, ent.sessionsRemaining - 1) : null,
+          maxMinutes: MAX_SESSION_MINUTES
+        }, 200, origin, env, requestId);
+      } finally {
+        if (!committed) {
+          // Refund the consumption and delete any row created before the failure.
+          // refundVoiceSession swallows its own errors and the DELETE is
+          // catch-guarded, so this never masks the original error.
+          await refundVoiceSession(env, uid, ent.mode);
+          await db.prepare(`DELETE FROM voice_sessions WHERE id = ?`).bind(sessionId).run().catch(() => {});
+        }
+      }
     } finally {
       await releaseKvLock(env, lockKey, lock.token);
     }
