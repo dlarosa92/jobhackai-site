@@ -22,14 +22,20 @@ export async function onRequest(context) {
     const planData = await getUserPlanData(env, uid);
     const trialEligible = await isTrialEligible(env, uid, email);
 
-    // Voice mock interview entitlement summary (read-only; server enforces)
+    // Voice mock interview entitlement summary (read-only; server enforces).
+    // `enabled` means the feature is actually USABLE: the flag is on AND the
+    // entitlement backend is operational. If migration 020 has not run (or D1
+    // is down), getVoiceEntitlement reports not_migrated/db_unavailable and we
+    // report enabled:false, so the dashboard tile and tool CTAs (which key off
+    // `enabled`) stay hidden instead of surfacing entry points that 503.
     const voiceEnabled = voiceFeatureEnabled(env);
-    let voice = { enabled: voiceEnabled, canStart: false, mode: null, unlimited: false, freeSessionUsed: false, sessionsRemaining: 0 };
+    let voice = { enabled: false, canStart: false, mode: null, unlimited: false, freeSessionUsed: false, sessionsRemaining: 0 };
     if (voiceEnabled) {
       try {
         const ent = await getVoiceEntitlement(env, uid);
+        const backendReady = ent.reason !== 'not_migrated' && ent.reason !== 'db_unavailable';
         voice = {
-          enabled: true,
+          enabled: backendReady,
           canStart: ent.canStart,
           mode: ent.mode,
           unlimited: ent.unlimited,
@@ -38,6 +44,7 @@ export async function onRequest(context) {
         };
       } catch (voiceErr) {
         console.warn('[PLAN-ME] Voice entitlement lookup failed (non-fatal):', voiceErr?.message || voiceErr);
+        // Leave enabled:false so the UI stays hidden until the backend works.
       }
     }
 
