@@ -2359,7 +2359,14 @@
       // Voice tile only when VOICE_INTERVIEW_ENABLED is on (via /api/plan/me)
       (async function revealVoiceTile() {
         try {
-          const planData = await fetchSubscriptionStatus();
+          // Fetch /api/plan/me directly rather than via fetchSubscriptionStatus/
+          // PlanCache, which trims the response to { plan, trialEndsAt } and
+          // drops the voice entitlement block, so the tile would never unhide.
+          const idToken = await getFirebaseIdToken();
+          if (!idToken) return;
+          const res = await fetch('/api/plan/me', { headers: { Authorization: `Bearer ${idToken}` } });
+          if (!res.ok) return;
+          const planData = await res.json();
           if (planData && planData.voice && planData.voice.enabled) {
             const voiceCard = root.querySelector('[data-feature-key="voice"]');
             if (voiceCard) voiceCard.style.display = '';

@@ -72,14 +72,16 @@ async function countSessionsThisMonth(db, userRowId) {
  *   unlimited: boolean,
  *   freeSessionUsed: boolean,
  *   sessionsRemaining: number,     // pack credits currently usable
- *   plan: string
+ *   plan: string,
+ *   hasEverPaid: boolean           // ever purchased (pack or subscription)
  * }>}
  */
 export async function getVoiceEntitlement(env, uid) {
   const db = getDb(env);
   const base = {
     canStart: false, mode: null, reason: 'db_unavailable',
-    unlimited: false, freeSessionUsed: false, sessionsRemaining: 0, plan: 'free'
+    unlimited: false, freeSessionUsed: false, sessionsRemaining: 0, plan: 'free',
+    hasEverPaid: false
   };
   if (!db) return base;
 
@@ -87,7 +89,7 @@ export async function getVoiceEntitlement(env, uid) {
   try {
     row = await db.prepare(
       `SELECT id, plan, subscription_status, current_period_end,
-              voice_sessions_remaining, free_session_used, pack_expires_at
+              voice_sessions_remaining, free_session_used, pack_expires_at, has_ever_paid
        FROM users WHERE auth_id = ?`
     ).bind(uid).first();
   } catch (err) {
@@ -105,6 +107,10 @@ export async function getVoiceEntitlement(env, uid) {
 
   const plan = row.plan || 'free';
   const now = Date.now();
+  // Whether the user has ever paid (pack or subscription). Used by the read
+  // endpoints to keep a free-taste session's full report unlocked permanently
+  // once the user has paid, even after a pack lapses or a sub is cancelled.
+  const hasEverPaid = !!row.has_ever_paid;
 
   // 1. Active subscription (new voice plans or grandfathered legacy plans).
   // Require POSITIVE evidence of a live subscription before granting unlimited:
@@ -131,13 +137,13 @@ export async function getVoiceEntitlement(env, uid) {
         return {
           canStart: false, mode: 'subscription', reason: 'limit_reached',
           unlimited: true, freeSessionUsed: !!row.free_session_used,
-          sessionsRemaining: Number(row.voice_sessions_remaining || 0), plan
+          sessionsRemaining: Number(row.voice_sessions_remaining || 0), plan, hasEverPaid
         };
       }
       return {
         canStart: true, mode: 'subscription', reason: null,
         unlimited: true, freeSessionUsed: !!row.free_session_used,
-        sessionsRemaining: Number(row.voice_sessions_remaining || 0), plan
+        sessionsRemaining: Number(row.voice_sessions_remaining || 0), plan, hasEverPaid
       };
     }
   }
@@ -150,7 +156,7 @@ export async function getVoiceEntitlement(env, uid) {
     return {
       canStart: true, mode: 'pack', reason: null,
       unlimited: false, freeSessionUsed: !!row.free_session_used,
-      sessionsRemaining: packRemaining, plan
+      sessionsRemaining: packRemaining, plan, hasEverPaid
     };
   }
 
@@ -158,13 +164,13 @@ export async function getVoiceEntitlement(env, uid) {
   if (!row.free_session_used) {
     return {
       canStart: true, mode: 'free', reason: null,
-      unlimited: false, freeSessionUsed: false, sessionsRemaining: 0, plan
+      unlimited: false, freeSessionUsed: false, sessionsRemaining: 0, plan, hasEverPaid
     };
   }
 
   return {
     canStart: false, mode: null, reason: 'paywall',
-    unlimited: false, freeSessionUsed: true, sessionsRemaining: 0, plan
+    unlimited: false, freeSessionUsed: true, sessionsRemaining: 0, plan, hasEverPaid
   };
 }
 

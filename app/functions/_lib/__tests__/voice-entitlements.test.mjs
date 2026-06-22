@@ -325,6 +325,26 @@ await test('grandfathering: active legacy pro subscription is unlimited', async 
   assert.equal(ent.unlimited, true);
 });
 
+await test('hasEverPaid is surfaced so a paid-then-lapsed user keeps their free session unlocked', async () => {
+  // Used the free taste, paid once (pack), but credits now lapsed and no sub.
+  const state = {
+    users: new Map([['paid', userRow({ plan: 'free', free_session_used: 1, voice_sessions_remaining: 0, has_ever_paid: 1 })]]),
+    eventLog: new Set(), sessionCount: 0
+  };
+  const ent = await getVoiceEntitlement(makeEnv(state), 'paid');
+  assert.equal(ent.canStart, false);
+  assert.equal(ent.reason, 'paywall', 'cannot start a NEW session without credits');
+  assert.equal(ent.hasEverPaid, true, 'but the read endpoints use this to keep the free report unlocked');
+
+  // Never-paid user: hasEverPaid is false.
+  const state2 = {
+    users: new Map([['nope', userRow({ plan: 'free', free_session_used: 1, voice_sessions_remaining: 0, has_ever_paid: 0 })]]),
+    eventLog: new Set(), sessionCount: 0
+  };
+  const ent2 = await getVoiceEntitlement(makeEnv(state2), 'nope');
+  assert.equal(ent2.hasEverPaid, false);
+});
+
 await test('paid plan label with null Stripe state does NOT grant unlimited voice', async () => {
   // Stale/legacy row: plan='pro' but no live subscription status or period.
   const state = {

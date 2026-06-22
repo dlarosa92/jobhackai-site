@@ -45,7 +45,7 @@ export async function onRequest(context) {
     const ent = await getVoiceEntitlement(env, uid);
 
     const sessions = (rows?.results || []).map((r) => {
-      const fullAccess = r.entitlement_mode !== 'free' || ent.unlimited || ent.sessionsRemaining > 0;
+      const fullAccess = r.entitlement_mode !== 'free' || ent.unlimited || ent.sessionsRemaining > 0 || ent.hasEverPaid;
       let overall = null;
       if (fullAccess && r.scorecard_json) {
         try { overall = JSON.parse(r.scorecard_json).overall ?? null; } catch (_) {}

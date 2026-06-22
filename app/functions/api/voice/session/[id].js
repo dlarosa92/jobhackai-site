@@ -54,11 +54,14 @@ export async function onRequest(context) {
 
     // Full access: the session itself was paid for, or the user is currently
     // entitled (active subscription, grandfathered legacy plan, or pack
-    // credits remaining). Upgrading retroactively unlocks the free session.
+    // credits remaining), or the user has ever paid. Upgrading retroactively
+    // unlocks the free-taste session, and that unlock persists after a pack
+    // lapses or a subscription is cancelled (hasEverPaid).
     const ent = await getVoiceEntitlement(env, uid);
     const fullAccess = session.entitlement_mode !== 'free'
       || ent.unlimited
-      || ent.sessionsRemaining > 0;
+      || ent.sessionsRemaining > 0
+      || ent.hasEverPaid;
 
     let transcript = null;
     if (fullAccess && session.transcript_json) {
