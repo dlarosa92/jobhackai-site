@@ -247,6 +247,25 @@ await test('expired pack credits do not grant access', async () => {
   assert.equal(ent.reason, 'paywall');
 });
 
+await test('concurrent starts cannot double-spend without a KV lock (atomic consume is the guard)', async () => {
+  // Free taste: two racing requests, only one consume may win.
+  const free = { users: new Map([['r', userRow()]]), eventLog: new Set(), sessionCount: 0 };
+  const fenv = makeEnv(free);
+  const a = await consumeVoiceSession(fenv, 'r', 'free');
+  const b = await consumeVoiceSession(fenv, 'r', 'free');
+  assert.equal(a, true);
+  assert.equal(b, false, 'second concurrent free consume must fail');
+
+  // Pack with a single credit: two racing requests, only one may win.
+  const pack = { users: new Map([['p', userRow({ plan: 'pack', voice_sessions_remaining: 1 })]]), eventLog: new Set(), sessionCount: 0 };
+  const penv = makeEnv(pack);
+  const c = await consumeVoiceSession(penv, 'p', 'pack');
+  const d = await consumeVoiceSession(penv, 'p', 'pack');
+  assert.equal(c, true);
+  assert.equal(d, false, 'second concurrent pack consume must fail on the last credit');
+  assert.equal(pack.users.get('p').voice_sessions_remaining, 0, 'credits never go negative');
+});
+
 await test('refund restores a pack credit and the free taste', async () => {
   const state = { users: new Map([['u6', userRow({ voice_sessions_remaining: 1, free_session_used: 1 })]]), eventLog: new Set(), sessionCount: 0 };
   const env = makeEnv(state);

@@ -79,8 +79,19 @@ async function mintClientSecret(env, { model, instructions }) {
   return { value: data.value, expiresAt: data.expires_at || null };
 }
 
+// Best-effort per-user lock to avoid two concurrent session starts doing
+// duplicate work (entitlement read + token mint). This is an OPTIMIZATION, not
+// the safety guard: credit integrity is enforced by the atomic conditional
+// UPDATEs in consumeVoiceSession (free: `WHERE free_session_used = 0`, pack:
+// `WHERE voice_sessions_remaining > 0`), which cannot double-spend even when
+// this lock is absent. KV is not bound in every environment (see wrangler.toml),
+// so the no-KV path must stay non-blocking; we log it rather than silently
+// pretend a real lock was taken.
 async function acquireKvLock(env, key, ttlSeconds = 30) {
-  if (!env.JOBHACKAI_KV) return { acquired: true, token: null };
+  if (!env.JOBHACKAI_KV) {
+    console.warn('[VOICE-SESSION] JOBHACKAI_KV unavailable; proceeding without advisory lock (atomic consume still guards credits)');
+    return { acquired: true, token: null, noKv: true };
+  }
   const existing = await env.JOBHACKAI_KV.get(key);
   if (existing) return { acquired: false, token: null };
   const token = crypto.randomUUID();
@@ -183,8 +194,10 @@ export async function onRequest(context) {
     const jd = String(body.jd || '').trim().slice(0, 2000);
     if (!role) return errorResponse('Role is required', 400, origin, env, requestId);
 
-    // Per-user lock so two parallel requests cannot both pass the entitlement
-    // check before either consumes.
+    // Advisory per-user lock (best effort). The authoritative anti-double-spend
+    // guard is the atomic conditional UPDATE in consumeVoiceSession below, which
+    // holds even if this lock no-ops because KV is unbound. The lock just avoids
+    // a redundant token mint when two requests race.
     const lockKey = `voiceSessionLock:${uid}`;
     const lock = await acquireKvLock(env, lockKey, 30);
     if (!lock.acquired) {

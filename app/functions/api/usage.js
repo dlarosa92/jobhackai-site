@@ -64,8 +64,11 @@ export async function onRequest(context) {
     const usage = {
       atsScans: {
         used: 0,
-        limit: null, // unlimited for signed-in users (rule-based scoring)
-        remaining: null,
+        // ats-score.js caps the free plan at 1 lifetime scan; all other
+        // signed-in plans are unlimited. Keep this in sync with that gate so
+        // the dashboard never shows "unlimited" while uploads 403.
+        limit: plan === 'free' ? 1 : null,
+        remaining: plan === 'free' ? 1 : null,
         cooldown: 0
       },
       resumeFeedback: {
@@ -122,8 +125,10 @@ export async function onRequest(context) {
           atsUsed = res?.count || 0;
         }
         usage.atsScans.used = atsUsed;
+        usage.atsScans.remaining = Math.max(0, 1 - atsUsed);
       } catch (e) {
         usage.atsScans.used = 0;
+        usage.atsScans.remaining = 1;
       }
     }
 
