@@ -165,7 +165,12 @@ export async function onRequest(context) {
       if (!['created', 'active'].includes(session.status)) {
         return errorResponse('Session already ended', 409, origin, env, requestId);
       }
-      const startedMs = new Date(session.started_at + (session.started_at.endsWith('Z') ? '' : 'Z')).getTime();
+      // Guard against a null/missing started_at so a bad row yields a controlled
+      // 'Session expired' (via the NaN check below) instead of throwing a 500.
+      const startedRaw = session.started_at ? String(session.started_at) : '';
+      const startedMs = startedRaw
+        ? new Date(startedRaw + (startedRaw.endsWith('Z') ? '' : 'Z')).getTime()
+        : NaN;
       if (!Number.isFinite(startedMs) || Date.now() - startedMs > RESUME_WINDOW_MS) {
         await db.prepare(`UPDATE voice_sessions SET status = 'abandoned', updated_at = datetime('now') WHERE id = ?`)
           .bind(session.id).run();

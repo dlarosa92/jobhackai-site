@@ -209,12 +209,20 @@ export async function onRequest(context) {
       // pack there is no follow-up event to heal from, so we must try hard here.
       const uid = customerUid || sessionMetadata.firebaseUid || sess?.metadata?.firebaseUid || null;
 
-      // One-time Interview Pack purchase (mode=payment): grant voice session
-      // credits and return. The subscription plan-mapping path below must not
-      // run for one-time payments or its fallback would set plan='essential'.
-      const isPackPurchase = sess?.mode === 'payment' &&
+      // One-time payments (mode=payment) are never subscriptions. The Interview
+      // Pack is our only one-time product, so handle all mode=payment here and
+      // never let them fall through to the subscription plan-mapping path below
+      // (which would mis-map a one-time charge to a legacy plan like essential).
+      const isOneTimePayment = sess?.mode === 'payment';
+      const isPackPurchase = isOneTimePayment &&
         (priceId === env.STRIPE_PRICE_PACK || originalPlan === 'pack');
-      if (isPackPurchase) {
+      if (isOneTimePayment) {
+        if (!isPackPurchase) {
+          // Unrecognized one-time product: we cannot know what to grant. Do not
+          // mis-map it to a subscription plan; log loudly for manual review.
+          console.error(`❌ [WEBHOOK] Unrecognized one-time payment (price=${priceId}, plan=${originalPlan}, session=${sessionId}); not granting any plan`);
+          return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
+        }
         if (!uid) {
           // No follow-up event will ever heal a one-time pack, so do NOT 200
           // this away (Stripe would never retry and the paid credits would be

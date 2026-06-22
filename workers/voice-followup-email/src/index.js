@@ -103,8 +103,11 @@ async function sendFollowups(env, db) {
 
   for (const row of candidates) {
     try {
-      // Claim before send: a crash after this point means a missed email,
-      // never a duplicate. One email per user, ever.
+      // Claim before send so two overlapping cron runs cannot both send. If the
+      // send then fails (Resend error, or RESEND_API_KEY unset), roll the claim
+      // back to NULL so the user stays eligible and a later run retries. This
+      // keeps the "exactly one email" guarantee without permanently dropping it
+      // on a transient send failure.
       const claim = await db.prepare(
         `UPDATE users SET voice_followup_email_sent_at = datetime('now')
          WHERE id = ? AND voice_followup_email_sent_at IS NULL`
@@ -121,7 +124,13 @@ async function sendFollowups(env, db) {
         frontendUrl: env.FRONTEND_URL || 'https://app.jobhackai.io'
       });
       const sent = await sendEmail(env, { to: row.email, subject, html });
-      console.log(`[VOICE-FOLLOWUP] ${sent ? 'Sent' : 'FAILED'} 48h email to user ${row.id}`);
+      if (!sent) {
+        // Release the claim so this user is retried on a future run.
+        await db.prepare(
+          `UPDATE users SET voice_followup_email_sent_at = NULL WHERE id = ?`
+        ).bind(row.id).run().catch(() => {});
+      }
+      console.log(`[VOICE-FOLLOWUP] ${sent ? 'Sent' : 'FAILED (claim released for retry)'} 48h email to user ${row.id}`);
     } catch (err) {
       console.error(`[VOICE-FOLLOWUP] Error for user ${row.id}:`, err?.message || err);
     }
