@@ -911,24 +911,33 @@
           trial: 'Trial (3 days)',
           essential: 'Essential',
           pro: 'Pro',
-          premium: 'Premium'
+          premium: 'Premium',
+          weekly: 'Weekly Pass',
+          monthly: 'Monthly',
+          pack: 'Interview Pack'
         };
-        
+
         const planPrices = {
           free: 'Free',
           trial: 'Free for 3 days',
           essential: '$29/month',
           pro: '$59/month',
-          premium: '$99/month'
+          premium: '$99/month',
+          weekly: '$17/week',
+          monthly: '$34/month',
+          pack: '$39 one time'
         };
-        
+
         // Plan badge text mapping
         const planBadgeText = {
           free: 'Free',
           trial: 'Trial',
           essential: 'Essential',
           pro: 'Pro',
-          premium: 'Premium'
+          premium: 'Premium',
+          weekly: 'Weekly',
+          monthly: 'Monthly',
+          pack: 'Pack'
         };
         
         let html = '<div class="settings-label" style="margin-bottom:0.5rem;">Subscription</div>';
@@ -941,7 +950,7 @@
             </div>
             <div class="subscription-action-row">
               <a href="/pricing" class="btn-primary" style="text-decoration:none;display:inline-block;">View Plans</a>
-              <span class="plan-badge free">${planBadgeText[plan]}</span>
+              <span class="plan-badge free">${planBadgeText[plan] || plan}</span>
             </div>
           `;
         } else {
@@ -965,8 +974,8 @@
               </div>`;
             }
           } else {
-            html += `<div style="font-size:1.1rem;font-weight:600;color:#232B36;">${planNames[plan]} Plan</div>`;
-            html += `<div style="color:#6B7280;font-size:0.98rem;margin-top:0.2rem;">${planPrices[plan]}</div>`;
+            html += `<div style="font-size:1.1rem;font-weight:600;color:#232B36;">${planNames[plan] || plan} Plan</div>`;
+            html += `<div style="color:#6B7280;font-size:0.98rem;margin-top:0.2rem;">${planPrices[plan] || ''}</div>`;
             
             // Show next renewal date for active subscriptions
             if (data.currentPeriodEnd && data.status === 'active') {
@@ -999,7 +1008,7 @@
           html += `</div>`;
           html += `<div class="subscription-action-row">`;
           html += `<button class="btn-outline" type="button" onclick="openBillingPortal()">Billing Management</button>`;
-          html += `<span class="plan-badge ${plan}">${planBadgeText[plan]}</span>`;
+          html += `<span class="plan-badge ${plan}">${planBadgeText[plan] || plan}</span>`;
           html += `</div>`;
           
           // Phase 2.4 & Phase 4.1: Add Stripe portal messaging and billing data notice
