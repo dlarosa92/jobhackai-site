@@ -208,6 +208,16 @@ export async function onRequest(context) {
     try {
       const ent = await getVoiceEntitlement(env, uid);
       if (!ent.canStart) {
+        // Infra/migration failures must not masquerade as a paywall, or
+        // operators (and users) cannot tell the real blocker. Surface them as
+        // a retryable 503 with no upgrade prompt.
+        if (ent.reason === 'db_unavailable' || ent.reason === 'not_migrated') {
+          console.error(`[VOICE-SESSION] Entitlement check unavailable for uid=${uid}: reason=${ent.reason}`);
+          return errorResponse(
+            'Voice interviews are temporarily unavailable. Please try again shortly.',
+            503, origin, env, requestId, { reason: ent.reason }
+          );
+        }
         const message = ent.reason === 'limit_reached'
           ? 'You have reached this month\'s session limit. It resets at the start of next month.'
           : 'Your free voice interview is used. Upgrade to keep practicing.';

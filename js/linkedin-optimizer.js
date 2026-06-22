@@ -1601,14 +1601,18 @@ async function init() {
       setLockedView('login');
       return;
     }
-    if (plan !== 'premium') {
+    // Repositioning: the LinkedIn Optimizer is free for every signed-in plan
+    // (the backend allows all of them), so the page must not premium-gate. Only
+    // authentication is required here; let the server be the source of truth.
+    const SIGNED_IN_PLANS = ['free', 'trial', 'essential', 'pro', 'premium', 'weekly', 'monthly', 'pack'];
+    if (!SIGNED_IN_PLANS.includes(String(plan || '').toLowerCase())) {
       setLoading(false);
       setResultsVisible(false);
-      setLockedView('upgrade');
+      setLockedView('login');
       return;
     }
 
-    // Authorized premium user — initialize page if not already done
+    // Authorized signed-in user — initialize page if not already done
     setLockedView('none');
     setPlanPill(plan);
     if (unlockedInitialized) return;
