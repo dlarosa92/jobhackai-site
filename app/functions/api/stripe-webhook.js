@@ -92,6 +92,16 @@ export async function onRequest(context) {
     await env.JOBHACKAI_KV?.put(lockKey, '1', { expirationTtl: 60 }); // 60s lock
   } catch (_) { /* ignore lock failures */ }
 
+  // When a handler must return a retryable 5xx, clear the idempotency markers
+  // first so Stripe's retry actually reprocesses instead of being short-circuited
+  // by the dedup check above (matters when JOBHACKAI_KV is bound).
+  const releaseEventForRetry = async () => {
+    try {
+      await env.JOBHACKAI_KV?.delete(`evt:${event.id}`);
+      await env.JOBHACKAI_KV?.delete(lockKey);
+    } catch (_) { /* no-op */ }
+  };
+
   // Helper to update plan in D1 (source of truth) with timestamp-based ordering protection
   // Prevents out-of-order webhooks from overwriting newer states with older data
   // Returns true when the row was written, false when the update was skipped
@@ -192,7 +202,12 @@ export async function onRequest(context) {
       const sess = await r.json();
       const priceId = sess?.line_items?.data?.[0]?.price?.id || '';
       const customerId = sess?.customer || event.data?.object?.customer || null;
-      const { uid, email: customerEmail } = await fetchCustomerInfo(customerId);
+      const { uid: customerUid, email: customerEmail } = await fetchCustomerInfo(customerId);
+      // Resolve the Firebase uid with fallbacks: customer metadata first, then
+      // the firebaseUid stamped on the checkout session during checkout. A
+      // customer matched by email can lack the metadata, and for a one-time
+      // pack there is no follow-up event to heal from, so we must try hard here.
+      const uid = customerUid || sessionMetadata.firebaseUid || sess?.metadata?.firebaseUid || null;
 
       // One-time Interview Pack purchase (mode=payment): grant voice session
       // credits and return. The subscription plan-mapping path below must not
@@ -201,8 +216,13 @@ export async function onRequest(context) {
         (priceId === env.STRIPE_PRICE_PACK || originalPlan === 'pack');
       if (isPackPurchase) {
         if (!uid) {
-          console.warn(`⚠️ [WEBHOOK] Pack purchase without resolvable uid (customer=${customerId})`);
-          return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
+          // No follow-up event will ever heal a one-time pack, so do NOT 200
+          // this away (Stripe would never retry and the paid credits would be
+          // lost). Return 5xx so Stripe retries and the failure surfaces in the
+          // dashboard for manual reconciliation.
+          console.error(`❌ [WEBHOOK] Pack purchase without resolvable uid (customer=${customerId}, session=${sessionId}); returning 500 for Stripe retry`);
+          await releaseEventForRetry();
+          return new Response('pack uid unresolved', { status: 500, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
         }
         const db = getDb(env);
         const existingUser = db ? await db.prepare('SELECT id FROM users WHERE auth_id = ?').bind(uid).first() : null;
@@ -222,6 +242,7 @@ export async function onRequest(context) {
           // grantPackCredits already released the idempotency lock; return 5xx so
           // Stripe retries rather than leaving a paid customer without credits.
           console.error(`❌ [WEBHOOK] Pack grant failed for ${uid}; returning 500 for Stripe retry`);
+          await releaseEventForRetry();
           return new Response('pack grant failed', { status: 500, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
         }
         if (granted) {

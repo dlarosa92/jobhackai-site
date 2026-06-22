@@ -51,11 +51,14 @@ function isMissingColumnError(err) {
  * Abandoned sessions count too: they consumed a session slot at create time.
  */
 async function countSessionsThisMonth(db, userRowId) {
-  const now = new Date();
-  const monthStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-01T00:00:00.000Z`;
+  // Use strftime so the comparison matches the stored started_at format
+  // (datetime('now') => 'YYYY-MM-DD HH:MM:SS'); comparing against an ISO 'T...Z'
+  // boundary string was unreliable (space vs 'T') and dropped day-1 sessions.
+  // SQLite 'now' is UTC, so this is a UTC calendar-month count.
   const row = await db.prepare(
-    'SELECT COUNT(*) AS n FROM voice_sessions WHERE user_id = ? AND started_at >= ?'
-  ).bind(userRowId, monthStart).first();
+    `SELECT COUNT(*) AS n FROM voice_sessions
+     WHERE user_id = ? AND strftime('%Y-%m', started_at) = strftime('%Y-%m', 'now')`
+  ).bind(userRowId).first();
   return Number(row?.n || 0);
 }
 
@@ -103,9 +106,17 @@ export async function getVoiceEntitlement(env, uid) {
   const plan = row.plan || 'free';
   const now = Date.now();
 
-  // 1. Active subscription (new voice plans or grandfathered legacy plans)
+  // 1. Active subscription (new voice plans or grandfathered legacy plans).
+  // Require POSITIVE evidence of a live subscription before granting unlimited:
+  // an active subscription_status. A bare plan label with no Stripe state (null
+  // status, e.g. a stale or legacy row) must NOT get unlimited voice; it falls
+  // through to pack credits or the free taste below. current_period_end stays
+  // lenient (null allowed) because an active status is sufficient evidence, but
+  // a non-null period that has passed (beyond grace) revokes access.
+  // NOTE: a manually granted plan (e.g. the white-glove customer) must also set
+  // subscription_status to an active value for this to apply.
   if (UNLIMITED_VOICE_PLANS.has(plan)) {
-    const statusOk = !row.subscription_status || ACTIVE_SUB_STATUSES.has(row.subscription_status);
+    const statusOk = ACTIVE_SUB_STATUSES.has(row.subscription_status);
     const periodOk = !row.current_period_end ||
       (new Date(row.current_period_end).getTime() + PERIOD_END_GRACE_MS) > now;
     if (statusOk && periodOk) {
@@ -220,6 +231,44 @@ export async function refundVoiceSession(env, uid, mode) {
     console.error('[VOICE-ENTITLEMENTS] Refund failed:', err?.message || err);
     return false;
   }
+}
+
+/**
+ * Insert the voice_sessions row for a started session.
+ *
+ * For subscription mode the fair-use cap is enforced atomically here, not just
+ * in the read-only getVoiceEntitlement check: the INSERT ... SELECT ... WHERE
+ * count < cap is a single statement, so concurrent starts cannot each observe
+ * the same sub-cap count and all slip through. For free/pack the credit was
+ * already claimed atomically by consumeVoiceSession, so the insert is
+ * unconditional.
+ *
+ * @returns {Promise<{inserted: boolean, reason: string|null}>}
+ *   reason is 'limit_reached' when a subscription insert was blocked by the cap.
+ */
+export async function createVoiceSessionRow(env, { sessionId, userRowId, role, seniority, jd, mode, model }) {
+  const db = getDb(env);
+  if (!db) return { inserted: false, reason: 'db_unavailable' };
+
+  if (mode === 'subscription') {
+    const cap = fairUseCap(env);
+    const res = await db.prepare(
+      `INSERT INTO voice_sessions (id, user_id, role, seniority, jd_excerpt, status, entitlement_mode, model)
+       SELECT ?, ?, ?, ?, ?, 'created', ?, ?
+       WHERE (
+         SELECT COUNT(*) FROM voice_sessions
+         WHERE user_id = ? AND strftime('%Y-%m', started_at) = strftime('%Y-%m', 'now')
+       ) < ?`
+    ).bind(sessionId, userRowId, role, seniority, jd, mode, model, userRowId, cap).run();
+    const inserted = (res?.meta?.changes ?? 0) === 1;
+    return { inserted, reason: inserted ? null : 'limit_reached' };
+  }
+
+  await db.prepare(
+    `INSERT INTO voice_sessions (id, user_id, role, seniority, jd_excerpt, status, entitlement_mode, model)
+     VALUES (?, ?, ?, ?, ?, 'created', ?, ?)`
+  ).bind(sessionId, userRowId, role, seniority, jd, mode, model).run();
+  return { inserted: true, reason: null };
 }
 
 /**

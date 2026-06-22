@@ -15,6 +15,7 @@ import {
   getVoiceEntitlement,
   consumeVoiceSession,
   refundVoiceSession,
+  createVoiceSessionRow,
   grantPackCredits,
   voiceFeatureEnabled,
   fairUseCap,
@@ -28,6 +29,21 @@ function fakeDb(state) {
   // state: { users: Map<auth_id, row>, eventLog: Set<string>, sessionCount: number }
   const exec = (sql, binds) => {
     const q = sql.replace(/\s+/g, ' ').trim();
+
+    if (q.startsWith('INSERT INTO voice_sessions')) {
+      if (q.includes('VALUES')) {
+        // Unconditional insert (free/pack); consume already gated it.
+        state.sessionCount = (state.sessionCount || 0) + 1;
+        return { run: { meta: { changes: 1 } } };
+      }
+      // Conditional INSERT ... SELECT ... WHERE count < cap (subscription).
+      const cap = binds[binds.length - 1];
+      if ((state.sessionCount || 0) < cap) {
+        state.sessionCount = (state.sessionCount || 0) + 1;
+        return { run: { meta: { changes: 1 } } };
+      }
+      return { run: { meta: { changes: 0 } } };
+    }
 
     if (q.startsWith('SELECT id, plan, subscription_status')) {
       const row = state.users.get(binds[0]) || null;
@@ -307,6 +323,44 @@ await test('grandfathering: active legacy pro subscription is unlimited', async 
   assert.equal(ent.canStart, true);
   assert.equal(ent.mode, 'subscription');
   assert.equal(ent.unlimited, true);
+});
+
+await test('paid plan label with null Stripe state does NOT grant unlimited voice', async () => {
+  // Stale/legacy row: plan='pro' but no live subscription status or period.
+  const state = {
+    users: new Map([['x', userRow({ plan: 'pro', subscription_status: null, current_period_end: null, free_session_used: 0 })]]),
+    eventLog: new Set(), sessionCount: 0
+  };
+  const ent = await getVoiceEntitlement(makeEnv(state), 'x');
+  assert.equal(ent.unlimited, false, 'no active status must not grant unlimited');
+  assert.equal(ent.mode, 'free', 'falls through to the free taste');
+  assert.equal(ent.canStart, true);
+
+  // Same, but the free taste is already spent -> paywall, never unlimited.
+  const state2 = {
+    users: new Map([['y', userRow({ plan: 'premium', subscription_status: null, current_period_end: null, free_session_used: 1 })]]),
+    eventLog: new Set(), sessionCount: 0
+  };
+  const ent2 = await getVoiceEntitlement(makeEnv(state2), 'y');
+  assert.equal(ent2.canStart, false);
+  assert.equal(ent2.reason, 'paywall');
+});
+
+await test('createVoiceSessionRow enforces the fair-use cap atomically for subscriptions', async () => {
+  const env = makeEnv({ users: new Map(), eventLog: new Set(), sessionCount: 59 }, { VOICE_FAIR_USE_CAP: '60' });
+  const a = await createVoiceSessionRow(env, { sessionId: 's60', userRowId: 1, role: 'X', seniority: null, jd: null, mode: 'subscription', model: 'm' });
+  assert.equal(a.inserted, true, '60th session (count was 59) is allowed');
+  const b = await createVoiceSessionRow(env, { sessionId: 's61', userRowId: 1, role: 'X', seniority: null, jd: null, mode: 'subscription', model: 'm' });
+  assert.equal(b.inserted, false, '61st session is blocked at the cap');
+  assert.equal(b.reason, 'limit_reached');
+});
+
+await test('createVoiceSessionRow always inserts for free/pack (consume already gated)', async () => {
+  const env = makeEnv({ users: new Map(), eventLog: new Set(), sessionCount: 999 }, { VOICE_FAIR_USE_CAP: '60' });
+  const f = await createVoiceSessionRow(env, { sessionId: 'f1', userRowId: 1, role: 'X', seniority: null, jd: null, mode: 'free', model: 'm' });
+  assert.equal(f.inserted, true);
+  const p = await createVoiceSessionRow(env, { sessionId: 'p1', userRowId: 1, role: 'X', seniority: null, jd: null, mode: 'pack', model: 'm' });
+  assert.equal(p.inserted, true);
 });
 
 await test('canceled subscription falls back to free taste / paywall', async () => {

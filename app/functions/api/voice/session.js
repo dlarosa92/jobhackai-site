@@ -20,6 +20,7 @@ import {
   getVoiceEntitlement,
   consumeVoiceSession,
   refundVoiceSession,
+  createVoiceSessionRow,
   voiceFeatureEnabled
 } from '../../_lib/voice-entitlements.js';
 import { errorResponse, successResponse, generateRequestId } from '../../_lib/error-handler.js';
@@ -222,14 +223,26 @@ export async function onRequest(context) {
       }
 
       const sessionId = crypto.randomUUID();
+      let insertResult;
       try {
-        await db.prepare(
-          `INSERT INTO voice_sessions (id, user_id, role, seniority, jd_excerpt, status, entitlement_mode, model)
-           VALUES (?, ?, ?, ?, ?, 'created', ?, ?)`
-        ).bind(sessionId, d1User.id, role, seniority || null, jd || null, ent.mode, model).run();
+        // For subscription mode this insert enforces the fair-use cap atomically
+        // (single conditional INSERT), closing the race where concurrent starts
+        // each read the same sub-cap count and all proceed.
+        insertResult = await createVoiceSessionRow(env, {
+          sessionId, userRowId: d1User.id, role, seniority: seniority || null,
+          jd: jd || null, mode: ent.mode, model
+        });
       } catch (insertErr) {
         await refundVoiceSession(env, uid, ent.mode);
         throw insertErr;
+      }
+      if (!insertResult.inserted) {
+        // Only subscription mode can be blocked here (by the cap); it consumes
+        // no credit, so there is nothing to refund.
+        return errorResponse(
+          'You have reached this month\'s session limit. It resets at the start of next month.',
+          403, origin, env, requestId, { reason: 'limit_reached' }
+        );
       }
 
       const minted = await mintClientSecret(env, {
