@@ -1411,22 +1411,22 @@ const PLANS = {
   },
   weekly: {
     name: 'Weekly Pass',
-    color: '#00695C',
-    bgColor: '#E0F2F1',
+    color: '#388E3C',
+    bgColor: '#E8F5E9',
     icon: '🎤',
     features: ['ats', 'feedback', 'interview', 'rewriting', 'coverLetter', 'mockInterview', 'linkedin', 'voice']
   },
   monthly: {
     name: 'Monthly',
-    color: '#00695C',
-    bgColor: '#E0F2F1',
+    color: '#388E3C',
+    bgColor: '#E8F5E9',
     icon: '🎤',
     features: ['ats', 'feedback', 'interview', 'rewriting', 'coverLetter', 'mockInterview', 'linkedin', 'voice']
   },
   pack: {
     name: 'Interview Pack',
-    color: '#00695C',
-    bgColor: '#E0F2F1',
+    color: '#388E3C',
+    bgColor: '#E8F5E9',
     icon: '🎟️',
     features: ['ats', 'feedback', 'interview', 'rewriting', 'coverLetter', 'mockInterview', 'linkedin', 'voice']
   }

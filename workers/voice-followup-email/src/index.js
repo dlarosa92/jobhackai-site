@@ -30,12 +30,12 @@ function followupEmail({ userName, tip, frontendUrl }) {
   <div style="font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; max-width: 540px; margin: 0 auto; color: #1F2937;">
     <h2 style="color: #1F2937;">Hi ${userName},</h2>
     <p>You ran your free voice mock interview a couple of days ago. From your session, here is the one improvement worth practicing first:</p>
-    <div style="background: #F9FAFB; border-left: 4px solid #FF9100; border-radius: 8px; padding: 14px 16px; margin: 16px 0;">
+    <div style="background: #F9FAFB; border-left: 4px solid #D97706; border-radius: 8px; padding: 14px 16px; margin: 16px 0;">
       <p style="margin: 0; color: #374151;">${safeTip}</p>
     </div>
     <p>The fastest way to fix it is to say the answer out loud again, not to think about it. Your full report, transcript, and unlimited practice sessions are one step away.</p>
     <p style="margin: 24px 0;">
-      <a href="${frontendUrl}/pricing" style="background: #00E676; color: #1F2937; font-weight: 700; padding: 12px 24px; border-radius: 8px; text-decoration: none; display: inline-block;">Keep practicing</a>
+      <a href="${frontendUrl}/pricing" style="background: #007A30; color: #FFFFFF; font-weight: 700; padding: 12px 24px; border-radius: 8px; text-decoration: none; display: inline-block;">Keep practicing</a>
     </p>
     <p style="color: #6B7280; font-size: 13px;">This is the only reminder we will send about your session. Good luck out there.</p>
     <p style="color: #6B7280; font-size: 13px;">JobHackAI</p>
