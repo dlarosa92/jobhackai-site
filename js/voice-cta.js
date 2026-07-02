@@ -98,14 +98,15 @@
     box.setAttribute('data-cta', 'voice-tool-' + config.tool);
     box.innerHTML =
       '<style>' +
-      '.jha-voice-cta{background:#1F2937;color:#fff;border-radius:14px;padding:1.4rem 1.4rem 1.5rem;margin:1.6rem 0;text-align:center}' +
-      '.jha-voice-cta h3{color:#fff;margin:0 0 .4rem;font-size:1.15rem}' +
-      '.jha-voice-cta p{color:#D1D5DB;margin:0 0 1rem;font-size:.95rem}' +
-      '.jha-voice-cta a{display:inline-block;background:#00E676;color:#1F2937;font-weight:700;padding:.75rem 1.6rem;border-radius:8px;text-decoration:none}' +
+      '.jha-voice-cta{background:var(--color-card-bg);border:1px solid var(--color-divider);border-radius:var(--radius-xl);box-shadow:var(--shadow-card);padding:1.4rem 1.4rem 1.5rem;margin:1.6rem 0;text-align:center}' +
+      '.jha-voice-cta h3{color:var(--color-text-main);margin:0 0 .4rem;font-size:1.15rem}' +
+      '.jha-voice-cta p{color:var(--color-text-secondary);margin:0 0 1rem;font-size:.95rem}' +
+      '.jha-voice-cta a{display:inline-block;background:var(--color-cta-green);color:#fff;font-weight:700;padding:.75rem 1.6rem;border-radius:var(--radius-button);text-decoration:none}' +
+      '.jha-voice-cta a:hover{background:var(--color-cta-green-hover)}' +
       '</style>' +
       '<h3>' + config.message + '</h3>' +
       '<p>Run a realistic voice mock interview for your target role and get a scored report. Your first session is free.</p>' +
-      '<a href="voice-interview.html">Practice out loud</a>';
+      '<a href="voice-interview.html">Start your free voice interview</a>';
     return box;
   }
 
@@ -152,9 +153,10 @@
       'box-shadow:0 -10px 36px rgba(0,0,0,.14);max-width:460px;width:94%;padding:1.6rem 1.5rem 1.9rem;text-align:center;margin-bottom:0}' +
       '#jha-preview-gate h2{color:#1F2937;font-size:1.25rem;margin:0 0 .5rem}' +
       '#jha-preview-gate p{color:#4B5563;font-size:.95rem;margin:0 0 1.1rem}' +
-      '#jha-preview-gate .jha-gate-btn{display:inline-block;background:#00E676;color:#1F2937;font-weight:700;' +
-      'padding:.85rem 2rem;border-radius:8px;text-decoration:none;font-size:1rem}' +
-      '#jha-preview-gate .jha-gate-login{display:block;margin-top:.8rem;color:#00897B;font-weight:600;text-decoration:none;font-size:.92rem}' +
+      '#jha-preview-gate .jha-gate-btn{display:inline-block;background:var(--color-cta-green);color:#fff;font-weight:700;' +
+      'padding:.85rem 2rem;border-radius:var(--radius-button);text-decoration:none;font-size:1rem}' +
+      '#jha-preview-gate .jha-gate-btn:hover{background:var(--color-cta-green-hover)}' +
+      '#jha-preview-gate .jha-gate-login{display:block;margin-top:.8rem;color:var(--color-accent-blue);font-weight:600;text-decoration:none;font-size:.92rem}' +
       '</style>' +
       '<div class="jha-gate-card">' +
       '<h2>This tool is free with a JobHackAI account</h2>' +
