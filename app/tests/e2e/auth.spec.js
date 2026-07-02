@@ -275,7 +275,10 @@ test.describe('Authentication', () => {
     }
   });
 
-  test('should protect resume-feedback from unauthenticated access', async ({ browser, baseURL }) => {
+  test('shows signup preview gate on resume-feedback for unauthenticated visitors', async ({ browser, baseURL }) => {
+    // Repositioning (PR #834): resume-feedback-pro opts into logged-out preview
+    // (__JHA_ALLOW_PREVIEW__), so the auth guard no longer redirects to /login.
+    // The page stays visible under an interaction-blocking signup gate instead.
     const context = await browser.newContext({
       baseURL,
       storageState: undefined,
@@ -287,13 +290,10 @@ test.describe('Authentication', () => {
         sessionStorage.clear();
       });
       await page.goto('/resume-feedback-pro.html', { waitUntil: 'domcontentloaded' });
-      try {
-        await page.waitForURL(/\/login|\/verify-email/, { timeout: 20000 });
-      } catch (e) {
-        const currentURL = page.url();
-        throw new Error(`Auth guard did not redirect from resume-feedback. Current URL: ${currentURL}`);
-      }
-      expect(page.url()).toMatch(/\/login|\/verify-email/);
+      const gate = page.locator('#jha-preview-gate');
+      await expect(gate).toBeVisible({ timeout: 20000 });
+      await expect(gate.locator('.jha-gate-btn')).toHaveAttribute('href', /login\.html\?mode=signup/);
+      expect(page.url()).toMatch(/resume-feedback-pro/);
     } finally {
       await context.close();
     }
