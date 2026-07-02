@@ -213,7 +213,11 @@ export async function onRequest(context) {
       // Pack is our only one-time product, so handle all mode=payment here and
       // never let them fall through to the subscription plan-mapping path below
       // (which would mis-map a one-time charge to a legacy plan like essential).
-      const isOneTimePayment = sess?.mode === 'payment';
+      // The signed event payload already carries mode (the session re-fetch is
+      // only needed for line_items), so a failed expansion cannot hide that
+      // this was a one-time payment.
+      const sessionMode = sess?.mode || event.data?.object?.mode || null;
+      const isOneTimePayment = sessionMode === 'payment';
       const isPackPurchase = isOneTimePayment &&
         (priceId === env.STRIPE_PRICE_PACK || originalPlan === 'pack');
       if (isOneTimePayment) {
@@ -278,6 +282,17 @@ export async function onRequest(context) {
           }));
         }
         return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
+      }
+
+      // Fail-closed: a pack purchase must never reach the subscription
+      // plan-mapping below (it would write plan='essential', which grants
+      // unlimited voice, for a one-time charge). Reaching here with
+      // metadata.plan=pack means the mode signal was lost everywhere, so
+      // return 5xx for a Stripe retry (mirrors the unresolved-uid path above).
+      if (originalPlan === 'pack') {
+        console.error(`❌ [WEBHOOK] Pack purchase fell through one-time handling (mode unresolved, session=${sessionId}); returning 500 for Stripe retry`);
+        await releaseEventForRetry();
+        return new Response('pack mode unresolved', { status: 500, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
       }
 
       // Determine effective plan based on original plan and subscription status
