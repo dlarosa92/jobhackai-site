@@ -9,7 +9,7 @@ export const CONTENT_SECURITY_POLICY = [
   "font-src 'self' data: https://fonts.gstatic.com",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "script-src 'self' 'unsafe-inline' https://www.gstatic.com https://www.googleapis.com https://apis.google.com https://accounts.google.com https://www.googletagmanager.com https://www.google-analytics.com https://www.google.com https://js.stripe.com https://checkout.stripe.com https://*.firebaseapp.com",
-  "connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://firebaseinstallations.googleapis.com https://www.googleapis.com https://api.stripe.com https://checkout.stripe.com https://www.google-analytics.com https://region1.google-analytics.com https://stats.g.doubleclick.net https://*.firebaseio.com https://*.firebasedatabase.app https://*.firebaseapp.com",
+  "connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://firebaseinstallations.googleapis.com https://www.googleapis.com https://api.stripe.com https://checkout.stripe.com https://www.google-analytics.com https://region1.google-analytics.com https://stats.g.doubleclick.net https://*.firebaseio.com https://*.firebasedatabase.app https://*.firebaseapp.com https://api.openai.com",
   "frame-src 'self' https://accounts.google.com https://*.google.com https://*.firebaseapp.com https://js.stripe.com https://hooks.stripe.com https://checkout.stripe.com",
   "worker-src 'self' blob:",
   "manifest-src 'self'",

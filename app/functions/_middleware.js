@@ -35,6 +35,13 @@ export async function onRequest({ request, next, env }) {
     h.set(name, value);
   }
 
+  // Voice interview needs the same-origin microphone. Mirrors the
+  // /voice-interview rule in app/public/_headers: middleware set() overrides
+  // the _headers layer on every route, so the exception must live here too.
+  if (pathname === '/voice-interview' || pathname === '/voice-interview.html') {
+    h.set('permissions-policy', 'camera=(), microphone=(self), geolocation=()');
+  }
+
   // QA-only: prevent indexing and disable caching
   if (env.ENVIRONMENT === 'qa') {
     h.set('x-qa-mw', 'hit');
