@@ -135,13 +135,16 @@ async function runCleanup(env) {
         OR (u.voice_sessions_remaining > 0
          AND (u.pack_expires_at IS NULL OR datetime(u.pack_expires_at) > datetime('now')))
       )`;
+    // Newest COMPLETED row only: the history list ignores created/active/
+    // abandoned rows, so a newer incomplete session must not steal the
+    // carve-out from the completed session the list actually keeps.
     const carveOutIds = `SELECT vs.id FROM voice_sessions vs
         JOIN users u ON u.id = vs.user_id
         WHERE vs.started_at < ?
           AND NOT ${activeVoicePlan}
           AND vs.id = (
             SELECT v2.id FROM voice_sessions v2
-            WHERE v2.user_id = vs.user_id
+            WHERE v2.user_id = vs.user_id AND v2.status = 'completed'
             ORDER BY v2.started_at DESC, v2.id DESC LIMIT 1
           )`;
     results.voice_sessions_stripped = await deleteRows(

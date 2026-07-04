@@ -599,11 +599,18 @@
   var HISTORY_LOCK_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="11" width="18" height="8" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>';
 
   function historyChip(item) {
-    if (!item.reportAvailable || !item.fullAccess) {
+    // Expired rows are locked whatever their status says: the stripped
+    // carve-out row reports 'scoring' (no stored scorecard) forever.
+    if (!item.reportAvailable) {
       return '<span class="vi-history-chip vi-history-chip--partial">' + HISTORY_LOCK_SVG + 'Partial</span>';
     }
+    // A report still being scored is 'Scoring…' even without full access —
+    // the Partial lock only applies once there is a report to lock.
     if (item.status === 'scoring') {
       return '<span class="vi-history-chip vi-history-chip--scoring">Scoring…</span>';
+    }
+    if (!item.fullAccess) {
+      return '<span class="vi-history-chip vi-history-chip--partial">' + HISTORY_LOCK_SVG + 'Partial</span>';
     }
     if (item.overall != null && isFinite(Number(item.overall))) {
       return '<span class="vi-history-chip vi-history-chip--score">' + Math.round(Number(item.overall)) + '</span>';
