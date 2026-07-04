@@ -291,6 +291,7 @@
       console.error('[VOICE] start failed:', err);
       alert('Could not connect the voice session. Check your connection and try again.');
       teardownConnection();
+      historyLiveClear(false);
       show('vi-setup-view');
       if (startBtn) { startBtn.disabled = false; startBtn.textContent = 'Start the interview'; }
     }
@@ -361,6 +362,7 @@
     } catch (err) {
       console.error('[VOICE] complete failed:', err);
       if (doneStatus) doneStatus.textContent = 'The session ended but saving failed. Your session is recorded; check back shortly.';
+      historyLiveClear(false);
     }
   }
 
@@ -368,6 +370,9 @@
     if (attempt > 20) {
       var doneStatus = $('vi-done-status');
       if (doneStatus) doneStatus.textContent = 'Your report is taking longer than usual. Refresh this page in a minute.';
+      // The session IS completed server-side; swap the local Scoring… row
+      // for the server's own scoring row so the rail stays truthful.
+      historyLiveClear(true);
       return;
     }
     setTimeout(async function () {
@@ -888,6 +893,17 @@
     if (!historyState.liveRow) return;
     historyState.liveRow.phase = 'scoring';
     renderHistory();
+  }
+
+  // Failure paths: drop the live row so the rail never shows Live/Scoring…
+  // for a session that is no longer going anywhere. Pass refresh=true when
+  // the session was completed server-side (poll timeout): the refetch swaps
+  // the local row for the server's real 'scoring' row instead.
+  function historyLiveClear(refresh) {
+    if (!historyState.liveRow) return;
+    historyState.liveRow = null;
+    if (refresh && historyState.voice && historyState.voice.enabled) fetchHistory();
+    else renderHistory();
   }
 
   function historyOnScorecardReady() {
