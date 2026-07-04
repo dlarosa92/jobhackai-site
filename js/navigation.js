@@ -1574,9 +1574,17 @@ function ensureVoiceNavState() {
     }
     if (_voiceNavFetching || !window.PlanCache || typeof window.PlanCache.getPlan !== 'function') return;
     _voiceNavFetching = true;
+    const requestUid = user.uid || null;
     user.getIdToken()
       .then((token) => window.PlanCache.getPlan(token))
       .then((data) => {
+        // Discard responses that outlive an account switch: the plan data
+        // belongs to whoever was signed in when the fetch started, and must
+        // not stamp their entitlement onto the next account's nav.
+        const current = (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function')
+          ? window.FirebaseAuthManager.getCurrentUser()
+          : null;
+        if (!current || (current.uid || null) !== requestUid) return;
         // getPlan resolves null on a failed fetch (it never rejects). That is
         // indeterminate, not authoritative: keep the last-known voice state
         // instead of tearing the nav entry out on a transient network blip.
