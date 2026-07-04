@@ -2359,9 +2359,9 @@
       // Voice tile only when VOICE_INTERVIEW_ENABLED is on (via /api/plan/me)
       (async function revealVoiceTile() {
         try {
-          // Fetch /api/plan/me directly rather than via fetchSubscriptionStatus/
-          // PlanCache, which trims the response to { plan, trialEndsAt } and
-          // drops the voice entitlement block, so the tile would never unhide.
+          // Fetch /api/plan/me directly rather than via fetchSubscriptionStatus,
+          // which trims the response to { plan, trialEndsAt } and drops the
+          // voice entitlement block, so the tile would never unhide.
           const idToken = await getFirebaseIdToken();
           if (!idToken) return;
           const res = await fetch('/api/plan/me', { headers: { Authorization: `Bearer ${idToken}` } });
@@ -2369,7 +2369,24 @@
           const planData = await res.json();
           if (planData && planData.voice && planData.voice.enabled) {
             const voiceCard = root.querySelector('[data-feature-key="voice"]');
-            if (voiceCard) voiceCard.style.display = '';
+            if (voiceCard) {
+              voiceCard.style.display = '';
+              // Entitlement chip next to the tile title (plan-badge family:
+              // #E8F5E9 tint + #388E3C text). Used-up free taste: no chip,
+              // the voice page itself paywalls.
+              const voice = planData.voice;
+              const chipText = voice.unlimited ? 'Unlimited'
+                : (voice.mode === 'pack' ? `${voice.sessionsRemaining} sessions left`
+                : (voice.canStart ? '1 free session' : null));
+              const titleEl = voiceCard.querySelector('.feature-title');
+              if (chipText && titleEl && !titleEl.querySelector('.voice-entitlement-chip')) {
+                const chip = document.createElement('span');
+                chip.className = 'voice-entitlement-chip';
+                chip.textContent = chipText;
+                chip.style.cssText = 'display:inline-block;margin-left:0.5rem;padding:0.1rem 0.6rem;border-radius:9999px;background:#E8F5E9;color:#388E3C;font-size:0.75rem;font-weight:700;vertical-align:middle;white-space:nowrap;';
+                titleEl.appendChild(chip);
+              }
+            }
           }
         } catch (_) { /* flag off or fetch failed: tile stays hidden */ }
       })();
