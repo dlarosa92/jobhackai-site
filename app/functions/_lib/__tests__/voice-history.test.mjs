@@ -39,8 +39,11 @@ function fakeDb(state) {
     }
     if (q.startsWith('DELETE FROM voice_sessions WHERE id = ? AND user_id = ?')) {
       const [id, userId] = binds;
+      const keepInFlight = q.includes("status NOT IN ('created', 'active')");
       const before = state.sessions.length;
-      state.sessions = state.sessions.filter((s) => !(String(s.id) === String(id) && s.user_id === userId));
+      state.sessions = state.sessions.filter((s) =>
+        !(String(s.id) === String(id) && s.user_id === userId
+          && !(keepInFlight && (s.status === 'created' || s.status === 'active'))));
       return { run: { meta: { changes: before - state.sessions.length } } };
     }
     if (q.startsWith('DELETE FROM voice_sessions WHERE user_id = ?')) {
@@ -197,6 +200,8 @@ await test('lapsed-paid user (no active plan) also keeps only the most recent ag
   const sessions = await listVoiceSessions(makeEnv(state), 1, LAPSED_PAID_ENT, NOW);
   assert.equal(sessions.length, 1, 'only the most recent row is carved out');
   assert.equal(sessions[0].reportAvailable, false);
+  assert.equal(sessions[0].overall, null,
+    'a locked expired row must not leak its score, even with fullAccess and an unstripped scorecard');
 });
 
 await test('paid user\'s aged sessions are excluded from the list (typed rule)', async () => {
@@ -256,6 +261,21 @@ await test('clear removes only the caller\'s sessions', async () => {
   assert.equal(state.sessions.length, 1);
   assert.equal(state.sessions[0].user_id, 2, 'other users\' history is untouched');
   assert.equal(await clearVoiceSessions(env, 1), 0, 'clearing again is a no-op');
+});
+
+await test('delete refuses in-flight (created/active) sessions', async () => {
+  const state = { sessions: [
+    sessionRow({ id: 'live-2', user_id: 1, status: 'active' }),
+    sessionRow({ id: 'fresh-2', user_id: 1, status: 'created' }),
+    sessionRow({ id: 'done-2', user_id: 1, status: 'completed' })
+  ] };
+  const env = makeEnv(state);
+
+  assert.equal(await deleteVoiceSession(env, 1, 'live-2'), false, 'active session must survive');
+  assert.equal(await deleteVoiceSession(env, 1, 'fresh-2'), false, 'created session must survive');
+  assert.equal(state.sessions.length, 3);
+  assert.equal(await deleteVoiceSession(env, 1, 'done-2'), true, 'completed sessions delete normally');
+  assert.equal(state.sessions.length, 2);
 });
 
 await test('clear never deletes an in-flight (created/active) session', async () => {

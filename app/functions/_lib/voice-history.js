@@ -105,7 +105,9 @@ export async function listVoiceSessions(env, userRowId, ent, nowMs = Date.now())
       createdAt: r.started_at,
       durationSeconds: r.duration_seconds,
       status: scorecard ? 'ready' : 'scoring',
-      overall: fullAccess && scorecard ? (scorecard.overall ?? null) : null,
+      // A locked (expired) row must not leak its score through the API even
+      // while the cleaner has yet to strip the stored scorecard.
+      overall: !expired && fullAccess && scorecard ? (scorecard.overall ?? null) : null,
       fullAccess,
       reportAvailable: !expired
     });
@@ -117,7 +119,9 @@ export async function listVoiceSessions(env, userRowId, ent, nowMs = Date.now())
 
 /**
  * Owner-only delete of one session (mirrors the typed delete: ownership is
- * enforced in the SQL, 0 changes means not found / not yours).
+ * enforced in the SQL, 0 changes means not found / not yours). In-flight
+ * (created/active) sessions are refused for the same reason clear skips
+ * them: destroying the row would orphan the upcoming /complete call.
  *
  * @returns {Promise<boolean>} true when a row was deleted
  */
@@ -125,7 +129,7 @@ export async function deleteVoiceSession(env, userRowId, sessionId) {
   const db = getDb(env);
   if (!db) return false;
   const res = await db.prepare(
-    `DELETE FROM voice_sessions WHERE id = ? AND user_id = ?`
+    `DELETE FROM voice_sessions WHERE id = ? AND user_id = ? AND status NOT IN ('created', 'active')`
   ).bind(String(sessionId), userRowId).run();
   const changes = typeof res?.meta?.changes === 'number' ? res.meta.changes : (res?.changes || 0);
   return changes > 0;
