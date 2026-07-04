@@ -31,6 +31,21 @@
     .vi-field input:focus-visible, .vi-field select:focus-visible, .vi-field textarea:focus-visible { outline: 2px solid var(--color-accent-blue); outline-offset: 1px; }
     .vi-field textarea { min-height: 110px; resize: vertical; }
     .vi-hint { font-size: 0.85rem; color: var(--color-text-muted); margin-top: 0.3rem; }
+    /* "What to expect" checklist (typed .mi-checklist pattern, retokenized) */
+    .vi-checklist { background: var(--color-bg-light); border-radius: var(--radius-md); padding: 1rem 1.25rem; margin-bottom: 1rem; }
+    .vi-checklist-title { font-weight: var(--font-weight-semibold); color: var(--color-text-main); margin-bottom: 0.75rem; font-size: 0.9rem; }
+    .vi-checklist-item { display: flex; align-items: flex-start; gap: 0.5rem; font-size: 0.9rem; color: var(--color-text-secondary); margin-bottom: 0.5rem; line-height: 1.4; }
+    .vi-checklist-item:last-child { margin-bottom: 0; }
+    .vi-checklist-item svg { flex-shrink: 0; margin-top: 2px; color: var(--color-cta-green); }
+    /* Live answer cue (typed .mi-sao-strip visual, retokenized). Static on
+       purpose: it must not compete with listening. */
+    .vi-sao-cue { border: 1px dashed var(--color-divider); border-radius: var(--radius-md); padding: 0.8rem 1rem; margin: 0 0 1.2rem; }
+    .vi-sao-cue-label { color: var(--color-text-muted); font-size: 12px; font-weight: var(--font-weight-semibold); letter-spacing: 0.04em; margin-bottom: 0.6rem; }
+    .vi-sao-strip { display: flex; justify-content: space-between; gap: 0.6rem; font-size: 0.85rem; }
+    .vi-sao-item { flex: 1; text-align: center; color: var(--color-text-secondary); background: var(--color-bg-light); border: 1px solid var(--color-divider); border-radius: var(--radius-md); padding: 0.5rem 0.6rem; }
+    .vi-sao-label { font-weight: var(--font-weight-semibold); color: var(--color-accent-blue); }
+    .vi-sao-item--outcome { background: #E8F5E9; border-color: var(--color-cta-green); color: var(--color-cta-green); }
+    .vi-sao-item--outcome .vi-sao-label { color: var(--color-cta-green); }
     .vi-banner { border-radius: 8px; padding: 0.7rem 1rem; font-size: 0.95rem; margin-bottom: 1.1rem; }
     .vi-banner-ok { background: #E8F5E9; color: var(--color-cta-green); }
     .vi-banner-paywall { background: #FFF7E6; color: #92400E; }
@@ -236,8 +251,23 @@
       <div class="vi-field">
         <label for="vi-jd">Job description (optional)</label>
         <textarea id="vi-jd" maxlength="2000" placeholder="Paste the job description so the interviewer can target it."></textarea>
-        <p class="vi-hint">Find a quiet room and use headphones if you can. The interviewer hears everything your microphone hears.</p>
       </div>
+      <div class="vi-checklist">
+        <div class="vi-checklist-title">What to expect</div>
+        <div class="vi-checklist-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20,6 9,17 4,12"/></svg>
+          <span>Up to 20 minutes, live voice, natural follow-up questions.</span>
+        </div>
+        <div class="vi-checklist-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20,6 9,17 4,12"/></svg>
+          <span>Use Situation → Action → Outcome — spend most of your answer on the Outcome (≈85%).</span>
+        </div>
+        <div class="vi-checklist-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20,6 9,17 4,12"/></svg>
+          <span>We'll score you out of 100 and save this session to your history.</span>
+        </div>
+      </div>
+      <p class="vi-hint">Find a quiet room and use headphones if you can. The interviewer hears everything your microphone hears.</p>
       <button id="vi-start-btn" class="vi-btn-primary" disabled>Start the interview</button>
     </div>
 
@@ -247,6 +277,14 @@
       <div class="vi-timer" id="vi-timer">20:00</div>
       <p><span id="vi-speaking" class="vi-speaking"></span>Interviewer</p>
       <p id="vi-caption" class="vi-caption">The interviewer will start in a moment. Speak naturally and take your time.</p>
+      <div class="vi-sao-cue">
+        <div class="vi-sao-cue-label">ANSWER CUE — S + A = O</div>
+        <div class="vi-sao-strip">
+          <div class="vi-sao-item"><span class="vi-sao-label">Situation</span><br>≈ 5% — one line</div>
+          <div class="vi-sao-item"><span class="vi-sao-label">Action</span><br>≈ 10% — what you did</div>
+          <div class="vi-sao-item vi-sao-item--outcome"><span class="vi-sao-label">Outcome</span><br>≈ 85% — results, numbers</div>
+        </div>
+      </div>
       <div class="vi-live-actions">
         <button id="vi-mute-btn" class="vi-btn-secondary">Mute</button>
         <button id="vi-reconnect-btn" class="vi-btn-secondary" style="display:none">Reconnect</button>

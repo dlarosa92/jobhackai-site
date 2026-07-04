@@ -342,7 +342,7 @@
 
     show('vi-done-view');
     var doneStatus = $('vi-done-status');
-    if (doneStatus) doneStatus.textContent = 'Interview finished. Preparing your report...';
+    if (doneStatus) doneStatus.textContent = 'We\'re reviewing your conversation using our S + A = O formula and interview rubric. This usually takes a few seconds.';
     historyLiveScoring();
 
     try {
