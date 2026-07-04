@@ -116,6 +116,7 @@ export async function onRequest(context) {
       seniority: session.seniority,
       status: session.status,
       startedAt: session.started_at,
+      createdAt: session.started_at,
       endedAt: session.ended_at,
       durationSeconds: session.duration_seconds,
       scorecardReady: !!scorecard,

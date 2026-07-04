@@ -397,6 +397,29 @@
     return div.innerHTML;
   }
 
+  // One row of the S + A = O balance block: green fill at the actual share,
+  // a dark goal tick at the 5/10/85 target, and a colored note. Over-goal is
+  // a warning, Outcome under-goal is the real error, on/near goal is success.
+  function saoBalanceRow(label, actual, goal, isOutcome) {
+    actual = Math.max(0, Math.min(100, Math.round(Number(actual) || 0)));
+    var noteClass = 'vi-sao-bal-note--ok';
+    if (isOutcome && actual < goal - 5) noteClass = 'vi-sao-bal-note--under';
+    else if (!isOutcome && actual > goal + 5) noteClass = 'vi-sao-bal-note--over';
+    return '<div class="vi-sao-bal-row"><span class="vi-sao-bal-label">' + label + '</span>' +
+      '<span class="vi-sao-bal-track"><span class="vi-sao-bal-fill" style="width:' + actual + '%"></span>' +
+      '<span class="vi-sao-bal-goal" style="left:' + goal + '%"></span></span>' +
+      '<span class="vi-sao-bal-note ' + noteClass + '">' + actual + '% · goal ≈ ' + goal + '%</span></div>';
+  }
+
+  function savedLine(data) {
+    var parts = ['Saved to history'];
+    var when = formatHistoryWhen(data.createdAt || data.startedAt);
+    if (when) parts.push(when);
+    if (data.role) parts.push(String(data.role));
+    if (data.seniority) parts.push(String(data.seniority));
+    return '<p class="vi-sc-saved">' + escapeHtml(parts.join(' · ')) + '</p>';
+  }
+
   function renderScorecard(data) {
     var wrap = $('vi-scorecard');
     var doneStatus = $('vi-done-status');
@@ -406,16 +429,34 @@
     var html = '';
 
     html += '<h2 class="vi-sc-title">Your interview report</h2>';
+    if (!data.expired) html += savedLine(data);
 
     if (data.fullAccess) {
       html += '<div class="vi-sc-overall"><div class="vi-sc-score">' + escapeHtml(sc.overall) + '</div><div class="vi-sc-overall-label">Overall</div></div>';
       if (sc.dimensions) {
         html += '<div class="vi-sc-dims">';
         html += dimensionRow('Communication', sc.dimensions.communication);
-        html += dimensionRow('Structure', sc.dimensions.structure);
+        html += dimensionRow('S + A = O structure', sc.dimensions.structure);
         html += dimensionRow('Content depth', sc.dimensions.contentDepth);
         html += dimensionRow('Role fit', sc.dimensions.roleFit);
         html += '</div>';
+      }
+      // Additive scorecard fields: old sessions have no saoBalance, so the
+      // whole balance block hides gracefully when it is absent.
+      if (sc.saoBalance) {
+        html += '<div class="vi-sc-block"><h3>How you balanced Situation, Action, and Outcome</h3>';
+        html += '<div class="vi-sao-bal">';
+        html += saoBalanceRow('Situation', sc.saoBalance.situation, 5, false);
+        html += saoBalanceRow('Action', sc.saoBalance.action, 10, false);
+        html += saoBalanceRow('Outcome', sc.saoBalance.outcome, 85, true);
+        html += '</div></div>';
+        if (sc.saoCoaching && sc.saoCoaching.length) {
+          html += '<div class="vi-sc-block vi-sc-improve"><h3>Next time, focus on</h3><ul class="vi-sc-coach">';
+          sc.saoCoaching.forEach(function (tip) {
+            html += '<li>' + escapeHtml(tip) + '</li>';
+          });
+          html += '</ul></div>';
+        }
       }
     }
 
@@ -442,7 +483,11 @@
         });
         html += '</details>';
       }
-      html += '<div class="vi-sc-actions"><a class="vi-btn-secondary" href="voice-interview.html">Run another interview</a></div>';
+      html += '<div class="vi-sc-actions">' +
+        '<a class="vi-btn-primary" href="voice-interview.html">Run another interview</a>' +
+        '<a class="vi-btn-secondary" href="mock-interview.html">Practice typed questions</a>' +
+        '<a class="vi-sc-actions-link" href="dashboard.html">Back to Dashboard</a>' +
+        '</div>';
     } else {
       // Free taste: partial scorecard, blurred full report, one upgrade CTA.
       // Expired sessions (past the 90-day retention window) share the same
