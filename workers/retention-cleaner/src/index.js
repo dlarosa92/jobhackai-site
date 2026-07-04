@@ -117,6 +117,48 @@ async function runCleanup(env) {
     cutoff
   );
 
+  // 9. Voice sessions — same 90-day rule as mock interviews, with the
+  // free-taste carve-out: a user with no active voice plan (no live
+  // subscription, no usable pack credits) keeps their most recent session
+  // row as metadata so it stays visible in history, but its transcript and
+  // scorecard are stripped (the report is locked once past retention).
+  // Entitled users' aged sessions are deleted exactly like typed sessions.
+  const hasVoiceSessions = await checkColumnExists(db, 'voice_sessions', 'id');
+  if (hasVoiceSessions) {
+    // Mirrors getVoiceEntitlement (app/functions/_lib/voice-entitlements.js):
+    // active subscription = unlimited plan label + live Stripe status + period
+    // not lapsed beyond the 3-day grace; usable pack = credits > 0, not expired.
+    const activeVoicePlan = `(
+        (u.plan IN ('weekly','monthly','trial','essential','pro','premium')
+         AND u.subscription_status IN ('active','trialing','past_due')
+         AND (u.current_period_end IS NULL OR datetime(u.current_period_end) > datetime('now','-3 days')))
+        OR (u.voice_sessions_remaining > 0
+         AND (u.pack_expires_at IS NULL OR datetime(u.pack_expires_at) > datetime('now')))
+      )`;
+    const carveOutIds = `SELECT vs.id FROM voice_sessions vs
+        JOIN users u ON u.id = vs.user_id
+        WHERE vs.started_at < ?
+          AND NOT ${activeVoicePlan}
+          AND vs.id = (
+            SELECT v2.id FROM voice_sessions v2
+            WHERE v2.user_id = vs.user_id
+            ORDER BY v2.started_at DESC, v2.id DESC LIMIT 1
+          )`;
+    results.voice_sessions_stripped = await deleteRows(
+      db,
+      `UPDATE voice_sessions SET transcript_json = NULL, scorecard_json = NULL, updated_at = datetime('now')
+       WHERE id IN (${carveOutIds})
+         AND (transcript_json IS NOT NULL OR scorecard_json IS NOT NULL)`,
+      cutoff
+    );
+    results.voice_sessions = await deleteRows(
+      db,
+      `DELETE FROM voice_sessions WHERE started_at < ? AND id NOT IN (${carveOutIds})`,
+      cutoff,
+      cutoff
+    );
+  }
+
   console.log('[retention-cleaner] cleanup complete', results);
 }
 

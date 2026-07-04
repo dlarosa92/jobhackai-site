@@ -1,14 +1,21 @@
 /**
  * GET /api/voice/sessions
  *
- * Lists the user's voice sessions for history and progress tracking.
- * Overall scores are included only for sessions the user has full access to
- * (paid sessions, or any session once the user is currently entitled).
+ * Lists the authenticated user's completed voice sessions for the history
+ * rail, newest first, max 10. Overall scores are included only for sessions
+ * the user has full access to (paid sessions, or any session once the user
+ * has ever paid); free/partial rows return overall: null.
+ *
+ * Retention mirrors the typed mock interview (90 days, deleted by
+ * workers/retention-cleaner) with the free-taste carve-out: a user with no
+ * active voice plan keeps their most recent session row listed past 90 days
+ * with reportAvailable: false. See _lib/voice-history.js.
  */
 
 import { getBearer, verifyFirebaseIdToken } from '../../_lib/firebase-auth.js';
 import { getOrCreateUserByAuthId, getDb } from '../../_lib/db.js';
 import { getVoiceEntitlement, voiceFeatureEnabled } from '../../_lib/voice-entitlements.js';
+import { listVoiceSessions } from '../../_lib/voice-history.js';
 import { errorResponse, successResponse, generateRequestId } from '../../_lib/error-handler.js';
 
 export async function onRequest(context) {
@@ -37,30 +44,8 @@ export async function onRequest(context) {
     const d1User = await getOrCreateUserByAuthId(env, uid, null, { updateActivity: false });
     if (!d1User?.id) return successResponse({ sessions: [] }, 200, origin, env, requestId);
 
-    const rows = await db.prepare(
-      `SELECT id, role, seniority, status, entitlement_mode, started_at, duration_seconds, scorecard_json
-       FROM voice_sessions WHERE user_id = ? ORDER BY started_at DESC LIMIT 25`
-    ).bind(d1User.id).all();
-
     const ent = await getVoiceEntitlement(env, uid);
-
-    const sessions = (rows?.results || []).map((r) => {
-      const fullAccess = r.entitlement_mode !== 'free' || ent.unlimited || ent.sessionsRemaining > 0 || ent.hasEverPaid;
-      let overall = null;
-      if (fullAccess && r.scorecard_json) {
-        try { overall = JSON.parse(r.scorecard_json).overall ?? null; } catch (_) {}
-      }
-      return {
-        sessionId: r.id,
-        role: r.role,
-        seniority: r.seniority,
-        status: r.status,
-        startedAt: r.started_at,
-        durationSeconds: r.duration_seconds,
-        overall,
-        fullAccess
-      };
-    });
+    const sessions = await listVoiceSessions(env, d1User.id, ent);
 
     return successResponse({ sessions }, 200, origin, env, requestId);
   } catch (err) {
