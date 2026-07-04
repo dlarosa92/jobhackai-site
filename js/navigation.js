@@ -1577,7 +1577,11 @@ function ensureVoiceNavState() {
     user.getIdToken()
       .then((token) => window.PlanCache.getPlan(token))
       .then((data) => {
-        const voice = (data && data.voice) || null;
+        // getPlan resolves null on a failed fetch (it never rejects). That is
+        // indeterminate, not authoritative: keep the last-known voice state
+        // instead of tearing the nav entry out on a transient network blip.
+        if (!data) return;
+        const voice = data.voice || null;
         const changed = JSON.stringify(voice) !== JSON.stringify(_voiceNav);
         _voiceNav = voice;
         if (changed) {
