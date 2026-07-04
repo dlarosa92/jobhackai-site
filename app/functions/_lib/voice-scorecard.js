@@ -23,11 +23,27 @@ export const SCORECARD_SCHEMA = {
         additionalProperties: false,
         properties: {
           communication: { type: 'integer', description: 'Clarity, pace, confidence 0-100' },
-          structure: { type: 'integer', description: 'Answer organization, STAR usage 0-100' },
+          structure: { type: 'integer', description: 'Answer structure scored BY the S + A = O formula (goal: about 5% situation, 10% action, 85% outcome) 0-100' },
           contentDepth: { type: 'integer', description: 'Specificity, examples, numbers 0-100' },
           roleFit: { type: 'integer', description: 'Relevance to the target role 0-100' }
         },
         required: ['communication', 'structure', 'contentDepth', 'roleFit']
+      },
+      saoBalance: {
+        type: 'object',
+        additionalProperties: false,
+        description: 'Share of the candidate speaking time spent on each S + A = O component, integer percents summing to about 100',
+        properties: {
+          situation: { type: 'integer', description: 'Percent of candidate speaking time spent setting up the situation, 0-100' },
+          action: { type: 'integer', description: 'Percent of candidate speaking time spent describing what they did, 0-100' },
+          outcome: { type: 'integer', description: 'Percent of candidate speaking time spent on results and numbers, 0-100' }
+        },
+        required: ['situation', 'action', 'outcome']
+      },
+      saoCoaching: {
+        type: 'array',
+        description: 'Exactly 2 imperative coaching lines, each under 120 characters, telling the candidate how to rebalance toward outcomes, e.g. "Open answers with the result. Then explain how."',
+        items: { type: 'string' }
       },
       topStrength: { type: 'string', description: 'The single strongest thing the candidate did, 1-2 sentences' },
       topImprovement: { type: 'string', description: 'The single most important improvement, 1-2 sentences, actionable' },
@@ -46,7 +62,7 @@ export const SCORECARD_SCHEMA = {
       },
       summary: { type: 'string', description: '3-4 sentence overall summary written to the candidate' }
     },
-    required: ['overall', 'dimensions', 'topStrength', 'topImprovement', 'moments', 'summary']
+    required: ['overall', 'dimensions', 'saoBalance', 'saoCoaching', 'topStrength', 'topImprovement', 'moments', 'summary']
   }
 };
 
@@ -100,6 +116,10 @@ export async function generateAndStoreScorecard(env, sessionId) {
       'You are an expert interview coach scoring a voice mock interview transcript.',
       'Score honestly: a rambling or vague performance should score in the 40s-60s, a strong one in the 70s-80s, exceptional in the 90s.',
       'Base every judgment only on what the CANDIDATE actually said. Quote or closely paraphrase real moments.',
+      'JobHackAI teaches the S + A = O answer formula: Situation about 5 percent, Action about 10 percent, Outcome about 85 percent of an answer.',
+      'Compute saoBalance from the transcript: the share of the candidate speaking time spent on situation setup, actions taken, and outcomes or results, as integer percents summing to about 100.',
+      'Score the structure dimension BY the S + A = O formula, not generic answer organization: answers that spend most of their time on concrete outcomes score high; answers stuck in backstory or process score low.',
+      'Write saoCoaching as exactly two imperative tips, each under 120 characters, telling the candidate how to rebalance toward outcomes.',
       'Write feedback to the candidate directly, in second person, plain language, short sentences. Do not use em dashes.'
     ].join(' ');
 

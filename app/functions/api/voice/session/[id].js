@@ -7,12 +7,20 @@
  * - Free-taste users get the partial scorecard only: top strength + one
  *   improvement area. The full report and transcript stay behind the paywall
  *   server-side, so no client-state tampering can reveal them.
+ * - Sessions past the 90-day retention window return a minimal expired
+ *   payload (expired: true); the client renders the locked view.
+ *
+ * DELETE /api/voice/session/:id
+ *
+ * Owner-only delete for the history rail (mirrors the typed mock interview
+ * session delete: ownership enforced, 404 when the row isn't the caller's).
  */
 
 import { getBearer, verifyFirebaseIdToken } from '../../../_lib/firebase-auth.js';
 import { getOrCreateUserByAuthId, getDb } from '../../../_lib/db.js';
 import { getVoiceEntitlement, voiceFeatureEnabled } from '../../../_lib/voice-entitlements.js';
 import { partialScorecard } from '../../../_lib/voice-scorecard.js';
+import { isSessionExpired, deleteVoiceSession } from '../../../_lib/voice-history.js';
 import { errorResponse, successResponse, generateRequestId } from '../../../_lib/error-handler.js';
 
 export async function onRequest(context) {
@@ -21,7 +29,9 @@ export async function onRequest(context) {
   const requestId = generateRequestId();
 
   if (request.method === 'OPTIONS') return successResponse({}, 200, origin, env, requestId);
-  if (request.method !== 'GET') return errorResponse('Method not allowed', 405, origin, env, requestId);
+  if (request.method !== 'GET' && request.method !== 'DELETE') {
+    return errorResponse('Method not allowed', 405, origin, env, requestId);
+  }
   if (!voiceFeatureEnabled(env)) return errorResponse('Not found', 404, origin, env, requestId);
 
   const token = getBearer(request);
@@ -49,8 +59,40 @@ export async function onRequest(context) {
       return errorResponse('Session not found', 404, origin, env, requestId);
     }
 
+    if (request.method === 'DELETE') {
+      const deleted = await deleteVoiceSession(env, d1User.id, session.id);
+      if (!deleted) return errorResponse('Session not found', 404, origin, env, requestId);
+      console.log(`[VOICE-SESSION-DELETE] Deleted session ${session.id} for uid=${uid}`);
+      return successResponse({ success: true }, 200, origin, env, requestId);
+    }
+
     let scorecard = null;
     try { scorecard = session.scorecard_json ? JSON.parse(session.scorecard_json) : null; } catch (_) {}
+
+    // Past the 90-day retention window the report is locked for everyone:
+    // the retention-cleaner will remove the payload (or, for the free-taste
+    // carve-out row, strip it while keeping the metadata). Serve a minimal
+    // expired payload either way; the client renders the locked view.
+    if (isSessionExpired(session.started_at)) {
+      return successResponse({
+        sessionId: session.id,
+        role: session.role,
+        seniority: session.seniority,
+        status: session.status,
+        startedAt: session.started_at,
+        createdAt: session.started_at,
+        endedAt: session.ended_at,
+        durationSeconds: session.duration_seconds,
+        scorecardReady: true,
+        fullAccess: false,
+        expired: true,
+        scorecard: {
+          topStrength: scorecard?.topStrength ?? null,
+          topImprovement: scorecard?.topImprovement ?? null
+        },
+        transcript: null
+      }, 200, origin, env, requestId);
+    }
 
     // Full access: the session itself was paid for, or the user is currently
     // entitled (active subscription, grandfathered legacy plan, or pack
@@ -74,6 +116,7 @@ export async function onRequest(context) {
       seniority: session.seniority,
       status: session.status,
       startedAt: session.started_at,
+      createdAt: session.started_at,
       endedAt: session.ended_at,
       durationSeconds: session.duration_seconds,
       scorecardReady: !!scorecard,
