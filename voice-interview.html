@@ -78,6 +78,96 @@
     .vi-sc-unlock { position: absolute; top: 18%; left: 50%; transform: translateX(-50%); width: min(92%, 420px); background: #fff; border: 1px solid var(--color-divider); border-radius: var(--radius-xl); box-shadow: var(--shadow-xl); padding: 1.4rem 1.4rem 1.5rem; text-align: center; }
     .vi-sc-unlock h3 { margin: 0 0 0.5rem; color: var(--color-text-main); }
     .vi-sc-unlock p { color: var(--color-text-secondary); font-size: 0.95rem; margin: 0 0 1rem; }
+
+    /* Two-column layout with the history rail (mirrors mock-interview's
+       .mi-layout grid, retokenized). The page stays single-column at the
+       production width until JS confirms voice.enabled and adds .vi-has-rail,
+       so with the flag off nothing changes visually. */
+    .vi-wrap.vi-has-rail { max-width: 1100px; }
+    .vi-layout { display: grid; grid-template-columns: 1fr; gap: 1.5rem; align-items: start; }
+    .vi-has-rail .vi-layout { grid-template-columns: 1fr 380px; }
+    @media (max-width: 900px) { .vi-has-rail .vi-layout { grid-template-columns: 1fr; } }
+
+    /* History rail (mirrors mock-interview's mi-history-* rail, retokenized) */
+    .vi-history { position: sticky; top: 1rem; }
+    .vi-history-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+    .vi-history-title-wrap { display: flex; align-items: center; gap: 10px; min-width: 0; color: var(--color-text-main); }
+    .vi-history-title-text { font-weight: 800; color: var(--color-text-main); font-size: 1.05rem; line-height: 1.2; }
+    .vi-history-header-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+    .vi-history-icon-btn { width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--color-divider); border-radius: var(--radius-md); background: transparent; color: var(--color-text-secondary); cursor: pointer; transition: background 0.18s ease, border-color 0.18s ease; }
+    .vi-history-icon-btn:hover { background: var(--color-bg-light); }
+    .vi-history-manage-btn { text-decoration: none; color: var(--color-text-secondary); font-weight: 700; border: 1px solid var(--color-divider); border-radius: var(--radius-md); padding: 0.5rem 1rem; background: transparent; transition: background 0.18s ease, border-color 0.18s ease; cursor: pointer; }
+    .vi-history-manage-btn:hover { color: var(--color-text-main); background: var(--color-bg-light); }
+    .vi-history-panel--manage .vi-history-header-actions { display: none; }
+    .vi-history-manage-actions { display: none; flex-shrink: 0; gap: 10px; }
+    .vi-history-panel--manage .vi-history-manage-actions { display: flex; justify-content: flex-end; align-items: center; }
+    .vi-history-danger-btn { background: rgba(220, 38, 38, 0.10); border: 1px solid rgba(220, 38, 38, 0.25); color: var(--color-error); font-weight: 800; border-radius: var(--radius-md); padding: 0.7rem 1rem; cursor: pointer; transition: background 0.18s ease, border-color 0.18s ease, opacity 0.18s ease; }
+    .vi-history-danger-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+    .vi-history-danger-btn:hover:not(:disabled) { background: rgba(220, 38, 38, 0.14); border-color: rgba(220, 38, 38, 0.35); }
+    .vi-history-neutral-btn { background: #fff; border: 1px solid var(--color-divider); color: var(--color-text-main); font-weight: 700; border-radius: var(--radius-md); padding: 0.7rem 1rem; cursor: pointer; transition: background 0.18s ease, border-color 0.18s ease; }
+    .vi-history-neutral-btn:hover { background: var(--color-bg-light); }
+    @media (max-width: 520px) {
+      .vi-history-panel--manage .vi-history-manage-actions { flex-direction: column; align-items: stretch; }
+      #vi-history-delete-selected, #vi-history-cancel-manage { width: 100%; }
+    }
+    .vi-history-subtitle { margin-top: 10px; font-size: 0.875rem; color: var(--color-text-muted); }
+    .vi-history-progress { margin-top: 12px; background: var(--color-bg-light); border: 1px solid var(--color-divider); border-radius: var(--radius-md); padding: 0.7rem 0.9rem; }
+    .vi-history-progress[hidden] { display: none !important; }
+    .vi-history-progress-label { color: var(--color-text-muted); font-size: 12px; font-weight: var(--font-weight-semibold); letter-spacing: 0.04em; }
+    .vi-history-progress-value { margin-top: 2px; font-weight: 800; color: var(--color-text-main); font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+    .vi-history-progress-delta { margin-top: 2px; font-weight: 700; font-size: 0.85rem; color: var(--color-success); }
+    .vi-history-progress-delta--down { color: var(--color-text-muted); }
+    .vi-history-progress--locked { display: flex; align-items: center; gap: 8px; color: var(--color-text-muted); font-weight: var(--font-weight-semibold); font-size: 0.9rem; }
+    .vi-history-progress--locked svg { flex-shrink: 0; }
+    .vi-history-progress--locked a { color: var(--color-accent-blue); font-weight: 700; margin-left: auto; }
+    .vi-history-body { margin-top: 16px; }
+    .vi-history-loading { display: none; }
+    .vi-history-loading.is-visible { display: flex; flex-direction: column; gap: 12px; }
+    .vi-history-skeleton-row { display: flex; align-items: center; gap: 12px; padding: 0.875rem 1rem; border-radius: var(--radius-md); border: 1px solid var(--color-divider); background: #fff; min-height: 56px; }
+    .vi-skeleton { background: linear-gradient(90deg, var(--color-bg-light) 25%, var(--color-divider) 50%, var(--color-bg-light) 75%); background-size: 200% 100%; animation: vi-shimmer 1.5s infinite; border-radius: var(--radius-lg); }
+    @keyframes vi-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+    .vi-history-skeleton-pill { height: 16px; border-radius: var(--radius-md); width: 60%; }
+    .vi-history-skeleton-pill.sm { width: 40%; }
+    .vi-history-skeleton-score { width: 44px; height: 24px; border-radius: var(--radius-full); }
+    .vi-history-error { padding: 10px 12px; border: 1px solid rgba(220, 38, 38, 0.22); background: rgba(220, 38, 38, 0.06); border-radius: var(--radius-lg); color: var(--color-text-main); font-size: 0.95rem; margin-bottom: 12px; }
+    .vi-history-link-btn { color: var(--color-accent-blue); text-decoration: underline; background: transparent; border: none; padding: 0; cursor: pointer; font-size: inherit; }
+    .vi-history-list { display: flex; flex-direction: column; gap: 12px; }
+    .vi-history-item { position: relative; display: flex; align-items: center; gap: 12px; padding: 0.875rem 1rem; background: #fff; border-radius: var(--radius-md); border: 1px solid var(--color-divider); transition: background 0.18s ease, border-color 0.18s ease, outline 0.18s ease; cursor: pointer; min-height: 56px; }
+    .vi-history-item:hover { background: var(--color-bg-light); }
+    .vi-history-item.is-selected { outline: 2px solid var(--color-accent-blue); outline-offset: 0; border-color: var(--color-divider); background: #fff; }
+    .vi-history-item--live { border-style: dashed; border-color: var(--color-warning); cursor: default; }
+    .vi-history-item--live:hover { background: #fff; }
+    .vi-history-checkbox-wrap { display: none; align-items: center; justify-content: center; flex-shrink: 0; }
+    .vi-history-checkbox { width: 18px; height: 18px; accent-color: var(--color-accent-blue); cursor: pointer; }
+    .vi-history-panel--manage .vi-history-checkbox-wrap { display: inline-flex; }
+    .vi-history-text { flex: 1; min-width: 0; }
+    .vi-history-line1 { font-weight: var(--font-weight-semibold); color: var(--color-text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.95rem; line-height: 1.25; }
+    .vi-history-line2 { margin-top: 2px; font-size: 0.85rem; color: var(--color-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .vi-history-chip { flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px; font-weight: 800; font-size: 0.85rem; line-height: 1; padding: 0.3rem 0.7rem; border-radius: var(--radius-full); }
+    .vi-history-chip svg { flex-shrink: 0; }
+    .vi-history-chip--score { background: #E8F5E9; color: var(--color-cta-green); }
+    .vi-history-chip--scoring { background: rgba(217, 119, 6, 0.10); color: var(--color-warning); }
+    .vi-history-chip--partial { background: var(--color-bg-light); color: var(--color-text-muted); border: 1px solid var(--color-divider); font-weight: 700; }
+    .vi-history-chip--live { background: rgba(217, 119, 6, 0.10); color: var(--color-warning); }
+    .vi-history-empty { text-align: center; padding: 20px 12px; color: var(--color-text-muted); border: 1px dashed var(--color-divider); border-radius: var(--radius-lg); }
+    .vi-history-footer { margin-top: 16px; font-size: 0.875rem; color: var(--color-text-muted); line-height: 1.45; }
+    .vi-history-footer a, .vi-history-footer button { font-size: inherit; }
+    .vi-history-footer-links { display: inline-flex; gap: 6px; align-items: center; margin-left: 4px; }
+    .vi-history-footer-link { color: var(--color-accent-blue); text-decoration: underline; background: transparent; border: none; padding: 0; cursor: pointer; }
+    .vi-history-footer-separator { color: var(--color-text-muted); font-weight: 600; }
+    .vi-history-footer-link--danger { color: var(--color-error); font-weight: 600; }
+    .vi-history-footer-link--danger:hover { text-decoration: underline; }
+    .vi-history-modal-backdrop { position: fixed; inset: 0; background: rgba(17, 24, 39, 0.45); z-index: var(--z-modal-backdrop); }
+    .vi-history-delete-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(520px, calc(100vw - 32px)); background: #fff; border: 1px solid var(--color-divider); border-radius: var(--radius-xl); box-shadow: var(--shadow-xl); padding: 20px; z-index: var(--z-modal); }
+    .vi-history-delete-modal[hidden] { display: none !important; }
+    .vi-history-delete-modal-content { display: flex; flex-direction: column; }
+    .vi-history-delete-modal-title { font-size: 1.15rem; font-weight: 800; margin: 0 0 8px 0; color: var(--color-text-main); }
+    .vi-history-delete-modal-body { margin: 6px 0; color: var(--color-text-secondary); line-height: 1.5; }
+    .vi-history-delete-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+    .vi-history-delete-modal-actions button { min-height: 44px; }
+    @media (max-width: 520px) {
+      .vi-history-delete-modal-actions { flex-direction: column; align-items: stretch; }
+    }
   </style>
 </head>
 <body>
@@ -115,6 +205,9 @@
     <h1>Voice Mock Interview</h1>
     <p class="vi-sub">A realistic spoken interview for your target role. Up to 20 minutes, then a scored report.</p>
 
+    <div class="vi-layout">
+      <!-- Left Column: Main Content Area -->
+      <div>
     <!-- Feature disabled -->
     <div id="vi-disabled-view" class="vi-card" style="display:none">
       <h2>Voice interviews are not available yet</h2>
@@ -166,6 +259,116 @@
     <div id="vi-done-view" class="vi-card" style="display:none">
       <p id="vi-done-status">Interview finished. Preparing your report...</p>
       <div id="vi-scorecard" style="display:none"></div>
+    </div>
+      </div>
+
+      <!-- Right Column: Session History (shown by JS only when voice.enabled) -->
+      <aside class="vi-card vi-history" id="vi-history-panel" style="display:none">
+        <div class="vi-history-header">
+          <div class="vi-history-title-wrap">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+            <span class="vi-history-title-text" id="vi-history-header-title">History</span>
+          </div>
+
+          <div class="vi-history-header-actions">
+            <button id="vi-history-refresh" class="vi-history-icon-btn" title="Refresh history" aria-label="Refresh history" type="button">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M23 4v6h-6"/>
+                <path d="M1 20v-6h6"/>
+                <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+              </svg>
+            </button>
+            <button id="vi-history-manage" class="vi-history-manage-btn" type="button">Manage</button>
+          </div>
+
+          <div class="vi-history-manage-actions" id="vi-history-manage-actions">
+            <button id="vi-history-delete-selected" class="vi-history-danger-btn" type="button" disabled>Delete selected</button>
+            <button id="vi-history-cancel-manage" class="vi-history-neutral-btn" type="button">Cancel</button>
+          </div>
+        </div>
+
+        <div class="vi-history-subtitle">Last 10 sessions • Auto-saved</div>
+
+        <!-- Progress strip: scored variant (paid, 2+ scored sessions) -->
+        <div class="vi-history-progress" id="vi-history-progress" hidden>
+          <div class="vi-history-progress-label">PROGRESS · LAST 3 SESSIONS</div>
+          <div class="vi-history-progress-value" id="vi-history-progress-value"></div>
+          <div class="vi-history-progress-delta" id="vi-history-progress-delta"></div>
+        </div>
+        <!-- Progress strip: locked variant (free users with history) -->
+        <div class="vi-history-progress vi-history-progress--locked" id="vi-history-progress-locked" hidden>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <rect x="3" y="11" width="18" height="8" rx="2"/>
+            <path d="M7 11V7a5 5 0 0110 0v4"/>
+          </svg>
+          <span>Progress tracking</span>
+          <a href="/pricing" data-cta="voice-history-progress-locked">See plans</a>
+        </div>
+
+        <div class="vi-history-body">
+          <div class="vi-history-loading" id="vi-history-loading">
+            <div class="vi-history-skeleton-row">
+              <div style="flex:1;min-width:0;">
+                <div class="vi-skeleton vi-history-skeleton-pill"></div>
+                <div class="vi-skeleton vi-history-skeleton-pill sm" style="margin-top:8px;"></div>
+              </div>
+              <div class="vi-skeleton vi-history-skeleton-score"></div>
+            </div>
+            <div class="vi-history-skeleton-row">
+              <div style="flex:1;min-width:0;">
+                <div class="vi-skeleton vi-history-skeleton-pill"></div>
+                <div class="vi-skeleton vi-history-skeleton-pill sm" style="margin-top:8px;"></div>
+              </div>
+              <div class="vi-skeleton vi-history-skeleton-score"></div>
+            </div>
+            <div class="vi-history-skeleton-row">
+              <div style="flex:1;min-width:0;">
+                <div class="vi-skeleton vi-history-skeleton-pill"></div>
+                <div class="vi-skeleton vi-history-skeleton-pill sm" style="margin-top:8px;"></div>
+              </div>
+              <div class="vi-skeleton vi-history-skeleton-score"></div>
+            </div>
+          </div>
+
+          <div class="vi-history-error" id="vi-history-error" hidden>
+            <span data-default-message="Couldn't load history.">Couldn't load history. </span>
+            <button id="vi-history-retry" class="vi-history-link-btn" type="button">Retry.</button>
+          </div>
+
+          <div class="vi-history-list" id="vi-history-list"></div>
+
+          <div class="vi-history-empty" id="vi-history-empty" hidden>
+            <div style="font-weight:800;margin-bottom:0.25rem;color:var(--color-text-main);">No history yet</div>
+            <div>Your last 10 voice interview sessions will appear here automatically.</div>
+          </div>
+        </div>
+
+        <div class="vi-history-footer">
+          <span>Data retention: your last 10 voice sessions are kept for 90 days.</span>
+          <div class="vi-history-footer-links">
+            <a class="vi-history-footer-link" href="privacy.html">Learn more</a>
+            <span class="vi-history-footer-separator" aria-hidden="true">·</span>
+            <button id="vi-history-clear" class="vi-history-footer-link vi-history-footer-link--danger" type="button">Clear history</button>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Delete confirmation modal -->
+      <div class="vi-history-modal-backdrop" id="vi-history-modal-backdrop" hidden></div>
+      <div class="vi-history-delete-modal" id="vi-history-delete-modal" role="dialog" aria-labelledby="vi-history-delete-modal-title" aria-modal="true" hidden>
+        <div class="vi-history-delete-modal-content">
+          <h3 class="vi-history-delete-modal-title" id="vi-history-delete-modal-title">Permanently delete history?</h3>
+          <p class="vi-history-delete-modal-body">This will remove the selected items from your account.</p>
+          <p class="vi-history-delete-modal-body">This cannot be undone.</p>
+          <div class="vi-history-delete-modal-actions">
+            <button id="vi-history-delete-cancel" class="vi-history-neutral-btn" type="button">Cancel</button>
+            <button id="vi-history-delete-confirm" class="vi-history-danger-btn" type="button">Delete permanently</button>
+          </div>
+        </div>
+      </div>
     </div>
   </main>
 
