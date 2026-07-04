@@ -45,8 +45,11 @@ function fakeDb(state) {
     }
     if (q.startsWith('DELETE FROM voice_sessions WHERE user_id = ?')) {
       const userId = binds[0];
+      const keepInFlight = q.includes("status NOT IN ('created', 'active')");
       const before = state.sessions.length;
-      state.sessions = state.sessions.filter((s) => s.user_id !== userId);
+      state.sessions = state.sessions.filter((s) =>
+        s.user_id !== userId || (keepInFlight && (s.status === 'created' || s.status === 'active'))
+      );
       return { run: { meta: { changes: before - state.sessions.length } } };
     }
     throw new Error(`fakeDb: unhandled SQL: ${q}`);
@@ -253,6 +256,21 @@ await test('clear removes only the caller\'s sessions', async () => {
   assert.equal(state.sessions.length, 1);
   assert.equal(state.sessions[0].user_id, 2, 'other users\' history is untouched');
   assert.equal(await clearVoiceSessions(env, 1), 0, 'clearing again is a no-op');
+});
+
+await test('clear never deletes an in-flight (created/active) session', async () => {
+  const state = { sessions: [
+    sessionRow({ id: 'done-1', user_id: 1, status: 'completed' }),
+    sessionRow({ id: 'gone-1', user_id: 1, status: 'abandoned' }),
+    sessionRow({ id: 'live-1', user_id: 1, status: 'active' }),
+    sessionRow({ id: 'fresh-1', user_id: 1, status: 'created' })
+  ] };
+  const env = makeEnv(state);
+
+  assert.equal(await clearVoiceSessions(env, 1), 2, 'completed + abandoned rows cleared');
+  const remaining = state.sessions.map((s) => s.id).sort();
+  assert.deepEqual(remaining, ['fresh-1', 'live-1'],
+    'the live session row must survive so /complete can still save the interview');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

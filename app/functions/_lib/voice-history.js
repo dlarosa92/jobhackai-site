@@ -132,7 +132,12 @@ export async function deleteVoiceSession(env, userRowId, sessionId) {
 }
 
 /**
- * Owner-only clear of the user's entire voice history.
+ * Owner-only clear of the user's voice history. In-flight sessions
+ * (created/active) are never touched: the rail is visible during a live
+ * interview, and clearing history must not destroy the session row the
+ * upcoming /complete call needs — that would lose the just-consumed
+ * interview. Abandoned rows are cleared too; they are invisible in the
+ * list and can no longer be completed.
  *
  * @returns {Promise<number>} number of rows deleted
  */
@@ -140,7 +145,7 @@ export async function clearVoiceSessions(env, userRowId) {
   const db = getDb(env);
   if (!db) return 0;
   const res = await db.prepare(
-    `DELETE FROM voice_sessions WHERE user_id = ?`
+    `DELETE FROM voice_sessions WHERE user_id = ? AND status NOT IN ('created', 'active')`
   ).bind(userRowId).run();
   return typeof res?.meta?.changes === 'number' ? res.meta.changes : (res?.changes || 0);
 }
