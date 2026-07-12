@@ -8,6 +8,7 @@
 
 import { getBearer, verifyFirebaseIdToken } from '../../_lib/firebase-auth.js';
 import { callOpenAI } from '../../_lib/openai-client.js';
+import { isSignedInPlan } from '../../_lib/plan-access.js';
 
 const DB_BINDING_NAMES = ['JOBHACKAI_DB', 'INTERVIEW_QUESTIONS_DB', 'IQ_D1', 'DB'];
 
@@ -163,7 +164,7 @@ export async function onRequest(context) {
   }
 
   const plan = await getUserPlan(env, uid);
-  if (!['free', 'trial', 'essential', 'pro', 'premium', 'weekly', 'monthly', 'pack'].includes(plan)) { // repositioning: free with signup
+  if (!isSignedInPlan(plan)) { // repositioning: free with signup (central gate, plan-access.js)
     return json(origin, { error: 'not_authorized' }, 403);
   }
 

@@ -37,7 +37,11 @@ export async function onRequest(context) {
     const requestedReturnUrl = body?.returnUrl || request.headers.get('Referer') || '';
 
     const targetPlan = normalizePlan(targetPlanRaw);
-    if (!targetPlan || !['essential', 'pro', 'premium'].includes(targetPlan)) {
+    // Voice subscription plans (weekly/monthly) are valid upgrade targets so
+    // existing subscribers can switch plans from /pricing without hitting
+    // INVALID_PLAN. The pack stays excluded: it is a one-time payment product
+    // handled by stripe-checkout (mode=payment), not a subscription change.
+    if (!targetPlan || !['essential', 'pro', 'premium', 'weekly', 'monthly'].includes(targetPlan)) {
       return json({ ok: false, code: 'INVALID_PLAN' }, 400, origin, env);
     }
 

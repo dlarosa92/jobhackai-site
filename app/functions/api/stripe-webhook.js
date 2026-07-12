@@ -222,10 +222,14 @@ export async function onRequest(context) {
         (priceId === env.STRIPE_PRICE_PACK || originalPlan === 'pack');
       if (isOneTimePayment) {
         if (!isPackPurchase) {
-          // Unrecognized one-time product: we cannot know what to grant. Do not
-          // mis-map it to a subscription plan; log loudly for manual review.
-          console.error(`❌ [WEBHOOK] Unrecognized one-time payment (price=${priceId}, plan=${originalPlan}, session=${sessionId}); not granting any plan`);
-          return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
+          // Unrecognized one-time product: we cannot know what to grant, and no
+          // follow-up event will heal a one-time charge. Do not 200 this away
+          // (Stripe would never retry and a misconfigured pack price would be
+          // charged without credits); release the marker and 5xx so Stripe
+          // retries and the failure surfaces for manual review.
+          console.error(`❌ [WEBHOOK] Unrecognized one-time payment (price=${priceId}, plan=${originalPlan}, session=${sessionId}); returning 500 for Stripe retry`);
+          await releaseEventForRetry();
+          return new Response('unrecognized one-time payment', { status: 500, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
         }
         if (!uid) {
           // No follow-up event will ever heal a one-time pack, so do NOT 200
@@ -236,18 +240,30 @@ export async function onRequest(context) {
           await releaseEventForRetry();
           return new Response('pack uid unresolved', { status: 500, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
         }
-        const db = getDb(env);
-        const existingUser = db ? await db.prepare('SELECT id FROM users WHERE auth_id = ?').bind(uid).first() : null;
-        if (!existingUser) {
-          const d1Tombstone = await isDeletedUser(env, uid);
-          const kvTombstone = await env.JOBHACKAI_KV?.get(`deleted:${uid}`);
-          if (d1Tombstone || kvTombstone) {
-            console.log(`⏭️ [WEBHOOK] Skipping pack grant: user ${uid} was deleted (tombstone found)`);
-            return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
+        // Everything from user resolution through the grant must not fall
+        // through to the outer catch: it logs and returns 200 with the evt
+        // idempotency marker still set, so a throw here (e.g. D1 down while
+        // creating a first-time buyer's user row) would permanently eat the
+        // paid pack. Release the marker and 5xx so Stripe retries instead.
+        let granted, duplicate;
+        try {
+          const db = getDb(env);
+          const existingUser = db ? await db.prepare('SELECT id FROM users WHERE auth_id = ?').bind(uid).first() : null;
+          if (!existingUser) {
+            const d1Tombstone = await isDeletedUser(env, uid);
+            const kvTombstone = await env.JOBHACKAI_KV?.get(`deleted:${uid}`);
+            if (d1Tombstone || kvTombstone) {
+              console.log(`⏭️ [WEBHOOK] Skipping pack grant: user ${uid} was deleted (tombstone found)`);
+              return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
+            }
+            await getOrCreateUserByAuthId(env, uid, customerEmail, { updateActivity: false });
           }
-          await getOrCreateUserByAuthId(env, uid, customerEmail, { updateActivity: false });
+          ({ granted, duplicate } = await grantPackCredits(env, uid, event.id));
+        } catch (packErr) {
+          console.error(`❌ [WEBHOOK] Pack handling failed before grant completion (uid=${uid}, session=${sessionId}); returning 500 for Stripe retry:`, packErr?.message || packErr);
+          await releaseEventForRetry();
+          return new Response('pack handling failed', { status: 500, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
         }
-        const { granted, duplicate } = await grantPackCredits(env, uid, event.id);
         console.log(`✅ [WEBHOOK] Pack grant for ${uid}: granted=${granted}, duplicate=${duplicate}`);
         if (!granted && !duplicate) {
           // Grant failed unexpectedly (e.g. the user row could not be resolved).
