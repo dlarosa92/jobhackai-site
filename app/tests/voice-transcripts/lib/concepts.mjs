@@ -66,7 +66,10 @@ export const CONCEPTS = {
 
   // Forbidden concepts
   'claims-no-outcome': [
-    /\b(no|without|lacks?|lacking|missing|absence of)\b[^.!?\n]{0,40}\b(outcome|result|impact)s?\b/i,
+    // Window kept tight (15 chars) so critiques of OTHER missing elements
+    // that merely mention results ("without more context, the results...")
+    // don't false-positive.
+    /\b(no|without|lacks?|lacking|missing|absence of)\b[^.!?\n]{0,15}\b(outcome|result|impact)s?\b/i,
     /\b(didn'?t|did not|fails? to|failed to|never|doesn'?t|does not)\s+(provide|share|state|mention|give|include|offer|present|quantify|describe)\b[^.!?\n]{0,40}\b(outcome|result|impact|metric)s?\b/i,
     /\b(outcome|result)s?\b[^.!?\n]{0,30}\b(not (provided|stated|mentioned|given|shared|clear)|missing|absent|unstated)\b/i
   ],

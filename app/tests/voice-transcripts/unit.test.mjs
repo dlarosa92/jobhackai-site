@@ -95,6 +95,10 @@ export function testConceptMatching() {
   assert.ok(!conceptAppears('claims-no-outcome', "Don't forget to quantify outcomes."));
   assert.ok(!conceptAppears('claims-no-outcome', 'Strong measurable outcomes in every answer.'));
   assert.ok(!conceptAppears('claims-no-outcome', 'Open answers with the result. Then explain how.'));
+  // ...nor critiques of OTHER missing elements that merely mention results
+  // (real false positive from the first full run)
+  assert.ok(!conceptAppears('claims-no-outcome', 'Without more context, the results are hard to assess.'));
+  assert.ok(!conceptAppears('claims-no-outcome', 'You are missing the situation setup before your results.'));
 
   assert.ok(conceptAppears('praises-relevance', 'The answers were highly relevant to the role.'));
   assert.ok(!conceptAppears('praises-relevance', 'Work on making answers more relevant.'));

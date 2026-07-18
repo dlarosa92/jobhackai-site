@@ -30,6 +30,7 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--mode' && argv[i + 1]) args.mode = argv[++i];
     else if (argv[i] === '--limit' && argv[i + 1]) args.limit = parseInt(argv[++i], 10);
+    else if (argv[i] === '--cases' && argv[i + 1]) args.cases = argv[++i].split(',').map(s => s.trim());
   }
   if (!['smoke', 'full', 'stability'].includes(args.mode)) {
     console.error(`Unknown mode "${args.mode}". Use smoke, full, or stability.`);
@@ -190,6 +191,14 @@ async function main() {
   if (args.mode === 'smoke') cases = selectSmokeCases(fixtures);
   else if (args.mode === 'stability') cases = selectStabilityCases(fixtures);
   else cases = fixtures;
+  if (args.cases) {
+    cases = fixtures.filter(f => args.cases.includes(f.id));
+    const missing = args.cases.filter(id => !cases.some(f => f.id === id));
+    if (missing.length > 0) {
+      console.error(`Unknown fixture IDs: ${missing.join(', ')}`);
+      process.exit(1);
+    }
+  }
   if (args.limit) cases = cases.slice(0, args.limit);
 
   const runsPerCase = args.mode === 'stability' ? STABILITY_RUNS : 1;
@@ -246,6 +255,17 @@ async function main() {
               dimensions: r.scorecard.dimensions,
               saoBalance: r.scorecard.saoBalance
             },
+            // Full feedback text kept for failed cases so concept-check
+            // failures can be diagnosed from the report alone.
+            ...(r.evaluation.passed ? {} : {
+              feedback: {
+                saoCoaching: r.scorecard.saoCoaching,
+                topStrength: r.scorecard.topStrength,
+                topImprovement: r.scorecard.topImprovement,
+                moments: r.scorecard.moments,
+                summary: r.scorecard.summary
+              }
+            }),
             usage: r.usage
           })
     }))

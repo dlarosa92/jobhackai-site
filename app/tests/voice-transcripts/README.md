@@ -132,15 +132,30 @@ LLM evaluation — occasional single-case flakiness is normal. Treat repeated
 failures of the same case or category as real regressions, especially after
 prompt changes.
 
-## Baseline (first real smoke run, 2026-07-18, gpt-4.1-mini)
+## Baseline (first real full run, 2026-07-18, gpt-4.1-mini, 100 cases)
 
-18/20 passed (90%), ~27k tokens, ~$0.019. Quality-level averages were
-monotonic at the top (excellent 84.5 > good 70.8 > average 65.8); the
-weak/poor tiers can invert in SMOKE runs because each smoke tier contains
-different archetypes — use the FULL run to judge tier ordering.
+82/100 passed (82%), ~133k tokens, ~$0.09, ~2.5 minutes. Quality-tier
+averages were fully monotonic: excellent 79.7 > good 74.4 > average 67.8 >
+weak 60.7 > poor 50.7. (Smoke runs can show tier inversions because each
+smoke tier contains different archetypes — judge tier ordering on full
+runs only.)
 
-Known genuine finding (expected to keep failing until the production
-grading prompt is tightened in a separate change): `irrelevant--weak`
-received `roleFit` 50 for a fully off-topic transcript (expected <= 40).
-The scorecard grades irrelevant content up rather than down. Do not
-"fix" this by loosening the fixture range.
+Known genuine scorecard findings — these cases are EXPECTED to keep
+failing until the production grading prompt is tightened in a separate
+change. Do not "fix" them by loosening fixture ranges:
+
+1. **saoBalance tracks answer quality, not speaking time (halo effect).**
+   Transcripts with zero stated outcomes (missing-outcome
+   excellent/good/average) received outcome shares of 50-60%; pure
+   process-detail answers (excessive-process) 60-70%; and
+   background-dominated transcripts (excessive-background excellent/good)
+   received situation shares of only 10-15%. The structure dimension,
+   which production scores BY the S+A=O formula, follows the same halo
+   (75-90 for outcome-less answers).
+2. **roleFit does not punish irrelevance.** Fully off-topic transcripts
+   received roleFit 45-60 (irrelevant good/weak/poor).
+3. **Mild leniency on fluent-but-hollow answers** (e.g. pure process
+   detail at weak quality scored overall 85).
+
+With these documented findings, the expected steady-state full-run result
+is roughly 87/100.
