@@ -255,9 +255,10 @@ async function main() {
               dimensions: r.scorecard.dimensions,
               saoBalance: r.scorecard.saoBalance
             },
-            // Full feedback text kept for failed cases so concept-check
-            // failures can be diagnosed from the report alone.
-            ...(r.evaluation.passed ? {} : {
+            // Full feedback text kept for failed cases (and every case in a
+            // targeted --cases run) so concept-check failures and suspected
+            // contradictions can be diagnosed from the report alone.
+            ...((r.evaluation.passed && !args.cases) ? {} : {
               feedback: {
                 saoCoaching: r.scorecard.saoCoaching,
                 topStrength: r.scorecard.topStrength,
