@@ -159,3 +159,13 @@ change. Do not "fix" them by loosening fixture ranges:
 
 With these documented findings, the expected steady-state full-run result
 is roughly 87/100.
+
+**Stability confirmation (3x targeted re-run of the 12 suspicious cases,
+same day):** findings 1 and 2 reproduced in every run with near-identical
+scores (overall-score spread <= 5 points, average 1.08) — they are stable
+model behavior, not variance. missing-outcome transcripts scored outcome
+50-60% / structure 75-80 in 9/9 runs; excessive-process scored overall 85
+/ outcome 60-70 in 9/9 runs; irrelevant roleFit stayed 45-60 in 8/9 runs;
+the background-heavy transcript reported situation=10% in 3/3 runs.
+These are the measured targets for any future production-prompt tightening
+(a separate change — this harness is the before/after yardstick).
