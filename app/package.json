@@ -23,7 +23,11 @@
     "test:ats": "node functions/_lib/__tests__/ats-test-suite.test.mjs",
     "test:ats:verbose": "node functions/_lib/__tests__/ats-test-suite.test.mjs --verbose",
     "test:ats-engine": "node functions/_lib/__tests__/ats-scoring-engine.test.mjs",
-    "test:grammar": "node functions/_lib/__tests__/grammar-engine.test.mjs"
+    "test:grammar": "node functions/_lib/__tests__/grammar-engine.test.mjs",
+    "test:voice:transcripts:smoke": "node tests/voice-transcripts/run-evals.mjs --mode smoke",
+    "test:voice:transcripts:full": "node tests/voice-transcripts/run-evals.mjs --mode full",
+    "test:voice:transcripts:stability": "node tests/voice-transcripts/run-evals.mjs --mode stability",
+    "test:voice:transcripts:unit": "node tests/voice-transcripts/unit.test.mjs"
   },
   "dependencies": {
     "firebase": "^10.7.0",
