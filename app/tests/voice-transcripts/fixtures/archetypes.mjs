@@ -151,12 +151,15 @@ export const ARCHETYPES = [
     id: 'missing-outcome',
     description: 'Situation and action present, outcome never stated',
     seniority: 'mid',
+    // NOTE: no 'vague' tokens here — the vague content strings contain
+    // implicit outcomes ("it went fine in the end"), which contradicts this
+    // archetype's premise and was over-crediting outcome share in real runs.
     plans: [
       ['situation', 'action', 'process0'],
       ['situation', 'action'],
-      ['vague', 'action'],
+      ['background0', 'action'],
       ['situation'],
-      ['vague']
+      ['minimal']
     ],
     expect(q) {
       return {

@@ -131,3 +131,16 @@ Pass-rate expectations: ranges are intentionally forgiving, but this is an
 LLM evaluation — occasional single-case flakiness is normal. Treat repeated
 failures of the same case or category as real regressions, especially after
 prompt changes.
+
+## Baseline (first real smoke run, 2026-07-18, gpt-4.1-mini)
+
+18/20 passed (90%), ~27k tokens, ~$0.019. Quality-level averages were
+monotonic at the top (excellent 84.5 > good 70.8 > average 65.8); the
+weak/poor tiers can invert in SMOKE runs because each smoke tier contains
+different archetypes — use the FULL run to judge tier ordering.
+
+Known genuine finding (expected to keep failing until the production
+grading prompt is tightened in a separate change): `irrelevant--weak`
+received `roleFit` 50 for a fully off-topic transcript (expected <= 40).
+The scorecard grades irrelevant content up rather than down. Do not
+"fix" this by loosening the fixture range.
