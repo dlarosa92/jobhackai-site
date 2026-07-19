@@ -150,6 +150,9 @@ export const ARCHETYPES = [
         e.overall = [22, 90];
         e.structure = [5, 95];
       }
+      // Same logic at poor: a bare metric sentence is nearly all Outcome,
+      // so the formula scores it mid-70s (v2 stability run: overall 75).
+      if (q === 4) e.overall = [0, 80];
       return e;
     }
   },
