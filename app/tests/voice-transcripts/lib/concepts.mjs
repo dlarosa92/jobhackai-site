@@ -64,6 +64,16 @@ export const CONCEPTS = {
     /brief|short answer/i
   ],
 
+  // Robotic/third-person tone the feedback must never use (it addresses
+  // the candidate directly). Consumed by the coherence checks.
+  'robotic-tone': [
+    /\bthe (candidate|interviewee)\b/i,
+    /demonstrates? (the )?ability/i,
+    /it is recommended that/i,
+    /\bin summary\b/i,
+    /\bmoving forward\b/i
+  ],
+
   // Forbidden concepts
   'claims-no-outcome': [
     // Window kept tight (15 chars) so critiques of OTHER missing elements

@@ -4,6 +4,7 @@
 
 import { readFileSync } from 'node:fs';
 import { conceptAppears, coachingText, allFeedbackText } from './concepts.mjs';
+import { coherenceChecks } from './coherence.mjs';
 
 export function loadFixtures(jsonlPath) {
   return readFileSync(jsonlPath, 'utf8')
@@ -115,6 +116,13 @@ export function evaluateCase(fixture, scorecard) {
       });
     }
   }
+
+  // Fixture-independent score<->feedback coherence and quality rules.
+  const candidateText = (fixture.transcript || [])
+    .filter(t => t.speaker === 'candidate')
+    .map(t => t.text)
+    .join(' ');
+  failures.push(...coherenceChecks(scorecard, candidateText || null));
 
   return { passed: failures.length === 0, failures };
 }

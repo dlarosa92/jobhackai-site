@@ -121,6 +121,19 @@ Each failed case lists its failed checks:
   required group (e.g. no specificity coaching for a vague candidate).
 - `forbidden-concept` — feedback said something it must never say for
   that case (e.g. "no outcome provided" to a candidate who gave metrics).
+- `coherence-*` / `lint-*` / `personability-*` — fixture-independent rules
+  (lib/coherence.mjs) asserting the scorecard's numbers and words tell one
+  story and the feedback meets baseline quality bars: no "no outcome"
+  claims when outcome share >= 50 (`coherence-halo`); structure must track
+  outcome share (`coherence-formula`); low roleFit must be explained and
+  high roleFit not contradicted (`coherence-rolefit`); a tiny outcome
+  share demands outcome coaching (`coherence-outcome-coaching`);
+  saoBalance sums to ~100 (`lint-sao-sum`); exactly two coaching tips
+  under 120 chars (`lint-coaching-shape`); moment quotes must actually
+  appear in the candidate's words (`lint-quote-fidelity` — fabrication
+  detector); no robotic third-person tone like "the candidate
+  demonstrates" (`personability-robotic`). These run on every case and
+  are the primary regression guard for feedback quality.
 - `api-error` — the call failed after retries; infrastructure, not scoring.
 
 The Markdown report also shows average scores per expected quality level —

@@ -12,6 +12,7 @@ import {
   loadFixtures, inRange, selectSmokeCases, selectStabilityCases, toVoiceTranscript,
   evaluateCase, mean, stddev, stabilityStats, estimateCostUsd, aggregateResults
 } from './lib/eval-utils.mjs';
+import { coherenceChecks, quoteFidelity } from './lib/coherence.mjs';
 import { generateFixtures } from './fixtures/generate-fixtures.mjs';
 import { ARCHETYPES, QUALITY_LEVELS } from './fixtures/archetypes.mjs';
 
@@ -178,6 +179,84 @@ export function testEvaluateCase() {
   assert.ok(fail3.failures.some(f => f.category === 'rolefit-range'));
 }
 
+export function testCoherenceChecks() {
+  const CANDIDATE_TEXT = 'P95 latency dropped from 2.1 seconds to 180 milliseconds and we shipped before the sale.';
+
+  // A coherent scorecard produces zero failures.
+  assert.deepStrictEqual(coherenceChecks(sampleScorecard(), CANDIDATE_TEXT), []);
+
+  // Too-short scorecards are exempt (fixed template).
+  assert.deepStrictEqual(coherenceChecks({ tooShort: true, overall: 0 }, CANDIDATE_TEXT), []);
+
+  const cats = (sc, text = CANDIDATE_TEXT) => coherenceChecks(sc, text).map(f => f.category);
+
+  // 1. coherence-halo: high outcome share + "no outcome" feedback
+  assert.ok(cats(sampleScorecard({
+    saoCoaching: ['No measurable outcome was provided.', 'Add results.']
+  })).includes('coherence-halo'));
+
+  // 2. coherence-formula: structure must track outcome share both ways
+  assert.ok(cats(sampleScorecard({
+    dimensions: { communication: 70, structure: 80, contentDepth: 70, roleFit: 70 },
+    saoBalance: { situation: 30, action: 30, outcome: 40 }
+  })).includes('coherence-formula'));
+  assert.ok(cats(sampleScorecard({
+    dimensions: { communication: 70, structure: 35, contentDepth: 70, roleFit: 70 },
+    saoBalance: { situation: 25, action: 25, outcome: 50 }
+  })).includes('coherence-formula'));
+
+  // 3. coherence-rolefit: low roleFit needs a relevance mention; high roleFit must not raise one
+  assert.ok(cats(sampleScorecard({
+    dimensions: { communication: 70, structure: 68, contentDepth: 70, roleFit: 35 }
+  })).includes('coherence-rolefit'));
+  assert.ok(cats(sampleScorecard({
+    topImprovement: 'Your answers were off-topic; stay relevant to the question.'
+  })).includes('coherence-rolefit')); // roleFit 78 in sample
+  assert.ok(!cats(sampleScorecard({
+    dimensions: { communication: 70, structure: 68, contentDepth: 70, roleFit: 35 },
+    topImprovement: 'Your stories were unrelated to the role; pick relevant examples.'
+  })).includes('coherence-rolefit'));
+
+  // 4. coherence-outcome-coaching: tiny outcome share demands outcome coaching
+  assert.ok(cats(sampleScorecard({
+    saoBalance: { situation: 60, action: 25, outcome: 15 },
+    dimensions: { communication: 70, structure: 40, contentDepth: 70, roleFit: 70 },
+    saoCoaching: ['Smile more.', 'Speak slower.'],
+    topImprovement: 'Be more animated.',
+    moments: [],
+    summary: 'A pleasant conversation.'
+  })).includes('coherence-outcome-coaching'));
+
+  // 5. lint-sao-sum
+  assert.ok(cats(sampleScorecard({
+    saoBalance: { situation: 10, action: 10, outcome: 20 },
+    dimensions: { communication: 70, structure: 30, contentDepth: 70, roleFit: 70 }
+  })).includes('lint-sao-sum'));
+
+  // 6. lint-coaching-shape: wrong count or over-length tips
+  assert.ok(cats(sampleScorecard({ saoCoaching: ['Only one tip.'] })).includes('lint-coaching-shape'));
+  assert.ok(cats(sampleScorecard({
+    saoCoaching: ['Fine tip.', 'x'.repeat(120)]
+  })).includes('lint-coaching-shape'));
+
+  // 7. lint-quote-fidelity: fabricated quotes are caught; real ones pass; no transcript = skipped
+  assert.ok(cats(sampleScorecard({
+    moments: [{ quote: 'increased quarterly revenue seventeen percent across Europe', comment: 'Great metric.' }]
+  })).includes('lint-quote-fidelity'));
+  assert.ok(!cats(sampleScorecard()).includes('lint-quote-fidelity'));
+  assert.ok(!cats(sampleScorecard({
+    moments: [{ quote: 'totally fabricated words here', comment: 'x' }]
+  }), null).includes('lint-quote-fidelity'));
+
+  // 8. personability-robotic
+  assert.ok(cats(sampleScorecard({
+    summary: 'In summary, the candidate demonstrates ability but should improve outcomes.'
+  })).includes('personability-robotic'));
+
+  assert.strictEqual(quoteFidelity('', 'anything'), 1);
+  assert.strictEqual(quoteFidelity('latency dropped milliseconds', CANDIDATE_TEXT), 1);
+}
+
 export function testStats() {
   assert.strictEqual(mean([2, 4, 6]), 4);
   assert.strictEqual(mean([]), 0);
@@ -324,6 +403,7 @@ const TESTS = [
   testFeedbackTextExtraction,
   testInRange,
   testEvaluateCase,
+  testCoherenceChecks,
   testStats,
   testEstimateCostUsd,
   testFixtureDataset,
