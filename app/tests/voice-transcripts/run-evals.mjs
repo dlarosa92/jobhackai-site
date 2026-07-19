@@ -9,6 +9,7 @@
 // the same model the production scorecard uses).
 
 import { writeFileSync, mkdirSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { scoreVoiceTranscript } from '../../functions/_lib/voice-scorecard.js';
@@ -31,12 +32,60 @@ function parseArgs(argv) {
     if (argv[i] === '--mode' && argv[i + 1]) args.mode = argv[++i];
     else if (argv[i] === '--limit' && argv[i + 1]) args.limit = parseInt(argv[++i], 10);
     else if (argv[i] === '--cases' && argv[i + 1]) args.cases = argv[++i].split(',').map(s => s.trim());
+    else if (argv[i] === '--allow-dirty') args.allowDirty = true;
   }
+  // npm swallows flags unless invoked with an extra `--` separator, which
+  // dispatch tools routinely drop. Env vars survive npm untouched.
+  if (!args.cases && process.env.VOICE_EVAL_CASES) {
+    args.cases = process.env.VOICE_EVAL_CASES.split(',').map(s => s.trim()).filter(Boolean);
+  }
+  if (!args.allowDirty && process.env.VOICE_EVAL_ALLOW_DIRTY === '1') args.allowDirty = true;
   if (!['smoke', 'full', 'stability'].includes(args.mode)) {
     console.error(`Unknown mode "${args.mode}". Use smoke, full, or stability.`);
     process.exit(1);
   }
   return args;
+}
+
+/**
+ * The code that actually runs is what's on disk, not what git history says.
+ * Report the checked-out commit and refuse to run if the scoring code or
+ * the harness itself is locally modified (stale/reverted files have burned
+ * real API money on runs that tested the wrong prompt).
+ */
+function gitPreflight(allowDirty) {
+  let head = 'unknown';
+  let branch = 'unknown';
+  let dirty = [];
+  try {
+    const opts = { cwd: HERE, encoding: 'utf8' };
+    head = execSync('git rev-parse --short HEAD', opts).trim();
+    branch = execSync('git rev-parse --abbrev-ref HEAD', opts).trim();
+    dirty = execSync('git status --porcelain', opts)
+      .split('\n')
+      .filter(line => line && !line.startsWith('??'))
+      .map(line => line.slice(3));
+  } catch (_) {
+    // Not a git checkout (e.g. exported tarball) — nothing to verify.
+  }
+
+  const critical = dirty.filter(f =>
+    f.includes('functions/_lib/voice-scorecard.js') ||
+    f.includes('functions/_lib/openai-client.js') ||
+    f.includes('tests/voice-transcripts/')
+  );
+  if (critical.length > 0 && !allowDirty) {
+    console.error(
+      '\nERROR: scoring/harness files on disk do not match the checked-out commit:\n' +
+      critical.map(f => `  M ${f}`).join('\n') +
+      '\n\nThe evaluation would test the modified files, not the committed code.\n' +
+      'Restore them (git checkout -- <files>) or pass --allow-dirty / VOICE_EVAL_ALLOW_DIRTY=1\n' +
+      'if the local modifications are intentional.\n'
+    );
+    process.exit(1);
+  }
+
+  return { head, branch, dirtyCritical: critical };
 }
 
 function requireApiKey() {
@@ -120,6 +169,7 @@ function buildMarkdownReport(report) {
     `# Voice Transcript Evaluation Report — ${report.mode}`,
     '',
     `- **Date:** ${report.timestamp}`,
+    `- **Commit:** ${report.commit} (${report.branch})`,
     `- **Model:** ${report.model || 'unknown'}`,
     `- **Total cases:** ${s.totalCases}`,
     `- **Passed:** ${s.passed}`,
@@ -201,8 +251,11 @@ async function main() {
   }
   if (args.limit) cases = cases.slice(0, args.limit);
 
+  const git = gitPreflight(args.allowDirty);
   const runsPerCase = args.mode === 'stability' ? STABILITY_RUNS : 1;
   console.log(`\nVoice transcript evaluation — mode: ${args.mode}`);
+  console.log(`Commit: ${git.head} (${git.branch})${git.dirtyCritical.length ? ' — DIRTY, --allow-dirty in effect' : ''}`);
+  if (args.cases) console.log(`Case filter: ${cases.length} targeted case(s)`);
   console.log(`Cases: ${cases.length}${runsPerCase > 1 ? ` x ${runsPerCase} runs` : ''}, concurrency: ${CONCURRENCY}\n`);
 
   const tasks = [];
@@ -237,6 +290,8 @@ async function main() {
   const report = {
     mode: args.mode,
     timestamp: new Date().toISOString(),
+    commit: git.head,
+    branch: git.branch,
     durationSeconds: durationS,
     model: results.find(r => r.model)?.model || null,
     summary,
