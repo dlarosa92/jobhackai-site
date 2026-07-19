@@ -124,6 +124,7 @@ export async function scoreVoiceTranscript({ role, seniority, transcript }, env)
     'If the candidate never states a concrete result, outcome must be 25 or lower no matter how polished the answer sounds; if backstory and context fill more than a third of the candidate\'s words, situation must be 40 or higher.',
     'A fluent, confident delivery earns credit in communication and contentDepth, never in structure or saoBalance.',
     'Score the structure dimension directly from your measured saoBalance against the 5/10/85 goal: give 80 or above only when outcome share is at least 65, give at most 55 when outcome share is below 40, and scale smoothly between those anchors in the middle.',
+    'Overall must respect the formula too: an answer cannot be strong without stated results, so when outcome share is 25 or lower, overall must not exceed 65 no matter how detailed or professional the delivery.',
     'Score roleFit strictly against the target role: when the answers are mostly unrelated to that role, such as hobby stories or a different job, roleFit must be 30 or lower and overall must be 50 or lower. Name the relevance gap kindly and plainly.',
     'Make the numbers and the words tell one story: never write that the candidate gave no results when outcome share is above 30, never say results are missing when they stated a metric, never praise relevance when roleFit is low, and aim topImprovement at the weakest dimension.',
     'Before finishing, re-check every score against your own measurements and your own feedback, and fix whichever is wrong.',
