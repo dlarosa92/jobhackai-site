@@ -16,19 +16,11 @@ export const SCORECARD_SCHEMA = {
   schema: {
     type: 'object',
     additionalProperties: false,
+    // Property order is deliberate: strict structured outputs emit keys in
+    // schema order, so saoBalance (the measurement) is generated BEFORE the
+    // dimension scores and overall that must be derived from it. JSON key
+    // order is invisible to D1, the frontend, and the eval harness.
     properties: {
-      overall: { type: 'integer', description: 'Overall interview performance 0-100' },
-      dimensions: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          communication: { type: 'integer', description: 'Clarity, pace, confidence 0-100' },
-          structure: { type: 'integer', description: 'Answer structure scored BY the S + A = O formula (goal: about 5% situation, 10% action, 85% outcome) 0-100' },
-          contentDepth: { type: 'integer', description: 'Specificity, examples, numbers 0-100' },
-          roleFit: { type: 'integer', description: 'Relevance to the target role 0-100' }
-        },
-        required: ['communication', 'structure', 'contentDepth', 'roleFit']
-      },
       saoBalance: {
         type: 'object',
         additionalProperties: false,
@@ -40,6 +32,18 @@ export const SCORECARD_SCHEMA = {
         },
         required: ['situation', 'action', 'outcome']
       },
+      dimensions: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          communication: { type: 'integer', description: 'Clarity, pace, confidence 0-100' },
+          structure: { type: 'integer', description: 'Answer structure scored BY the S + A = O formula (goal: about 5% situation, 10% action, 85% outcome) 0-100' },
+          contentDepth: { type: 'integer', description: 'Specificity, examples, numbers 0-100' },
+          roleFit: { type: 'integer', description: 'Relevance to the target role 0-100' }
+        },
+        required: ['communication', 'structure', 'contentDepth', 'roleFit']
+      },
+      overall: { type: 'integer', description: 'Overall interview performance 0-100, consistent with the dimensions and saoBalance above' },
       saoCoaching: {
         type: 'array',
         description: 'Exactly 2 imperative coaching lines, each under 120 characters, telling the candidate how to rebalance toward outcomes, e.g. "Open answers with the result. Then explain how."',
