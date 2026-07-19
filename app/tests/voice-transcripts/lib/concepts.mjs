@@ -66,12 +66,12 @@ export const CONCEPTS = {
 
   // Robotic/third-person tone the feedback must never use (it addresses
   // the candidate directly). Consumed by the coherence checks.
+  // Only genuinely third-person/robotic phrasing — mild coach-speak
+  // transitions like "in summary" or "moving forward" are acceptable.
   'robotic-tone': [
     /\bthe (candidate|interviewee)\b/i,
     /demonstrates? (the )?ability/i,
-    /it is recommended that/i,
-    /\bin summary\b/i,
-    /\bmoving forward\b/i
+    /it is recommended that/i
   ],
 
   // Forbidden concepts

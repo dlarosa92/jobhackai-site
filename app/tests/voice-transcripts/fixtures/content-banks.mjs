@@ -151,7 +151,7 @@ export const ROLE_SCENARIOS = {
       ],
       action: "I scoped the questions with the CFO's chief of staff first, rebuilt the revenue reconciliation query, validated the totals against billing exports, and built a six-slide summary with clear caveats.",
       process: [
-        'I started by writing down the five questions the board actually needed answered and got them confirmed before touching any data.',
+        'I started by writing down the five questions the board actually needed answered before touching any data.',
         'Then I built the query incrementally with checkpoint validations at each join, and had a peer review both the SQL and the final numbers before anything went out.'
       ],
       outcome: 'The analysis went to the board on time and the CFO used it as the anchor for the revenue discussion.',
@@ -212,7 +212,7 @@ export const ROLE_SCENARIOS = {
       action: 'I got our sales engineer and security lead in a room the same day, built a compressed timeline working backward from their date, and personally chased every open item across both companies daily.',
       process: [
         "I created a shared tracker with the buyer's procurement team so both sides saw the same status in real time.",
-        'I also pre-drafted answers to the forty most common security questions from past deals, which cut our response cycle from days to hours.'
+        'I also pre-drafted answers to the forty most common security questions from past deals so our responses could go back the same day.'
       ],
       outcome: 'We completed the review in time and signed before their deadline.',
       metric: 'We closed the 200-seat deal nine days early at full list price, and the compressed security-review playbook I built cut our average enterprise review time by two weeks.',

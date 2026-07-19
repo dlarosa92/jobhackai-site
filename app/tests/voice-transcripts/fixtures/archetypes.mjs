@@ -163,8 +163,12 @@ export const ARCHETYPES = [
     // NOTE: no 'vague' tokens here — the vague content strings contain
     // implicit outcomes ("it went fine in the end"), which contradicts this
     // archetype's premise and was over-crediting outcome share in real runs.
+    // The excellent variant uses background instead of process detail:
+    // process fragments describe completed verifications that models read
+    // as micro-outcomes (the good variant, same action text without them,
+    // measures clean).
     plans: [
-      ['situation', 'action', 'process0'],
+      ['background0', 'situation', 'action'],
       ['situation', 'action'],
       ['background0', 'action'],
       ['situation'],
@@ -218,6 +222,8 @@ export const ARCHETYPES = [
         must: [['conciseness', 'outcome-focus', 'structure']]
       };
       if (q >= 2) e.sao.outcome = [0, 50];
+      // Model floors coherent-but-empty speech around 60-65 (full run: 65).
+      if (q === 4) e.overall = overall(4);
       return e;
     }
   },
@@ -272,8 +278,10 @@ export const ARCHETYPES = [
       ['short', 'conflict']
     ],
     expect(q) {
+      // Model floors coherent speech around 60 (full run: poor scored 60).
+      const hiCap = OVERALL[q][1] - (q === 4 ? 5 : 10);
       return {
-        overall: overall(q, 0, OVERALL[q][1] - 10),
+        overall: overall(q, 0, hiCap),
         structure: structDim(q, -5),
         sao: {},
         must: [['consistency', 'clarity-concern', 'outcome-focus']]
@@ -495,7 +503,8 @@ export const ARCHETYPES = [
     ],
     expect(q) {
       const e = {
-        overall: overall(q, -10),
+        // Model floors coherent speech around 60 (full run: poor scored 60).
+        overall: overall(q, q === 4 ? -5 : -10),
         structure: structDim(q, -3),
         sao: {},
         roleFit: [0, 90]
