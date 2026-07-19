@@ -19,8 +19,10 @@ export const CONCEPTS = {
   structure: [
     /(structur|STAR|framework|organiz|coherent|flow|situation.{0,30}action)/i
   ],
+  // NOTE: "tangent" deliberately excluded — "trim the tangents" is
+  // conciseness coaching for rambling answers, not a relevance verdict.
   'relevance-concern': [
-    /(relevan|off.?topic|unrelated|tangent)/i,
+    /(relevan|off.?topic|unrelated)/i,
     /(didn'?t|did not|doesn'?t|does not|fail(s|ed)? to)\s+(directly\s+)?(answer|address)/i,
     /(answer|address)\s+the\s+(question|prompt)/i,
     /stay (on|focused)/i

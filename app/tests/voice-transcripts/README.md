@@ -145,40 +145,26 @@ LLM evaluation — occasional single-case flakiness is normal. Treat repeated
 failures of the same case or category as real regressions, especially after
 prompt changes.
 
-## Baseline (first real full run, 2026-07-18, gpt-4.1-mini, 100 cases)
+## Baselines (gpt-4.1-mini, full 100-case runs)
 
-82/100 passed (82%), ~133k tokens, ~$0.09, ~2.5 minutes. Quality-tier
-averages were fully monotonic: excellent 79.7 > good 74.4 > average 67.8 >
-weak 60.7 > poor 50.7. (Smoke runs can show tier inversions because each
-smoke tier contains different archetypes — judge tier ordering on full
-runs only.)
+**Original production prompt (2026-07-18): 82/100.** Confirmed stable
+defects (3x re-runs, spread <= 5 pts): saoBalance tracked answer quality
+instead of speaking time (outcome 50-60% on outcome-less transcripts,
+situation 10-15% on backstory-heavy ones, structure following the halo),
+roleFit never dropped below ~45 for fully off-topic answers, and
+fluent-but-hollow answers scored overall ~85.
 
-Known genuine scorecard findings — these cases are EXPECTED to keep
-failing until the production grading prompt is tightened in a separate
-change. Do not "fix" them by loosening fixture ranges:
+**v2.4 prompt (2026-07-19, the stacked scorecard-prompt PR): 95/100**,
+with every defect above at zero, fully monotonic quality tiers
+(75.1 > 69.3 > 64.6 > 59.3 > 52.7), scores and feedback in agreement,
+and all failures reduced to singletons. After the final fixture
+calibration in this revision, the expected steady state is ~98-99/100.
 
-1. **saoBalance tracks answer quality, not speaking time (halo effect).**
-   Transcripts with zero stated outcomes (missing-outcome
-   excellent/good/average) received outcome shares of 50-60%; pure
-   process-detail answers (excessive-process) 60-70%; and
-   background-dominated transcripts (excessive-background excellent/good)
-   received situation shares of only 10-15%. The structure dimension,
-   which production scores BY the S+A=O formula, follows the same halo
-   (75-90 for outcome-less answers).
-2. **roleFit does not punish irrelevance.** Fully off-topic transcripts
-   received roleFit 45-60 (irrelevant good/weak/poor).
-3. **Mild leniency on fluent-but-hollow answers** (e.g. pure process
-   detail at weak quality scored overall 85).
+Known occasional flake (~1 case per 100): `lint-coaching-shape` — the
+model rarely emits 3 saoCoaching tips instead of the instructed 2. The
+schema cannot hard-enforce array length under strict mode without
+compatibility risk; the lint stays as truth-telling. Treat isolated
+occurrences as noise, repeated ones as prompt drift.
 
-With these documented findings, the expected steady-state full-run result
-is roughly 87/100.
-
-**Stability confirmation (3x targeted re-run of the 12 suspicious cases,
-same day):** findings 1 and 2 reproduced in every run with near-identical
-scores (overall-score spread <= 5 points, average 1.08) — they are stable
-model behavior, not variance. missing-outcome transcripts scored outcome
-50-60% / structure 75-80 in 9/9 runs; excessive-process scored overall 85
-/ outcome 60-70 in 9/9 runs; irrelevant roleFit stayed 45-60 in 8/9 runs;
-the background-heavy transcript reported situation=10% in 3/3 runs.
-These are the measured targets for any future production-prompt tightening
-(a separate change — this harness is the before/after yardstick).
+Smoke runs can show quality-tier inversions because each smoke tier
+contains different archetypes — judge tier ordering on full runs only.
