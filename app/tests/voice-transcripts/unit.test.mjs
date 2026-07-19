@@ -97,9 +97,14 @@ export function testConceptMatching() {
   assert.ok(!conceptAppears('claims-no-outcome', 'Strong measurable outcomes in every answer.'));
   assert.ok(!conceptAppears('claims-no-outcome', 'Open answers with the result. Then explain how.'));
   // ...nor critiques of OTHER missing elements that merely mention results
-  // (real false positive from the first full run)
+  // (real false positives from full runs)
   assert.ok(!conceptAppears('claims-no-outcome', 'Without more context, the results are hard to assess.'));
   assert.ok(!conceptAppears('claims-no-outcome', 'You are missing the situation setup before your results.'));
+  assert.ok(!conceptAppears('claims-no-outcome', 'Your results are missing the story behind them.'));
+  assert.ok(!conceptAppears('claims-no-outcome', 'The result is missing its supporting actions.'));
+  // ...while genuine "results were absent" claims still match
+  assert.ok(conceptAppears('claims-no-outcome', 'Concrete outcomes were missing from most answers.'));
+  assert.ok(conceptAppears('claims-no-outcome', 'The results were not stated anywhere.'));
 
   assert.ok(conceptAppears('praises-relevance', 'The answers were highly relevant to the role.'));
   assert.ok(!conceptAppears('praises-relevance', 'Work on making answers more relevant.'));
@@ -205,17 +210,33 @@ export function testCoherenceChecks() {
     saoBalance: { situation: 25, action: 25, outcome: 50 }
   })).includes('coherence-formula'));
 
-  // 3. coherence-rolefit: low roleFit needs a relevance mention; high roleFit must not raise one
+  // 3. coherence-rolefit: very low roleFit (<= 30, the prompt's irrelevance
+  // anchor) needs relevance OR specificity coaching; high roleFit must not
+  // raise a relevance concern.
+  const blandCoaching = {
+    saoCoaching: ['Smile more.', 'Speak slower.'],
+    topImprovement: 'Be more animated.',
+    moments: [],
+    summary: 'A pleasant conversation.'
+  };
   assert.ok(cats(sampleScorecard({
+    ...blandCoaching,
+    dimensions: { communication: 70, structure: 68, contentDepth: 70, roleFit: 25 }
+  })).includes('coherence-rolefit'));
+  // roleFit 35 (weak-but-on-topic zone) no longer triggers the rule
+  assert.ok(!cats(sampleScorecard({
+    ...blandCoaching,
     dimensions: { communication: 70, structure: 68, contentDepth: 70, roleFit: 35 }
+  })).includes('coherence-rolefit'));
+  // specificity coaching satisfies the rule at roleFit <= 30
+  assert.ok(!cats(sampleScorecard({
+    ...blandCoaching,
+    dimensions: { communication: 70, structure: 68, contentDepth: 70, roleFit: 25 },
+    topImprovement: 'Give specific examples from real projects next time.'
   })).includes('coherence-rolefit'));
   assert.ok(cats(sampleScorecard({
     topImprovement: 'Your answers were off-topic; stay relevant to the question.'
   })).includes('coherence-rolefit')); // roleFit 78 in sample
-  assert.ok(!cats(sampleScorecard({
-    dimensions: { communication: 70, structure: 68, contentDepth: 70, roleFit: 35 },
-    topImprovement: 'Your stories were unrelated to the role; pick relevant examples.'
-  })).includes('coherence-rolefit'));
 
   // 4. coherence-outcome-coaching: tiny outcome share demands outcome coaching
   assert.ok(cats(sampleScorecard({

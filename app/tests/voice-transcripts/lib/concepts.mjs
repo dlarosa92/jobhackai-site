@@ -81,7 +81,11 @@ export const CONCEPTS = {
     // don't false-positive.
     /\b(no|without|lacks?|lacking|missing|absence of)\b[^.!?\n]{0,15}\b(outcome|result|impact)s?\b/i,
     /\b(didn'?t|did not|fails? to|failed to|never|doesn'?t|does not)\s+(provide|share|state|mention|give|include|offer|present|quantify|describe)\b[^.!?\n]{0,40}\b(outcome|result|impact|metric)s?\b/i,
-    /\b(outcome|result)s?\b[^.!?\n]{0,30}\b(not (provided|stated|mentioned|given|shared|clear)|missing|absent|unstated)\b/i
+    // "missing/absent" must not be followed by an object — "your results
+    // are missing the story behind them" critiques a missing SETUP, which
+    // is correct coaching for a bare metric, not a claim that no outcome
+    // was given.
+    /\b(outcome|result)s?\b[^.!?\n]{0,30}\b(not (provided|stated|mentioned|given|shared|clear)|(missing|absent|unstated)(?!\s+(the|a|an|its|their|any|some|context|situation|setup|story|background|detail)))\b/i
   ],
   'praises-relevance': [
     /(highly|very|strongly|extremely|directly) relevant/i,

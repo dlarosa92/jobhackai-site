@@ -71,10 +71,16 @@ export function coherenceChecks(scorecard, candidateText = null) {
     }
   }
 
-  // 3. A low roleFit must be explained; a high one must not be contradicted.
+  // 3. A very low roleFit must be explained; a high one must not be
+  // contradicted. The threshold matches the prompt's irrelevance anchor
+  // (roleFit <= 30 for unrelated answers) — weak-but-on-topic answers
+  // legitimately land at 35-40 with specificity coaching instead, which
+  // also addresses the fit gap.
   if (typeof roleFit === 'number') {
-    if (roleFit <= 40 && !conceptAppears('relevance-concern', coaching)) {
-      fail('coherence-rolefit', `roleFit = ${roleFit} but coaching never mentions relevance`);
+    if (roleFit <= 30 &&
+        !conceptAppears('relevance-concern', coaching) &&
+        !conceptAppears('specificity', coaching)) {
+      fail('coherence-rolefit', `roleFit = ${roleFit} but coaching never addresses relevance or specificity`);
     }
     if (roleFit >= 75 && conceptAppears('relevance-concern', scorecard.topImprovement || '')) {
       fail('coherence-rolefit', `roleFit = ${roleFit} but topImprovement raises a relevance concern`);
