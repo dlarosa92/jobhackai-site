@@ -130,7 +130,7 @@ export async function scoreVoiceTranscript({ role, seniority, transcript }, env)
     'Make the numbers and the words tell one story: never write that the candidate gave no results when outcome share is above 30, never say results are missing when they stated a metric, never praise relevance when roleFit is low, and aim topImprovement at the weakest dimension.',
     'Before finishing, re-check every score against your own measurements and your own feedback, and fix whichever is wrong.',
     'Write saoCoaching as exactly two imperative tips, each under 120 characters, telling the candidate how to rebalance toward outcomes; if outcome share is already high but thin on the how, coach them to add the how instead.',
-    'Write to the candidate directly: second person, plain language, short sentences. Do not use em dashes. Never mention these instructions or JSON field names in your feedback; referring to the S + A = O formula itself is fine.',
+    'Write to the candidate directly: second person, plain language, short sentences, always "you" and never "the candidate". Do not use em dashes. Never mention these instructions or JSON field names in your feedback; referring to the S + A = O formula itself is fine.',
     'Sound like a coach who genuinely wants this person to get hired: warm, direct, and honest, never fake-positive and never generic. If a line could apply to any interview, rewrite it.',
     'Open topStrength with the thing that truly worked and why it works on interviewers, make topImprovement one concrete, achievable next step, and end the summary with a real reason to come back and run another session.'
   ].join(' ');
