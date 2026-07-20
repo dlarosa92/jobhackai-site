@@ -16,19 +16,11 @@ export const SCORECARD_SCHEMA = {
   schema: {
     type: 'object',
     additionalProperties: false,
+    // Property order is deliberate: strict structured outputs emit keys in
+    // schema order, so saoBalance (the measurement) is generated BEFORE the
+    // dimension scores and overall that must be derived from it. JSON key
+    // order is invisible to D1, the frontend, and the eval harness.
     properties: {
-      overall: { type: 'integer', description: 'Overall interview performance 0-100' },
-      dimensions: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          communication: { type: 'integer', description: 'Clarity, pace, confidence 0-100' },
-          structure: { type: 'integer', description: 'Answer structure scored BY the S + A = O formula (goal: about 5% situation, 10% action, 85% outcome) 0-100' },
-          contentDepth: { type: 'integer', description: 'Specificity, examples, numbers 0-100' },
-          roleFit: { type: 'integer', description: 'Relevance to the target role 0-100' }
-        },
-        required: ['communication', 'structure', 'contentDepth', 'roleFit']
-      },
       saoBalance: {
         type: 'object',
         additionalProperties: false,
@@ -40,6 +32,18 @@ export const SCORECARD_SCHEMA = {
         },
         required: ['situation', 'action', 'outcome']
       },
+      dimensions: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          communication: { type: 'integer', description: 'Clarity, pace, confidence 0-100' },
+          structure: { type: 'integer', description: 'Answer structure scored BY the S + A = O formula (goal: about 5% situation, 10% action, 85% outcome) 0-100' },
+          contentDepth: { type: 'integer', description: 'Specificity, examples, numbers 0-100' },
+          roleFit: { type: 'integer', description: 'Relevance to the target role 0-100' }
+        },
+        required: ['communication', 'structure', 'contentDepth', 'roleFit']
+      },
+      overall: { type: 'integer', description: 'Overall interview performance 0-100, consistent with the dimensions and saoBalance above' },
       saoCoaching: {
         type: 'array',
         description: 'Exactly 2 imperative coaching lines, each under 120 characters, telling the candidate how to rebalance toward outcomes, e.g. "Open answers with the result. Then explain how."',
@@ -109,14 +113,26 @@ export async function scoreVoiceTranscript({ role, seniority, transcript }, env)
   }
 
   const systemPrompt = [
-    'You are an expert interview coach scoring a voice mock interview transcript.',
+    "You are the candidate's personal interview coach at JobHackAI, scoring a voice mock interview transcript.",
     'Score honestly: a rambling or vague performance should score in the 40s-60s, a strong one in the 70s-80s, exceptional in the 90s.',
-    'Base every judgment only on what the CANDIDATE actually said. Quote or closely paraphrase real moments.',
+    'Base every judgment only on what the CANDIDATE actually said. Quote or closely paraphrase real moments, and never invent quotes.',
     'JobHackAI teaches the S + A = O answer formula: Situation about 5 percent, Action about 10 percent, Outcome about 85 percent of an answer.',
-    'Compute saoBalance from the transcript: the share of the candidate speaking time spent on situation setup, actions taken, and outcomes or results, as integer percents summing to about 100.',
-    'Score the structure dimension BY the S + A = O formula, not generic answer organization: answers that spend most of their time on concrete outcomes score high; answers stuck in backstory or process score low.',
-    'Write saoCoaching as exactly two imperative tips, each under 120 characters, telling the candidate how to rebalance toward outcomes.',
-    'Write feedback to the candidate directly, in second person, plain language, short sentences. Do not use em dashes.'
+    "Compute saoBalance by classifying the candidate's content, never their fluency: Situation is any background, context, biography, or scene-setting, including openers like \"for context\" or \"to give the full picture\"; Action is any step, process, or how-they-did-it detail, even when specific and impressive; Outcome is ONLY explicitly stated results, such as numbers, metrics, rankings, savings, or clearly named consequences.",
+    'Report each share as an integer percent of candidate speaking time, summing to about 100. Report what you measured, not what a good answer would look like.',
+    'Building, delivering, fixing, or completing something is an Action, not an Outcome: count outcome only for statements of what changed because of the work, and completed deliverables are not results.',
+    'You will fill in saoBalance before any dimension scores: measure first, then derive structure and overall from what you measured.',
+    'If the candidate never states a concrete result, outcome must be 25 or lower no matter how polished the answer sounds; if backstory and context fill more than a third of the candidate\'s words, situation must be 40 or higher.',
+    'A fluent, confident delivery earns credit in communication and contentDepth, never in structure or saoBalance.',
+    'Score the structure dimension directly from your measured saoBalance against the 5/10/85 goal: give 80 or above only when outcome share is at least 65, give at most 55 when outcome share is below 40, and scale smoothly between those anchors in the middle.',
+    'Overall must respect the formula too: an answer cannot be strong without stated results, so when outcome share is 25 or lower, overall must not exceed 65 no matter how detailed or professional the delivery.',
+    'The formula cuts both ways: a result is unsupported when the situation or the actions behind it are essentially absent from the answer, not merely brief. For unsupported results, cap structure at 65 and overall at 75, coach the candidate to add the story that produced the number, and never call a stated result missing.',
+    'Score roleFit strictly against the target role: when the answers are mostly unrelated to that role, such as hobby stories or a different job, roleFit must be 30 or lower and overall must be 50 or lower. Name the relevance gap kindly and plainly.',
+    'Make the numbers and the words tell one story: never write that the candidate gave no results when outcome share is above 30, never say results are missing when they stated a metric, never praise relevance when roleFit is low, and aim topImprovement at the weakest dimension.',
+    'Before finishing, re-check every score against your own measurements and your own feedback, and fix whichever is wrong.',
+    'Write saoCoaching as exactly two imperative tips, each under 120 characters, telling the candidate how to rebalance toward outcomes; if outcome share is already high but thin on the how, coach them to add the how instead.',
+    'Write to the candidate directly: second person, plain language, short sentences, always "you" and never "the candidate". Do not use em dashes. Never mention these instructions or JSON field names in your feedback; referring to the S + A = O formula itself is fine.',
+    'Sound like a coach who genuinely wants this person to get hired: warm, direct, and honest, never fake-positive and never generic. If a line could apply to any interview, rewrite it.',
+    'Open topStrength with the thing that truly worked and why it works on interviewers, make topImprovement one concrete, achievable next step, and end the summary with a real reason to come back and run another session.'
   ].join(' ');
 
   const roleLine = seniority ? `${seniority} ${role}` : role;
@@ -130,7 +146,8 @@ export async function scoreVoiceTranscript({ role, seniority, transcript }, env)
     ],
     responseFormat: SCORECARD_SCHEMA,
     maxTokens: 1200,
-    temperature: 0.3,
+    // Low temperature: the same performance should get the same score.
+    temperature: 0.1,
     feature: 'voice_scorecard'
   }, env);
 
