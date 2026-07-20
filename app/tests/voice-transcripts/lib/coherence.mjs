@@ -85,8 +85,11 @@ export function coherenceChecks(scorecard, candidateText = null) {
         !conceptAppears('specificity', coaching)) {
       fail('coherence-rolefit', `roleFit = ${roleFit} but coaching never addresses relevance or specificity`);
     }
-    if (roleFit >= 75 && conceptAppears('relevance-concern', scorecard.topImprovement || '')) {
-      fail('coherence-rolefit', `roleFit = ${roleFit} but topImprovement raises a relevance concern`);
+    // Only outright irrelevance assertions contradict a high roleFit —
+    // "answer the question more directly" is focus coaching a coach can
+    // honestly pair with well-fitting content.
+    if (roleFit >= 75 && conceptAppears('asserts-irrelevance', scorecard.topImprovement || '')) {
+      fail('coherence-rolefit', `roleFit = ${roleFit} but topImprovement asserts the content is off-topic`);
     }
   }
 

@@ -27,6 +27,14 @@ export const CONCEPTS = {
     /(didn'?t|did not|doesn'?t|does not|fail(s|ed)? to)\s+(directly\s+)?(answer|address)/i,
     /(answer|address)\s+the\s+(question|prompt)/i
   ],
+  // Strict subset of relevance-concern: only outright assertions that the
+  // content is off-topic. "Answer the question more directly" is focus
+  // coaching a coach can honestly pair with a high roleFit; these cannot be.
+  'asserts-irrelevance': [
+    /(off.?topic|unrelated|irrelevant)/i,
+    /not relevant to/i,
+    /(different|wrong) (question|job|role)/i
+  ],
   confidence: [
     /(confiden|filler|hesitat|assert|nervous|composure|poise|hedg|apolog|\bum\b|\buh\b)/i
   ],

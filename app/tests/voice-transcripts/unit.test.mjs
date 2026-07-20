@@ -237,6 +237,10 @@ export function testCoherenceChecks() {
   assert.ok(cats(sampleScorecard({
     topImprovement: 'Your answers were off-topic; stay relevant to the question.'
   })).includes('coherence-rolefit')); // roleFit 78 in sample
+  // ...but focus coaching alongside a high roleFit is coherent
+  assert.ok(!cats(sampleScorecard({
+    topImprovement: 'Answer the question more directly and trim the setup.'
+  })).includes('coherence-rolefit'));
 
   // 4. coherence-outcome-coaching: tiny outcome share demands outcome coaching
   assert.ok(cats(sampleScorecard({

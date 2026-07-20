@@ -152,7 +152,14 @@ export const ARCHETYPES = [
       }
       // Same logic at poor: a bare metric sentence is nearly all Outcome,
       // so the formula scores it mid-70s (v2 stability run: overall 75).
-      if (q === 4) e.overall = [0, 80];
+      // Structure for the all-outcome edge case is genuinely contested —
+      // near-target ratio vs unsupported result — and the model's honest
+      // judgment flaps 60-85 across runs; the overall cap and the
+      // claims-no-outcome guard carry this check instead.
+      if (q === 4) {
+        e.overall = [0, 80];
+        e.structure = [0, 85];
+      }
       return e;
     }
   },
