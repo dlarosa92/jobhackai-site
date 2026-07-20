@@ -5,6 +5,10 @@
     "jose": "^5.0.0"
   },
   "scripts": {
-    "build:roles": "node marketing/scripts/build-role-pages.mjs"
+    "build:roles": "node marketing/scripts/build-role-pages.mjs",
+    "test:voice:transcripts:smoke": "node app/tests/voice-transcripts/run-evals.mjs --mode smoke",
+    "test:voice:transcripts:full": "node app/tests/voice-transcripts/run-evals.mjs --mode full",
+    "test:voice:transcripts:stability": "node app/tests/voice-transcripts/run-evals.mjs --mode stability",
+    "test:voice:transcripts:unit": "node app/tests/voice-transcripts/unit.test.mjs"
   }
 }
