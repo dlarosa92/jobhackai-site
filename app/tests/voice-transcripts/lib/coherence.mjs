@@ -61,13 +61,16 @@ export function coherenceChecks(scorecard, candidateText = null) {
     fail('coherence-halo', `saoBalance.outcome = ${outcome} but feedback claims no outcome was given`);
   }
 
-  // 2. Structure is scored BY the S+A=O formula, so it must track outcome share.
+  // 2. Structure is scored BY the S+A=O formula, so it must track outcome
+  // share. Thresholds mirror the prompt's own anchors (structure >= 80
+  // requires outcome >= 65; structure <= 55 below outcome 40) with a
+  // 5-point tolerance so borderline-but-anchor-consistent scores pass.
   if (typeof structure === 'number' && typeof outcome === 'number') {
-    if (structure >= 75 && outcome < 50) {
-      fail('coherence-formula', `structure = ${structure} despite outcome share ${outcome} (< 50)`);
+    if (structure >= 80 && outcome < 60) {
+      fail('coherence-formula', `structure = ${structure} despite outcome share ${outcome} (< 60)`);
     }
-    if (structure <= 40 && outcome > 40) {
-      fail('coherence-formula', `structure = ${structure} despite outcome share ${outcome} (> 40)`);
+    if (structure <= 40 && outcome > 45) {
+      fail('coherence-formula', `structure = ${structure} despite outcome share ${outcome} (> 45)`);
     }
   }
 

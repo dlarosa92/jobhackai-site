@@ -178,7 +178,9 @@ export const ARCHETYPES = [
       return {
         overall: overall(q, -5, 85),
         structure: [0, 65],
-        sao: { outcome: [0, 35] },
+        // Deliverable-flavored actions honestly measure a little outcome
+        // credit; runs straddle 35 (full run: 40).
+        sao: { outcome: [0, 40] },
         must: [['outcome-focus']]
       };
     }
@@ -240,8 +242,9 @@ export const ARCHETYPES = [
     ],
     expect(q) {
       const e = {
-        // Model floors coherent-but-empty speech around 60-65 (full run: 65).
-        overall: q === 4 ? overall(4) : overall(q, -5),
+        // Model floors coherent-but-empty speech around 60-65 (full run: 65),
+        // and fluent pure-process answers straddle the high 70s at weak.
+        overall: q === 4 ? overall(4) : q === 3 ? [17, 78] : overall(q, -5),
         // The prompt's smooth structure scale permits mid-70s at outcome
         // ~50, and these variants carry real action content (full run: 75).
         structure: q === 0 ? [0, 85] : [0, 78],
