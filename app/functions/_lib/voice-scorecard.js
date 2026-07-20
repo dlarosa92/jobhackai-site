@@ -146,7 +146,8 @@ export async function scoreVoiceTranscript({ role, seniority, transcript }, env)
     ],
     responseFormat: SCORECARD_SCHEMA,
     maxTokens: 1200,
-    temperature: 0.3,
+    // Low temperature: the same performance should get the same score.
+    temperature: 0.1,
     feature: 'voice_scorecard'
   }, env);
 
