@@ -65,6 +65,50 @@ export async function testScoreVoiceTranscriptTooShortPath() {
   assert.ok(MIN_SCOREABLE_CHARS === 200);
 }
 
+export async function testScoreVoiceTranscriptContextBlocks() {
+  const transcript = [
+    { speaker: 'assistant', text: 'Tell me about a time you had to deliver a project under a very tight deadline for the team.' },
+    { speaker: 'user', text: 'Two weeks before our holiday sale, load testing showed our checkout service timing out at peak traffic. I profiled it, fixed an N+1 query, and P95 dropped from 2.1 seconds to 180 milliseconds.' }
+  ];
+  const env = { OPENAI_API_KEY: 'sk-test' };
+  let captured;
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    captured = JSON.parse(opts.body);
+    return {
+      ok: true, status: 200, headers: { get: () => null },
+      json: async () => ({ model: captured.model, choices: [{ message: { content: '{"overall":70}' }, finish_reason: 'stop' }], usage: {} })
+    };
+  };
+  try {
+    // Without context: message is byte-identical to the classic shape
+    await scoreVoiceTranscript({ role: 'Software Engineer', seniority: 'Senior', transcript }, env);
+    const baseMsg = captured.messages[1].content;
+    const baseSys = captured.messages[0].content;
+    assert.ok(baseMsg.startsWith('Target role: Senior Software Engineer\n\nTranscript:\n'));
+    assert.ok(!baseMsg.includes('Job description excerpt'));
+    assert.ok(!baseMsg.includes('Previous session focus'));
+
+    // With context: blocks appear between the role line and the transcript,
+    // and the base system prompt is extended, never altered
+    await scoreVoiceTranscript({
+      role: 'Software Engineer', seniority: 'Senior', transcript,
+      jd: 'Must have Kubernetes and on-call experience.',
+      priorFocus: 'Lead with the results you achieved.'
+    }, env);
+    const ctxMsg = captured.messages[1].content;
+    assert.ok(ctxMsg.includes('Job description excerpt:\nMust have Kubernetes and on-call experience.'));
+    assert.ok(ctxMsg.includes('Previous session focus: Lead with the results you achieved.'));
+    assert.ok(ctxMsg.indexOf('Job description excerpt') < ctxMsg.indexOf('Previous session focus'));
+    assert.ok(ctxMsg.indexOf('Previous session focus') < ctxMsg.indexOf('Transcript:'));
+    assert.ok(captured.messages[0].content.startsWith(baseSys));
+    assert.ok(captured.messages[0].content.includes('A job description excerpt is provided'));
+    assert.ok(captured.messages[0].content.includes('A previous session focus is provided'));
+  } finally {
+    globalThis.fetch = origFetch;
+  }
+}
+
 export function testToVoiceTranscript() {
   assert.deepStrictEqual(
     toVoiceTranscript([
@@ -423,6 +467,7 @@ export function testAggregateResults() {
 const TESTS = [
   testTranscriptToText,
   testScoreVoiceTranscriptTooShortPath,
+  testScoreVoiceTranscriptContextBlocks,
   testToVoiceTranscript,
   testConceptMatching,
   testFeedbackTextExtraction,
