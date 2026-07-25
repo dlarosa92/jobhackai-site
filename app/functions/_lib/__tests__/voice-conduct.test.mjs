@@ -298,11 +298,24 @@ test('BLOCKER 2: the ordinary distress redirect does not trigger the backstop', 
   assert.equal(isSafetyReferral('This is interview practice, so it is not the right place for it. If it is real, you deserve to talk to someone who can actually help.'), false);
 });
 
-test('BLOCKER 2: echoing a story about emergency services does not trigger', () => {
-  // Bare "emergency services" is deliberately not matched — candidates tell
-  // stories about calling them, and interviewers echo those stories
+test('BLOCKER 2: the permitted emergency-services wording is detected (Codex P1)', () => {
+  // The prompt's FIRST permitted wording contains no "988"; the backstop must
+  // catch it too or a rule-following model can still evade the close
+  assert.equal(isSafetyReferral('Please contact emergency services now.'), true);
+  assert.equal(isSafetyReferral('Contact emergency services right away.'), true);
+  assert.equal(isSafetyReferral('You should contact emergency services.'), true);
+  assert.equal(isSafetyReferral('I need you to call emergency services immediately.'), true);
+  assert.equal(isSafetyReferral('This matters far more than a practice interview. Please contact emergency services now, or call or text 988 if you are in the US.'), true);
+});
+
+test('BLOCKER 2: echoing a story about emergency services still does not trigger', () => {
+  // Past-tense and descriptive echoes have none of the referral shape:
+  // no imperative opening, no directive, no urgency word
   assert.equal(isSafetyReferral('So you called emergency services during the incident.'), false);
   assert.equal(isSafetyReferral('You decided to contact emergency services that night.'), false);
+  assert.equal(isSafetyReferral('Tell me about the night you had to contact emergency services.'), false);
+  // Questions about the duty never match, whatever their tense
+  assert.equal(isSafetyReferral('When you contact emergency services in that role, what is the protocol?'), false);
 });
 
 test('BLOCKER 2: near-miss numbers and junk input stay false', () => {

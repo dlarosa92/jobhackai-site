@@ -180,6 +180,17 @@ test('BLOCKER 3: a real answer that quotes part of the question is KEPT', () => 
   assert.equal(o.list().length, 2, 'partial overlap is a quote, not echo');
 });
 
+test('BLOCKER 3: an answer built from the question\'s own words is KEPT (Codex P1)', () => {
+  const o = createTranscriptOrder();
+  o.noteItem('a1');
+  o.noteItem('u1');
+  o.setText('a1', 'assistant', 'Would you describe your role as strategic, operational, or both?');
+  // 100% of the answer's tokens appear in the question, but it reproduces only
+  // a fraction of the question — coverage is what tells it apart from echo
+  o.setText('u1', 'user', 'Strategic, operational, or both - both.');
+  assert.equal(o.list().length, 2, 'a real answer must never be deleted');
+});
+
 test('BLOCKER 3: short answers are never treated as echo', () => {
   const o = createTranscriptOrder();
   o.noteItem('a1');

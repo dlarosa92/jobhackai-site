@@ -114,13 +114,21 @@ export function readToolCall(evt) {
  * signal that the safety rule fired, so the client treats speaking it as the
  * decision to close and the tool call as a formality.
  *
- * Deliberately narrow to keep false positives out of legitimate interviews:
- *   - keyed on "988" with a referral verb in the same clause, because the
- *     prompt mandates that phrasing; bare "emergency services" is NOT matched
- *     (an interviewer echoing a candidate's story — "so you called emergency
- *     services?" — must not end the session)
+ * Matches BOTH wordings the prompt permits, since the model may use either:
+ *   - "call or text 988": a referral verb with 988 in the same clause
+ *   - "contact emergency services now": the emergency-services phrase with a
+ *     present-tense referral verb, in a sentence that reads as a directive —
+ *     sentence-initial imperative, "please"/"you should", or an urgency word
+ * Kept out of legitimate interviews by shape, not just keywords:
  *   - questions never match, so "did you ever call 988 in that role?" in an
  *     interview for a crisis-line job stays an interview question
+ *   - past-tense echoes of a candidate's story never match: "so you called
+ *     emergency services?" and "you decided to contact emergency services
+ *     that night" carry no imperative, directive, or urgency shape
+ * Residual false positive, accepted deliberately: a non-question duty
+ * description like "in that role you contact emergency services immediately"
+ * would close the session politely. Missing a real referral means someone in
+ * danger keeps being interviewed; the asymmetry decides it.
  * Feed it interviewer turns only; candidate speech mentioning 988 is content.
  */
 export function isSafetyReferral(text) {
@@ -131,6 +139,12 @@ export function isSafetyReferral(text) {
     var s = sentences[i].toLowerCase();
     if (!s || s.indexOf('?') >= 0) continue;
     if (/\b(?:call|text|dial|contact|reach)\b[^]{0,30}\b988\b/.test(s)) return true;
+    if (/\b(?:call|contact|reach)\b[^]{0,25}\bemergency services\b/.test(s)) {
+      var imperative = /^\s*(?:please\s+)?(?:contact|call|reach(?:\s+out)?(?:\s+to)?)\b/.test(s);
+      var directive = /\b(?:please|you should|you need to|i need you to|i want you to)\b/.test(s);
+      var urgent = /\b(?:now|right now|immediately|right away|as soon as)\b/.test(s);
+      if (imperative || directive || urgent) return true;
+    }
   }
   return false;
 }

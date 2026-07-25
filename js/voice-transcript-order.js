@@ -25,12 +25,17 @@ var DEFAULT_FLUSH_MS = 1500;
 // real dev session's stored transcript opened with the interviewer's greeting
 // attributed to the user. A user turn that is a near-verbatim copy of an
 // adjacent interviewer turn is that artifact, not an answer. Thresholds are
-// deliberately strict so genuine answers survive: a candidate quoting part of
-// the question back ("a conflict with a manager — sure, so...") shares well
-// under 85% of their tokens with the question, and short affirmations are
-// never touched.
+// deliberately strict so genuine answers survive, and the test is
+// BIDIRECTIONAL: the user turn must be made of the interviewer's words
+// (containment) AND reproduce most of her line (coverage). Coverage is what
+// saves a legitimate answer assembled from the question's own words — after
+// "would you describe your role as strategic, operational, or both?", the
+// answer "strategic, operational, or both - both" is 100% contained but
+// covers a fraction of the question, while true echo reproduces the bulk of
+// the line it leaked from. Short affirmations are never touched.
 var ECHO_MIN_TOKENS = 5;
 var ECHO_CONTAINMENT = 0.85;
+var ECHO_COVERAGE = 0.5;
 var ECHO_WINDOW = 2;
 
 function echoTokens(text) {
@@ -43,18 +48,29 @@ function echoTokens(text) {
 function isEchoOfNeighbor(filled, at) {
   var mine = echoTokens(filled[at].text);
   if (mine.length < ECHO_MIN_TOKENS) return false;
+  var mineSet = Object.create(null);
+  for (var m = 0; m < mine.length; m++) mineSet[mine[m]] = true;
   for (var d = -ECHO_WINDOW; d <= ECHO_WINDOW; d++) {
     if (d === 0) continue;
     var n = filled[at + d];
     if (!n || n.speaker !== 'assistant') continue;
-    var theirs = Object.create(null);
     var tks = echoTokens(n.text);
+    var theirs = Object.create(null);
     for (var i = 0; i < tks.length; i++) theirs[tks[i]] = true;
+    // Containment: the user turn is made of the interviewer's words
     var hit = 0;
     for (var k = 0; k < mine.length; k++) {
       if (theirs[mine[k]]) hit++;
     }
-    if (hit / mine.length >= ECHO_CONTAINMENT) return true;
+    if (hit / mine.length < ECHO_CONTAINMENT) continue;
+    // Coverage: and it reproduces most of her line, not a fragment of it
+    var theirsDistinct = 0;
+    var covered = 0;
+    for (var key in theirs) {
+      theirsDistinct++;
+      if (mineSet[key]) covered++;
+    }
+    if (theirsDistinct > 0 && covered / theirsDistinct >= ECHO_COVERAGE) return true;
   }
   return false;
 }
