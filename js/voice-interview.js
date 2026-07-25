@@ -349,6 +349,8 @@
     for (var i = 0; i < sentences.length; i++) {
       var t = sentences[i].toLowerCase();
       if (!t || t.indexOf('?') >= 0) continue;
+      if (/^\s*(?:please\s+)?(?:describe|tell|walk|talk|share|give|explain)\b/.test(t)) continue;
+      if (/\b(?:had to|used to|ever)\s+(?:call|text|dial|contact|reach)\b/.test(t)) continue;
       if (/\b(?:call|text|dial|contact|reach)\b[^]{0,30}\b988\b/.test(t)) return true;
       if (/\b(?:call|contact|reach)\b[^]{0,25}\bemergency services\b/.test(t) &&
           (/^\s*(?:please\s+)?(?:contact|call|reach)\b/.test(t) ||

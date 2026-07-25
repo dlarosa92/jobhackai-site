@@ -138,6 +138,13 @@ export function isSafetyReferral(text) {
   for (var i = 0; i < sentences.length; i++) {
     var s = sentences[i].toLowerCase();
     if (!s || s.indexOf('?') >= 0) continue;
+    // Interview prompts about crisis-line work are not referrals, and
+    // behavioral prompts are often imperative ("describe a time you had to
+    // call 988"), so the question filter alone cannot catch them. A real
+    // referral never opens with a prompt verb and never frames the call as
+    // past experience.
+    if (/^\s*(?:please\s+)?(?:describe|tell|walk|talk|share|give|explain)\b/.test(s)) continue;
+    if (/\b(?:had to|used to|ever)\s+(?:call|text|dial|contact|reach)\b/.test(s)) continue;
     if (/\b(?:call|text|dial|contact|reach)\b[^]{0,30}\b988\b/.test(s)) return true;
     if (/\b(?:call|contact|reach)\b[^]{0,25}\bemergency services\b/.test(s)) {
       var imperative = /^\s*(?:please\s+)?(?:contact|call|reach(?:\s+out)?(?:\s+to)?)\b/.test(s);

@@ -324,6 +324,18 @@ test('BLOCKER 2: interview questions about 988 do NOT end a session', () => {
   assert.equal(isSafetyReferral('What drew you to 988 crisis work?'), false);
 });
 
+test('BLOCKER 2: imperative interview PROMPTS about 988 do not end a session (Bugbot)', () => {
+  // Behavioral prompts are often phrased without a question mark, so the
+  // question filter alone cannot protect a crisis-line mock interview
+  assert.equal(isSafetyReferral('Describe when you had to call or text 988 to de-escalate a caller.'), false);
+  assert.equal(isSafetyReferral('Walk me through how you would call or text 988 with a caller in crisis.'), false);
+  assert.equal(isSafetyReferral('Tell me about a shift where you had to contact 988 twice.'), false);
+  // ...while the real referral, which never opens with a prompt verb and
+  // never frames the call as past experience, still matches
+  assert.equal(isSafetyReferral('Please call or text 988 right now.'), true);
+  assert.equal(isSafetyReferral('If you are in the US, call or text 988.'), true);
+});
+
 test('BLOCKER 2: the ordinary distress redirect does not trigger the backstop', () => {
   // Rule 4's no-resources redirect contains no referral and must stay inert
   assert.equal(isSafetyReferral('This is interview practice, so it is not the right place for it. If it is real, you deserve to talk to someone who can actually help.'), false);
