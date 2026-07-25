@@ -7,12 +7,21 @@
 // matters most: a candidate quoting profanity from a real workplace story is
 // answering the question, and must never lose their session over it.
 //
-// They also cover the two review findings on the first implementation:
+// They also cover the review findings on earlier implementations:
 //   1. a duplicated tool call converting a REFUSED unwarned end into a real one
 //   2. a conduct end completing without waiting for the closing spoken line
+//   3. a LATE whisper transcript, describing pre-warning audio, retroactively
+//      satisfying "the candidate spoke again" and letting (1) through anyway
 
 import assert from 'node:assert/strict';
-import { createConductGate, createClosingTurnGate } from '../../../../js/voice-conduct.js';
+import {
+  createConductGate,
+  createClosingTurnGate,
+  LIVE_CANDIDATE_SPEECH_EVENTS
+} from '../../../../js/voice-conduct.js';
+
+// Live speech signal, as the client passes it in.
+const SPOKE = 'input_audio_buffer.speech_started';
 
 let passed = 0;
 let failed = 0;
@@ -32,7 +41,7 @@ test('the documented path: warning, candidate re-offends, then end', () => {
   const g = createConductGate();
   assert.equal(g.decide('warning'), 'warn');
   assert.equal(g.wasWarned(), true);
-  g.noteCandidateSpoke();
+  g.noteCandidateSpoke(SPOKE);
   assert.equal(g.decide('end'), 'end');
   assert.equal(g.endReason(), 'ended_by_interviewer');
 });
@@ -48,7 +57,7 @@ test('an end with no prior warning is refused and becomes the warning', () => {
 test('after a refused end, the next real incident does end the session', () => {
   const g = createConductGate();
   assert.equal(g.decide('end', 'call_1'), 'warn_instead');
-  g.noteCandidateSpoke();
+  g.noteCandidateSpoke(SPOKE);
   assert.equal(g.decide('end', 'call_2'), 'end');
   assert.equal(g.endReason(), 'ended_by_interviewer_unwarned');
 });
@@ -102,7 +111,7 @@ test('a replayed unwarned end does NOT end the session with NO id at all', () =>
 test('a replayed legitimate end is idempotent across differing ids', () => {
   const g = createConductGate();
   assert.equal(g.decide('warning', 'call_1'), 'warn');
-  g.noteCandidateSpoke();
+  g.noteCandidateSpoke(SPOKE);
   assert.equal(g.decide('end', 'call_2'), 'end');
   // The replay of that same end resolves to a different id and must not
   // re-trigger. The caller guards too, but the gate should not invite it.
@@ -111,25 +120,68 @@ test('a replayed legitimate end is idempotent across differing ids', () => {
 
 test('candidate speech before any warning does not license an unwarned end', () => {
   const g = createConductGate();
-  g.noteCandidateSpoke();
-  g.noteCandidateSpoke();
+  g.noteCandidateSpoke(SPOKE);
+  g.noteCandidateSpoke(SPOKE);
   // Still the first offense, so still a warning rather than an end
   assert.equal(g.decide('end', 'call_1'), 'warn_instead');
 });
 
 test('a warning resets the clock: pre-warning speech does not license an end', () => {
   const g = createConductGate();
-  g.noteCandidateSpoke();
+  g.noteCandidateSpoke(SPOKE);
   assert.equal(g.decide('warning', 'c1'), 'warn');
   assert.equal(g.decide('end', 'c2'), 'ignore');
-  g.noteCandidateSpoke();
+  g.noteCandidateSpoke(SPOKE);
   assert.equal(g.decide('end', 'c3'), 'end');
+});
+
+// -- review finding 3: only LIVE speech signals may satisfy "spoke again" ------
+
+test('a late whisper transcript does NOT license a replayed unwarned end', () => {
+  const g = createConductGate();
+  // First offense: the model skips the warning and asks to end. Refused.
+  assert.equal(g.decide('end', 'call_abc'), 'warn_instead');
+  // The whisper transcript for that SAME first utterance now lands. It is
+  // pre-warning audio arriving late, so it must not count as speaking again.
+  g.noteCandidateSpoke('conversation.item.input_audio_transcription.completed');
+  // ...so the duplicate of that end call still cannot close the interview.
+  assert.equal(g.decide('end', 'item_xyz'), 'ignore');
+});
+
+test('only the live speech events are accepted as speaking again', () => {
+  assert.deepEqual(LIVE_CANDIDATE_SPEECH_EVENTS, [
+    'input_audio_buffer.speech_started',
+    'input_audio_buffer.committed'
+  ]);
+  for (const evt of LIVE_CANDIDATE_SPEECH_EVENTS) {
+    const g = createConductGate();
+    g.decide('warning', 'c1');
+    g.noteCandidateSpoke(evt);
+    assert.equal(g.decide('end', 'c2'), 'end', `${evt} should count as speaking`);
+  }
+});
+
+test('non-live, missing, and malformed speech signals are all rejected', () => {
+  const rejected = [
+    'conversation.item.input_audio_transcription.completed',
+    'conversation.item.created',
+    'response.done',
+    'input_audio_buffer.speech_stopped',
+    'INPUT_AUDIO_BUFFER.SPEECH_STARTED',
+    '', null, undefined, 0, {}, []
+  ];
+  for (const evt of rejected) {
+    const g = createConductGate();
+    g.decide('warning', 'c1');
+    g.noteCandidateSpoke(evt);
+    assert.equal(g.decide('end', 'c2'), 'ignore', `${JSON.stringify(evt)} must not count as speaking`);
+  }
 });
 
 test('the same call id is ignored outright (cheap first layer)', () => {
   const g = createConductGate();
   assert.equal(g.decide('warning', 'call_1'), 'warn');
-  g.noteCandidateSpoke();
+  g.noteCandidateSpoke(SPOKE);
   assert.equal(g.decide('warning', 'call_1'), 'ignore');
 });
 
@@ -137,7 +189,7 @@ test('a warning survives a reconnect: only reset() clears it', () => {
   const g = createConductGate();
   g.decide('warning');
   assert.equal(g.wasWarned(), true);
-  g.noteCandidateSpoke();
+  g.noteCandidateSpoke(SPOKE);
   assert.equal(g.decide('end'), 'end');
 });
 

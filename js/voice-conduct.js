@@ -27,6 +27,24 @@
 export var CONDUCT_WARNING_STAGE = 'warning';
 export var CONDUCT_END_STAGE = 'end';
 
+/**
+ * The only realtime events allowed to mark "the candidate spoke again".
+ *
+ * Both fire live, while the candidate is at the microphone, and both precede the
+ * model response for that same utterance. A whisper transcript
+ * (`conversation.item.input_audio_transcription.completed`) is deliberately NOT
+ * here: it is computed asynchronously and can land long after the audio it
+ * describes, including audio from BEFORE the warning. Accepting it let the
+ * transcript of the FIRST offense retroactively satisfy "spoke since warning",
+ * so a replayed end call passed the gate and closed the interview on a first
+ * offense — the exact failure the gate exists to prevent. The allowlist lives
+ * here, not at the call site, so a future caller cannot reintroduce it.
+ */
+export var LIVE_CANDIDATE_SPEECH_EVENTS = [
+  'input_audio_buffer.speech_started',
+  'input_audio_buffer.committed'
+];
+
 export function createConductGate() {
   var warned = false;
   var deviated = false;
@@ -79,12 +97,13 @@ export function createConductGate() {
   }
 
   /**
-   * The candidate started or finished speaking. Driven by the realtime speech
-   * events rather than by transcripts: whisper transcripts arrive late (the
-   * whole reason the transcript assembler exists), so waiting for one would
-   * suppress a legitimate end.
+   * The candidate started or finished speaking, per `eventType`. Only the live
+   * events in LIVE_CANDIDATE_SPEECH_EVENTS count; anything else — notably a late
+   * whisper transcript, which may describe pre-warning audio — is rejected here
+   * rather than trusted to the caller. See that constant for why.
    */
-  function noteCandidateSpoke() {
+  function noteCandidateSpoke(eventType) {
+    if (LIVE_CANDIDATE_SPEECH_EVENTS.indexOf(eventType) < 0) return;
     if (warned) spokeSinceWarning = true;
   }
 

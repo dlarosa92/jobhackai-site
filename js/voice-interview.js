@@ -223,7 +223,7 @@
     if (typeof window.createConductGate === 'function') return window.createConductGate();
     return {
       decide: function () { return 'ignore'; },
-      noteCandidateSpoke: function () {},
+      noteCandidateSpoke: function (_eventType) {},
       endReason: function () { return 'ended_by_interviewer'; },
       wasWarned: function () { return false; },
       reset: function () {}
@@ -313,13 +313,10 @@
 
     // The candidate speaking again is what makes a warned incident a CONTINUED
     // one, and it is the guard that stops a duplicated tool call from ending the
-    // session on a first offense. Driven by the speech events, which fire live —
-    // waiting for a whisper transcript would arrive too late to be useful.
-    if (type === 'input_audio_buffer.speech_started' ||
-        type === 'input_audio_buffer.committed' ||
-        type === 'conversation.item.input_audio_transcription.completed') {
-      if (state.conduct) state.conduct.noteCandidateSpoke();
-    }
+    // session on a first offense. Only live speech events qualify, and the gate
+    // enforces that itself — a whisper transcript can describe audio from before
+    // the warning, so it must never count here.
+    if (state.conduct) state.conduct.noteCandidateSpoke(type);
 
     if (type === 'conversation.item.input_audio_transcription.completed') {
       recordTurn('user', evt.transcript, evt.item_id);
