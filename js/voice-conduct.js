@@ -172,6 +172,7 @@ export function createConductGate() {
   var deviated = false;
   var spokeSinceWarning = false;
   var ended = false;
+  var warnResponseId = '';
   var seen = Object.create(null);
 
   /**
@@ -187,7 +188,23 @@ export function createConductGate() {
    * `callId` identifies the tool call, and is a cheap first layer of replay
    * defense. It is deliberately NOT the only one; see the note above.
    */
-  function decide(stage, callId) {
+  // A repeat call once warned escalates to the end only when it is a genuine
+  // second incident, judged by two independent signals:
+  //   1. the candidate spoke again since the warning (live mic events), and
+  //   2. the call came from a DIFFERENT response than the warning itself.
+  // The second signal is what keeps replays inert even through mic noise:
+  // `speech_started` can fire on a cough or speaker bleed, but a replay is by
+  // definition the same response re-surfacing, while a real second incident is
+  // always a fresh response (the model only speaks again after a new candidate
+  // turn). When either response id is unknown, the speech guard alone decides,
+  // which keeps escalation working on API shapes that omit the id.
+  function isSecondIncident(responseId) {
+    if (!spokeSinceWarning) return false;
+    if (responseId && warnResponseId && responseId === warnResponseId) return false;
+    return true;
+  }
+
+  function decide(stage, callId, responseId) {
     // Once the session is ending there is nothing left to decide, so a replay
     // of the end call cannot re-trigger it however its id resolves.
     if (ended) return 'ignore';
@@ -200,12 +217,10 @@ export function createConductGate() {
         warned = true;
         deviated = true;
         spokeSinceWarning = false;
+        warnResponseId = responseId || '';
         return 'warn_instead';
       }
-      // Warned already, but the candidate has not said anything since. There is
-      // no "continued" behavior to end over, so this is a replay or an
-      // immediate re-call, not a second offense.
-      if (!spokeSinceWarning) return 'ignore';
+      if (!isSecondIncident(responseId)) return 'ignore';
       ended = true;
       return 'end';
     }
@@ -215,16 +230,15 @@ export function createConductGate() {
         // Live, the model kept choosing stage "warning" for every new incident
         // and the session never ended, because only an explicit stage "end"
         // could end it — the gate could refuse an end but never initiate one.
-        // A repeat warning WITH new candidate speech is the model reporting a
-        // second incident; escalate exactly as if it had been labeled "end".
-        // Without new speech it is a replay or duplicate and stays inert, so
-        // the replay protections are unchanged.
-        if (!spokeSinceWarning) return 'ignore';
+        // A repeat warning that is a genuine second incident escalates exactly
+        // as if it had been labeled "end"; a replay or duplicate stays inert.
+        if (!isSecondIncident(responseId)) return 'ignore';
         ended = true;
         return 'end';
       }
       warned = true;
       spokeSinceWarning = false;
+      warnResponseId = responseId || '';
       return 'warn';
     }
     return 'ignore';
@@ -256,6 +270,7 @@ export function createConductGate() {
     deviated = false;
     spokeSinceWarning = false;
     ended = false;
+    warnResponseId = '';
     seen = Object.create(null);
   }
 

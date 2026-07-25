@@ -277,9 +277,10 @@
     if (typeof window.createConductGate === 'function') return window.createConductGate();
     reportConductModuleMissing();
     var warned = false, deviated = false, spoke = false, ended = false;
+    var warnResponseId = '';
     var seen = Object.create(null);
     return {
-      decide: function (stage, callId) {
+      decide: function (stage, callId, responseId) {
         if (ended) return 'ignore';
         if (callId) {
           if (seen[callId]) return 'ignore';
@@ -289,10 +290,13 @@
           if (!warned) {
             warned = true;
             spoke = false;
+            warnResponseId = responseId || '';
             if (stage === 'end') { deviated = true; return 'warn_instead'; }
             return 'warn';
           }
           if (!spoke) return 'ignore';
+          // Same response as the warning = a replay, not a second incident
+          if (responseId && warnResponseId && responseId === warnResponseId) return 'ignore';
           ended = true;
           return 'end';
         }
@@ -305,7 +309,7 @@
       },
       endReason: function () { return deviated ? 'ended_by_interviewer_unwarned' : 'ended_by_interviewer'; },
       wasWarned: function () { return warned; },
-      reset: function () { warned = false; deviated = false; spoke = false; ended = false; seen = Object.create(null); }
+      reset: function () { warned = false; deviated = false; spoke = false; ended = false; warnResponseId = ''; seen = Object.create(null); }
     };
   }
 
@@ -336,10 +340,33 @@
   // exists to prevent. The referral line itself is the decision; if it was
   // spoken, the session closes whether or not the tool call arrives. Harmless
   // alongside a real tool call: requestGuardedEnd is first-wins.
+  // Hand-synced copy of isSafetyReferral for the module-missing case: the
+  // backstop is the piece that must survive that failure, because "model skips
+  // the tool" is exactly the live blocker it exists for.
+  function fallbackIsSafetyReferral(text) {
+    if (typeof text !== 'string' || text.length < 8) return false;
+    var sentences = text.replace(/([.!?])/g, '$1\n').split('\n');
+    for (var i = 0; i < sentences.length; i++) {
+      var t = sentences[i].toLowerCase();
+      if (!t || t.indexOf('?') >= 0) continue;
+      if (/\b(?:call|text|dial|contact|reach)\b[^]{0,30}\b988\b/.test(t)) return true;
+      if (/\b(?:call|contact|reach)\b[^]{0,25}\bemergency services\b/.test(t) &&
+          (/^\s*(?:please\s+)?(?:contact|call|reach)\b/.test(t) ||
+           /\b(?:please|you should|you need to|i need you to|i want you to|now|right now|immediately|right away|as soon as)\b/.test(t))) return true;
+    }
+    return false;
+  }
+
   function maybeSafetyBackstop(transcript, responseId) {
     if (state.ending || state.conductEnd) return;
-    if (typeof window.isSafetyReferral !== 'function') return;
-    if (!window.isSafetyReferral(String(transcript || ''))) return;
+    var check;
+    if (typeof window.isSafetyReferral === 'function') {
+      check = window.isSafetyReferral;
+    } else {
+      reportConductModuleMissing();
+      check = fallbackIsSafetyReferral;
+    }
+    if (!check(String(transcript || ''))) return;
     console.warn('[VOICE] crisis referral spoken without end_for_safety; closing the session anyway');
     track('voice_safety_end', { via: 'transcript_backstop' });
     requestGuardedEnd('safety', responseId || '');
@@ -350,7 +377,7 @@
   function handleConductCall(call) {
     if (!call.stage) return;
     if (!state.conduct) state.conduct = newConductGate();
-    var decision = state.conduct.decide(call.stage, call.dedupeId);
+    var decision = state.conduct.decide(call.stage, call.dedupeId, call.responseId);
     if (decision === 'ignore') {
       // Refusing to act on a call is not the same as leaving it unresolved. A
       // real-but-refused call — an end the model asked for before the candidate

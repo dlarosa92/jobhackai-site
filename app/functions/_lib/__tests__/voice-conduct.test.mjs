@@ -125,6 +125,37 @@ test('BLOCKER 1: a replayed second warning with a different id still cannot end 
   assert.equal(g.decide('warning', 'resp_1'), 'ignore');
 });
 
+// Mic noise can fire input_audio_buffer.speech_started without real candidate
+// speech, so "spoke since warning" alone is weaker than it looks. The second
+// discriminator is the response id: a replay is the same response re-surfacing,
+// while a genuine second incident is always a fresh response.
+test('noise + a same-response replay never ends the session (Bugbot)', () => {
+  const g = createConductGate();
+  assert.equal(g.decide('warning', 'call_1', 'resp_A'), 'warn');
+  g.noteCandidateSpoke(SPOKE);                                 // cough, speaker bleed
+  // The warning's replay arrives with a DIFFERENT dedupe id but the SAME response
+  assert.equal(g.decide('warning', 'item_1', 'resp_A'), 'ignore');
+  assert.equal(g.decide('end', 'item_2', 'resp_A'), 'ignore');
+  // Still open: only one real incident has happened
+  assert.equal(g.wasWarned(), true);
+});
+
+test('a second incident from a NEW response still ends after speech', () => {
+  const g = createConductGate();
+  assert.equal(g.decide('warning', 'call_1', 'resp_A'), 'warn');
+  g.noteCandidateSpoke(SPOKE);
+  assert.equal(g.decide('warning', 'call_2', 'resp_B'), 'end');
+  assert.equal(g.endReason(), 'ended_by_interviewer');
+});
+
+test('missing response ids fall back to the speech guard alone', () => {
+  // API shapes that omit response_id must not lose the blocker-1 escalation
+  const g = createConductGate();
+  assert.equal(g.decide('warning', 'c1'), 'warn');
+  g.noteCandidateSpoke(SPOKE);
+  assert.equal(g.decide('end', 'c2'), 'end');
+});
+
 test('unknown, empty, and malformed stages never end a session', () => {
   for (const stage of ['', null, undefined, 'END', 'Warning', 'conduct', 'stop', 0, 1, {}, []]) {
     const g = createConductGate();
