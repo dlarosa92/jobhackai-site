@@ -16,6 +16,14 @@ function test(name, fn) {
   catch (err) { failed++; console.error(`  ✗ ${name}\n    ${err.message}`); }
 }
 
+const asyncTests = [];
+function asyncTest(name, fn) {
+  asyncTests.push(async () => {
+    try { await fn(); passed++; console.log(`  ✓ ${name}`); }
+    catch (err) { failed++; console.error(`  ✗ ${name}\n    ${err.message}`); }
+  });
+}
+
 test('out-of-order transcripts land in conversation order', () => {
   const o = createTranscriptOrder();
   // Items are announced in true order...
@@ -121,6 +129,116 @@ test('list() returns a fresh array each call (no shared mutation)', () => {
   a.push({ speaker: 'user', text: 'injected' });
   assert.equal(o.list().length, 1);
 });
+
+// ---------- previous_item_id ordering ----------
+
+test('previous_item_id inserts an out-of-band item after its anchor, not at the end', () => {
+  const o = createTranscriptOrder();
+  o.noteItem('a');
+  o.noteItem('b', 'a');
+  o.noteItem('c', 'b');
+  // An item announced late but belonging right after 'a'
+  o.noteItem('a2', 'a');
+  o.setText('a', 'user', 'one');
+  o.setText('a2', 'user', 'one-and-a-half');
+  o.setText('b', 'assistant', 'two');
+  o.setText('c', 'user', 'three');
+  assert.deepEqual(o.list().map((t) => t.text), ['one', 'one-and-a-half', 'two', 'three']);
+});
+
+test('in-order previous_item_id chains behave exactly like appending', () => {
+  const o = createTranscriptOrder();
+  o.noteItem('u1', null);
+  o.noteItem('a1', 'u1');
+  o.noteItem('u2', 'a1');
+  o.setText('a1', 'assistant', 'mid');
+  o.setText('u2', 'user', 'last');
+  o.setText('u1', 'user', 'first');
+  assert.deepEqual(o.list().map((t) => t.text), ['first', 'mid', 'last']);
+});
+
+test('an unknown previous_item_id appends rather than dropping the turn', () => {
+  const o = createTranscriptOrder();
+  o.noteItem('u1');
+  o.noteItem('u2', 'never_seen');
+  o.setText('u1', 'user', 'first');
+  o.setText('u2', 'user', 'second');
+  assert.deepEqual(o.list().map((t) => t.text), ['first', 'second']);
+});
+
+test('a repeat noteItem never moves an already-reserved slot', () => {
+  const o = createTranscriptOrder();
+  o.noteItem('u1');
+  o.noteItem('a1', 'u1');
+  o.noteItem('u1', 'a1');        // contradictory replay: must not reorder
+  o.setText('u1', 'user', 'first');
+  o.setText('a1', 'assistant', 'second');
+  assert.deepEqual(o.list().map((t) => t.text), ['first', 'second']);
+});
+
+// ---------- pending / flush ----------
+
+test('pendingCount counts only announced slots still awaiting a transcript', () => {
+  const o = createTranscriptOrder();
+  assert.equal(o.pendingCount(), 0);
+  o.noteItem('u1');
+  o.noteItem('a1');
+  assert.equal(o.pendingCount(), 2);
+  o.setText('u1', 'user', 'filled');
+  assert.equal(o.pendingCount(), 1);
+  o.append('assistant', 'appended directly');   // id-less, never pending
+  assert.equal(o.pendingCount(), 1);
+  o.setText('a1', 'assistant', 'filled too');
+  assert.equal(o.pendingCount(), 0);
+});
+
+asyncTest('flushTranscript resolves immediately when nothing is in flight', async () => {
+  const o = createTranscriptOrder();
+  o.noteItem('u1');
+  o.setText('u1', 'user', 'done');
+  assert.equal(await o.flushTranscript({ timeoutMs: 50 }), true);
+});
+
+asyncTest('flushTranscript resolves as soon as the late transcript lands', async () => {
+  const o = createTranscriptOrder();
+  o.noteItem('u1');
+  o.noteItem('a1');
+  o.setText('a1', 'assistant', 'arrived first');
+  // The user's whisper transcript is still in flight when the session ends
+  const flushed = o.flushTranscript({ timeoutMs: 5000 });
+  setTimeout(() => o.setText('u1', 'user', 'the line that ended the session'), 10);
+  assert.equal(await flushed, true);
+  // ...and the recovered turn is in the right place, not appended at the end
+  assert.deepEqual(o.list().map((t) => t.text), [
+    'the line that ended the session',
+    'arrived first'
+  ]);
+});
+
+asyncTest('flushTranscript gives up on timeout and keeps what already arrived', async () => {
+  const o = createTranscriptOrder();
+  o.noteItem('u1');
+  o.noteItem('a1');            // never arrives
+  o.setText('u1', 'user', 'kept');
+  assert.equal(await o.flushTranscript({ timeoutMs: 20 }), false);
+  assert.deepEqual(o.list().map((t) => t.text), ['kept']);
+});
+
+asyncTest('a zero timeout does not wait', async () => {
+  const o = createTranscriptOrder();
+  o.noteItem('u1');
+  assert.equal(await o.flushTranscript({ timeoutMs: 0 }), false);
+});
+
+asyncTest('reset releases an in-progress flush instead of hanging it', async () => {
+  const o = createTranscriptOrder();
+  o.noteItem('u1');
+  const flushed = o.flushTranscript({ timeoutMs: 5000 });
+  o.reset();
+  assert.equal(await flushed, false);
+});
+
+for (const run of asyncTests) await run();
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
