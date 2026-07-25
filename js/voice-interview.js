@@ -337,11 +337,16 @@
       cause === 'safety' ? 'Ending this session.' : 'The interviewer is ending this session.',
       'vi-error'
     );
-    // Only count audio already playing when it belongs to the response that made
-    // this call. A previous turn's audio must not stand in for the closing line:
-    // it would either satisfy the wait with the wrong turn's stop, or leave us
-    // waiting on a `stopped` that is never coming.
-    var closingAudioLive = !!responseId && state.audioResponseId === responseId;
+    // Whether the closing line is already mid-playback. This has to fail SAFE,
+    // and safe means "assume it is". Over-waiting costs at most the backstop and
+    // nothing is lost; under-waiting cuts the interviewer off — and on the safety
+    // path the sentence being cut is the one naming emergency services. So audio
+    // counts unless we can positively attribute it to a DIFFERENT response:
+    // requiring a positive id match instead meant an event without a response id
+    // read as "no audio" and the grace path tore the session down mid-sentence.
+    var closingAudioLive = state.audioPlaying && (
+      !responseId || !state.audioResponseId || state.audioResponseId === responseId
+    );
     state.conductEnd.start(closingAudioLive);
   }
 
@@ -541,11 +546,8 @@
         timerEl.textContent = (remaining < 0 ? '-' : '') + m + ':' + (s < 10 ? '0' : '') + s;
       }
       if (remaining <= 0) {
-        // A conduct or safety close already in flight owns the ending, and it
-        // carries the reason that matters — letting the clock win here would
-        // record a conduct termination, or a safety close, as `time_up` and
-        // lose it from the audit trail. The guarded end has its own bounded
-        // backstop, so standing down cannot leave the session open.
+        // endInterview defers to a pending conduct or safety close on its own;
+        // checking here too just keeps this from logging that once a second.
         if (!state.conductEnd) endInterview('time_up');
       }
     }, 1000);
@@ -679,14 +681,18 @@
 
   async function endInterview(reason) {
     if (state.ending) return;
+    // A conduct or safety close already in flight owns the ending and the reason
+    // it will be recorded under. Anything else arriving mid-flight — the End
+    // button, the clock — would cancel that close and persist its own reason
+    // instead, filing a conduct termination or a safety close as `user_ended`
+    // or `time_up`. finishConductEnd clears the gate before it calls in here, so
+    // the guarded close itself is never blocked by this.
+    if (state.conductEnd) {
+      console.warn('[VOICE] end requested (' + reason + ') while a session close was pending; deferring to it');
+      return;
+    }
     state.ending = true;
     if (state.timerInterval) { clearInterval(state.timerInterval); state.timerInterval = null; }
-    // A pending conduct end is moot once we are ending for any reason (the
-    // clock running out mid-warning, say); drop its timers.
-    if (state.conductEnd) {
-      state.conductEnd.cancel();
-      state.conductEnd = null;
-    }
 
     var durationSeconds = state.startedAtMs ? Math.round((Date.now() - state.startedAtMs) / 1000) : 0;
     stopMicrophone();
