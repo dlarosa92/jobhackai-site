@@ -69,7 +69,10 @@ export async function onRequest(context) {
     transcript = transcript
       .filter((t) => t && typeof t.text === 'string' && (t.speaker === 'user' || t.speaker === 'assistant'))
       .map((t) => ({ speaker: t.speaker, text: t.text.slice(0, 4000) }))
-      .slice(0, 400);
+      // Keep the most recent turns, matching the byte-overflow branch below:
+      // in a long interview the closing questions and stated outcomes carry
+      // the most scoring signal, so the tail must survive, not the opening.
+      .slice(-400);
     let transcriptJson = JSON.stringify(transcript);
     if (transcriptJson.length > MAX_TRANSCRIPT_BYTES) {
       transcript = transcript.slice(-200);

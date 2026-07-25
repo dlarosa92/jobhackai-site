@@ -9,6 +9,8 @@
     "test:voice:transcripts:smoke": "node app/tests/voice-transcripts/run-evals.mjs --mode smoke",
     "test:voice:transcripts:full": "node app/tests/voice-transcripts/run-evals.mjs --mode full",
     "test:voice:transcripts:stability": "node app/tests/voice-transcripts/run-evals.mjs --mode stability",
-    "test:voice:transcripts:unit": "node app/tests/voice-transcripts/unit.test.mjs"
+    "test:voice:transcripts:unit": "node app/tests/voice-transcripts/unit.test.mjs",
+    "test:voice:interviewer": "node app/functions/_lib/__tests__/voice-interviewer.test.mjs",
+    "test:voice:transcript-order": "node app/functions/_lib/__tests__/voice-transcript-order.test.mjs"
   }
 }

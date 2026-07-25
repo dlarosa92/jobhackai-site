@@ -17,7 +17,7 @@
     startedAtMs: null,
     timerInterval: null,
     maxMinutes: 20,
-    transcript: [],            // [{speaker:'user'|'assistant', text}]
+    order: null,               // ordered transcript assembler (voice-transcript-order.js)
     usage: { input: 0, output: 0 },
     ending: false,
     connected: false
@@ -113,12 +113,35 @@
 
   // ---------- realtime event handling ----------
 
-  function appendTranscript(speaker, text) {
+  // js/voice-transcript-order.js is an ES module, so on the vanishing chance
+  // it has not executed yet we degrade to plain arrival-order collection
+  // rather than losing turns.
+  function newTranscriptOrder() {
+    if (typeof window.createTranscriptOrder === 'function') {
+      return window.createTranscriptOrder();
+    }
+    var arr = [];
+    return {
+      noteItem: function () {},
+      setText: function (id, speaker, text) { arr.push({ speaker: speaker, text: text }); },
+      append: function (speaker, text) { arr.push({ speaker: speaker, text: text }); },
+      list: function () { return arr.slice(); },
+      reset: function () { arr = []; }
+    };
+  }
+
+  // The conversation in true order, for /complete and the resume tail.
+  function getTranscript() {
+    return state.order ? state.order.list() : [];
+  }
+
+  // Realtime transcripts arrive out of order; itemId places each turn in the
+  // slot its conversation item reserved (see voice-transcript-order.js).
+  function recordTurn(speaker, text, itemId) {
     text = String(text || '').trim();
     if (!text) return;
-    var last = state.transcript[state.transcript.length - 1];
-    if (last && last.speaker === speaker && last.text === text) return; // dedupe replays
-    state.transcript.push({ speaker: speaker, text: text });
+    if (!state.order) state.order = newTranscriptOrder();
+    state.order.setText(itemId || null, speaker, text);
     var caption = $('vi-caption');
     if (caption) {
       caption.textContent = (speaker === 'assistant' ? 'Interviewer: ' : 'You: ') + text;
@@ -128,13 +151,21 @@
   function handleRealtimeEvent(evt) {
     var type = evt.type || '';
 
+    // Items are announced in true conversation order and carry the id that
+    // the (later, out-of-order) transcript events reference.
+    if (type === 'conversation.item.created' || type === 'conversation.item.added') {
+      if (!state.order) state.order = newTranscriptOrder();
+      state.order.noteItem(evt.item && evt.item.id);
+      return;
+    }
+
     if (type === 'conversation.item.input_audio_transcription.completed') {
-      appendTranscript('user', evt.transcript);
+      recordTurn('user', evt.transcript, evt.item_id);
       return;
     }
     // GA + beta event names for assistant transcript
     if (type === 'response.output_audio_transcript.done' || type === 'response.audio_transcript.done') {
-      appendTranscript('assistant', evt.transcript);
+      recordTurn('assistant', evt.transcript, evt.item_id);
       return;
     }
     if (type === 'response.done' && evt.response && evt.response.usage) {
@@ -276,7 +307,7 @@
       state.sessionId = res.data.sessionId;
       state.model = res.data.model;
       state.maxMinutes = res.data.maxMinutes || 20;
-      state.transcript = [];
+      state.order = newTranscriptOrder();
       state.usage = { input: 0, output: 0 };
       state.ending = false;
 
@@ -313,7 +344,7 @@
         method: 'POST',
         body: JSON.stringify({
           resumeSessionId: state.sessionId,
-          transcript: state.transcript.slice(-20)
+          transcript: getTranscript().slice(-20)
         })
       });
       if (!res.ok) throw new Error((res.data && res.data.error) || 'resume_failed');
@@ -355,7 +386,7 @@
       await api('/api/voice/session/' + encodeURIComponent(state.sessionId) + '/complete', {
         method: 'POST',
         body: JSON.stringify({
-          transcript: state.transcript,
+          transcript: getTranscript(),
           durationSeconds: durationSeconds,
           inputTokens: state.usage.input,
           outputTokens: state.usage.output,
