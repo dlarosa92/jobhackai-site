@@ -44,7 +44,7 @@ function parseStage(rawArgs) {
   }
 }
 
-function classifyCall(name, rawArgs, callId, fallbackId) {
+function classifyCall(name, rawArgs, callId, fallbackId, responseId) {
   var stage = parseStage(rawArgs);
   var tool = null;
   if (name === CONDUCT_TOOL) {
@@ -69,7 +69,10 @@ function classifyCall(name, rawArgs, callId, fallbackId) {
     // when the event did not carry one.
     callId: callId || '',
     // Stable-enough key for replay suppression, which may fall back.
-    dedupeId: callId || fallbackId || ''
+    dedupeId: callId || fallbackId || '',
+    // Which response made this call. The closing-turn gate needs it to tell
+    // THIS response's audio from a previous turn's.
+    responseId: responseId || ''
   };
 }
 
@@ -82,7 +85,7 @@ function classifyCall(name, rawArgs, callId, fallbackId) {
 export function readToolCall(evt) {
   if (!evt) return null;
   if (evt.type === 'response.function_call_arguments.done') {
-    return classifyCall(evt.name, evt.arguments, evt.call_id, evt.item_id || evt.response_id);
+    return classifyCall(evt.name, evt.arguments, evt.call_id, evt.item_id || evt.response_id, evt.response_id);
   }
   var out = evt.response && evt.response.output;
   if (!out || !out.length) return null;
@@ -93,7 +96,8 @@ export function readToolCall(evt) {
       item.name,
       item.arguments,
       item.call_id,
-      item.id || (evt.response && evt.response.id)
+      item.id || (evt.response && evt.response.id),
+      evt.response && evt.response.id
     );
     if (found) return found;
   }

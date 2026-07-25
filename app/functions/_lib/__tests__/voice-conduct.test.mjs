@@ -440,6 +440,38 @@ test('a conduct call is read from a response.done output item', () => {
   assert.equal(call.callId, 'call_9');
 });
 
+// The closing-turn gate must be able to tell THIS response's audio from a
+// previous turn's, so the response id travels with the call.
+test('the response id travels with the call, from either event shape', () => {
+  const dedicated = readToolCall({
+    type: 'response.function_call_arguments.done',
+    name: 'conduct_action',
+    call_id: 'call_1',
+    response_id: 'resp_A',
+    arguments: '{"stage":"warning"}'
+  });
+  assert.equal(dedicated.responseId, 'resp_A');
+
+  const fromDone = readToolCall({
+    type: 'response.done',
+    response: {
+      id: 'resp_B',
+      output: [{ type: 'function_call', name: 'end_for_safety', call_id: 'call_2', arguments: '{}' }]
+    }
+  });
+  assert.equal(fromDone.responseId, 'resp_B');
+});
+
+test('a missing response id reads as empty rather than undefined', () => {
+  const call = readToolCall({
+    type: 'response.function_call_arguments.done',
+    name: 'conduct_action',
+    call_id: 'call_1',
+    arguments: '{"stage":"end"}'
+  });
+  assert.equal(call.responseId, '', 'empty means "cannot match any playing audio"');
+});
+
 test('callId is empty when the event carries none, and dedupeId falls back', () => {
   const call = readToolCall({
     type: 'response.function_call_arguments.done',

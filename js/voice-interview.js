@@ -35,6 +35,7 @@
     ending: false,
     connected: false,
     audioPlaying: false,       // interviewer's audio is mid-playback
+    audioResponseId: '',       // which response that audio belongs to
     conduct: null,             // escalation gate (voice-conduct.js); survives a reconnect
     conductEnd: null,          // pending end, waiting for the closing turn
     endCause: null             // 'conduct' | 'safety' — which reason the pending end carries
@@ -248,7 +249,7 @@
     console.warn('[VOICE] session closing for candidate safety');
     track('voice_safety_end', {});
     answerToolCall(call.callId, { ok: true, closing: true });
-    requestGuardedEnd('safety');
+    requestGuardedEnd('safety', call.responseId);
   }
 
   // "One warning, then end" is enforced in state by the gate, not trusted to
@@ -281,7 +282,7 @@
     if (decision === 'end') {
       track('voice_conduct_action', { stage: 'end' });
       answerToolCall(call.callId, { ok: true, closing: true });
-      requestGuardedEnd('conduct');
+      requestGuardedEnd('conduct', call.responseId);
     }
   }
 
@@ -311,7 +312,7 @@
 
   // cause is 'conduct' or 'safety' — it decides the reason and the wording, not
   // the timing, which is identical for both.
-  function requestGuardedEnd(cause) {
+  function requestGuardedEnd(cause, responseId) {
     if (state.ending || state.conductEnd) return;
     state.endCause = cause;
     state.conductEnd = newClosingTurnGate();
@@ -319,7 +320,12 @@
       cause === 'safety' ? 'Ending this session.' : 'The interviewer is ending this session.',
       'vi-error'
     );
-    state.conductEnd.start(state.audioPlaying);
+    // Only count audio already playing when it belongs to the response that made
+    // this call. A previous turn's audio must not stand in for the closing line:
+    // it would either satisfy the wait with the wrong turn's stop, or leave us
+    // waiting on a `stopped` that is never coming.
+    var closingAudioLive = !!responseId && state.audioResponseId === responseId;
+    state.conductEnd.start(closingAudioLive);
   }
 
   function finishConductEnd(reason) {
@@ -402,13 +408,22 @@
     if (type === 'output_audio_buffer.started' || type === 'response.created') {
       if (type === 'output_audio_buffer.started') {
         state.audioPlaying = true;
+        // Which response is speaking, not merely that something is. A bare
+        // "audio is playing" flag cannot tell the closing line apart from a
+        // previous turn's, and seeding the gate from it is what made the stale
+        // reads possible in the first place.
+        state.audioResponseId = evt.response_id || '';
         if (state.conductEnd) state.conductEnd.noteAudioStarted();
       }
       setSpeaking(true);
       return;
     }
-    if (type === 'output_audio_buffer.stopped') {
+    // `cleared` is the interruption counterpart of `stopped` — a barge-in
+    // truncates the turn and no `stopped` follows. Without handling it, the
+    // playing flag stayed true for the rest of the session.
+    if (type === 'output_audio_buffer.stopped' || type === 'output_audio_buffer.cleared') {
       state.audioPlaying = false;
+      state.audioResponseId = '';
       setSpeaking(false);
       if (state.conductEnd) state.conductEnd.noteAudioStopped();
       return;
@@ -565,6 +580,7 @@
       state.usage = { input: 0, output: 0 };
       state.ending = false;
       state.audioPlaying = false;
+      state.audioResponseId = '';
       // A fresh session starts with a clean conduct slate. A reconnect must not
       // reset the gate, or dropping the connection would clear a warning.
       state.conduct = newConductGate();
