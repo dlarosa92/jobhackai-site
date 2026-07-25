@@ -403,13 +403,29 @@
       '<span class="vi-dim-num">' + value + '</span></div>';
   }
 
-  // Most recent OTHER scored session, for the "vs your last session" delta.
+  // The scored session immediately OLDER than the one on screen, for the
+  // "vs your last session" delta.
+  //
+  // Returning the newest other session is only right when the report on screen
+  // is the newest one. Opening an older report via ?session= compared it
+  // against a NEWER session, so the arrow pointed the wrong way and the delta
+  // was measured against a session the candidate had not taken yet.
+  //
+  // history is newest-first, so "older" means a higher index. When the
+  // displayed session is not in history at all — the ordinary just-finished
+  // case, since renderScorecard runs before the history refresh — the newest
+  // scored entry IS the previous session, which is the original behavior.
   function previousOverall(currentSessionId) {
-    for (var i = 0; i < historyState.items.length; i++) {
-      var item = historyState.items[i];
-      if (item.sessionId === currentSessionId) continue;
+    var items = historyState.items;
+    var from = 0;
+    for (var i = 0; i < items.length; i++) {
+      if (items[i] && items[i].sessionId === currentSessionId) { from = i + 1; break; }
+    }
+    for (var j = from; j < items.length; j++) {
+      var item = items[j];
+      if (!item || item.sessionId === currentSessionId || item.overall == null) continue;
       var v = Number(item.overall);
-      if (item.overall != null && isFinite(v)) return Math.round(v);
+      if (isFinite(v)) return Math.round(v);
     }
     return null;
   }
