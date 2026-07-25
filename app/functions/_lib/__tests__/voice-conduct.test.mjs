@@ -18,6 +18,7 @@ import {
   createConductGate,
   createClosingTurnGate,
   readToolCall,
+  isSafetyReferral,
   LIVE_CANDIDATE_SPEECH_EVENTS,
   CONDUCT_TOOL,
   SAFETY_TOOL
@@ -70,12 +71,89 @@ test('after a refused end, the next real incident does end the session', () => {
   assert.equal(g.endReason(), 'ended_by_interviewer_unwarned');
 });
 
-test('a repeated warning is ignored, not treated as escalation', () => {
+test('a repeated warning WITHOUT new speech is ignored (replay stays inert)', () => {
   const g = createConductGate();
   assert.equal(g.decide('warning'), 'warn');
+  // No candidate speech in between: these are duplicates/replays, not incidents
   assert.equal(g.decide('warning'), 'ignore');
   assert.equal(g.decide('warning'), 'ignore');
   assert.equal(g.wasWarned(), true);
+});
+
+// -- dev blocker 1: repeated abuse never ended the session ---------------------
+//
+// Live, the model reported every new incident as stage "warning" and never
+// chose "end", so the session warned forever: the gate could refuse an end but
+// never initiate one. A second warning AFTER new candidate speech is the model
+// reporting a second incident — the gate now escalates it to the end itself.
+
+test('BLOCKER 1: a second warning after new candidate speech ENDS the session', () => {
+  const g = createConductGate();
+  assert.equal(g.decide('warning', 'c1'), 'warn');
+  g.noteCandidateSpoke(SPOKE);                    // the candidate re-offends
+  assert.equal(g.decide('warning', 'c2'), 'end'); // model mislabels it: still ends
+  assert.equal(g.endReason(), 'ended_by_interviewer');
+});
+
+test('BLOCKER 1: warning loop can never continue past the second incident', () => {
+  const g = createConductGate();
+  assert.equal(g.decide('warning', 'c1'), 'warn');
+  g.noteCandidateSpoke(SPOKE);
+  assert.equal(g.decide('warning', 'c2'), 'end');
+  // Anything after the end — more warnings, more ends — is inert
+  g.noteCandidateSpoke(SPOKE);
+  assert.equal(g.decide('warning', 'c3'), 'ignore');
+  assert.equal(g.decide('end', 'c4'), 'ignore');
+});
+
+test('BLOCKER 1: warn_instead followed by a mislabeled second incident also ends', () => {
+  const g = createConductGate();
+  // Model skipped the warning and asked to end: refused, counted as warning
+  assert.equal(g.decide('end', 'c1'), 'warn_instead');
+  g.noteCandidateSpoke(SPOKE);
+  // Model then warns again instead of ending: escalates all the same
+  assert.equal(g.decide('warning', 'c2'), 'end');
+  assert.equal(g.endReason(), 'ended_by_interviewer_unwarned');
+});
+
+test('BLOCKER 1: a replayed second warning with a different id still cannot end early', () => {
+  const g = createConductGate();
+  assert.equal(g.decide('warning', 'call_1'), 'warn');
+  // The same warning surfaces again from response.done with a different id and
+  // NO intervening candidate speech: must stay a no-op, not become the end
+  assert.equal(g.decide('warning', 'item_1'), 'ignore');
+  assert.equal(g.decide('warning', 'resp_1'), 'ignore');
+});
+
+// Mic noise can fire input_audio_buffer.speech_started without real candidate
+// speech, so "spoke since warning" alone is weaker than it looks. The second
+// discriminator is the response id: a replay is the same response re-surfacing,
+// while a genuine second incident is always a fresh response.
+test('noise + a same-response replay never ends the session (Bugbot)', () => {
+  const g = createConductGate();
+  assert.equal(g.decide('warning', 'call_1', 'resp_A'), 'warn');
+  g.noteCandidateSpoke(SPOKE);                                 // cough, speaker bleed
+  // The warning's replay arrives with a DIFFERENT dedupe id but the SAME response
+  assert.equal(g.decide('warning', 'item_1', 'resp_A'), 'ignore');
+  assert.equal(g.decide('end', 'item_2', 'resp_A'), 'ignore');
+  // Still open: only one real incident has happened
+  assert.equal(g.wasWarned(), true);
+});
+
+test('a second incident from a NEW response still ends after speech', () => {
+  const g = createConductGate();
+  assert.equal(g.decide('warning', 'call_1', 'resp_A'), 'warn');
+  g.noteCandidateSpoke(SPOKE);
+  assert.equal(g.decide('warning', 'call_2', 'resp_B'), 'end');
+  assert.equal(g.endReason(), 'ended_by_interviewer');
+});
+
+test('missing response ids fall back to the speech guard alone', () => {
+  // API shapes that omit response_id must not lose the blocker-1 escalation
+  const g = createConductGate();
+  assert.equal(g.decide('warning', 'c1'), 'warn');
+  g.noteCandidateSpoke(SPOKE);
+  assert.equal(g.decide('end', 'c2'), 'end');
 });
 
 test('unknown, empty, and malformed stages never end a session', () => {
@@ -218,6 +296,78 @@ test('gates are independent (no shared state across sessions)', () => {
   assert.equal(a.wasWarned(), true);
   assert.equal(b.wasWarned(), false);
   assert.equal(b.decide('end'), 'warn_instead');
+});
+
+// -- dev blocker 2: crisis guidance spoken, tool skipped, interview resumed ----
+//
+// The safety close cannot depend on the model calling end_for_safety. The
+// referral line itself is the decision: if the interviewer says it, the client
+// closes the session whether or not the tool call arrives. The detector is fed
+// INTERVIEWER turns only and is deliberately narrow.
+
+test('BLOCKER 2: the mandated referral phrasing is detected', () => {
+  assert.equal(isSafetyReferral('Please call or text 988 right now.'), true);
+  assert.equal(isSafetyReferral('If you are in the US, call or text 988. This matters more than any interview.'), true);
+  assert.equal(isSafetyReferral('You should contact 988 immediately.'), true);
+  assert.equal(isSafetyReferral('Please reach out to 988 now.'), true);
+});
+
+test('BLOCKER 2: referral after an opening question still detected', () => {
+  // Realistic model output mixes a question with the referral; the referral
+  // sentence itself is not a question, so it must still match
+  assert.equal(isSafetyReferral('Are you safe right now? Please call 988 now.'), true);
+});
+
+test('BLOCKER 2: interview questions about 988 do NOT end a session', () => {
+  // A candidate interviewing for a crisis-line job gets asked about it
+  assert.equal(isSafetyReferral('Did you ever call 988 as part of your role?'), false);
+  assert.equal(isSafetyReferral('What drew you to 988 crisis work?'), false);
+});
+
+test('BLOCKER 2: imperative interview PROMPTS about 988 do not end a session (Bugbot)', () => {
+  // Behavioral prompts are often phrased without a question mark, so the
+  // question filter alone cannot protect a crisis-line mock interview
+  assert.equal(isSafetyReferral('Describe when you had to call or text 988 to de-escalate a caller.'), false);
+  assert.equal(isSafetyReferral('Walk me through how you would call or text 988 with a caller in crisis.'), false);
+  assert.equal(isSafetyReferral('Tell me about a shift where you had to contact 988 twice.'), false);
+  // ...while the real referral, which never opens with a prompt verb and
+  // never frames the call as past experience, still matches
+  assert.equal(isSafetyReferral('Please call or text 988 right now.'), true);
+  assert.equal(isSafetyReferral('If you are in the US, call or text 988.'), true);
+});
+
+test('BLOCKER 2: the ordinary distress redirect does not trigger the backstop', () => {
+  // Rule 4's no-resources redirect contains no referral and must stay inert
+  assert.equal(isSafetyReferral('This is interview practice, so it is not the right place for it. If it is real, you deserve to talk to someone who can actually help.'), false);
+});
+
+test('BLOCKER 2: the permitted emergency-services wording is detected (Codex P1)', () => {
+  // The prompt's FIRST permitted wording contains no "988"; the backstop must
+  // catch it too or a rule-following model can still evade the close
+  assert.equal(isSafetyReferral('Please contact emergency services now.'), true);
+  assert.equal(isSafetyReferral('Contact emergency services right away.'), true);
+  assert.equal(isSafetyReferral('You should contact emergency services.'), true);
+  assert.equal(isSafetyReferral('I need you to call emergency services immediately.'), true);
+  assert.equal(isSafetyReferral('This matters far more than a practice interview. Please contact emergency services now, or call or text 988 if you are in the US.'), true);
+});
+
+test('BLOCKER 2: echoing a story about emergency services still does not trigger', () => {
+  // Past-tense and descriptive echoes have none of the referral shape:
+  // no imperative opening, no directive, no urgency word
+  assert.equal(isSafetyReferral('So you called emergency services during the incident.'), false);
+  assert.equal(isSafetyReferral('You decided to contact emergency services that night.'), false);
+  assert.equal(isSafetyReferral('Tell me about the night you had to contact emergency services.'), false);
+  // Questions about the duty never match, whatever their tense
+  assert.equal(isSafetyReferral('When you contact emergency services in that role, what is the protocol?'), false);
+});
+
+test('BLOCKER 2: near-miss numbers and junk input stay false', () => {
+  assert.equal(isSafetyReferral('The store extension was 9880.'), false);
+  assert.equal(isSafetyReferral('We served 988 customers.'), false);
+  assert.equal(isSafetyReferral(''), false);
+  assert.equal(isSafetyReferral(null), false);
+  assert.equal(isSafetyReferral(undefined), false);
+  assert.equal(isSafetyReferral('short'), false);
 });
 
 // ----------------------------------------------------------- closing turn gate
