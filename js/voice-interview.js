@@ -325,10 +325,14 @@
   function finishConductEnd(reason) {
     if (!state.conductEnd) return;
     state.conductEnd = null;
+    // Read the cause before clearing it, so nothing downstream can act on a
+    // stale one.
+    var cause = state.endCause;
+    state.endCause = null;
     if (reason === 'timeout') {
       console.warn('[VOICE] guarded end: closing turn never completed, ending anyway');
     }
-    if (state.endCause === 'safety') {
+    if (cause === 'safety') {
       setStatus('This session has ended. Please reach out for help.', 'vi-error');
       endInterview('ended_for_safety');
       return;
@@ -585,11 +589,25 @@
   }
 
   function offerReconnect() {
+    // Nothing to reconnect to when the session is already closing — offering it
+    // would be misleading, and taking it would be a way out of a conduct end.
+    if (state.conductEnd || state.ending) return;
     var btn = $('vi-reconnect-btn');
     if (btn) btn.style.display = '';
   }
 
   async function reconnect() {
+    // A pending conduct or safety close survives the connection dropping. Its
+    // gate is waiting on events from a link that no longer exists, so letting it
+    // run on into a fresh session would kill that session with a stale reason.
+    // Finish the end instead: the interviewer already decided, and dropping the
+    // connection must not become a way to dodge it (the same reason the conduct
+    // warning itself survives a reconnect).
+    if (state.conductEnd) {
+      console.warn('[VOICE] reconnect requested while a session close was pending; completing the close');
+      finishConductEnd('connection_lost');
+      return;
+    }
     var btn = $('vi-reconnect-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Reconnecting...'; }
     try {
