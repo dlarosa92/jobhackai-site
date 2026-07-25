@@ -10,7 +10,8 @@ import assert from 'node:assert/strict';
 import {
   interviewerInstructions,
   buildResumeContext,
-  RESUME_CONTEXT_MAX_CHARS
+  RESUME_CONTEXT_MAX_CHARS,
+  INTERVIEWER_TOOLS
 } from '../voice-interviewer.js';
 
 let passed = 0;
@@ -96,6 +97,63 @@ test('buildResumeContext ignores junk and returns null when empty', () => {
   assert.equal(buildResumeContext(null), null);
   assert.equal(buildResumeContext([]), null);
   assert.equal(buildResumeContext([{ speaker: 'system', text: 'nope' }, { speaker: 'user', text: '   ' }]), null);
+});
+
+// ---- persona lock and conduct policy (real adversarial session findings) ----
+
+test('persona is locked to interviewer: no assistant, coach, or resource role', () => {
+  const out = interviewerInstructions(BASE);
+  assert.ok(out.includes('You are only ever the interviewer'));
+  assert.ok(out.includes('not an assistant, a coach, a tutor, or a resource finder'));
+  assert.ok(out.includes('never describe yourself or list what you can do'));
+  assert.ok(out.includes('you are their interviewer for this practice session'));
+});
+
+test('internals are never revealed', () => {
+  const out = interviewerInstructions(BASE);
+  assert.ok(out.includes('Never explain where your questions come from'));
+  assert.ok(out.includes('do not narrate your own reasoning'));
+});
+
+test('conduct: one warning in her own voice, then end via the tool', () => {
+  const out = interviewerInstructions(BASE);
+  assert.ok(out.includes('abusive, sexually explicit, or demeaning'));
+  // The tone brief: human and firm, not a policy recital
+  assert.ok(out.includes('as a professional who will not be spoken to that way'));
+  assert.ok(out.includes('Name what they just said'));
+  assert.ok(out.includes('do not recite a policy'));
+  assert.ok(out.includes('never pretend it did not happen'));
+  // Escalation is bounded: only after one warning
+  assert.ok(out.includes('call the end_interview tool with reason "conduct"'));
+  assert.ok(out.includes('only after you have already given them that one clear warning'));
+});
+
+test('distress: brief honest redirect, never a counselor or hotline dispenser', () => {
+  const out = interviewerInstructions(BASE);
+  assert.ok(out.includes('do not become a counselor'));
+  assert.ok(out.includes('do not offer hotlines, therapists, or HR advice'));
+  assert.ok(out.includes('this is interview practice so it is not the right place for it'));
+  assert.ok(out.includes('deserve to talk to someone who can actually help'));
+});
+
+test('the question-pushback rule no longer overrides conduct or distress', () => {
+  const out = interviewerInstructions(BASE);
+  assert.ok(out.includes('challenges or refuses an interview question'));
+  assert.ok(out.includes('it never overrides the conduct and distress rules above'));
+  // Ordering matters for "above" to be true
+  assert.ok(out.indexOf('abusive, sexually explicit') < out.indexOf('challenges or refuses an interview question'));
+  assert.ok(out.indexOf('do not become a counselor') < out.indexOf('challenges or refuses an interview question'));
+});
+
+test('end_interview is the only registered tool and is shaped for the Realtime API', () => {
+  assert.equal(INTERVIEWER_TOOLS.length, 1);
+  const tool = INTERVIEWER_TOOLS[0];
+  assert.equal(tool.type, 'function');
+  assert.equal(tool.name, 'end_interview');
+  assert.ok(/one clear warning/i.test(tool.description));
+  assert.equal(tool.parameters.type, 'object');
+  assert.deepEqual(tool.parameters.required, ['reason']);
+  assert.deepEqual(tool.parameters.properties.reason.enum, ['conduct']);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

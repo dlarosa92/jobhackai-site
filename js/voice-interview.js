@@ -157,8 +157,36 @@
     }
   }
 
+  // end_interview is the only tool the session registers, so a function call
+  // without a name can only be that one. Realtime event naming differs across
+  // API versions, so check the dedicated event and the response.done output
+  // items both (same belt-and-braces approach as the transcript events).
+  function isEndInterviewCall(evt) {
+    if (evt.type === 'response.function_call_arguments.done') {
+      return !evt.name || evt.name === 'end_interview';
+    }
+    var out = evt.response && evt.response.output;
+    if (!out || !out.length) return false;
+    for (var i = 0; i < out.length; i++) {
+      if (out[i] && out[i].type === 'function_call' &&
+          (!out[i].name || out[i].name === 'end_interview')) return true;
+    }
+    return false;
+  }
+
   function handleRealtimeEvent(evt) {
     var type = evt.type || '';
+
+    // The interviewer ended it herself after an unheeded conduct warning.
+    // Checked before the response.done branches below so it is not swallowed
+    // by the usage accumulator's early return.
+    if (type === 'response.function_call_arguments.done' || type === 'response.done') {
+      if (isEndInterviewCall(evt)) {
+        setStatus('The interviewer ended this session.', 'vi-error');
+        endInterview('ended_by_interviewer');
+        return;
+      }
+    }
 
     // Items are announced in true conversation order and carry the id that
     // the (later, out-of-order) transcript events reference.

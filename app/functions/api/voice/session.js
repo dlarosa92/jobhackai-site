@@ -24,7 +24,7 @@ import {
   voiceFeatureEnabled
 } from '../../_lib/voice-entitlements.js';
 import { errorResponse, successResponse, generateRequestId } from '../../_lib/error-handler.js';
-import { interviewerInstructions, buildResumeContext } from '../../_lib/voice-interviewer.js';
+import { interviewerInstructions, buildResumeContext, INTERVIEWER_TOOLS } from '../../_lib/voice-interviewer.js';
 
 const MAX_SESSION_MINUTES = 20;
 // Reconnects allowed while the session could still plausibly be live.
@@ -46,6 +46,9 @@ async function mintClientSecret(env, { model, instructions }) {
         type: 'realtime',
         model,
         instructions,
+        // Lets the interviewer end a session herself after a conduct warning
+        // goes unheeded (see INTERVIEWER_TOOLS and the conduct rules).
+        tools: INTERVIEWER_TOOLS,
         audio: {
           input: {
             transcription: { model: 'whisper-1' },
