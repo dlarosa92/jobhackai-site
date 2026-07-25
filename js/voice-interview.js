@@ -7,6 +7,11 @@
 
   var REALTIME_CALLS_URL = 'https://api.openai.com/v1/realtime/calls';
 
+  // How long ending the interview waits for transcripts already in flight.
+  // Long enough for a trailing whisper result, short enough that nobody is
+  // left staring at a spinner if an event never arrives.
+  var TRANSCRIPT_FLUSH_MS = 1500;
+
   var state = {
     sessionId: null,
     model: null,
@@ -17,7 +22,7 @@
     startedAtMs: null,
     timerInterval: null,
     maxMinutes: 20,
-    transcript: [],            // [{speaker:'user'|'assistant', text}]
+    order: null,               // ordered transcript assembler (voice-transcript-order.js)
     usage: { input: 0, output: 0 },
     ending: false,
     connected: false
@@ -113,12 +118,39 @@
 
   // ---------- realtime event handling ----------
 
-  function appendTranscript(speaker, text) {
+  // js/voice-transcript-order.js is an ES module, so on the vanishing chance
+  // it has not executed yet we degrade to plain arrival-order collection
+  // rather than losing turns.
+  function newTranscriptOrder() {
+    if (typeof window.createTranscriptOrder === 'function') {
+      return window.createTranscriptOrder();
+    }
+    var arr = [];
+    return {
+      noteItem: function () {},
+      setText: function (id, speaker, text) { arr.push({ speaker: speaker, text: text }); },
+      append: function (speaker, text) { arr.push({ speaker: speaker, text: text }); },
+      list: function () { return arr.slice(); },
+      // Arrival-order collection reserves nothing, so there is never anything
+      // in flight to wait for.
+      pendingCount: function () { return 0; },
+      flushTranscript: function () { return Promise.resolve(true); },
+      reset: function () { arr = []; }
+    };
+  }
+
+  // The conversation in true order, for /complete and the resume tail.
+  function getTranscript() {
+    return state.order ? state.order.list() : [];
+  }
+
+  // Realtime transcripts arrive out of order; itemId places each turn in the
+  // slot its conversation item reserved (see voice-transcript-order.js).
+  function recordTurn(speaker, text, itemId) {
     text = String(text || '').trim();
     if (!text) return;
-    var last = state.transcript[state.transcript.length - 1];
-    if (last && last.speaker === speaker && last.text === text) return; // dedupe replays
-    state.transcript.push({ speaker: speaker, text: text });
+    if (!state.order) state.order = newTranscriptOrder();
+    state.order.setText(itemId || null, speaker, text);
     var caption = $('vi-caption');
     if (caption) {
       caption.textContent = (speaker === 'assistant' ? 'Interviewer: ' : 'You: ') + text;
@@ -128,13 +160,23 @@
   function handleRealtimeEvent(evt) {
     var type = evt.type || '';
 
+    // Items are announced in true conversation order and carry the id that
+    // the (later, out-of-order) transcript events reference.
+    if (type === 'conversation.item.created' || type === 'conversation.item.added') {
+      if (!state.order) state.order = newTranscriptOrder();
+      // previous_item_id says which item this one follows, so an item inserted
+      // out of band lands in the right place instead of at the end.
+      state.order.noteItem(evt.item && evt.item.id, evt.previous_item_id);
+      return;
+    }
+
     if (type === 'conversation.item.input_audio_transcription.completed') {
-      appendTranscript('user', evt.transcript);
+      recordTurn('user', evt.transcript, evt.item_id);
       return;
     }
     // GA + beta event names for assistant transcript
     if (type === 'response.output_audio_transcript.done' || type === 'response.audio_transcript.done') {
-      appendTranscript('assistant', evt.transcript);
+      recordTurn('assistant', evt.transcript, evt.item_id);
       return;
     }
     if (type === 'response.done' && evt.response && evt.response.usage) {
@@ -206,13 +248,32 @@
     await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
   }
 
-  function teardownConnection() {
-    try { if (state.dc) state.dc.close(); } catch (_) {}
-    try { if (state.pc) state.pc.close(); } catch (_) {}
+  // The mic is released on its own so the interview can stop listening the
+  // instant it ends, while the data channel stays open long enough for
+  // in-flight transcripts to land. Mic audio is outbound only, so this never
+  // cuts the interviewer off mid-sentence.
+  function stopMicrophone() {
     try {
       if (state.micStream) state.micStream.getTracks().forEach(function (t) { t.stop(); });
     } catch (_) {}
-    state.pc = null; state.dc = null; state.micStream = null; state.connected = false;
+    state.micStream = null;
+  }
+
+  function teardownConnection() {
+    try { if (state.dc) state.dc.close(); } catch (_) {}
+    try { if (state.pc) state.pc.close(); } catch (_) {}
+    stopMicrophone();
+    state.pc = null; state.dc = null; state.connected = false;
+  }
+
+  // Whisper transcripts for the last turn routinely arrive after the turn is
+  // over. Closing the data channel first threw them away, which is how the
+  // utterance that ended a session went missing from its own report.
+  function flushPendingTranscript() {
+    if (!state.order || typeof state.order.flushTranscript !== 'function') {
+      return Promise.resolve(false);
+    }
+    return state.order.flushTranscript({ timeoutMs: TRANSCRIPT_FLUSH_MS });
   }
 
   // ---------- timer ----------
@@ -276,7 +337,7 @@
       state.sessionId = res.data.sessionId;
       state.model = res.data.model;
       state.maxMinutes = res.data.maxMinutes || 20;
-      state.transcript = [];
+      state.order = newTranscriptOrder();
       state.usage = { input: 0, output: 0 };
       state.ending = false;
 
@@ -313,7 +374,7 @@
         method: 'POST',
         body: JSON.stringify({
           resumeSessionId: state.sessionId,
-          transcript: state.transcript.slice(-20)
+          transcript: getTranscript().slice(-20)
         })
       });
       if (!res.ok) throw new Error((res.data && res.data.error) || 'resume_failed');
@@ -344,18 +405,23 @@
     if (state.timerInterval) { clearInterval(state.timerInterval); state.timerInterval = null; }
 
     var durationSeconds = state.startedAtMs ? Math.round((Date.now() - state.startedAtMs) / 1000) : 0;
-    teardownConnection();
+    stopMicrophone();
 
     show('vi-done-view');
     var doneStatus = $('vi-done-status');
     if (doneStatus) doneStatus.textContent = 'We\'re reviewing your conversation using our S + A = O formula and interview rubric. This usually takes a few seconds.';
     historyLiveScoring();
 
+    // Let any transcript still in flight land before the channel closes; the
+    // wait is bounded and a timeout just means we store what we already have.
+    await flushPendingTranscript();
+    teardownConnection();
+
     try {
       await api('/api/voice/session/' + encodeURIComponent(state.sessionId) + '/complete', {
         method: 'POST',
         body: JSON.stringify({
-          transcript: state.transcript,
+          transcript: getTranscript(),
           durationSeconds: durationSeconds,
           inputTokens: state.usage.input,
           outputTokens: state.usage.output,

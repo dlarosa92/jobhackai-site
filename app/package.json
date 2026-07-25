@@ -27,7 +27,9 @@
     "test:voice:transcripts:smoke": "node tests/voice-transcripts/run-evals.mjs --mode smoke",
     "test:voice:transcripts:full": "node tests/voice-transcripts/run-evals.mjs --mode full",
     "test:voice:transcripts:stability": "node tests/voice-transcripts/run-evals.mjs --mode stability",
-    "test:voice:transcripts:unit": "node tests/voice-transcripts/unit.test.mjs"
+    "test:voice:transcripts:unit": "node tests/voice-transcripts/unit.test.mjs",
+    "test:voice:interviewer": "node functions/_lib/__tests__/voice-interviewer.test.mjs",
+    "test:voice:transcript-order": "node functions/_lib/__tests__/voice-transcript-order.test.mjs"
   },
   "dependencies": {
     "firebase": "^10.7.0",

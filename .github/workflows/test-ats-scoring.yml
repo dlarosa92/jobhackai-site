@@ -6,11 +6,19 @@ on:
     paths:
       - 'app/functions/_lib/**'
       - 'app/functions/dictionaries/**'
+      # The voice transcript assembler is a browser module, but its suite lives
+      # in _lib/__tests__ — without these the module could break untested.
+      - 'js/voice-transcript-order.js'
+      - 'js/package.json'
   pull_request:
     branches: [main, dev0]
     paths:
       - 'app/functions/_lib/**'
       - 'app/functions/dictionaries/**'
+      # The voice transcript assembler is a browser module, but its suite lives
+      # in _lib/__tests__ — without these the module could break untested.
+      - 'js/voice-transcript-order.js'
+      - 'js/package.json'
 
 jobs:
   test:
@@ -46,5 +54,24 @@ jobs:
       - name: Run ATS scoring tests
         working-directory: app/functions/_lib/__tests__
         run: node ats-scoring-engine.test.mjs
+
+      # Deterministic voice suites — no API key, no cost. These prove the
+      # transcript assembler and the prompt's own text, NOT that the live model
+      # obeys the prompt; that stays a manual dev-session check.
+      - name: Run voice transcript ordering tests
+        working-directory: app/functions/_lib/__tests__
+        run: node voice-transcript-order.test.mjs
+
+      - name: Run voice interviewer prompt tests
+        working-directory: app/functions/_lib/__tests__
+        run: node voice-interviewer.test.mjs
+
+      - name: Run voice entitlement tests
+        working-directory: app/functions/_lib/__tests__
+        run: node voice-entitlements.test.mjs
+
+      - name: Run voice history tests
+        working-directory: app/functions/_lib/__tests__
+        run: node voice-history.test.mjs
 
 
