@@ -307,9 +307,14 @@
     if (btn) { btn.disabled = true; btn.textContent = 'Reconnecting...'; }
     try {
       teardownConnection();
+      // Send the local transcript tail so the fresh realtime session resumes
+      // the conversation instead of restarting the interview from scratch.
       var res = await api('/api/voice/session', {
         method: 'POST',
-        body: JSON.stringify({ resumeSessionId: state.sessionId })
+        body: JSON.stringify({
+          resumeSessionId: state.sessionId,
+          transcript: state.transcript.slice(-20)
+        })
       });
       if (!res.ok) throw new Error((res.data && res.data.error) || 'resume_failed');
       setStatus('Reconnecting...', 'vi-connecting');
