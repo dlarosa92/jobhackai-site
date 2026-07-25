@@ -19,6 +19,9 @@
   // conduct end tears the session down. Generous enough for a spoken sentence,
   // hard enough that a dropped event cannot hold the session open.
   var CONDUCT_END_MAX_WAIT_MS = 6000;
+  // How long to wait after the closing response completes for its audio to
+  // begin, before concluding there is no closing audio at all.
+  var CONDUCT_END_AUDIO_GRACE_MS = 750;
 
   var state = {
     sessionId: null,
@@ -220,6 +223,7 @@
     if (typeof window.createConductGate === 'function') return window.createConductGate();
     return {
       decide: function () { return 'ignore'; },
+      noteCandidateSpoke: function () {},
       endReason: function () { return 'ended_by_interviewer'; },
       wasWarned: function () { return false; },
       reset: function () {}
@@ -251,32 +255,38 @@
   // The closing line is still being generated and spoken when the tool call
   // arrives. Ending here would cut the interviewer off mid-sentence, drop the
   // response's token usage, and lose the utterance that triggered the end.
-  // So: record the intent, then wait for the turn to actually finish.
+  // So: record the intent, then wait for the turn to actually finish
+  // (js/voice-conduct.js owns that timing).
+  function newClosingTurnGate() {
+    if (typeof window.createClosingTurnGate === 'function') {
+      return window.createClosingTurnGate({
+        timeoutMs: CONDUCT_END_MAX_WAIT_MS,
+        graceMs: CONDUCT_END_AUDIO_GRACE_MS,
+        onDone: finishConductEnd
+      });
+    }
+    // Degraded: end after the response completes rather than never ending.
+    return {
+      start: function () { return true; },
+      noteResponseDone: function () { finishConductEnd('no_module'); },
+      noteAudioStarted: function () {},
+      noteAudioStopped: function () {},
+      cancel: function () {},
+      isActive: function () { return false; }
+    };
+  }
+
   function requestConductEnd() {
     if (state.ending || state.conductEnd) return;
-    state.conductEnd = { responseDone: false, audioDone: !state.audioPlaying, timer: null };
+    state.conductEnd = newClosingTurnGate();
     setStatus('The interviewer is ending this session.', 'vi-error');
-    // A missing event must never leave the session open indefinitely.
-    state.conductEnd.timer = setTimeout(function () { finishConductEnd(true); }, CONDUCT_END_MAX_WAIT_MS);
-    maybeFinishConductEnd();
+    state.conductEnd.start(state.audioPlaying);
   }
 
-  function noteConductEndProgress(field) {
+  function finishConductEnd(reason) {
     if (!state.conductEnd) return;
-    state.conductEnd[field] = true;
-    maybeFinishConductEnd();
-  }
-
-  function maybeFinishConductEnd() {
-    if (!state.conductEnd) return;
-    if (state.conductEnd.responseDone && state.conductEnd.audioDone) finishConductEnd(false);
-  }
-
-  function finishConductEnd(timedOut) {
-    if (!state.conductEnd) return;
-    if (state.conductEnd.timer) clearTimeout(state.conductEnd.timer);
     state.conductEnd = null;
-    if (timedOut) {
+    if (reason === 'timeout') {
       console.warn('[VOICE] conduct end: closing turn never completed, ending anyway');
     }
     setStatus('The interviewer ended this session.', 'vi-error');
@@ -301,8 +311,21 @@
       return;
     }
 
+    // The candidate speaking again is what makes a warned incident a CONTINUED
+    // one, and it is the guard that stops a duplicated tool call from ending the
+    // session on a first offense. Driven by the speech events, which fire live —
+    // waiting for a whisper transcript would arrive too late to be useful.
+    if (type === 'input_audio_buffer.speech_started' ||
+        type === 'input_audio_buffer.committed' ||
+        type === 'conversation.item.input_audio_transcription.completed') {
+      if (state.conduct) state.conduct.noteCandidateSpoke();
+    }
+
     if (type === 'conversation.item.input_audio_transcription.completed') {
       recordTurn('user', evt.transcript, evt.item_id);
+      return;
+    }
+    if (type === 'input_audio_buffer.speech_started' || type === 'input_audio_buffer.committed') {
       return;
     }
     // GA + beta event names for assistant transcript
@@ -327,19 +350,22 @@
       }
       handleConductCall(conductCallFromEvent(evt));
       setSpeaking(false);
-      noteConductEndProgress('responseDone');
+      if (state.conductEnd) state.conductEnd.noteResponseDone();
       return;
     }
 
     if (type === 'output_audio_buffer.started' || type === 'response.created') {
-      if (type === 'output_audio_buffer.started') state.audioPlaying = true;
+      if (type === 'output_audio_buffer.started') {
+        state.audioPlaying = true;
+        if (state.conductEnd) state.conductEnd.noteAudioStarted();
+      }
       setSpeaking(true);
       return;
     }
     if (type === 'output_audio_buffer.stopped') {
       state.audioPlaying = false;
       setSpeaking(false);
-      noteConductEndProgress('audioDone');
+      if (state.conductEnd) state.conductEnd.noteAudioStopped();
       return;
     }
     if (type === 'error') {
@@ -557,9 +583,9 @@
     state.ending = true;
     if (state.timerInterval) { clearInterval(state.timerInterval); state.timerInterval = null; }
     // A pending conduct end is moot once we are ending for any reason (the
-    // clock running out mid-warning, say); drop its backstop timer.
+    // clock running out mid-warning, say); drop its timers.
     if (state.conductEnd) {
-      if (state.conductEnd.timer) clearTimeout(state.conductEnd.timer);
+      state.conductEnd.cancel();
       state.conductEnd = null;
     }
 
