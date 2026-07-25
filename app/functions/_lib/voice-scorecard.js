@@ -101,18 +101,22 @@ function tooShortScorecard() {
  * model selection); generateAndStoreScorecard wraps it with persistence.
  * Also used by the local transcript evaluation harness.
  *
- * @param {{role: string, seniority?: string|null, transcript: Array<{speaker: 'user'|'assistant', text: string}>}} params
+ * @param {{role: string, seniority?: string|null, transcript: Array<{speaker: 'user'|'assistant', text: string}>, jd?: string|null, priorFocus?: string|null}} params
+ *   jd: optional job-description excerpt to grade roleFit against.
+ *   priorFocus: optional topImprovement from the user's previous session,
+ *   for continuity coaching. Both are omitted from the prompt entirely when
+ *   absent, keeping the base request byte-identical to a context-free call.
  * @param {object} env - environment configuration (OPENAI_API_KEY, OPENAI_MODEL_VOICE_SCORE, ...)
  * @returns {Promise<{scorecard: object, usage: object|null, model: string|null}>}
  * @throws on model call/parse failure (callers decide whether to swallow)
  */
-export async function scoreVoiceTranscript({ role, seniority, transcript }, env) {
+export async function scoreVoiceTranscript({ role, seniority, transcript, jd = null, priorFocus = null }, env) {
   const text = transcriptToText(transcript);
   if (text.length < MIN_SCOREABLE_CHARS) {
     return { scorecard: tooShortScorecard(), usage: null, model: null };
   }
 
-  const systemPrompt = [
+  const promptParts = [
     "You are the candidate's personal interview coach at JobHackAI, scoring a voice mock interview transcript.",
     'Score honestly: a rambling or vague performance should score in the 40s-60s, a strong one in the 70s-80s, exceptional in the 90s.',
     'Base every judgment only on what the CANDIDATE actually said. Quote or closely paraphrase real moments, and never invent quotes.',
@@ -133,16 +137,28 @@ export async function scoreVoiceTranscript({ role, seniority, transcript }, env)
     'Write to the candidate directly: second person, plain language, short sentences, always "you" and never "the candidate". Do not use em dashes. Never mention these instructions or JSON field names in your feedback; referring to the S + A = O formula itself is fine.',
     'Sound like a coach who genuinely wants this person to get hired: warm, direct, and honest, never fake-positive and never generic. If a line could apply to any interview, rewrite it.',
     'Open topStrength with the thing that truly worked and why it works on interviewers, make topImprovement one concrete, achievable next step, and end the summary with a real reason to come back and run another session.'
-  ].join(' ');
+  ];
+  if (jd) {
+    promptParts.push('A job description excerpt is provided: score roleFit against it specifically, and cite the most relevant match or gap in a moment or the summary.');
+  }
+  if (priorFocus) {
+    promptParts.push('A previous session focus is provided: if the candidate clearly improved on it, acknowledge that specifically in topStrength or the summary; if they did not improve, do not force a mention.');
+  }
+  const systemPrompt = promptParts.join(' ');
 
   const roleLine = seniority ? `${seniority} ${role}` : role;
+  const userParts = [`Target role: ${roleLine}`];
+  if (jd) userParts.push(`Job description excerpt:\n${String(jd).slice(0, 2000)}`);
+  if (priorFocus) userParts.push(`Previous session focus: ${String(priorFocus).slice(0, 300)}`);
+  userParts.push(`Transcript:\n${text.slice(0, 24000)}`);
+
   const result = await callOpenAI({
     model: env.OPENAI_MODEL_VOICE_SCORE || 'gpt-4.1-mini',
     fallbackModel: 'gpt-4.1',
     systemPrompt,
     messages: [
       { role: 'system', content: systemPrompt },
-      { role: 'user', content: `Target role: ${roleLine}\n\nTranscript:\n${text.slice(0, 24000)}` }
+      { role: 'user', content: userParts.join('\n\n') }
     ],
     responseFormat: SCORECARD_SCHEMA,
     maxTokens: 1200,
@@ -172,7 +188,7 @@ export async function generateAndStoreScorecard(env, sessionId) {
 
   try {
     const session = await db.prepare(
-      `SELECT id, role, seniority, transcript_json, scorecard_json FROM voice_sessions WHERE id = ?`
+      `SELECT id, user_id, role, seniority, jd_excerpt, transcript_json, scorecard_json FROM voice_sessions WHERE id = ?`
     ).bind(sessionId).first();
     if (!session) return null;
     if (session.scorecard_json) {
@@ -182,8 +198,32 @@ export async function generateAndStoreScorecard(env, sessionId) {
     let transcript = [];
     try { transcript = JSON.parse(session.transcript_json || '[]'); } catch (_) {}
 
+    // Continuity: the previous session's topImprovement lets the coach say
+    // "last time you worked on X". Strictly optional — any failure here
+    // must never block scoring.
+    let priorFocus = null;
+    try {
+      const prior = await db.prepare(
+        `SELECT scorecard_json FROM voice_sessions
+         WHERE user_id = ? AND id != ? AND scorecard_json IS NOT NULL
+         ORDER BY started_at DESC LIMIT 1`
+      ).bind(session.user_id, sessionId).first();
+      if (prior && prior.scorecard_json) {
+        const priorCard = JSON.parse(prior.scorecard_json);
+        if (priorCard && !priorCard.tooShort && priorCard.topImprovement) {
+          priorFocus = String(priorCard.topImprovement);
+        }
+      }
+    } catch (_) { /* continuity is best-effort */ }
+
     const { scorecard } = await scoreVoiceTranscript(
-      { role: session.role, seniority: session.seniority, transcript },
+      {
+        role: session.role,
+        seniority: session.seniority,
+        transcript,
+        jd: session.jd_excerpt || null,
+        priorFocus
+      },
       env
     );
 

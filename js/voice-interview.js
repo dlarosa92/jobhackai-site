@@ -391,9 +391,22 @@
   // ---------- scorecard rendering ----------
 
   function dimensionRow(label, value) {
+    // Band colors make honest scores legible at a glance: red <40, amber 40-69, green >=70
+    var band = value >= 70 ? '' : value >= 40 ? ' vi-dim-fill--mid' : ' vi-dim-fill--low';
     return '<div class="vi-dim"><span class="vi-dim-label">' + label + '</span>' +
-      '<span class="vi-dim-bar"><span class="vi-dim-fill" style="width:' + Math.max(2, Math.min(100, value)) + '%"></span></span>' +
+      '<span class="vi-dim-bar"><span class="vi-dim-fill' + band + '" style="width:' + Math.max(2, Math.min(100, value)) + '%"></span></span>' +
       '<span class="vi-dim-num">' + value + '</span></div>';
+  }
+
+  // Most recent OTHER scored session, for the "vs your last session" delta.
+  function previousOverall(currentSessionId) {
+    for (var i = 0; i < historyState.items.length; i++) {
+      var item = historyState.items[i];
+      if (item.sessionId === currentSessionId) continue;
+      var v = Number(item.overall);
+      if (item.overall != null && isFinite(v)) return Math.round(v);
+    }
+    return null;
   }
 
   function escapeHtml(s) {
@@ -438,6 +451,14 @@
 
     if (data.fullAccess) {
       html += '<div class="vi-sc-overall"><div class="vi-sc-score">' + escapeHtml(sc.overall) + '</div><div class="vi-sc-overall-label">Overall</div></div>';
+      // Session-over-session delta; downward trends are muted, not error-red —
+      // practice is never punished (same rule as the history progress strip).
+      var prevOverall = previousOverall(data.sessionId);
+      if (prevOverall != null && sc.overall != null && isFinite(Number(sc.overall))) {
+        var scDelta = Math.round(Number(sc.overall)) - prevOverall;
+        html += '<p class="vi-sc-delta' + (scDelta < 0 ? ' vi-sc-delta--down' : '') + '">' +
+          (scDelta >= 0 ? '▲ +' : '▼ −') + Math.abs(scDelta) + ' vs your last session</p>';
+      }
       if (sc.dimensions) {
         html += '<div class="vi-sc-dims">';
         html += dimensionRow('Communication', sc.dimensions.communication);
@@ -573,6 +594,22 @@
     if (loading) loading.classList.remove('is-visible');
     renderHistory();
     renderProgressStrip();
+    renderLastFocus();
+  }
+
+  // "Last time we said: ..." on the setup view for returning users — pairs
+  // with the scorer's continuity coaching so the loop feels closed.
+  function renderLastFocus() {
+    var el = $('vi-last-focus');
+    if (!el) return;
+    var focus = null;
+    for (var i = 0; i < historyState.items.length; i++) {
+      if (historyState.items[i].topImprovement) { focus = historyState.items[i].topImprovement; break; }
+    }
+    if (!focus) { el.hidden = true; return; }
+    el.innerHTML = '<strong>Last time we said:</strong> ';
+    el.appendChild(document.createTextNode('“' + String(focus) + '”'));
+    el.hidden = false;
   }
 
   function formatHistoryWhen(createdAt) {
@@ -950,11 +987,35 @@
 
   // ---------- init ----------
 
+  // Same canonical role typeahead as mock-interview/resume-feedback/cover-letter
+  // pages (js/role-selector.js, backed by /api/roles). Free-typed roles keep
+  // working (showCustomOption), and the submit path is unchanged — the
+  // component writes the chosen string into #vi-role's value.
+  function initRoleSelector() {
+    var input = $('vi-role');
+    if (!input) return;
+    if (window.RoleSelector && !input.dataset.roleSelectorInitialized) {
+      try {
+        new window.RoleSelector(input, {
+          minChars: 2,
+          maxResults: 8,
+          showCustomOption: true
+        });
+        input.dataset.roleSelectorInitialized = 'true';
+      } catch (e) {
+        console.warn('[VOICE] RoleSelector init failed:', e);
+      }
+    } else if (!input.dataset.roleSelectorInitialized) {
+      setTimeout(initRoleSelector, 200); // module script may not have loaded yet
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', async function () {
     var startBtn = $('vi-start-btn');
     var endBtn = $('vi-end-btn');
     var muteBtn = $('vi-mute-btn');
     var reconnectBtn = $('vi-reconnect-btn');
+    initRoleSelector();
     if (startBtn) startBtn.addEventListener('click', startInterview);
     if (endBtn) endBtn.addEventListener('click', function () { endInterview('user_ended'); });
     if (muteBtn) muteBtn.addEventListener('click', toggleMute);

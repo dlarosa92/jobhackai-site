@@ -76,6 +76,12 @@
     .vi-dim-label { flex: 0 0 8.5rem; font-size: 0.9rem; color: var(--color-text-secondary); }
     .vi-dim-bar { flex: 1; height: 9px; background: var(--color-divider); border-radius: 999px; overflow: hidden; }
     .vi-dim-fill { display: block; height: 100%; background: var(--color-cta-green); border-radius: 999px; }
+    .vi-dim-fill--mid { background: var(--color-warning); }
+    .vi-dim-fill--low { background: var(--color-error); }
+    .vi-sc-delta { font-size: 0.9rem; font-weight: 600; color: var(--color-cta-green); text-align: center; margin: -0.6rem 0 1rem; }
+    .vi-sc-delta--down { color: var(--color-text-secondary); }
+    .vi-last-focus { font-size: 0.92rem; color: var(--color-text-secondary); margin: 0.6rem 0 0.9rem; }
+    .vi-last-focus strong { color: var(--color-text-main); font-weight: 600; }
     .vi-dim-num { flex: 0 0 2.2rem; text-align: right; font-weight: 700; color: var(--color-text-main); font-size: 0.9rem; }
     .vi-sc-block { margin-bottom: 1.2rem; }
     .vi-sc-block h3 { font-size: 1.02rem; color: var(--color-text-main); margin: 0 0 0.4rem; }
@@ -248,9 +254,10 @@
     <!-- Setup -->
     <div id="vi-setup-view" class="vi-card" style="display:none">
       <div id="vi-entitlement" class="vi-banner vi-banner-ok">Checking your access...</div>
+      <p id="vi-last-focus" class="vi-last-focus" hidden></p>
       <div class="vi-field">
         <label for="vi-role">Role you are interviewing for</label>
-        <input id="vi-role" type="text" placeholder="e.g. Product Manager" maxlength="120" autocomplete="off">
+        <input id="vi-role" type="text" placeholder="e.g. Product Manager" maxlength="120" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false">
       </div>
       <div class="vi-field">
         <label for="vi-seniority">Seniority</label>
@@ -266,7 +273,7 @@
       </div>
       <div class="vi-field">
         <label for="vi-jd">Job description (optional)</label>
-        <textarea id="vi-jd" maxlength="2000" placeholder="Paste the job description so the interviewer can target it."></textarea>
+        <textarea id="vi-jd" maxlength="2000" placeholder="Paste the job description. The interviewer will target it, and your report will grade you against it."></textarea>
       </div>
       <div class="vi-checklist">
         <div class="vi-checklist-title">What to expect</div>
@@ -457,6 +464,7 @@
   <script src="js/universal-logout.js?v=20260208-1" defer></script>
   <script src="js/analytics.js" type="module"></script>
   <script src="js/main.js" type="module"></script>
-  <script src="js/voice-interview.js?v=20260704-1" defer></script>
+  <script src="js/role-selector.js" type="module"></script>
+  <script src="js/voice-interview.js?v=20260720-1" defer></script>
 </body>
 </html>
