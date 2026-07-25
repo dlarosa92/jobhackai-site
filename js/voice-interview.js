@@ -12,6 +12,14 @@
   // left staring at a spinner if an event never arrives.
   var TRANSCRIPT_FLUSH_MS = 1500;
 
+  // Ceiling on waiting for the interviewer's closing line to finish before a
+  // conduct end tears the session down. Generous enough for a spoken sentence,
+  // hard enough that a dropped event cannot hold the session open.
+  var CONDUCT_END_MAX_WAIT_MS = 6000;
+  // How long to wait after the closing response completes for its audio to
+  // begin, before concluding there is no closing audio at all.
+  var CONDUCT_END_AUDIO_GRACE_MS = 750;
+
   var state = {
     sessionId: null,
     model: null,
@@ -25,7 +33,13 @@
     order: null,               // ordered transcript assembler (voice-transcript-order.js)
     usage: { input: 0, output: 0 },
     ending: false,
-    connected: false
+    connected: false,
+    audioPlaying: false,       // interviewer's audio is mid-playback
+    audioResponseId: '',       // which response that audio belongs to
+    answeredCalls: null,       // call_id -> true; each tool call answered exactly once
+    conduct: null,             // escalation gate (voice-conduct.js); survives a reconnect
+    conductEnd: null,          // pending end, waiting for the closing turn
+    endCause: null             // 'conduct' | 'safety' — which reason the pending end carries
   };
 
   function $(id) { return document.getElementById(id); }
@@ -157,6 +171,209 @@
     }
   }
 
+  // ---------- realtime sends ----------
+
+  // The only outbound traffic this client sends. Everything else is inbound.
+  function sendRealtime(payload) {
+    try {
+      if (!state.dc || state.dc.readyState !== 'open') return false;
+      state.dc.send(JSON.stringify(payload));
+      return true;
+    } catch (err) {
+      console.warn('[VOICE] realtime send failed:', err && err.message);
+      return false;
+    }
+  }
+
+  // A tool call the model makes stays unresolved in the conversation until the
+  // client answers it with a function_call_output. Leaving it dangling can stall
+  // or derail the following turns — which matters most for a conduct WARNING,
+  // the one case where the interview is meant to carry on afterwards.
+  //
+  // Deliberately no response.create afterwards: the interviewer already spoke
+  // her line in the response that made this call, so triggering another
+  // response here would have her say a second one. The resolved output is
+  // picked up on the next natural turn instead.
+  // Exactly once per call_id: Realtime surfaces the same call twice, and a
+  // duplicate function_call_output for one call_id is its own protocol error.
+  function answerToolCall(callId, output) {
+    if (!callId) {
+      console.warn('[VOICE] tool call had no call_id; cannot answer it');
+      return false;
+    }
+    if (!state.answeredCalls) state.answeredCalls = Object.create(null);
+    if (state.answeredCalls[callId]) return false;
+    state.answeredCalls[callId] = true;
+    return sendRealtime({
+      type: 'conversation.item.create',
+      item: {
+        type: 'function_call_output',
+        call_id: callId,
+        output: JSON.stringify(output)
+      }
+    });
+  }
+
+  // ---------- conduct + safety ----------
+
+  // Reading the call is in js/voice-conduct.js so the two-tool disambiguation is
+  // unit-tested. Degraded fallback returns null, which does nothing.
+  function readToolCall(evt) {
+    if (typeof window.readVoiceToolCall === 'function') return window.readVoiceToolCall(evt);
+    return null;
+  }
+
+  // js/voice-conduct.js is an ES module; if it somehow has not executed, fail
+  // toward keeping the interview open rather than ending it on an unverified
+  // signal — a wrongly closed session costs the candidate their credit.
+  function newConductGate() {
+    if (typeof window.createConductGate === 'function') return window.createConductGate();
+    return {
+      decide: function () { return 'ignore'; },
+      noteCandidateSpoke: function (_eventType) {},
+      endReason: function () { return 'ended_by_interviewer'; },
+      wasWarned: function () { return false; },
+      reset: function () {}
+    };
+  }
+
+  function handleToolCall(call) {
+    if (!call) return;
+    if (call.tool === 'safety') {
+      handleSafetyCall(call);
+      return;
+    }
+    if (call.tool === 'conduct') handleConductCall(call);
+  }
+
+  // A candidate in danger has done nothing wrong, so this deliberately bypasses
+  // the conduct gate: no warning is recorded, nothing is refused, and the end
+  // reason is not a conduct outcome. It still goes through the closing-turn gate
+  // — the line she just spoke is the one pointing them at emergency help, and
+  // cutting that off would be the worst possible moment to do it.
+  function handleSafetyCall(call) {
+    console.warn('[VOICE] session closing for candidate safety');
+    track('voice_safety_end', {});
+    answerToolCall(call.callId, { ok: true, closing: true });
+    requestGuardedEnd('safety', call.responseId);
+  }
+
+  // "One warning, then end" is enforced in state by the gate, not trusted to
+  // the prompt (see js/voice-conduct.js).
+  function handleConductCall(call) {
+    if (!call.stage) return;
+    if (!state.conduct) state.conduct = newConductGate();
+    var decision = state.conduct.decide(call.stage, call.dedupeId);
+    if (decision === 'ignore') {
+      // Refusing to act on a call is not the same as leaving it unresolved. A
+      // real-but-refused call — an end the model asked for before the candidate
+      // said anything more, say — still has to be answered or it dangles and can
+      // stall the turns that follow. Replays are absorbed by the ledger above.
+      answerToolCall(call.callId, {
+        ok: false,
+        error: 'No action taken. Continue the interview.',
+        interview_continues: true
+      });
+      return;
+    }
+
+    if (decision === 'warn') {
+      console.warn('[VOICE] conduct warning issued by the interviewer');
+      track('voice_conduct_action', { stage: 'warning' });
+      // The interview continues from here, so this call in particular must not
+      // be left dangling.
+      answerToolCall(call.callId, { ok: true, warned: true, interview_continues: true });
+      return;
+    }
+    if (decision === 'warn_instead') {
+      console.warn('[VOICE] conduct end requested with no prior warning; refused and counted as the warning');
+      track('voice_conduct_action', { stage: 'end_refused_unwarned' });
+      answerToolCall(call.callId, {
+        ok: false,
+        error: 'A warning must be given before the session can be ended. This has been recorded as that warning; continue the interview.',
+        warned: true,
+        interview_continues: true
+      });
+      return;
+    }
+    if (decision === 'end') {
+      track('voice_conduct_action', { stage: 'end' });
+      answerToolCall(call.callId, { ok: true, closing: true });
+      requestGuardedEnd('conduct', call.responseId);
+    }
+  }
+
+  // The closing line is still being generated and spoken when the tool call
+  // arrives. Ending here would cut the interviewer off mid-sentence, drop the
+  // response's token usage, and lose the utterance that triggered the end.
+  // So: record the intent, then wait for the turn to actually finish
+  // (js/voice-conduct.js owns that timing).
+  function newClosingTurnGate() {
+    if (typeof window.createClosingTurnGate === 'function') {
+      return window.createClosingTurnGate({
+        timeoutMs: CONDUCT_END_MAX_WAIT_MS,
+        graceMs: CONDUCT_END_AUDIO_GRACE_MS,
+        onDone: finishConductEnd
+      });
+    }
+    // Degraded: end after the response completes rather than never ending.
+    return {
+      start: function () { return true; },
+      noteResponseDone: function () { finishConductEnd('no_module'); },
+      noteAudioStarted: function () {},
+      noteAudioStopped: function () {},
+      cancel: function () {},
+      isActive: function () { return false; }
+    };
+  }
+
+  // cause is 'conduct' or 'safety' — it decides the reason and the wording, not
+  // the timing, which is identical for both.
+  function requestGuardedEnd(cause, responseId) {
+    if (state.ending || state.conductEnd) return;
+    state.endCause = cause;
+    state.conductEnd = newClosingTurnGate();
+    setStatus(
+      cause === 'safety' ? 'Ending this session.' : 'The interviewer is ending this session.',
+      'vi-error'
+    );
+    // Whether the closing line is already mid-playback. This has to fail SAFE,
+    // and safe means "assume it is". Over-waiting costs at most the backstop and
+    // nothing is lost; under-waiting cuts the interviewer off — and on the safety
+    // path the sentence being cut is the one naming emergency services. So audio
+    // counts unless we can positively attribute it to a DIFFERENT response:
+    // requiring a positive id match instead meant an event without a response id
+    // read as "no audio" and the grace path tore the session down mid-sentence.
+    var closingAudioLive = state.audioPlaying && (
+      !responseId || !state.audioResponseId || state.audioResponseId === responseId
+    );
+    state.conductEnd.start(closingAudioLive);
+  }
+
+  function finishConductEnd(reason) {
+    if (!state.conductEnd) return;
+    state.conductEnd = null;
+    // Read the cause before clearing it, so nothing downstream can act on a
+    // stale one.
+    var cause = state.endCause;
+    state.endCause = null;
+    if (reason === 'timeout') {
+      console.warn('[VOICE] guarded end: closing turn never completed, ending anyway');
+    }
+    if (cause === 'safety') {
+      setStatus('This session has ended. Please reach out for help.', 'vi-error');
+      endInterview('ended_for_safety');
+      return;
+    }
+    setStatus('The interviewer ended this session.', 'vi-error');
+    endInterview(state.conduct ? state.conduct.endReason() : 'ended_by_interviewer');
+  }
+
+  function setSpeaking(on) {
+    var ind = $('vi-speaking');
+    if (ind) ind.classList.toggle('vi-speaking-on', !!on);
+  }
+
   function handleRealtimeEvent(evt) {
     var type = evt.type || '';
 
@@ -170,8 +387,18 @@
       return;
     }
 
+    // The candidate speaking again is what makes a warned incident a CONTINUED
+    // one, and it is the guard that stops a duplicated tool call from ending the
+    // session on a first offense. Only live speech events qualify, and the gate
+    // enforces that itself — a whisper transcript can describe audio from before
+    // the warning, so it must never count here.
+    if (state.conduct) state.conduct.noteCandidateSpoke(type);
+
     if (type === 'conversation.item.input_audio_transcription.completed') {
       recordTurn('user', evt.transcript, evt.item_id);
+      return;
+    }
+    if (type === 'input_audio_buffer.speech_started' || type === 'input_audio_buffer.committed') {
       return;
     }
     // GA + beta event names for assistant transcript
@@ -179,19 +406,48 @@
       recordTurn('assistant', evt.transcript, evt.item_id);
       return;
     }
-    if (type === 'response.done' && evt.response && evt.response.usage) {
-      state.usage.input += Number(evt.response.usage.input_tokens || 0);
-      state.usage.output += Number(evt.response.usage.output_tokens || 0);
+
+    if (type === 'response.function_call_arguments.done') {
+      handleToolCall(readToolCall(evt));
       return;
     }
+
+    // response.done does three jobs, in this order deliberately: usage is
+    // counted even for the response that ends the session, the tool call is
+    // picked up here on API versions that only surface it in the output, and
+    // only then does the closing turn count as complete.
+    if (type === 'response.done') {
+      if (evt.response && evt.response.usage) {
+        state.usage.input += Number(evt.response.usage.input_tokens || 0);
+        state.usage.output += Number(evt.response.usage.output_tokens || 0);
+      }
+      handleToolCall(readToolCall(evt));
+      setSpeaking(false);
+      if (state.conductEnd) state.conductEnd.noteResponseDone();
+      return;
+    }
+
     if (type === 'output_audio_buffer.started' || type === 'response.created') {
-      var ind = $('vi-speaking');
-      if (ind) ind.classList.add('vi-speaking-on');
+      if (type === 'output_audio_buffer.started') {
+        state.audioPlaying = true;
+        // Which response is speaking, not merely that something is. A bare
+        // "audio is playing" flag cannot tell the closing line apart from a
+        // previous turn's, and seeding the gate from it is what made the stale
+        // reads possible in the first place.
+        state.audioResponseId = evt.response_id || '';
+        if (state.conductEnd) state.conductEnd.noteAudioStarted();
+      }
+      setSpeaking(true);
       return;
     }
-    if (type === 'output_audio_buffer.stopped' || type === 'response.done') {
-      var ind2 = $('vi-speaking');
-      if (ind2) ind2.classList.remove('vi-speaking-on');
+    // `cleared` is the interruption counterpart of `stopped` — a barge-in
+    // truncates the turn and no `stopped` follows. Without handling it, the
+    // playing flag stayed true for the rest of the session.
+    if (type === 'output_audio_buffer.stopped' || type === 'output_audio_buffer.cleared') {
+      state.audioPlaying = false;
+      state.audioResponseId = '';
+      setSpeaking(false);
+      if (state.conductEnd) state.conductEnd.noteAudioStopped();
       return;
     }
     if (type === 'error') {
@@ -290,7 +546,9 @@
         timerEl.textContent = (remaining < 0 ? '-' : '') + m + ':' + (s < 10 ? '0' : '') + s;
       }
       if (remaining <= 0) {
-        endInterview('time_up');
+        // endInterview defers to a pending conduct or safety close on its own;
+        // checking here too just keeps this from logging that once a second.
+        if (!state.conductEnd) endInterview('time_up');
       }
     }, 1000);
   }
@@ -340,6 +598,14 @@
       state.order = newTranscriptOrder();
       state.usage = { input: 0, output: 0 };
       state.ending = false;
+      state.audioPlaying = false;
+      state.audioResponseId = '';
+      state.answeredCalls = null;
+      // A fresh session starts with a clean conduct slate. A reconnect must not
+      // reset the gate, or dropping the connection would clear a warning.
+      state.conduct = newConductGate();
+      state.conductEnd = null;
+      state.endCause = null;
 
       show('vi-live-view');
       setStatus('Connecting...', 'vi-connecting');
@@ -359,11 +625,25 @@
   }
 
   function offerReconnect() {
+    // Nothing to reconnect to when the session is already closing — offering it
+    // would be misleading, and taking it would be a way out of a conduct end.
+    if (state.conductEnd || state.ending) return;
     var btn = $('vi-reconnect-btn');
     if (btn) btn.style.display = '';
   }
 
   async function reconnect() {
+    // A pending conduct or safety close survives the connection dropping. Its
+    // gate is waiting on events from a link that no longer exists, so letting it
+    // run on into a fresh session would kill that session with a stale reason.
+    // Finish the end instead: the interviewer already decided, and dropping the
+    // connection must not become a way to dodge it (the same reason the conduct
+    // warning itself survives a reconnect).
+    if (state.conductEnd) {
+      console.warn('[VOICE] reconnect requested while a session close was pending; completing the close');
+      finishConductEnd('connection_lost');
+      return;
+    }
     var btn = $('vi-reconnect-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Reconnecting...'; }
     try {
@@ -401,6 +681,16 @@
 
   async function endInterview(reason) {
     if (state.ending) return;
+    // A conduct or safety close already in flight owns the ending and the reason
+    // it will be recorded under. Anything else arriving mid-flight — the End
+    // button, the clock — would cancel that close and persist its own reason
+    // instead, filing a conduct termination or a safety close as `user_ended`
+    // or `time_up`. finishConductEnd clears the gate before it calls in here, so
+    // the guarded close itself is never blocked by this.
+    if (state.conductEnd) {
+      console.warn('[VOICE] end requested (' + reason + ') while a session close was pending; deferring to it');
+      return;
+    }
     state.ending = true;
     if (state.timerInterval) { clearInterval(state.timerInterval); state.timerInterval = null; }
 

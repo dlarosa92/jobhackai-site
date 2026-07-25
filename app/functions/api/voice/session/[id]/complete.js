@@ -10,6 +10,7 @@
 import { getBearer, verifyFirebaseIdToken } from '../../../../_lib/firebase-auth.js';
 import { getOrCreateUserByAuthId, getDb } from '../../../../_lib/db.js';
 import { voiceFeatureEnabled } from '../../../../_lib/voice-entitlements.js';
+import { normalizeEndReason } from '../../../../_lib/voice-interviewer.js';
 import { generateAndStoreScorecard } from '../../../../_lib/voice-scorecard.js';
 import { errorResponse, successResponse, generateRequestId } from '../../../../_lib/error-handler.js';
 
@@ -91,10 +92,16 @@ export async function onRequest(context) {
       ? Number(((inputTokens * inRate + outputTokens * outRate) / 1e6).toFixed(4))
       : null;
 
+    // Why the session ended, clamped to the allowlist. A conduct termination
+    // is otherwise indistinguishable from a normal one, which makes it
+    // impossible to audit or count.
+    const endReason = normalizeEndReason(body.reason);
+
     await db.prepare(
       `UPDATE voice_sessions SET
          status = 'completed',
          ended_at = datetime('now'),
+         end_reason = ?,
          duration_seconds = ?,
          transcript_json = ?,
          input_tokens = ?,
@@ -102,10 +109,13 @@ export async function onRequest(context) {
          cost_usd = ?,
          updated_at = datetime('now')
        WHERE id = ?`
-    ).bind(durationSeconds, transcriptJson, inputTokens, outputTokens, costUsd, sessionId).run();
+    ).bind(endReason, durationSeconds, transcriptJson, inputTokens, outputTokens, costUsd, sessionId).run();
 
     // Unit economics log line (client-reported usage; see runbook brief §2)
-    console.log(`[VOICE-COST] session=${sessionId} uid=${uid} duration=${durationSeconds}s in=${inputTokens} out=${outputTokens} cost_usd=${costUsd}`);
+    console.log(`[VOICE-COST] session=${sessionId} uid=${uid} duration=${durationSeconds}s in=${inputTokens} out=${outputTokens} cost_usd=${costUsd} end=${endReason || 'unknown'}`);
+    if (endReason === 'ended_by_interviewer' || endReason === 'ended_by_interviewer_unwarned') {
+      console.warn(`[VOICE-CONDUCT] session=${sessionId} uid=${uid} end=${endReason}`);
+    }
 
     // Scorecard generation off the request path; client polls the session GET
     context.waitUntil(generateAndStoreScorecard(env, sessionId));
