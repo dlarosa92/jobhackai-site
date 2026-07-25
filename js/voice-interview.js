@@ -36,6 +36,7 @@
     connected: false,
     audioPlaying: false,       // interviewer's audio is mid-playback
     audioResponseId: '',       // which response that audio belongs to
+    answeredCalls: null,       // call_id -> true; each tool call answered exactly once
     conduct: null,             // escalation gate (voice-conduct.js); survives a reconnect
     conductEnd: null,          // pending end, waiting for the closing turn
     endCause: null             // 'conduct' | 'safety' — which reason the pending end carries
@@ -193,11 +194,16 @@
   // her line in the response that made this call, so triggering another
   // response here would have her say a second one. The resolved output is
   // picked up on the next natural turn instead.
+  // Exactly once per call_id: Realtime surfaces the same call twice, and a
+  // duplicate function_call_output for one call_id is its own protocol error.
   function answerToolCall(callId, output) {
     if (!callId) {
       console.warn('[VOICE] tool call had no call_id; cannot answer it');
       return false;
     }
+    if (!state.answeredCalls) state.answeredCalls = Object.create(null);
+    if (state.answeredCalls[callId]) return false;
+    state.answeredCalls[callId] = true;
     return sendRealtime({
       type: 'conversation.item.create',
       item: {
@@ -258,7 +264,18 @@
     if (!call.stage) return;
     if (!state.conduct) state.conduct = newConductGate();
     var decision = state.conduct.decide(call.stage, call.dedupeId);
-    if (decision === 'ignore') return;
+    if (decision === 'ignore') {
+      // Refusing to act on a call is not the same as leaving it unresolved. A
+      // real-but-refused call — an end the model asked for before the candidate
+      // said anything more, say — still has to be answered or it dangles and can
+      // stall the turns that follow. Replays are absorbed by the ledger above.
+      answerToolCall(call.callId, {
+        ok: false,
+        error: 'No action taken. Continue the interview.',
+        interview_continues: true
+      });
+      return;
+    }
 
     if (decision === 'warn') {
       console.warn('[VOICE] conduct warning issued by the interviewer');
@@ -581,6 +598,7 @@
       state.ending = false;
       state.audioPlaying = false;
       state.audioResponseId = '';
+      state.answeredCalls = null;
       // A fresh session starts with a clean conduct slate. A reconnect must not
       // reset the gate, or dropping the connection would clear a warning.
       state.conduct = newConductGate();
