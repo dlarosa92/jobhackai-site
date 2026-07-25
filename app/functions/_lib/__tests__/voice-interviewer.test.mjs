@@ -13,6 +13,7 @@ import {
   RESUME_CONTEXT_MAX_CHARS,
   INTERVIEWER_TOOLS,
   CONDUCT_TOOL_NAME,
+  SAFETY_TOOL_NAME,
   CONDUCT_WARNING_STAGE,
   CONDUCT_END_STAGE,
   VOICE_END_REASONS,
@@ -217,11 +218,10 @@ test('the question-pushback rule no longer overrides conduct or distress', () =>
   assert.ok(out.indexOf('do not become a counselor') < out.indexOf('challenges or refuses an interview question'));
 });
 
-test('conduct_action is the only registered tool and is shaped for the Realtime API', () => {
-  assert.equal(INTERVIEWER_TOOLS.length, 1);
-  const tool = INTERVIEWER_TOOLS[0];
+test('conduct_action is shaped for the Realtime API', () => {
+  const tool = INTERVIEWER_TOOLS.find((t) => t.name === CONDUCT_TOOL_NAME);
+  assert.ok(tool, 'conduct tool is registered');
   assert.equal(tool.type, 'function');
-  assert.equal(tool.name, CONDUCT_TOOL_NAME);
   assert.equal(tool.name, 'conduct_action');
   assert.equal(tool.parameters.type, 'object');
   assert.deepEqual(tool.parameters.required, ['stage']);
@@ -232,6 +232,37 @@ test('conduct_action is the only registered tool and is shaped for the Realtime 
   assert.ok(/already warned them once/i.test(tool.description));
   // The tool description itself repeats the quoted-story carve-out
   assert.ok(/quoting from a workplace story/i.test(tool.description));
+  // ...and keeps distress out of the conduct path entirely
+  assert.ok(/never for a candidate in distress or danger/i.test(tool.description));
+});
+
+test('end_for_safety is a SEPARATE tool, not a third conduct stage', () => {
+  assert.equal(INTERVIEWER_TOOLS.length, 2);
+  const tool = INTERVIEWER_TOOLS.find((t) => t.name === SAFETY_TOOL_NAME);
+  assert.ok(tool, 'safety tool is registered');
+  assert.equal(tool.name, 'end_for_safety');
+  assert.equal(tool.type, 'function');
+  // No arguments to get wrong, and nothing to gate on
+  assert.equal(tool.parameters.type, 'object');
+  assert.deepEqual(tool.parameters.required, []);
+  assert.deepEqual(Object.keys(tool.parameters.properties), []);
+  // It must state plainly that this is not a conduct outcome
+  assert.ok(/immediate danger/i.test(tool.description));
+  assert.ok(/not a conduct action/i.test(tool.description));
+  assert.ok(/carries no warning/i.test(tool.description));
+  // The conduct stage enum must NOT have grown a safety value
+  const conduct = INTERVIEWER_TOOLS.find((t) => t.name === CONDUCT_TOOL_NAME);
+  assert.deepEqual(conduct.parameters.properties.stage.enum, ['warning', 'end']);
+});
+
+test('the imminent-danger rule now has a mechanism behind it', () => {
+  const out = interviewerInstructions(BASE);
+  // Previously this rule said "let the session close there" with no way to do it
+  assert.ok(out.includes('Then call the end_for_safety tool to close the session'));
+  // And it must steer away from the conduct tool, which would warn a candidate
+  // in crisis and refuse the end
+  assert.ok(out.includes('Never use conduct_action for this'));
+  assert.ok(out.includes('they have done nothing wrong and this is not a warning'));
 });
 
 // ---- end reason persistence ----
@@ -242,7 +273,8 @@ test('end reasons cover every path the client can report', () => {
     'time_up',
     'connection_lost',
     'ended_by_interviewer',
-    'ended_by_interviewer_unwarned'
+    'ended_by_interviewer_unwarned',
+    'ended_for_safety'
   ]);
 });
 
@@ -253,6 +285,8 @@ test('normalizeEndReason clamps to the allowlist and rejects junk', () => {
   // A conduct end with no prior warning is recorded distinctly, so the
   // deviation is countable instead of invisible.
   assert.equal(normalizeEndReason('ended_by_interviewer_unwarned'), 'ended_by_interviewer_unwarned');
+  // A safety close is not a conduct outcome and stays countable on its own
+  assert.equal(normalizeEndReason('ended_for_safety'), 'ended_for_safety');
   assert.equal(normalizeEndReason('DROP TABLE voice_sessions'), null);
   assert.equal(normalizeEndReason(''), null);
   assert.equal(normalizeEndReason(null), null);

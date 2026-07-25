@@ -12,9 +12,6 @@
   // left staring at a spinner if an event never arrives.
   var TRANSCRIPT_FLUSH_MS = 1500;
 
-  // Must match INTERVIEWER_TOOLS in app/functions/_lib/voice-interviewer.js.
-  // The stage values themselves are interpreted by js/voice-conduct.js.
-  var CONDUCT_TOOL_NAME = 'conduct_action';
   // Ceiling on waiting for the interviewer's closing line to finish before a
   // conduct end tears the session down. Generous enough for a spoken sentence,
   // hard enough that a dropped event cannot hold the session open.
@@ -39,7 +36,8 @@
     connected: false,
     audioPlaying: false,       // interviewer's audio is mid-playback
     conduct: null,             // escalation gate (voice-conduct.js); survives a reconnect
-    conductEnd: null           // pending end, waiting for the closing turn
+    conductEnd: null,          // pending end, waiting for the closing turn
+    endCause: null             // 'conduct' | 'safety' — which reason the pending end carries
   };
 
   function $(id) { return document.getElementById(id); }
@@ -171,48 +169,50 @@
     }
   }
 
-  // ---------- conduct ----------
+  // ---------- realtime sends ----------
 
-  // conduct_action is the only tool the session registers, so a function call
-  // without a name can only be that one. Realtime event naming differs across
-  // API versions, so read the dedicated event and the response.done output
-  // items both (same belt-and-braces approach as the transcript events).
-  function isConductCall(name) {
-    return !name || name === CONDUCT_TOOL_NAME;
-  }
-
-  function parseStage(rawArgs) {
+  // The only outbound traffic this client sends. Everything else is inbound.
+  function sendRealtime(payload) {
     try {
-      var parsed = JSON.parse(rawArgs || '{}');
-      return parsed && typeof parsed.stage === 'string' ? parsed.stage : '';
-    } catch (_) {
-      return '';
+      if (!state.dc || state.dc.readyState !== 'open') return false;
+      state.dc.send(JSON.stringify(payload));
+      return true;
+    } catch (err) {
+      console.warn('[VOICE] realtime send failed:', err && err.message);
+      return false;
     }
   }
 
-  // The conduct call in this event as { id, stage }, or null when there is
-  // none. The id lets the gate ignore the replay of a call it already decided;
-  // it falls back to the response id so the two events for one response still
-  // collapse to a single decision.
-  function conductCallFromEvent(evt) {
-    if (evt.type === 'response.function_call_arguments.done') {
-      if (!isConductCall(evt.name)) return null;
-      return {
-        id: evt.call_id || evt.item_id || evt.response_id || '',
-        stage: parseStage(evt.arguments)
-      };
+  // A tool call the model makes stays unresolved in the conversation until the
+  // client answers it with a function_call_output. Leaving it dangling can stall
+  // or derail the following turns — which matters most for a conduct WARNING,
+  // the one case where the interview is meant to carry on afterwards.
+  //
+  // Deliberately no response.create afterwards: the interviewer already spoke
+  // her line in the response that made this call, so triggering another
+  // response here would have her say a second one. The resolved output is
+  // picked up on the next natural turn instead.
+  function answerToolCall(callId, output) {
+    if (!callId) {
+      console.warn('[VOICE] tool call had no call_id; cannot answer it');
+      return false;
     }
-    var out = evt.response && evt.response.output;
-    if (!out || !out.length) return null;
-    for (var i = 0; i < out.length; i++) {
-      var item = out[i];
-      if (item && item.type === 'function_call' && isConductCall(item.name)) {
-        return {
-          id: item.call_id || item.id || (evt.response && evt.response.id) || '',
-          stage: parseStage(item.arguments)
-        };
+    return sendRealtime({
+      type: 'conversation.item.create',
+      item: {
+        type: 'function_call_output',
+        call_id: callId,
+        output: JSON.stringify(output)
       }
-    }
+    });
+  }
+
+  // ---------- conduct + safety ----------
+
+  // Reading the call is in js/voice-conduct.js so the two-tool disambiguation is
+  // unit-tested. Degraded fallback returns null, which does nothing.
+  function readToolCall(evt) {
+    if (typeof window.readVoiceToolCall === 'function') return window.readVoiceToolCall(evt);
     return null;
   }
 
@@ -230,25 +230,58 @@
     };
   }
 
+  function handleToolCall(call) {
+    if (!call) return;
+    if (call.tool === 'safety') {
+      handleSafetyCall(call);
+      return;
+    }
+    if (call.tool === 'conduct') handleConductCall(call);
+  }
+
+  // A candidate in danger has done nothing wrong, so this deliberately bypasses
+  // the conduct gate: no warning is recorded, nothing is refused, and the end
+  // reason is not a conduct outcome. It still goes through the closing-turn gate
+  // — the line she just spoke is the one pointing them at emergency help, and
+  // cutting that off would be the worst possible moment to do it.
+  function handleSafetyCall(call) {
+    console.warn('[VOICE] session closing for candidate safety');
+    track('voice_safety_end', {});
+    answerToolCall(call.callId, { ok: true, closing: true });
+    requestGuardedEnd('safety');
+  }
+
   // "One warning, then end" is enforced in state by the gate, not trusted to
   // the prompt (see js/voice-conduct.js).
   function handleConductCall(call) {
-    if (!call || !call.stage) return;
+    if (!call.stage) return;
     if (!state.conduct) state.conduct = newConductGate();
-    var decision = state.conduct.decide(call.stage, call.id);
+    var decision = state.conduct.decide(call.stage, call.dedupeId);
+    if (decision === 'ignore') return;
+
     if (decision === 'warn') {
       console.warn('[VOICE] conduct warning issued by the interviewer');
       track('voice_conduct_action', { stage: 'warning' });
+      // The interview continues from here, so this call in particular must not
+      // be left dangling.
+      answerToolCall(call.callId, { ok: true, warned: true, interview_continues: true });
       return;
     }
     if (decision === 'warn_instead') {
       console.warn('[VOICE] conduct end requested with no prior warning; refused and counted as the warning');
       track('voice_conduct_action', { stage: 'end_refused_unwarned' });
+      answerToolCall(call.callId, {
+        ok: false,
+        error: 'A warning must be given before the session can be ended. This has been recorded as that warning; continue the interview.',
+        warned: true,
+        interview_continues: true
+      });
       return;
     }
     if (decision === 'end') {
       track('voice_conduct_action', { stage: 'end' });
-      requestConductEnd();
+      answerToolCall(call.callId, { ok: true, closing: true });
+      requestGuardedEnd('conduct');
     }
   }
 
@@ -276,10 +309,16 @@
     };
   }
 
-  function requestConductEnd() {
+  // cause is 'conduct' or 'safety' — it decides the reason and the wording, not
+  // the timing, which is identical for both.
+  function requestGuardedEnd(cause) {
     if (state.ending || state.conductEnd) return;
+    state.endCause = cause;
     state.conductEnd = newClosingTurnGate();
-    setStatus('The interviewer is ending this session.', 'vi-error');
+    setStatus(
+      cause === 'safety' ? 'Ending this session.' : 'The interviewer is ending this session.',
+      'vi-error'
+    );
     state.conductEnd.start(state.audioPlaying);
   }
 
@@ -287,7 +326,12 @@
     if (!state.conductEnd) return;
     state.conductEnd = null;
     if (reason === 'timeout') {
-      console.warn('[VOICE] conduct end: closing turn never completed, ending anyway');
+      console.warn('[VOICE] guarded end: closing turn never completed, ending anyway');
+    }
+    if (state.endCause === 'safety') {
+      setStatus('This session has ended. Please reach out for help.', 'vi-error');
+      endInterview('ended_for_safety');
+      return;
     }
     setStatus('The interviewer ended this session.', 'vi-error');
     endInterview(state.conduct ? state.conduct.endReason() : 'ended_by_interviewer');
@@ -332,7 +376,7 @@
     }
 
     if (type === 'response.function_call_arguments.done') {
-      handleConductCall(conductCallFromEvent(evt));
+      handleToolCall(readToolCall(evt));
       return;
     }
 
@@ -345,7 +389,7 @@
         state.usage.input += Number(evt.response.usage.input_tokens || 0);
         state.usage.output += Number(evt.response.usage.output_tokens || 0);
       }
-      handleConductCall(conductCallFromEvent(evt));
+      handleToolCall(readToolCall(evt));
       setSpeaking(false);
       if (state.conductEnd) state.conductEnd.noteResponseDone();
       return;
@@ -516,6 +560,7 @@
       // reset the gate, or dropping the connection would clear a warning.
       state.conduct = newConductGate();
       state.conductEnd = null;
+      state.endCause = null;
 
       show('vi-live-view');
       setStatus('Connecting...', 'vi-connecting');

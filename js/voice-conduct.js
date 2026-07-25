@@ -27,6 +27,79 @@
 export var CONDUCT_WARNING_STAGE = 'warning';
 export var CONDUCT_END_STAGE = 'end';
 
+// Must match INTERVIEWER_TOOLS in app/functions/_lib/voice-interviewer.js.
+// A test asserts these stay in sync with the server-side names.
+export var CONDUCT_TOOL = 'conduct_action';
+export var SAFETY_TOOL = 'end_for_safety';
+
+function parseStage(rawArgs) {
+  if (rawArgs && typeof rawArgs === 'object') {
+    return typeof rawArgs.stage === 'string' ? rawArgs.stage : '';
+  }
+  try {
+    var parsed = JSON.parse(rawArgs || '{}');
+    return parsed && typeof parsed.stage === 'string' ? parsed.stage : '';
+  } catch (_) {
+    return '';
+  }
+}
+
+function classifyCall(name, rawArgs, callId, fallbackId) {
+  var stage = parseStage(rawArgs);
+  var tool = null;
+  if (name === CONDUCT_TOOL) {
+    tool = 'conduct';
+  } else if (name === SAFETY_TOOL) {
+    tool = 'safety';
+  } else if (!name) {
+    // Two tools are registered now, so an unnamed function call is genuinely
+    // ambiguous — the old "it can only be the one tool" shortcut is no longer
+    // sound. Infer only from an unmistakable argument shape, and otherwise
+    // refuse to guess: silently doing nothing is far better than ending a
+    // session, or warning a candidate, on a coin flip.
+    if (stage === CONDUCT_WARNING_STAGE || stage === CONDUCT_END_STAGE) tool = 'conduct';
+    else return null;
+  } else {
+    return null;   // a tool we do not own
+  }
+  return {
+    tool: tool,
+    stage: tool === 'conduct' ? stage : '',
+    // The TRUE call_id, needed to answer with a function_call_output. Empty
+    // when the event did not carry one.
+    callId: callId || '',
+    // Stable-enough key for replay suppression, which may fall back.
+    dedupeId: callId || fallbackId || ''
+  };
+}
+
+/**
+ * Interpret a realtime event that may carry one of our tool calls, from either
+ * the dedicated `response.function_call_arguments.done` event or a
+ * `function_call` item inside `response.done`. Returns
+ * { tool: 'conduct'|'safety', stage, callId, dedupeId } or null.
+ */
+export function readToolCall(evt) {
+  if (!evt) return null;
+  if (evt.type === 'response.function_call_arguments.done') {
+    return classifyCall(evt.name, evt.arguments, evt.call_id, evt.item_id || evt.response_id);
+  }
+  var out = evt.response && evt.response.output;
+  if (!out || !out.length) return null;
+  for (var i = 0; i < out.length; i++) {
+    var item = out[i];
+    if (!item || item.type !== 'function_call') continue;
+    var found = classifyCall(
+      item.name,
+      item.arguments,
+      item.call_id,
+      item.id || (evt.response && evt.response.id)
+    );
+    if (found) return found;
+  }
+  return null;
+}
+
 /**
  * The only realtime events allowed to mark "the candidate spoke again".
  *
@@ -251,4 +324,5 @@ export function createClosingTurnGate(opts) {
 if (typeof window !== 'undefined') {
   window.createConductGate = createConductGate;
   window.createClosingTurnGate = createClosingTurnGate;
+  window.readVoiceToolCall = readToolCall;
 }

@@ -17,8 +17,16 @@ import assert from 'node:assert/strict';
 import {
   createConductGate,
   createClosingTurnGate,
-  LIVE_CANDIDATE_SPEECH_EVENTS
+  readToolCall,
+  LIVE_CANDIDATE_SPEECH_EVENTS,
+  CONDUCT_TOOL,
+  SAFETY_TOOL
 } from '../../../../js/voice-conduct.js';
+import {
+  INTERVIEWER_TOOLS,
+  CONDUCT_TOOL_NAME,
+  SAFETY_TOOL_NAME
+} from '../voice-interviewer.js';
 
 // Live speech signal, as the client passes it in.
 const SPOKE = 'input_audio_buffer.speech_started';
@@ -386,6 +394,138 @@ test('closing turn: start is idempotent while already active', () => {
   gate.noteResponseDone();
   gate.noteAudioStopped();
   assert.deepEqual(calls, ['complete']);
+});
+
+// ------------------------------------------------------------- tool call reads
+//
+// Two tools are registered now, so the old "an unnamed function call can only be
+// the conduct tool" shortcut is unsound — guessing wrong either ends a session
+// or warns a candidate for nothing.
+
+test('client tool names match the server-registered tools', () => {
+  assert.equal(CONDUCT_TOOL, CONDUCT_TOOL_NAME);
+  assert.equal(SAFETY_TOOL, SAFETY_TOOL_NAME);
+  const names = INTERVIEWER_TOOLS.map((t) => t.name).sort();
+  assert.deepEqual(names, ['conduct_action', 'end_for_safety']);
+});
+
+test('a conduct call is read from its dedicated event, preserving the real call_id', () => {
+  const call = readToolCall({
+    type: 'response.function_call_arguments.done',
+    name: 'conduct_action',
+    call_id: 'call_real',
+    item_id: 'item_other',
+    arguments: JSON.stringify({ stage: 'warning' })
+  });
+  assert.equal(call.tool, 'conduct');
+  assert.equal(call.stage, 'warning');
+  // The true call_id is what a function_call_output must echo back
+  assert.equal(call.callId, 'call_real');
+  assert.equal(call.dedupeId, 'call_real');
+});
+
+test('a conduct call is read from a response.done output item', () => {
+  const call = readToolCall({
+    type: 'response.done',
+    response: {
+      id: 'resp_1',
+      output: [
+        { type: 'message' },
+        { type: 'function_call', name: 'conduct_action', call_id: 'call_9', arguments: '{"stage":"end"}' }
+      ]
+    }
+  });
+  assert.equal(call.tool, 'conduct');
+  assert.equal(call.stage, 'end');
+  assert.equal(call.callId, 'call_9');
+});
+
+test('callId is empty when the event carries none, and dedupeId falls back', () => {
+  const call = readToolCall({
+    type: 'response.function_call_arguments.done',
+    name: 'conduct_action',
+    item_id: 'item_5',
+    arguments: '{"stage":"warning"}'
+  });
+  assert.equal(call.callId, '', 'no call_id to answer with');
+  assert.equal(call.dedupeId, 'item_5', 'replay suppression still has a key');
+});
+
+test('a safety call is read and carries no conduct stage', () => {
+  const call = readToolCall({
+    type: 'response.function_call_arguments.done',
+    name: 'end_for_safety',
+    call_id: 'call_safe',
+    arguments: '{}'
+  });
+  assert.equal(call.tool, 'safety');
+  assert.equal(call.stage, '');
+  assert.equal(call.callId, 'call_safe');
+});
+
+test('an unnamed call with a valid conduct stage is still read as conduct', () => {
+  const call = readToolCall({
+    type: 'response.function_call_arguments.done',
+    call_id: 'call_x',
+    arguments: '{"stage":"warning"}'
+  });
+  assert.equal(call.tool, 'conduct');
+  assert.equal(call.stage, 'warning');
+});
+
+test('an unnamed call with no recognizable stage is refused, never guessed', () => {
+  for (const args of ['{}', '', null, '{"stage":"safety"}', 'not json', '{"foo":1}']) {
+    const call = readToolCall({
+      type: 'response.function_call_arguments.done',
+      call_id: 'call_x',
+      arguments: args
+    });
+    assert.equal(call, null, `args ${JSON.stringify(args)} must not be guessed at`);
+  }
+});
+
+test('a tool we do not own is ignored', () => {
+  assert.equal(readToolCall({
+    type: 'response.function_call_arguments.done',
+    name: 'some_other_tool',
+    call_id: 'c1',
+    arguments: '{"stage":"end"}'
+  }), null);
+});
+
+test('events with no tool call at all read as null', () => {
+  assert.equal(readToolCall(null), null);
+  assert.equal(readToolCall({ type: 'response.done', response: { output: [] } }), null);
+  assert.equal(readToolCall({ type: 'response.done', response: {} }), null);
+  assert.equal(readToolCall({ type: 'response.done' }), null);
+  assert.equal(readToolCall({ type: 'output_audio_buffer.stopped' }), null);
+  assert.equal(readToolCall({
+    type: 'response.done',
+    response: { output: [{ type: 'message', content: [] }] }
+  }), null);
+});
+
+test('already-parsed argument objects are accepted too', () => {
+  const call = readToolCall({
+    type: 'response.function_call_arguments.done',
+    name: 'conduct_action',
+    call_id: 'c1',
+    arguments: { stage: 'end' }
+  });
+  assert.equal(call.stage, 'end');
+});
+
+// A safety close must never be routed through the conduct gate: the candidate
+// has done nothing wrong, and the gate would both refuse the end (leaving the
+// session live) and record a conduct warning against them.
+test('the conduct gate would mishandle a safety end, which is why it is bypassed', () => {
+  const g = createConductGate();
+  assert.equal(g.decide('end', 'call_safety'), 'warn_instead');
+  assert.equal(g.wasWarned(), true, 'this is exactly the mislabeling to avoid');
+  // The safety path does not call decide() at all, so a real safety end leaves
+  // the gate untouched:
+  const clean = createConductGate();
+  assert.equal(clean.wasWarned(), false);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
