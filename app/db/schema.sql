@@ -239,6 +239,7 @@ CREATE TABLE IF NOT EXISTS voice_sessions (
   entitlement_mode TEXT,                        -- free | pack | subscription
   started_at TEXT DEFAULT (datetime('now')),
   ended_at TEXT,
+  end_reason TEXT,                              -- see VOICE_END_REASONS in _lib/voice-interviewer.js
   duration_seconds INTEGER,
   transcript_json TEXT,
   scorecard_json TEXT,

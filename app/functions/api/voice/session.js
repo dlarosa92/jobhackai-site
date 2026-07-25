@@ -46,8 +46,9 @@ async function mintClientSecret(env, { model, instructions }) {
         type: 'realtime',
         model,
         instructions,
-        // Lets the interviewer end a session herself after a conduct warning
-        // goes unheeded (see INTERVIEWER_TOOLS and the conduct rules).
+        // Lets the interviewer report a conduct warning and, only after one,
+        // end the session. The client gates the escalation in state rather than
+        // trusting the prompt (see INTERVIEWER_TOOLS and js/voice-conduct.js).
         tools: INTERVIEWER_TOOLS,
         audio: {
           input: {
