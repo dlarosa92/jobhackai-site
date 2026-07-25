@@ -176,6 +176,22 @@ test('conduct: the trigger is language aimed at the interviewer, not a quoted st
   assert.ok(out.indexOf('QUOTING') > out.indexOf('directs abusive'));
 });
 
+test('conduct: a second warning is forbidden in the prompt (dev blocker 1)', () => {
+  const out = interviewerInstructions(BASE);
+  assert.ok(out.includes('You get exactly one warning per interview and once it is given it is spent: never warn a second time.'));
+  assert.ok(out.includes('If you catch yourself about to address their language again, that IS the end of the interview'));
+  // The tool description carries the same rule
+  const conduct = INTERVIEWER_TOOLS.find((t) => t.name === CONDUCT_TOOL_NAME);
+  assert.ok(/never issue a second warning/i.test(conduct.description));
+});
+
+test('safety: the tool call is mandated in the same turn (dev blocker 2)', () => {
+  const out = interviewerInstructions(BASE);
+  assert.ok(out.includes('in that same turn, call the end_for_safety tool'));
+  assert.ok(out.includes('saying the words without calling the tool leaves them stuck inside a mock interview'));
+  assert.ok(out.includes('Never ask another interview question after giving crisis guidance'));
+});
+
 test('conduct: ending requires the warning to have happened first', () => {
   const out = interviewerInstructions(BASE);
   assert.ok(out.includes('call conduct_action with stage "end"'));
@@ -258,7 +274,7 @@ test('end_for_safety is a SEPARATE tool, not a third conduct stage', () => {
 test('the imminent-danger rule now has a mechanism behind it', () => {
   const out = interviewerInstructions(BASE);
   // Previously this rule said "let the session close there" with no way to do it
-  assert.ok(out.includes('Then call the end_for_safety tool to close the session'));
+  assert.ok(out.includes('in that same turn, call the end_for_safety tool'));
   // And it must steer away from the conduct tool, which would warn a candidate
   // in crisis and refuse the end
   assert.ok(out.includes('Never use conduct_action for this'));

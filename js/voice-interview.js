@@ -7,6 +7,12 @@
 
   var REALTIME_CALLS_URL = 'https://api.openai.com/v1/realtime/calls';
 
+  // Echo cancellation is the first defense against the interviewer's own voice
+  // leaking from the speakers into the mic and coming back transcribed as a
+  // candidate turn. Browsers usually default these on, but not universally,
+  // and the observed dev transcript started with exactly that artifact.
+  var MIC_CONSTRAINTS = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+
   // How long ending the interview waits for transcripts already in flight.
   // Long enough for a trailing whisper result, short enough that nobody is
   // left staring at a spinner if an event never arrives.
@@ -216,24 +222,90 @@
 
   // ---------- conduct + safety ----------
 
+  // If js/voice-conduct.js failed to execute, the old fallbacks silently
+  // no-opped EVERYTHING: warnings never ended sessions and safety calls were
+  // dropped outright — a module-load failure reproduced both live blockers with
+  // zero console evidence. The fallbacks below are minimal but functional, and
+  // the failure is loud so a dev session can actually diagnose it.
+  var conductModuleMissingReported = false;
+  function reportConductModuleMissing() {
+    if (conductModuleMissingReported) return;
+    conductModuleMissingReported = true;
+    console.error('[VOICE] js/voice-conduct.js did not load; using built-in fallbacks. Conduct/safety behavior is degraded — report this.');
+    track('voice_module_missing', { module: 'voice-conduct' });
+  }
+
   // Reading the call is in js/voice-conduct.js so the two-tool disambiguation is
-  // unit-tested. Degraded fallback returns null, which does nothing.
+  // unit-tested. The fallback handles NAMED calls only — no guessing.
   function readToolCall(evt) {
     if (typeof window.readVoiceToolCall === 'function') return window.readVoiceToolCall(evt);
+    reportConductModuleMissing();
+    if (!evt) return null;
+    function fromParts(name, args, callId, responseId) {
+      if (name !== 'conduct_action' && name !== 'end_for_safety') return null;
+      var stage = '';
+      try {
+        var parsed = typeof args === 'object' && args ? args : JSON.parse(args || '{}');
+        if (parsed && typeof parsed.stage === 'string') stage = parsed.stage;
+      } catch (_) {}
+      return {
+        tool: name === 'end_for_safety' ? 'safety' : 'conduct',
+        stage: name === 'conduct_action' ? stage : '',
+        callId: callId || '',
+        dedupeId: callId || responseId || '',
+        responseId: responseId || ''
+      };
+    }
+    if (evt.type === 'response.function_call_arguments.done') {
+      return fromParts(evt.name, evt.arguments, evt.call_id, evt.response_id);
+    }
+    var out = evt.response && evt.response.output;
+    if (!out || !out.length) return null;
+    for (var i = 0; i < out.length; i++) {
+      var item = out[i];
+      if (!item || item.type !== 'function_call') continue;
+      var found = fromParts(item.name, item.arguments, item.call_id, evt.response && evt.response.id);
+      if (found) return found;
+    }
     return null;
   }
 
-  // js/voice-conduct.js is an ES module; if it somehow has not executed, fail
-  // toward keeping the interview open rather than ending it on an unverified
-  // signal — a wrongly closed session costs the candidate their credit.
+  // Fallback gate: same policy as js/voice-conduct.js (one warning, then end;
+  // escalation needs new live candidate speech; replays are inert), kept in
+  // sync by hand. Better a duplicated 30 lines than a session that cannot end.
   function newConductGate() {
     if (typeof window.createConductGate === 'function') return window.createConductGate();
+    reportConductModuleMissing();
+    var warned = false, deviated = false, spoke = false, ended = false;
+    var seen = Object.create(null);
     return {
-      decide: function () { return 'ignore'; },
-      noteCandidateSpoke: function (_eventType) {},
-      endReason: function () { return 'ended_by_interviewer'; },
-      wasWarned: function () { return false; },
-      reset: function () {}
+      decide: function (stage, callId) {
+        if (ended) return 'ignore';
+        if (callId) {
+          if (seen[callId]) return 'ignore';
+          seen[callId] = true;
+        }
+        if (stage === 'end' || stage === 'warning') {
+          if (!warned) {
+            warned = true;
+            spoke = false;
+            if (stage === 'end') { deviated = true; return 'warn_instead'; }
+            return 'warn';
+          }
+          if (!spoke) return 'ignore';
+          ended = true;
+          return 'end';
+        }
+        return 'ignore';
+      },
+      noteCandidateSpoke: function (eventType) {
+        if (eventType !== 'input_audio_buffer.speech_started' &&
+            eventType !== 'input_audio_buffer.committed') return;
+        if (warned) spoke = true;
+      },
+      endReason: function () { return deviated ? 'ended_by_interviewer_unwarned' : 'ended_by_interviewer'; },
+      wasWarned: function () { return warned; },
+      reset: function () { warned = false; deviated = false; spoke = false; ended = false; seen = Object.create(null); }
     };
   }
 
@@ -253,9 +325,24 @@
   // cutting that off would be the worst possible moment to do it.
   function handleSafetyCall(call) {
     console.warn('[VOICE] session closing for candidate safety');
-    track('voice_safety_end', {});
+    track('voice_safety_end', { via: 'tool' });
     answerToolCall(call.callId, { ok: true, closing: true });
     requestGuardedEnd('safety', call.responseId);
+  }
+
+  // The safety close must not depend on the model remembering the tool: live,
+  // the interviewer spoke the 988 referral, never called end_for_safety, and
+  // then went back to interview questions — the exact outcome the safety rule
+  // exists to prevent. The referral line itself is the decision; if it was
+  // spoken, the session closes whether or not the tool call arrives. Harmless
+  // alongside a real tool call: requestGuardedEnd is first-wins.
+  function maybeSafetyBackstop(transcript, responseId) {
+    if (state.ending || state.conductEnd) return;
+    if (typeof window.isSafetyReferral !== 'function') return;
+    if (!window.isSafetyReferral(String(transcript || ''))) return;
+    console.warn('[VOICE] crisis referral spoken without end_for_safety; closing the session anyway');
+    track('voice_safety_end', { via: 'transcript_backstop' });
+    requestGuardedEnd('safety', responseId || '');
   }
 
   // "One warning, then end" is enforced in state by the gate, not trusted to
@@ -404,6 +491,7 @@
     // GA + beta event names for assistant transcript
     if (type === 'response.output_audio_transcript.done' || type === 'response.audio_transcript.done') {
       recordTurn('assistant', evt.transcript, evt.item_id);
+      maybeSafetyBackstop(evt.transcript, evt.response_id);
       return;
     }
 
@@ -458,7 +546,7 @@
   // ---------- connection ----------
 
   async function connectRealtime(clientSecret, model) {
-    state.micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    state.micStream = await navigator.mediaDevices.getUserMedia({ audio: MIC_CONSTRAINTS });
 
     var pc = new RTCPeerConnection();
     state.pc = pc;
@@ -566,7 +654,7 @@
 
     try {
       // Mic permission before consuming a session: fail cheap
-      var probe = await navigator.mediaDevices.getUserMedia({ audio: true });
+      var probe = await navigator.mediaDevices.getUserMedia({ audio: MIC_CONSTRAINTS });
       probe.getTracks().forEach(function (t) { t.stop(); });
     } catch (micErr) {
       alert('JobHackAI needs microphone access for the voice interview. Allow the microphone and try again.');

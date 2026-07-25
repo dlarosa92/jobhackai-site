@@ -90,9 +90,12 @@ test('identical consecutive same-speaker lines are deduped (event replays)', () 
   const o = createTranscriptOrder();
   o.append('assistant', 'Tell me about a deadline.');
   o.append('assistant', 'Tell me about a deadline.');
-  o.append('user', 'Tell me about a deadline.');   // different speaker: kept
   o.append('assistant', 'Tell me about a deadline.');
-  assert.equal(o.list().length, 3);
+  assert.equal(o.list().length, 1);
+  // NOTE: a USER turn verbatim-identical to an adjacent assistant turn is no
+  // longer kept — that exact pattern is microphone echo (see the echo tests
+  // below), which is why this test no longer uses one as its "different
+  // speaker" case.
 });
 
 test('re-filling the same item id updates in place, no duplicate slot', () => {
@@ -128,6 +131,74 @@ test('list() returns a fresh array each call (no shared mutation)', () => {
   const a = o.list();
   a.push({ speaker: 'user', text: 'injected' });
   assert.equal(o.list().length, 1);
+});
+
+// ---------- microphone echo (dev blocker 3) ----------
+//
+// A real dev session's stored transcript opened with the interviewer's own
+// greeting attributed to the CANDIDATE: her voice played through the speakers,
+// the open mic picked it up, and whisper transcribed it as a user turn. A user
+// turn that is a near-verbatim copy of an adjacent interviewer turn is that
+// artifact, not an answer.
+
+test('BLOCKER 3: the greeting echoed back as a user turn is dropped', () => {
+  const o = createTranscriptOrder();
+  o.noteItem('a1');
+  o.noteItem('u1');
+  o.setText('a1', 'assistant', 'Welcome to your mock interview for the barista role. Tell me about yourself.');
+  o.setText('u1', 'user', 'Welcome to your mock interview for the barista role. Tell me about yourself.');
+  assert.deepEqual(o.list(), [
+    { speaker: 'assistant', text: 'Welcome to your mock interview for the barista role. Tell me about yourself.' }
+  ]);
+});
+
+test('BLOCKER 3: a partial echo (subset of the assistant line) is dropped too', () => {
+  const o = createTranscriptOrder();
+  o.noteItem('a1');
+  o.noteItem('u1');
+  o.setText('a1', 'assistant', 'Welcome to your mock interview for the barista role. Tell me about yourself.');
+  // Whisper often catches only a fragment of the leaked audio
+  o.setText('u1', 'user', 'Welcome to your mock interview for the barista role.');
+  assert.equal(o.list().length, 1);
+});
+
+test('BLOCKER 3: echo works in either slot order (user item created first)', () => {
+  const o = createTranscriptOrder();
+  o.noteItem('u1');
+  o.noteItem('a1');
+  o.setText('u1', 'user', 'Tell me about a time you handled a difficult customer.');
+  o.setText('a1', 'assistant', 'Tell me about a time you handled a difficult customer.');
+  assert.deepEqual(o.list().map((t) => t.speaker), ['assistant']);
+});
+
+test('BLOCKER 3: a real answer that quotes part of the question is KEPT', () => {
+  const o = createTranscriptOrder();
+  o.noteItem('a1');
+  o.noteItem('u1');
+  o.setText('a1', 'assistant', 'Tell me about a conflict with a manager.');
+  o.setText('u1', 'user', 'A conflict with a manager, sure. It was Christmas Eve and my manager wanted to close early.');
+  assert.equal(o.list().length, 2, 'partial overlap is a quote, not echo');
+});
+
+test('BLOCKER 3: short answers are never treated as echo', () => {
+  const o = createTranscriptOrder();
+  o.noteItem('a1');
+  o.noteItem('u1');
+  o.setText('a1', 'assistant', 'Yes. Are you ready to begin the interview now?');
+  o.setText('u1', 'user', 'Yes.');
+  assert.equal(o.list().length, 2, 'below the token floor, always kept');
+});
+
+test('BLOCKER 3: a distant identical line is not treated as echo', () => {
+  const o = createTranscriptOrder();
+  o.noteItem('a1'); o.noteItem('u1'); o.noteItem('a2'); o.noteItem('u2'); o.noteItem('u3');
+  o.setText('a1', 'assistant', 'Describe the hardest deadline you have ever hit for me.');
+  o.setText('u1', 'user', 'The launch, definitely. We had six weeks and lost two engineers.');
+  o.setText('a2', 'assistant', 'What did you cut to make it?');
+  o.setText('u2', 'user', 'Scope. We dropped the reporting dashboard.');
+  // Outside the ±2 window relative to a1: kept even though near-verbatim
+  o.setText('u3', 'user', 'Describe the hardest deadline you have ever hit for me.');
+  assert.equal(o.list().length, 5);
 });
 
 // ---------- previous_item_id ordering ----------

@@ -20,6 +20,45 @@
 
 var DEFAULT_FLUSH_MS = 1500;
 
+// Microphone echo: the interviewer's voice plays through the speakers, the
+// open mic picks it up, and whisper transcribes it as a CANDIDATE turn — a
+// real dev session's stored transcript opened with the interviewer's greeting
+// attributed to the user. A user turn that is a near-verbatim copy of an
+// adjacent interviewer turn is that artifact, not an answer. Thresholds are
+// deliberately strict so genuine answers survive: a candidate quoting part of
+// the question back ("a conflict with a manager — sure, so...") shares well
+// under 85% of their tokens with the question, and short affirmations are
+// never touched.
+var ECHO_MIN_TOKENS = 5;
+var ECHO_CONTAINMENT = 0.85;
+var ECHO_WINDOW = 2;
+
+function echoTokens(text) {
+  return String(text).toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
+}
+
+// Is filled[at] (a user turn) a near-verbatim copy of an assistant turn within
+// ECHO_WINDOW positions on either side? Both directions matter: the echo's
+// conversation item can be created before or after the line it echoes.
+function isEchoOfNeighbor(filled, at) {
+  var mine = echoTokens(filled[at].text);
+  if (mine.length < ECHO_MIN_TOKENS) return false;
+  for (var d = -ECHO_WINDOW; d <= ECHO_WINDOW; d++) {
+    if (d === 0) continue;
+    var n = filled[at + d];
+    if (!n || n.speaker !== 'assistant') continue;
+    var theirs = Object.create(null);
+    var tks = echoTokens(n.text);
+    for (var i = 0; i < tks.length; i++) theirs[tks[i]] = true;
+    var hit = 0;
+    for (var k = 0; k < mine.length; k++) {
+      if (theirs[mine[k]]) hit++;
+    }
+    if (hit / mine.length >= ECHO_CONTAINMENT) return true;
+  }
+  return false;
+}
+
 export function createTranscriptOrder() {
   var slots = [];
   var byId = Object.create(null);
@@ -107,16 +146,22 @@ export function createTranscriptOrder() {
     settleWaiters();
   }
 
-  // Ordered, placeholder-free, with identical consecutive same-speaker
-  // lines collapsed (dedupes realtime event replays).
+  // Ordered, placeholder-free, with identical consecutive same-speaker lines
+  // collapsed (dedupes realtime event replays) and microphone echo removed.
   function list() {
-    var out = [];
+    var filled = [];
     for (var i = 0; i < slots.length; i++) {
       var s = slots[i];
       if (!s.speaker || !s.text) continue;
+      filled.push({ speaker: s.speaker, text: s.text });
+    }
+    var out = [];
+    for (var j = 0; j < filled.length; j++) {
+      var t = filled[j];
+      if (t.speaker === 'user' && isEchoOfNeighbor(filled, j)) continue;
       var prev = out[out.length - 1];
-      if (prev && prev.speaker === s.speaker && prev.text === s.text) continue;
-      out.push({ speaker: s.speaker, text: s.text });
+      if (prev && prev.speaker === t.speaker && prev.text === t.text) continue;
+      out.push({ speaker: t.speaker, text: t.text });
     }
     return out;
   }

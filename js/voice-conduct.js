@@ -105,6 +105,37 @@ export function readToolCall(evt) {
 }
 
 /**
+ * Does this INTERVIEWER utterance contain a crisis referral — the "call or
+ * text 988" line the safety rule mandates?
+ *
+ * This exists because the safety close cannot depend on the model calling
+ * end_for_safety: live, it spoke the crisis guidance, skipped the tool, and
+ * resumed interview questions. The referral line itself is the most reliable
+ * signal that the safety rule fired, so the client treats speaking it as the
+ * decision to close and the tool call as a formality.
+ *
+ * Deliberately narrow to keep false positives out of legitimate interviews:
+ *   - keyed on "988" with a referral verb in the same clause, because the
+ *     prompt mandates that phrasing; bare "emergency services" is NOT matched
+ *     (an interviewer echoing a candidate's story — "so you called emergency
+ *     services?" — must not end the session)
+ *   - questions never match, so "did you ever call 988 in that role?" in an
+ *     interview for a crisis-line job stays an interview question
+ * Feed it interviewer turns only; candidate speech mentioning 988 is content.
+ */
+export function isSafetyReferral(text) {
+  if (typeof text !== 'string' || text.length < 8) return false;
+  // Sentence-split without lookbehind (older Safari parses this file too)
+  var sentences = text.replace(/([.!?])/g, '$1\n').split('\n');
+  for (var i = 0; i < sentences.length; i++) {
+    var s = sentences[i].toLowerCase();
+    if (!s || s.indexOf('?') >= 0) continue;
+    if (/\b(?:call|text|dial|contact|reach)\b[^]{0,30}\b988\b/.test(s)) return true;
+  }
+  return false;
+}
+
+/**
  * The only realtime events allowed to mark "the candidate spoke again".
  *
  * Both fire live, while the candidate is at the microphone, and both precede the
@@ -165,7 +196,19 @@ export function createConductGate() {
       return 'end';
     }
     if (stage === CONDUCT_WARNING_STAGE) {
-      if (warned) return 'ignore';
+      if (warned) {
+        // There is no second warning in this policy: one warning, then end.
+        // Live, the model kept choosing stage "warning" for every new incident
+        // and the session never ended, because only an explicit stage "end"
+        // could end it — the gate could refuse an end but never initiate one.
+        // A repeat warning WITH new candidate speech is the model reporting a
+        // second incident; escalate exactly as if it had been labeled "end".
+        // Without new speech it is a replay or duplicate and stays inert, so
+        // the replay protections are unchanged.
+        if (!spokeSinceWarning) return 'ignore';
+        ended = true;
+        return 'end';
+      }
       warned = true;
       spokeSinceWarning = false;
       return 'warn';
@@ -329,4 +372,5 @@ if (typeof window !== 'undefined') {
   window.createConductGate = createConductGate;
   window.createClosingTurnGate = createClosingTurnGate;
   window.readVoiceToolCall = readToolCall;
+  window.isSafetyReferral = isSafetyReferral;
 }
