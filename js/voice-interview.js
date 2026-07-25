@@ -505,7 +505,12 @@
         timerEl.textContent = (remaining < 0 ? '-' : '') + m + ':' + (s < 10 ? '0' : '') + s;
       }
       if (remaining <= 0) {
-        endInterview('time_up');
+        // A conduct or safety close already in flight owns the ending, and it
+        // carries the reason that matters — letting the clock win here would
+        // record a conduct termination, or a safety close, as `time_up` and
+        // lose it from the audit trail. The guarded end has its own bounded
+        // backstop, so standing down cannot leave the session open.
+        if (!state.conductEnd) endInterview('time_up');
       }
     }, 1000);
   }
