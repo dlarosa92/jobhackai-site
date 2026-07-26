@@ -356,6 +356,81 @@ test('a reconnect after a demotion re-greets like any audio-check drop', () => {
   assert.equal(lc.isGreetingDone(), false, 'the fresh session greets again');
 });
 
+// ---------------- content-based greeting arming (Bugbot: greeting done on any response)
+
+test('a racing auto-response that is not the hearing question arms nothing', () => {
+  const lc = createInterviewLifecycle();
+  lc.to(LIFECYCLE.AUDIO_CHECK);
+  // The model replied to pre-start chatter with something else entirely.
+  lc.noteAudioCheckTranscript("I'm sorry, I didn't quite catch that.");
+  lc.noteGreetingDone();
+  assert.equal(lc.isGreetingDone(), false, 'a non-check response must not arm the acknowledgement');
+  assert.equal(lc.noteUserCommitted('item_x'), 'excluded', 'the next commit is still pre-interview chatter');
+  // The model then actually asks the hearing question: NOW it arms.
+  lc.noteAudioCheckTranscript('Hi. Before we begin, can you hear me clearly?');
+  assert.equal(lc.isGreetingDone(), true);
+  assert.equal(lc.noteUserCommitted('item_ack'), 'begin_interview');
+});
+
+test('a greeting cut off before the question does not arm; the re-ask does', () => {
+  const lc = createInterviewLifecycle();
+  lc.to(LIFECYCLE.AUDIO_CHECK);
+  lc.noteAudioCheckTranscript('Hi, before we begin');   // barge-in truncated the line
+  lc.noteGreetingDone();
+  assert.equal(lc.isGreetingDone(), false);
+  lc.noteAudioCheckTranscript('Let me try again — can you hear me clearly?');
+  assert.equal(lc.isGreetingDone(), true);
+});
+
+test('liveness fallback: a response with no transcript seen still arms the check', () => {
+  // Never arming on lost transcript events would strand the session in
+  // AUDIO_CHECK and exclude the entire interview — the worse failure.
+  const lc = createInterviewLifecycle();
+  lc.to(LIFECYCLE.AUDIO_CHECK);
+  lc.noteGreetingDone();
+  assert.equal(lc.isGreetingDone(), true);
+});
+
+test('the spoken flag is per response: a later transcript-less response uses the fallback', () => {
+  const lc = createInterviewLifecycle();
+  lc.to(LIFECYCLE.AUDIO_CHECK);
+  lc.noteAudioCheckTranscript('One moment.');
+  lc.noteGreetingDone();                    // spoke, not a check: no arm, flag resets
+  assert.equal(lc.isGreetingDone(), false);
+  lc.noteGreetingDone();                    // next response: nothing spoken at all
+  assert.equal(lc.isGreetingDone(), true, 'liveness fallback applies per response');
+});
+
+test('audio-check transcripts outside AUDIO_CHECK arm nothing', () => {
+  const lc = lifecycleAt(LIFECYCLE.ACTIVE_INTERVIEW);
+  lc.noteAssistantTurn('item_open', 'Welcome. First question: what drew you here?');   // settle
+  lc.noteAudioCheckTranscript('Can you hear me clearly?');   // mid-interview line
+  assert.equal(lc.phase(), LIFECYCLE.ACTIVE_INTERVIEW);
+});
+
+// ------- the settling window across a reconnect (Bugbot: window survives reconnect)
+
+test('a reconnect does not close an open settling window, and the window settles on the new connection', () => {
+  const lc = lifecycleAt(LIFECYCLE.ACTIVE_INTERVIEW);   // provisional ack, window open
+  lc.noteReconnect();
+  assert.equal(lc.phase(), LIFECYCLE.ACTIVE_INTERVIEW);
+  assert.equal(lc.isAwaitingOpening(), true, 'the unsettled window survives the drop');
+  // The resumed session re-runs the check (interviewStarted was false):
+  // the window demotes on it and client converges with the server.
+  assert.equal(lc.noteAssistantTurn('item_recheck', 'Hi. Before we begin, can you hear me clearly?'), 'demoted');
+  assert.equal(lc.phase(), LIFECYCLE.AUDIO_CHECK);
+  assert.equal(lc.noteUserCommitted('item_ack2'), 'begin_interview');
+});
+
+test('a settled interview reconnects with no window, so no resume line can ever demote it', () => {
+  const lc = lifecycleAt(LIFECYCLE.ACTIVE_INTERVIEW);
+  lc.noteAssistantTurn('item_open', 'Welcome. Tell me about your current role.');
+  lc.noteReconnect();
+  assert.equal(lc.isAwaitingOpening(), false);
+  assert.equal(lc.noteAssistantTurn('item_resume', 'Welcome back — can you hear me okay?'), 'none');
+  assert.equal(lc.phase(), LIFECYCLE.ACTIVE_INTERVIEW, 'a hearing-shaped resume line is conversation, not lifecycle');
+});
+
 // ------------------------------------ the hearing-check detector
 
 test('hearing-check turns are detected across the register', () => {

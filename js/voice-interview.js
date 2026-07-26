@@ -225,6 +225,7 @@
     var excluded = Object.create(null);
     var included = Object.create(null);
     var greetingDone = false;
+    var spokeThisResponse = false;
     var awaitingOpening = false;
     var pendingSinceAck = [];
     var lastDemotedItems = [];
@@ -245,7 +246,16 @@
         excluded[id] = true;
         return false;
       },
-      noteGreetingDone: function () { if (phase === PHASES.AUDIO_CHECK) greetingDone = true; },
+      noteAudioCheckTranscript: function (transcript) {
+        if (phase !== PHASES.AUDIO_CHECK) return;
+        spokeThisResponse = true;
+        if (fallbackIsHearingCheckTurn(typeof transcript === 'string' ? transcript : '')) greetingDone = true;
+      },
+      noteGreetingDone: function () {
+        if (phase !== PHASES.AUDIO_CHECK) return;
+        if (!spokeThisResponse) greetingDone = true;
+        spokeThisResponse = false;
+      },
       isGreetingDone: function () { return greetingDone; },
       noteUserCommitted: function (itemId) {
         if (phase === PHASES.ACTIVE_INTERVIEW) {
@@ -293,7 +303,10 @@
         }
         return phase === PHASES.ACTIVE_INTERVIEW;
       },
-      noteReconnect: function () { if (phase === PHASES.AUDIO_CHECK) greetingDone = false; }
+      noteReconnect: function () {
+        if (phase === PHASES.AUDIO_CHECK) greetingDone = false;
+        spokeThisResponse = false;
+      }
     };
   }
 
@@ -900,6 +913,14 @@
         }
       }
       recordTurn('assistant', evt.transcript, evt.item_id);
+      // During the audio check (initial or re-entered via demotion) the
+      // greeting arms by CONTENT: only the spoken hearing question makes the
+      // next commit readable as its answer. A racing VAD auto-response that
+      // said something else arms nothing.
+      if (lifecycle().is(PHASES.AUDIO_CHECK) &&
+          typeof lifecycle().noteAudioCheckTranscript === 'function') {
+        lifecycle().noteAudioCheckTranscript(evt.transcript);
+      }
       // A repeated hearing check is not interview material: no backstops, no
       // closing detection on it.
       if (opening === 'demoted') return;
@@ -997,14 +1018,24 @@
       // the app owns only the state.
       if (state.ending || state.conductEnd) return;
       var lc = lifecycle();
+      var windowOpen = typeof lc.isAwaitingOpening === 'function' && lc.isAwaitingOpening();
       if (lc.is(PHASES.CONNECTING)) {
         lc.to(PHASES.AUDIO_CHECK);
       } else if (lc.is(PHASES.AUDIO_CHECK)) {
         lc.noteReconnect();   // a drop during the check: the fresh session re-greets
+      } else if (lc.is(PHASES.ACTIVE_INTERVIEW) && windowOpen) {
+        // A drop with the settling window open: the resume was minted
+        // without interviewStarted, so the model's first turn is either the
+        // re-check (the window demotes on it) or, with a transcript tail,
+        // the resumed conversation (the window confirms). Either way the
+        // interviewer speaks first.
+        lc.noteReconnect();
       } else {
         return;               // reconnect mid-interview: the conversation resumes as before
       }
-      setStatus('Connected. Quick audio check...', 'vi-connecting');
+      if (!lc.is(PHASES.ACTIVE_INTERVIEW)) {
+        setStatus('Connected. Quick audio check...', 'vi-connecting');
+      }
       sendRealtime({ type: 'response.create' });
     };
 
@@ -1202,12 +1233,21 @@
       // fact, or the server would rebuild audio-check instructions and the
       // interviewer would replay the greeting into a live, committing
       // interview.
+      //
+      // "Started" means SETTLED: while the provisional window is still open
+      // the audio check has not concluded (the opening never arrived, and
+      // the acknowledgement may yet turn out to be "I can't hear you"), so
+      // the resumed session re-runs the check. The settling window survives
+      // the reconnect and demotes on that re-check, so client and server
+      // converge — and early-resume instructions can only ever be minted
+      // with the window closed, where no demotion is possible.
+      var windowOpen = typeof lifecycle().isAwaitingOpening === 'function' && lifecycle().isAwaitingOpening();
       var res = await api('/api/voice/session', {
         method: 'POST',
         body: JSON.stringify({
           resumeSessionId: state.sessionId,
           transcript: getTranscript().slice(-20),
-          interviewStarted: lifecycle().is(PHASES.ACTIVE_INTERVIEW)
+          interviewStarted: lifecycle().is(PHASES.ACTIVE_INTERVIEW) && !windowOpen
         })
       });
       if (!res.ok) throw new Error((res.data && res.data.error) || 'resume_failed');

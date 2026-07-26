@@ -175,13 +175,39 @@ export function createInterviewLifecycle() {
     return false;
   }
 
+  // Whether the response currently completing produced any spoken transcript
+  // during the audio check. Arms the liveness fallback in noteGreetingDone.
+  var spokeThisResponse = false;
+
   /**
-   * The interviewer's audio-check greeting finished generating. Only the
-   * first response of the audio check counts; the flag arms the
-   * acknowledgement transition below.
+   * An interviewer transcript arrived while the session is in AUDIO_CHECK.
+   * The greeting is armed by CONTENT: only a turn that actually asks the
+   * hearing question makes the next candidate commit readable as its answer.
+   * A racing VAD auto-response that said something else, or a greeting cut
+   * off before the question, arms nothing — the model re-asks and the check
+   * arms then.
+   */
+  function noteAudioCheckTranscript(transcript) {
+    if (phase !== LIFECYCLE.AUDIO_CHECK) return;
+    spokeThisResponse = true;
+    if (isHearingCheckTurn(typeof transcript === 'string' ? transcript : '')) {
+      greetingDone = true;
+    }
+  }
+
+  /**
+   * A response finished while the session is in AUDIO_CHECK. Content arming
+   * lives in noteAudioCheckTranscript; this is the LIVENESS fallback only —
+   * a response that completed with no transcript seen at all (event lost,
+   * transcript-less response) still arms the check, because never arming
+   * would strand the session in AUDIO_CHECK and exclude the entire
+   * interview. A response whose transcript was seen and was NOT the hearing
+   * question does not arm anything.
    */
   function noteGreetingDone() {
-    if (phase === LIFECYCLE.AUDIO_CHECK) greetingDone = true;
+    if (phase !== LIFECYCLE.AUDIO_CHECK) return;
+    if (!spokeThisResponse) greetingDone = true;
+    spokeThisResponse = false;
   }
 
   function isGreetingDone() { return greetingDone; }
@@ -287,6 +313,7 @@ export function createInterviewLifecycle() {
   /** A reconnect landed. During the audio check the fresh session re-greets. */
   function noteReconnect() {
     if (phase === LIFECYCLE.AUDIO_CHECK) greetingDone = false;
+    spokeThisResponse = false;
   }
 
   return {
@@ -295,6 +322,7 @@ export function createInterviewLifecycle() {
     to: to,
     excludeItem: excludeItem,
     noteItem: noteItem,
+    noteAudioCheckTranscript: noteAudioCheckTranscript,
     noteGreetingDone: noteGreetingDone,
     isGreetingDone: isGreetingDone,
     noteUserCommitted: noteUserCommitted,
