@@ -10,6 +10,7 @@ on:
       # without these paths they could break untested.
       - 'js/voice-transcript-order.js'
       - 'js/voice-conduct.js'
+      - 'js/role-selector.js'
       - 'js/package.json'
   pull_request:
     branches: [main, dev0]
@@ -20,6 +21,7 @@ on:
       # without these paths they could break untested.
       - 'js/voice-transcript-order.js'
       - 'js/voice-conduct.js'
+      - 'js/role-selector.js'
       - 'js/package.json'
 
 jobs:
@@ -71,6 +73,10 @@ jobs:
       - name: Run voice conduct gate tests
         working-directory: app/functions/_lib/__tests__
         run: node voice-conduct.test.mjs
+
+      - name: Run role selector helper tests
+        working-directory: app/functions/_lib/__tests__
+        run: node role-selector.test.mjs
 
       - name: Run voice entitlement tests
         working-directory: app/functions/_lib/__tests__
