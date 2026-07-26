@@ -43,6 +43,50 @@ function unbindRoleSelectorDocumentListenersIfUnused() {
   roleSelectorDocumentListenersBound = false;
 }
 
+// ---- Pure helpers (exported for Node tests; no DOM dependencies) ----
+
+/** Case-insensitive substring filter over role names, capped at maxResults. */
+export function filterRoles(roles, rawQuery, maxResults) {
+  const query = String(rawQuery || '').toLowerCase().trim();
+  if (!query) return [];
+  return (roles || [])
+    .filter((role) => role && typeof role.name === 'string' && role.name.toLowerCase().includes(query))
+    .slice(0, maxResults);
+}
+
+/** HTML-escape without a DOM, so highlighting is testable in Node. */
+export function escapeHtmlText(text) {
+  if (typeof text !== 'string') return '';
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * Wrap the matched span in <strong>, escaping each part separately so entity
+ * encoding cannot shift the match position.
+ */
+export function highlightRoleMatch(text, query) {
+  const safeText = typeof text === 'string' ? text : '';
+  const trimmed = String(query || '').trim();
+  if (!trimmed) return escapeHtmlText(safeText);
+  const index = safeText.toLowerCase().indexOf(trimmed.toLowerCase());
+  if (index === -1) return escapeHtmlText(safeText);
+  const before = safeText.substring(0, index);
+  const match = safeText.substring(index, index + trimmed.length);
+  const after = safeText.substring(index + trimmed.length);
+  return `${escapeHtmlText(before)}<strong>${escapeHtmlText(match)}</strong>${escapeHtmlText(after)}`;
+}
+
+/** "software_engineering" -> "software engineering" for the category line. */
+export function prettyCategory(category) {
+  if (typeof category !== 'string') return '';
+  return category.replace(/_/g, ' ').trim();
+}
+
 /**
  * Role Selector Component
  * Loads roles from /api/roles endpoint with fallback to pre-seeded list
@@ -60,6 +104,8 @@ export class RoleSelector {
     this.roles = [];
     this.recentSelections = this.loadRecentSelections();
     this.dropdown = null;
+    this.activeIndex = -1;
+    this.optionEls = [];
     this.blurHideTimeout = null;
     this.isDestroyed = false;
     this.handleDocumentPointerDown = this.handleDocumentPointerDown.bind(this);
@@ -88,17 +134,34 @@ export class RoleSelector {
 
   createDropdown() {
     if (!this.input || !this.input.parentNode) return;
+
+    // The dropdown is absolutely positioned against its nearest positioned
+    // ancestor. Pages that wrap the input in a position:relative container get
+    // it beneath the field; pages that do not (the voice interview page's
+    // plain .vi-field) had the dropdown anchor to some distant ancestor and
+    // render nowhere near the input - suggestions existed but were effectively
+    // invisible. Make the parent the positioning context ourselves, so the
+    // component works on every page without page CSS knowing about it.
+    const parent = this.input.parentNode;
+    try {
+      if (parent instanceof Element && getComputedStyle(parent).position === 'static') {
+        parent.style.position = 'relative';
+      }
+    } catch (_) { /* getComputedStyle can throw on detached nodes; harmless */ }
+
     this.dropdown = document.createElement('div');
     this.dropdown.className = 'role-selector-dropdown';
+    this.dropdown.setAttribute('role', 'listbox');
+    if (this.input.id) this.dropdown.id = this.input.id + '-listbox';
     this.dropdown.style.cssText = `
       position: absolute;
       top: 100%;
       left: 0;
       right: 0;
       background: #fff;
-      border: 1px solid #E5E7EB;
-      border-radius: 8px;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+      border: 1px solid #CBD5E1;
+      border-radius: 10px;
+      box-shadow: 0 10px 28px rgba(15, 23, 42, 0.18);
       max-height: 300px;
       overflow-y: auto;
       z-index: 1000;
@@ -200,13 +263,61 @@ export class RoleSelector {
 
   handleInputKeyDown(event) {
     if (this.isDestroyed) return;
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Enter') {
+    const open = this.isDropdownOpen();
+
+    if (event.key === 'ArrowDown') {
+      // Closed + enough characters: ArrowDown opens the suggestions
+      if (!open) {
+        if (this.input && this.input.value.trim().length >= this.options.minChars) {
+          event.preventDefault();
+          this.handleInput(this.input.value);
+          this.setActive(0);
+        }
+        return;
+      }
       event.preventDefault();
-      this.handleKeyboard(event.key);
+      this.setActive(this.activeIndex + 1);
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      if (!open) return;
+      event.preventDefault();
+      this.setActive(this.activeIndex <= 0 ? this.optionEls.length - 1 : this.activeIndex - 1);
+      return;
+    }
+    if (event.key === 'Enter') {
+      // Only claim Enter while the list is open; otherwise the page keeps it
+      if (!open || this.optionEls.length === 0) return;
+      event.preventDefault();
+      const target = this.optionEls[this.activeIndex >= 0 ? this.activeIndex : 0];
+      if (target) target.click();
       return;
     }
     if (event.key === 'Escape') {
       this.hideDropdown();
+    }
+  }
+
+  isDropdownOpen() {
+    return !!(this.dropdown && this.dropdown.style.display !== 'none');
+  }
+
+  // One active option, shared by hover and arrow keys, wrapping at both ends.
+  setActive(index) {
+    if (this.isDestroyed || this.optionEls.length === 0) return;
+    const count = this.optionEls.length;
+    const next = ((index % count) + count) % count;
+    this.activeIndex = next;
+    for (let i = 0; i < count; i++) {
+      const el = this.optionEls[i];
+      const active = i === next;
+      el.style.background = active ? '#E8F0FE' : (el.dataset.baseBg || '#fff');
+      el.setAttribute('aria-selected', active ? 'true' : 'false');
+    }
+    const activeEl = this.optionEls[next];
+    if (activeEl) {
+      if (activeEl.id && this.input) this.input.setAttribute('aria-activedescendant', activeEl.id);
+      if (typeof activeEl.scrollIntoView === 'function') activeEl.scrollIntoView({ block: 'nearest' });
     }
   }
 
@@ -235,9 +346,7 @@ export class RoleSelector {
       return;
     }
 
-    const matches = this.roles
-      .filter((role) => role.name.toLowerCase().includes(query))
-      .slice(0, this.options.maxResults);
+    const matches = filterRoles(this.roles, query, this.options.maxResults);
 
     if (matches.length > 0 || this.options.showCustomOption) {
       this.showDropdown(matches, value);
@@ -251,100 +360,78 @@ export class RoleSelector {
     const query = rawQuery.trim();
     this.dropdown.innerHTML = '';
     this.dropdown.style.display = 'block';
+    this.optionEls = [];
+    this.activeIndex = -1;
+    if (this.input) {
+      this.input.setAttribute('aria-expanded', 'true');
+      this.input.removeAttribute('aria-activedescendant');
+    }
 
-    matches.forEach((role, index) => {
+    const idBase = (this.input && this.input.id ? this.input.id : 'role') + '-option-';
+    const addOption = (el) => {
+      const index = this.optionEls.length;
+      el.id = idBase + index;
+      el.setAttribute('role', 'option');
+      el.setAttribute('aria-selected', 'false');
+      // Hover and arrow keys share one active state, so what the mouse
+      // highlights is exactly what Enter would pick.
+      el.addEventListener('mouseover', () => this.setActive(index));
+      this.optionEls.push(el);
+      this.dropdown.appendChild(el);
+    };
+
+    matches.forEach((role) => {
       const optionDiv = document.createElement('div');
       optionDiv.className = 'role-option';
       optionDiv.dataset.role = role.name;
-      optionDiv.dataset.index = String(index);
+      optionDiv.dataset.baseBg = '#fff';
       optionDiv.style.cssText = `
         padding: 0.75rem 1rem;
         cursor: pointer;
         border-bottom: 1px solid #F3F4F6;
         transition: background 0.15s;
+        background: #fff;
       `;
 
-      optionDiv.addEventListener('mouseover', () => {
-        optionDiv.style.background = '#F9FAFB';
-      });
-      optionDiv.addEventListener('mouseout', () => {
-        optionDiv.style.background = '#fff';
-      });
-
       const nameDiv = document.createElement('div');
-      nameDiv.style.cssText = 'font-weight: 500; color: #1F2937;';
-      nameDiv.innerHTML = this.highlightMatch(role.name, query);
+      nameDiv.style.cssText = 'font-weight: 600; color: #111827; font-size: 1rem;';
+      nameDiv.innerHTML = highlightRoleMatch(role.name, query);
       optionDiv.appendChild(nameDiv);
 
-      if (role.category) {
+      const categoryLabel = prettyCategory(role.category);
+      if (categoryLabel) {
         const categoryDiv = document.createElement('div');
-        categoryDiv.style.cssText = 'font-size: 0.875rem; color: #6B7280; margin-top: 0.25rem;';
-        categoryDiv.textContent = role.category;
+        categoryDiv.style.cssText = 'font-size: 0.85rem; color: #4B5563; margin-top: 0.2rem;';
+        categoryDiv.textContent = categoryLabel;
         optionDiv.appendChild(categoryDiv);
       }
 
       optionDiv.addEventListener('click', () => {
-        this.selectRole(optionDiv.dataset.role === 'custom' ? query : optionDiv.dataset.role);
+        this.selectRole(optionDiv.dataset.role);
       });
 
-      this.dropdown.appendChild(optionDiv);
+      addOption(optionDiv);
     });
 
     if (this.options.showCustomOption) {
       const customDiv = document.createElement('div');
       customDiv.className = 'role-option role-custom';
       customDiv.dataset.role = 'custom';
+      customDiv.dataset.baseBg = '#F9FAFB';
       customDiv.style.cssText = `
         padding: 0.75rem 1rem;
         cursor: pointer;
         background: #F9FAFB;
         border-top: 2px solid #E5E7EB;
         font-style: italic;
-        color: #6B7280;
+        color: #4B5563;
       `;
-      customDiv.addEventListener('mouseover', () => {
-        customDiv.style.background = '#F3F4F6';
-      });
-      customDiv.addEventListener('mouseout', () => {
-        customDiv.style.background = '#F9FAFB';
-      });
       customDiv.textContent = `Use "${query}" as custom role`;
       customDiv.addEventListener('click', () => {
         this.selectRole(query);
       });
-      this.dropdown.appendChild(customDiv);
+      addOption(customDiv);
     }
-  }
-
-  highlightMatch(text, query) {
-    if (!query) {
-      return this.escapeHtml(text);
-    }
-
-    // Find match position in original text (case-insensitive)
-    const lowerText = text.toLowerCase();
-    const lowerQuery = query.toLowerCase();
-    const index = lowerText.indexOf(lowerQuery);
-    
-    if (index === -1) {
-      return this.escapeHtml(text);
-    }
-
-    // Split original text at match position, then escape each part separately
-    // This ensures correct highlighting even if text contains HTML entities
-    // We split first, then escape, to avoid position shifts from HTML entity encoding
-    const before = text.substring(0, index);
-    const match = text.substring(index, index + query.length);
-    const after = text.substring(index + query.length);
-
-    return `${this.escapeHtml(before)}<strong>${this.escapeHtml(match)}</strong>${this.escapeHtml(after)}`;
-  }
-
-  escapeHtml(text) {
-    if (typeof text !== 'string') return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
   }
 
   selectRole(roleName) {
@@ -406,15 +493,11 @@ export class RoleSelector {
     if (this.dropdown) {
       this.dropdown.style.display = 'none';
     }
-  }
-
-  handleKeyboard(key) {
-    if (this.isDestroyed || !this.dropdown) return;
-    const options = this.dropdown.querySelectorAll('.role-option');
-    if (options.length === 0) return;
-
-    if (key === 'Enter') {
-      options[0].click();
+    this.optionEls = [];
+    this.activeIndex = -1;
+    if (this.input) {
+      this.input.setAttribute('aria-expanded', 'false');
+      this.input.removeAttribute('aria-activedescendant');
     }
   }
 

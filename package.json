@@ -12,6 +12,7 @@
     "test:voice:transcripts:unit": "node app/tests/voice-transcripts/unit.test.mjs",
     "test:voice:interviewer": "node app/functions/_lib/__tests__/voice-interviewer.test.mjs",
     "test:voice:transcript-order": "node app/functions/_lib/__tests__/voice-transcript-order.test.mjs",
-    "test:voice:conduct": "node app/functions/_lib/__tests__/voice-conduct.test.mjs"
+    "test:voice:conduct": "node app/functions/_lib/__tests__/voice-conduct.test.mjs",
+    "test:role-selector": "node app/functions/_lib/__tests__/role-selector.test.mjs"
   }
 }
