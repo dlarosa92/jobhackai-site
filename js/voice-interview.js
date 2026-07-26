@@ -26,6 +26,13 @@
   // begin, before concluding there is no closing audio at all.
   var CONDUCT_END_AUDIO_GRACE_MS = 750;
 
+  // A genuine processing delay this long earns one truthful waiting cue.
+  // This is an app-level prompt about OUR pipeline being slow, deliberately
+  // far above conversational pause length: a 2-2.5s pause is the candidate or
+  // the interviewer thinking, and must never trigger a cue or a reprompt.
+  // ASR/VAD endpointing is untouched and stays server-side.
+  var WAITING_CUE_MS = 4000;
+
   var state = {
     sessionId: null,
     model: null,
@@ -45,7 +52,9 @@
     answeredCalls: null,       // call_id -> true; each tool call answered exactly once
     conduct: null,             // escalation gate (voice-conduct.js); survives a reconnect
     conductEnd: null,          // pending end, waiting for the closing turn
-    endCause: null             // 'conduct' | 'safety' — which reason the pending end carries
+    endCause: null,            // 'conduct' | 'safety' | 'closing' — which reason the pending end carries
+    lifecycle: null,           // interview lifecycle (voice-lifecycle.js); owns commit boundaries
+    turnWait: null             // { committedAtMs, cueTimer } — turn-start latency + waiting cue
   };
 
   function $(id) { return document.getElementById(id); }
@@ -164,17 +173,135 @@
     return state.order ? state.order.list() : [];
   }
 
+  // ---------- interview lifecycle ----------
+
+  // If js/voice-lifecycle.js failed to execute, fall back to a hand-synced
+  // minimal copy rather than reverting to "commit everything": the module
+  // going missing must not silently reintroduce the pre-interview-speech and
+  // late-chatter defects. Loud, same pattern as the conduct fallbacks.
+  var lifecycleModuleMissingReported = false;
+  function reportLifecycleModuleMissing() {
+    if (lifecycleModuleMissingReported) return;
+    lifecycleModuleMissingReported = true;
+    console.error('[VOICE] js/voice-lifecycle.js did not load; using built-in fallback. Report this.');
+    track('voice_module_missing', { module: 'voice-lifecycle' });
+  }
+
+  var PHASES = (typeof window.VOICE_LIFECYCLE === 'object' && window.VOICE_LIFECYCLE) || {
+    CONNECTING: 'connecting',
+    AUDIO_CHECK: 'audio_check',
+    ACTIVE_INTERVIEW: 'active_interview',
+    CLOSING: 'closing',
+    COMPLETE: 'complete'
+  };
+
+  // Hand-synced fallback of createInterviewLifecycle: same phases, same
+  // permanent per-item verdicts (exclusion wins), same single automatic
+  // transition on the post-greeting acknowledgement.
+  function newInterviewLifecycle() {
+    if (typeof window.createInterviewLifecycle === 'function') {
+      return window.createInterviewLifecycle();
+    }
+    reportLifecycleModuleMissing();
+    var TRANSITIONS = {
+      connecting: { audio_check: true, complete: true },
+      audio_check: { active_interview: true, complete: true },
+      active_interview: { closing: true, complete: true },
+      closing: { complete: true },
+      complete: {}
+    };
+    var phase = PHASES.CONNECTING;
+    var excluded = Object.create(null);
+    var included = Object.create(null);
+    var greetingDone = false;
+    return {
+      phase: function () { return phase; },
+      is: function (p) { return phase === p; },
+      to: function (next) {
+        if (!TRANSITIONS[phase] || !TRANSITIONS[phase][next]) return false;
+        phase = next;
+        return true;
+      },
+      excludeItem: function (id) { if (id) excluded[id] = true; },
+      noteItem: function (id) {
+        if (!id) return phase === PHASES.ACTIVE_INTERVIEW;
+        if (excluded[id]) return false;
+        if (included[id]) return true;
+        if (phase === PHASES.ACTIVE_INTERVIEW) { included[id] = true; return true; }
+        excluded[id] = true;
+        return false;
+      },
+      noteGreetingDone: function () { if (phase === PHASES.AUDIO_CHECK) greetingDone = true; },
+      isGreetingDone: function () { return greetingDone; },
+      noteUserCommitted: function (itemId) {
+        if (phase === PHASES.ACTIVE_INTERVIEW) {
+          if (itemId && !excluded[itemId]) included[itemId] = true;
+          return 'committed';
+        }
+        if (itemId) excluded[itemId] = true;
+        if (phase === PHASES.AUDIO_CHECK && greetingDone) {
+          phase = PHASES.ACTIVE_INTERVIEW;
+          return 'begin_interview';
+        }
+        return 'excluded';
+      },
+      shouldCommit: function (itemId) {
+        if (itemId) {
+          if (excluded[itemId]) return false;
+          if (included[itemId]) return true;
+        }
+        return phase === PHASES.ACTIVE_INTERVIEW;
+      },
+      noteReconnect: function () { if (phase === PHASES.AUDIO_CHECK) greetingDone = false; }
+    };
+  }
+
+  // Hand-synced copy of isClosingAnnouncement for the module-missing case:
+  // without it, the wrap-up would once again leave the mic live and the
+  // interview resumable — the exact live defect this pass fixes.
+  function fallbackIsClosingAnnouncement(text) {
+    if (typeof text !== 'string' || text.length < 12) return false;
+    if (text.indexOf('?') >= 0) return false;
+    var lower = text.toLowerCase();
+    var closingThanks = /\bthank(?:s|\s+you)\b[^]{0,60}\b(?:your time|for talking|for speaking|for joining|for the conversation|for sitting down|for meeting|for coming|today)\b/.test(lower);
+    var wrapSignal = /\b(?:that(?:'s| is) (?:all|everything)|that (?:concludes|wraps)|this (?:concludes|wraps)|we(?:'re| are) (?:done|finished|at time|out of time)|no (?:further|more) questions)\b/.test(lower);
+    if (!closingThanks && !wrapSignal) return false;
+    var sentences = lower.replace(/([.!])/g, '$1\n').split('\n');
+    for (var i = 0; i < sentences.length; i++) {
+      var s = sentences[i];
+      if (!s) continue;
+      if (!/\b(?:report|feedback|results|evaluation)\b/.test(s)) continue;
+      if (/\b(?:being prepared|prepared|being generated|generated|will appear|appears? on this page|on its way|ready|available)\b/.test(s)) return true;
+    }
+    return false;
+  }
+
+  // Lazily created so a realtime event arriving before startInterview (never
+  // observed, but events are events) cannot throw on a null lifecycle.
+  function lifecycle() {
+    if (!state.lifecycle) state.lifecycle = newInterviewLifecycle();
+    return state.lifecycle;
+  }
+
   // Realtime transcripts arrive out of order; itemId places each turn in the
   // slot its conversation item reserved (see voice-transcript-order.js).
+  // Persistence is gated per item by the lifecycle: only turns that belong to
+  // the official interview reach the stored transcript, history, or scoring.
+  // The live caption is ephemeral UI, so the audio-check exchange still
+  // captions while it is happening — it just never persists.
   function recordTurn(speaker, text, itemId) {
     text = String(text || '').trim();
     if (!text) return;
+    var lc = lifecycle();
+    if (lc.is(PHASES.AUDIO_CHECK) || lc.is(PHASES.ACTIVE_INTERVIEW)) {
+      var caption = $('vi-caption');
+      if (caption) {
+        caption.textContent = (speaker === 'assistant' ? 'Interviewer: ' : 'You: ') + text;
+      }
+    }
+    if (!lc.shouldCommit(itemId || null)) return;
     if (!state.order) state.order = newTranscriptOrder();
     state.order.setText(itemId || null, speaker, text);
-    var caption = $('vi-caption');
-    if (caption) {
-      caption.textContent = (speaker === 'assistant' ? 'Interviewer: ' : 'You: ') + text;
-    }
   }
 
   // ---------- realtime sends ----------
@@ -510,16 +637,20 @@
     };
   }
 
-  // cause is 'conduct' or 'safety' — it decides the reason and the wording, not
-  // the timing, which is identical for both.
+  // cause is 'conduct', 'safety', or 'closing' — it decides the reason and the
+  // wording, not the timing, which is identical for all three.
   function requestGuardedEnd(cause, responseId) {
     if (state.ending || state.conductEnd) return;
     state.endCause = cause;
     state.conductEnd = newClosingTurnGate();
-    setStatus(
-      cause === 'safety' ? 'Ending this session.' : 'The interviewer is ending this session.',
-      'vi-error'
-    );
+    if (cause === 'closing') {
+      setStatus('Wrapping up. Your report is on its way.', 'vi-live');
+    } else {
+      setStatus(
+        cause === 'safety' ? 'Ending this session.' : 'The interviewer is ending this session.',
+        'vi-error'
+      );
+    }
     // Whether the closing line is already mid-playback. This has to fail SAFE,
     // and safe means "assume it is". Over-waiting costs at most the backstop and
     // nothing is lost; under-waiting cuts the interviewer off — and on the safety
@@ -548,6 +679,11 @@
       endInterview('ended_for_safety');
       return;
     }
+    if (cause === 'closing') {
+      setStatus('Interview complete. Preparing your report...', 'vi-live');
+      endInterview('completed');
+      return;
+    }
     setStatus('The interviewer ended this session.', 'vi-error');
     endInterview(state.conduct ? state.conduct.endReason() : 'ended_by_interviewer');
   }
@@ -557,12 +693,100 @@
     if (ind) ind.classList.toggle('vi-speaking-on', !!on);
   }
 
+  // ---------- turn-start latency + waiting cue ----------
+
+  function clearTurnWait() {
+    if (state.turnWait && state.turnWait.cueTimer) clearTimeout(state.turnWait.cueTimer);
+    state.turnWait = null;
+  }
+
+  // The candidate's turn was committed; the clock on the interviewer's reply
+  // starts now. ~200ms is a human conversational benchmark, not a realtime
+  // pipeline promise — this pipeline routinely needs 1-3s, which is why the
+  // one truthful cue waits WAITING_CUE_MS and a 2-2.5s pause never triggers
+  // anything: no cue, no reprompt, no forced turn.
+  function beginTurnWait() {
+    clearTurnWait();
+    var wait = { committedAtMs: Date.now(), cueTimer: null };
+    wait.cueTimer = setTimeout(function () {
+      // Re-check the world before touching UI: the session may have ended,
+      // begun closing, or a guarded end may own the screen by now.
+      if (state.turnWait !== wait) return;
+      if (state.ending || state.conductEnd) return;
+      if (!lifecycle().is(PHASES.ACTIVE_INTERVIEW)) return;
+      var caption = $('vi-caption');
+      if (caption) caption.textContent = 'One moment — the interviewer is thinking.';
+      track('voice_turn_wait_cue', { waited_ms: Date.now() - wait.committedAtMs });
+    }, WAITING_CUE_MS);
+    state.turnWait = wait;
+  }
+
+  // The interviewer's audio began: that is the human-perceived turn start.
+  function noteTurnStarted() {
+    var wait = state.turnWait;
+    if (!wait) return;
+    clearTurnWait();
+    var ms = Date.now() - wait.committedAtMs;
+    console.log('[VOICE] agent turn-start latency: ' + ms + 'ms');
+    track('voice_turn_start_latency', { latency_ms: ms });
+  }
+
+  // ---------- normal wrap-up ----------
+
+  // The interviewer announced the normal wrap-up (thanks + report being
+  // prepared). Same spoken-line pattern as the safety and conduct backstops,
+  // and for the same reason: lifecycle decisions cannot depend on the model
+  // remembering a tool. The application owns the boundary from here:
+  // entering CLOSING stops candidate speech from being committed or routed
+  // (the mic stops), blocks new interviewer questions (racing responses are
+  // cancelled), and hands completion to the same guarded-end pipeline the
+  // conduct/safety closes use — the closing audio finishes, then the session
+  // completes exactly once and the report opens.
+  function maybeClosingAnnouncement(transcript, responseId) {
+    if (state.ending || state.conductEnd) return;
+    if (!lifecycle().is(PHASES.ACTIVE_INTERVIEW)) return;
+    var check;
+    if (typeof window.isClosingAnnouncement === 'function') {
+      check = window.isClosingAnnouncement;
+    } else {
+      reportLifecycleModuleMissing();
+      check = fallbackIsClosingAnnouncement;
+    }
+    if (!check(String(transcript || ''))) return;
+    lifecycle().to(PHASES.CLOSING);
+    // Late chatter must never reach ASR/VAD or the model again. Outbound
+    // only: the interviewer's closing audio keeps playing.
+    stopMicrophone();
+    clearTurnWait();
+    console.log('[VOICE] wrap-up announced; closing the session');
+    track('voice_closing_detected', {});
+    requestGuardedEnd('closing', responseId || '');
+  }
+
+  // VAD committed a candidate turn. The lifecycle classifies the item once,
+  // permanently — and the first commit after the audio-check greeting is the
+  // acknowledgement that starts the official interview.
+  function handleUserCommitted(itemId) {
+    var action = lifecycle().noteUserCommitted(itemId || null);
+    if (action === 'begin_interview') {
+      setStatus('Live. The interviewer can hear you.', 'vi-live');
+      track('voice_interview_begin', {});
+      beginTurnWait();
+      return;
+    }
+    if (action === 'committed') beginTurnWait();
+  }
+
   function handleRealtimeEvent(evt) {
     var type = evt.type || '';
 
     // Items are announced in true conversation order and carry the id that
-    // the (later, out-of-order) transcript events reference.
+    // the (later, out-of-order) transcript events reference. The lifecycle
+    // classifies each item exactly once; only official-interview items reach
+    // the assembler, so excluded items never leave pending slots for a
+    // teardown flush to wait on.
     if (type === 'conversation.item.created' || type === 'conversation.item.added') {
+      if (!lifecycle().noteItem(evt.item && evt.item.id)) return;
       if (!state.order) state.order = newTranscriptOrder();
       // previous_item_id says which item this one follows, so an item inserted
       // out of band lands in the right place instead of at the end.
@@ -581,7 +805,13 @@
       recordTurn('user', evt.transcript, evt.item_id);
       return;
     }
-    if (type === 'input_audio_buffer.speech_started' || type === 'input_audio_buffer.committed') {
+    if (type === 'input_audio_buffer.speech_started') {
+      // The candidate is talking again; they are not waiting on a reply.
+      clearTurnWait();
+      return;
+    }
+    if (type === 'input_audio_buffer.committed') {
+      handleUserCommitted(evt.item_id);
       return;
     }
     // GA + beta event names for assistant transcript
@@ -589,6 +819,7 @@
       recordTurn('assistant', evt.transcript, evt.item_id);
       maybeConductBackstop(evt.transcript, evt.response_id);
       maybeSafetyBackstop(evt.transcript, evt.response_id);
+      maybeClosingAnnouncement(evt.transcript, evt.response_id);
       return;
     }
 
@@ -608,20 +839,33 @@
       }
       handleToolCall(readToolCall(evt));
       setSpeaking(false);
+      // The audio-check greeting finished generating; the next candidate
+      // turn is the acknowledgement that begins the official interview.
+      lifecycle().noteGreetingDone();
       if (state.conductEnd) state.conductEnd.noteResponseDone();
       return;
     }
 
-    if (type === 'output_audio_buffer.started' || type === 'response.created') {
-      if (type === 'output_audio_buffer.started') {
-        state.audioPlaying = true;
-        // Which response is speaking, not merely that something is. A bare
-        // "audio is playing" flag cannot tell the closing line apart from a
-        // previous turn's, and seeding the gate from it is what made the stale
-        // reads possible in the first place.
-        state.audioResponseId = evt.response_id || '';
-        if (state.conductEnd) state.conductEnd.noteAudioStarted();
+    if (type === 'response.created') {
+      // No new interviewer turns once the wrap-up is announced. Responses
+      // are serial, so anything created during CLOSING is a new turn racing
+      // the mic shutdown — cancel it before it speaks.
+      if (lifecycle().is(PHASES.CLOSING)) {
+        sendRealtime({ type: 'response.cancel' });
+        return;
       }
+      setSpeaking(true);
+      return;
+    }
+    if (type === 'output_audio_buffer.started') {
+      state.audioPlaying = true;
+      // Which response is speaking, not merely that something is. A bare
+      // "audio is playing" flag cannot tell the closing line apart from a
+      // previous turn's, and seeding the gate from it is what made the stale
+      // reads possible in the first place.
+      state.audioResponseId = evt.response_id || '';
+      if (state.conductEnd) state.conductEnd.noteAudioStarted();
+      noteTurnStarted();
       setSpeaking(true);
       return;
     }
@@ -659,15 +903,41 @@
     dc.onmessage = function (e) {
       try { handleRealtimeEvent(JSON.parse(e.data)); } catch (_) {}
     };
+    dc.onopen = function () {
+      // Realtime is ready. Before the official interview there is an audio
+      // check: the interviewer speaks first, and with semantic VAD the model
+      // only ever replies to candidate speech, so her opening line has to be
+      // requested explicitly. The wording lives in the session instructions;
+      // the app owns only the state.
+      if (state.ending || state.conductEnd) return;
+      var lc = lifecycle();
+      if (lc.is(PHASES.CONNECTING)) {
+        lc.to(PHASES.AUDIO_CHECK);
+      } else if (lc.is(PHASES.AUDIO_CHECK)) {
+        lc.noteReconnect();   // a drop during the check: the fresh session re-greets
+      } else {
+        return;               // reconnect mid-interview: the conversation resumes as before
+      }
+      setStatus('Connected. Quick audio check...', 'vi-connecting');
+      sendRealtime({ type: 'response.create' });
+    };
 
     pc.onconnectionstatechange = function () {
       if (!state.pc) return;
       var s = state.pc.connectionState;
       if (s === 'connected') {
         state.connected = true;
-        setStatus('Live. The interviewer can hear you.', 'vi-live');
+        // Truthful per phase: nothing is being scored yet during the audio
+        // check, so the status must not claim the interview is running.
+        if (lifecycle().is(PHASES.ACTIVE_INTERVIEW)) {
+          setStatus('Live. The interviewer can hear you.', 'vi-live');
+        } else if (!state.ending && !state.conductEnd) {
+          setStatus('Connected. Quick audio check...', 'vi-connecting');
+        }
       } else if ((s === 'disconnected' || s === 'failed') && !state.ending) {
         state.connected = false;
+        // A pending "interviewer is thinking" cue would be a lie now.
+        clearTurnWait();
         setStatus('Connection lost.', 'vi-error');
         offerReconnect();
       }
@@ -791,6 +1061,11 @@
       state.conduct = newConductGate();
       state.conductEnd = null;
       state.endCause = null;
+      // Fresh lifecycle: CONNECTING until realtime is ready, then the audio
+      // check. Nothing is committed to transcript or scoring before the
+      // official interview begins.
+      state.lifecycle = newInterviewLifecycle();
+      clearTurnWait();
 
       show('vi-live-view');
       setStatus('Connecting...', 'vi-connecting');
@@ -877,6 +1152,12 @@
       return;
     }
     state.ending = true;
+    // Terminal for every path — manual, time up, conduct, safety, connection
+    // lost, or the natural close. COMPLETE is reachable from any phase, and
+    // from here no late event can commit a turn, reopen the session, or start
+    // another completion (state.ending makes this function run once).
+    lifecycle().to(PHASES.COMPLETE);
+    clearTurnWait();
     if (state.timerInterval) { clearInterval(state.timerInterval); state.timerInterval = null; }
 
     var durationSeconds = state.startedAtMs ? Math.round((Date.now() - state.startedAtMs) / 1000) : 0;

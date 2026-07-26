@@ -24,7 +24,7 @@ import {
   voiceFeatureEnabled
 } from '../../_lib/voice-entitlements.js';
 import { errorResponse, successResponse, generateRequestId } from '../../_lib/error-handler.js';
-import { interviewerInstructions, buildResumeContext, INTERVIEWER_TOOLS } from '../../_lib/voice-interviewer.js';
+import { interviewerInstructions, buildResumeContext, voiceFirstName, INTERVIEWER_TOOLS } from '../../_lib/voice-interviewer.js';
 
 const MAX_SESSION_MINUTES = 20;
 // Reconnects allowed while the session could still plausibly be live.
@@ -120,11 +120,14 @@ export async function onRequest(context) {
   const token = getBearer(request);
   if (!token) return errorResponse('Unauthorized', 401, origin, env, requestId);
 
-  let uid, email;
+  let uid, email, firstName;
   try {
     const verified = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
     uid = verified.uid;
     email = verified.payload?.email || null;
+    // Account-profile first name for the audio-check greeting, sanitized for
+    // prompt inclusion. '' when the account has no usable name.
+    firstName = voiceFirstName(verified.payload?.name);
   } catch (e) {
     return errorResponse('Unauthorized', 401, origin, env, requestId);
   }
@@ -178,6 +181,9 @@ export async function onRequest(context) {
         resumeContext = buildResumeContext(tail);
       }
 
+      // firstName rides along for the one resume case that re-greets: a drop
+      // DURING the audio check has an empty transcript tail, so resumeContext
+      // is null and the fresh session runs the audio check again.
       const minted = await mintClientSecret(env, {
         model,
         instructions: interviewerInstructions({
@@ -185,7 +191,8 @@ export async function onRequest(context) {
           seniority: session.seniority,
           jd: session.jd_excerpt,
           maxMinutes: MAX_SESSION_MINUTES,
-          resumeContext
+          resumeContext,
+          firstName
         })
       });
       if (!minted) return errorResponse('Could not start the voice session. Please try again.', 502, origin, env, requestId);
@@ -271,7 +278,7 @@ export async function onRequest(context) {
 
         const minted = await mintClientSecret(env, {
           model,
-          instructions: interviewerInstructions({ role, seniority, jd, maxMinutes: MAX_SESSION_MINUTES })
+          instructions: interviewerInstructions({ role, seniority, jd, maxMinutes: MAX_SESSION_MINUTES, firstName })
         });
         if (!minted) {
           return errorResponse('Could not start the voice session. Please try again.', 502, origin, env, requestId);
