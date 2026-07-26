@@ -884,8 +884,15 @@
 
     show('vi-done-view');
     var doneStatus = $('vi-done-status');
-    if (doneStatus) doneStatus.textContent = 'We\'re reviewing your conversation using our S + A = O formula and interview rubric. This usually takes a few seconds.';
-    historyLiveScoring();
+    var isSafetyEnd = reason === 'ended_for_safety';
+    if (isSafetyEnd) {
+      // The safety view goes up immediately: no S+A=O copy, no scoring state,
+      // whatever happens to the save below.
+      renderSafetyEnd(null);
+    } else {
+      if (doneStatus) doneStatus.textContent = 'We\'re reviewing your conversation using our S + A = O formula and interview rubric. This usually takes a few seconds.';
+      historyLiveScoring();
+    }
 
     // Let any transcript still in flight land before the channel closes; the
     // wait is bounded and a timeout just means we store what we already have.
@@ -904,16 +911,21 @@
         })
       });
       track('voice_session_complete', { duration_seconds: durationSeconds, reason: reason || 'user_ended' });
-      if (reason === 'ended_for_safety') {
-        // No score exists for ending an interview to reach real help; polling
-        // would wait for a scorecard the server deliberately never generates.
-        renderSafetyEnd(null);
+      if (isSafetyEnd) {
+        // Already showing the safety view; no polling for a scorecard the
+        // server deliberately never generates.
         historyLiveClear(true);
         return;
       }
       pollScorecard(0);
     } catch (err) {
       console.error('[VOICE] complete failed:', err);
+      if (isSafetyEnd) {
+        // The safety view stays up regardless — never replace it with
+        // score-oriented error copy.
+        historyLiveClear(false);
+        return;
+      }
       if (doneStatus) doneStatus.textContent = 'The session ended but saving failed. Your session is recorded; check back shortly.';
       historyLiveClear(false);
     }
@@ -1227,6 +1239,11 @@
     // carve-out row reports 'scoring' (no stored scorecard) forever.
     if (!item.reportAvailable) {
       return '<span class="vi-history-chip vi-history-chip--partial">' + HISTORY_LOCK_SVG + 'Partial</span>';
+    }
+    // A safety-ended session has no report by design: never show it as
+    // scoring, never show a score.
+    if (item.status === 'safety' || item.endReason === 'ended_for_safety') {
+      return '<span class="vi-history-chip vi-history-chip--partial">Safety</span>';
     }
     // A report still being scored is 'Scoring…' even without full access —
     // the Partial lock only applies once there is a report to lock.

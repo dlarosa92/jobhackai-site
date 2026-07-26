@@ -66,7 +66,7 @@ export function sessionFullAccess(row, ent) {
  * @returns {Promise<Array<{
  *   sessionId: string, role: string|null, seniority: string|null,
  *   createdAt: string, durationSeconds: number|null,
- *   status: 'scoring'|'ready', overall: number|null,
+ *   status: 'scoring'|'ready'|'safety', overall: number|null,
  *   fullAccess: boolean, reportAvailable: boolean
  * }>>}
  */
@@ -77,7 +77,7 @@ export async function listVoiceSessions(env, userRowId, ent, nowMs = Date.now())
   // Newest 25 completed rows are always enough: expired rows sort strictly
   // after live ones, and the carve-out row is by definition the newest row.
   const rows = await db.prepare(
-    `SELECT id, role, seniority, status, entitlement_mode, started_at, duration_seconds, scorecard_json
+    `SELECT id, role, seniority, status, entitlement_mode, started_at, duration_seconds, scorecard_json, end_reason
      FROM voice_sessions
      WHERE user_id = ? AND status = 'completed'
      ORDER BY started_at DESC LIMIT 25`
@@ -104,7 +104,11 @@ export async function listVoiceSessions(env, userRowId, ent, nowMs = Date.now())
       seniority: r.seniority,
       createdAt: r.started_at,
       durationSeconds: r.duration_seconds,
-      status: scorecard ? 'ready' : 'scoring',
+      // A safety-ended session is never scored, so it must not report
+      // 'scoring': that chip would spin forever for a report that is
+      // deliberately never generated.
+      status: r.end_reason === 'ended_for_safety' ? 'safety' : (scorecard ? 'ready' : 'scoring'),
+      endReason: r.end_reason || null,
       // A locked (expired) row must not leak its score through the API even
       // while the cleaner has yet to strip the stored scorecard.
       overall: !expired && fullAccess && scorecard ? (scorecard.overall ?? null) : null,
