@@ -155,16 +155,27 @@
       return window.createTranscriptOrder();
     }
     var arr = [];
+    var droppedIds = Object.create(null);
     return {
       noteItem: function () {},
-      setText: function (id, speaker, text) { arr.push({ speaker: speaker, text: text }); },
-      append: function (speaker, text) { arr.push({ speaker: speaker, text: text }); },
-      list: function () { return arr.slice(); },
+      setText: function (id, speaker, text) {
+        if (id && droppedIds[id]) return;   // a dropped turn stays dropped
+        arr.push({ id: id || null, speaker: speaker, text: text });
+      },
+      append: function (speaker, text) { arr.push({ id: null, speaker: speaker, text: text }); },
+      drop: function (id) {
+        if (!id) return;
+        droppedIds[id] = true;
+        arr = arr.filter(function (r) { return r.id !== id; });
+      },
+      list: function () {
+        return arr.map(function (r) { return { speaker: r.speaker, text: r.text }; });
+      },
       // Arrival-order collection reserves nothing, so there is never anything
       // in flight to wait for.
       pendingCount: function () { return 0; },
       flushTranscript: function () { return Promise.resolve(true); },
-      reset: function () { arr = []; }
+      reset: function () { arr = []; droppedIds = Object.create(null); }
     };
   }
 
@@ -216,6 +227,7 @@
     var greetingDone = false;
     var awaitingOpening = false;
     var pendingSinceAck = [];
+    var lastDemotedItems = [];
     return {
       phase: function () { return phase; },
       is: function (p) { return phase === p; },
@@ -259,14 +271,20 @@
           pendingSinceAck = [];
           return 'confirmed';
         }
-        if (itemId) excluded[itemId] = true;
-        for (var i = 0; i < pendingSinceAck.length; i++) excluded[pendingSinceAck[i]] = true;
+        var dropped = [];
+        if (itemId) { excluded[itemId] = true; dropped.push(itemId); }
+        for (var i = 0; i < pendingSinceAck.length; i++) {
+          excluded[pendingSinceAck[i]] = true;
+          dropped.push(pendingSinceAck[i]);
+        }
+        lastDemotedItems = dropped;
         pendingSinceAck = [];
         awaitingOpening = false;
         phase = PHASES.AUDIO_CHECK;
         greetingDone = true;
         return 'demoted';
       },
+      demotedItems: function () { return lastDemotedItems.slice(); },
       isAwaitingOpening: function () { return awaitingOpening; },
       shouldCommit: function (itemId) {
         if (itemId) {
@@ -871,6 +889,15 @@
         console.warn('[VOICE] candidate could not hear; audio check repeating — round excluded');
         setStatus('Connected. Quick audio check...', 'vi-connecting');
         track('voice_audio_check_repeat', {});
+        // Exclusion gates future writes only. A whisper that landed inside
+        // the settling window is already written into the assembler, and the
+        // demoted check's reserved slot would otherwise hold the end-of-
+        // session flush open — purge the round's items outright.
+        if (state.order && typeof state.order.drop === 'function' &&
+            typeof lifecycle().demotedItems === 'function') {
+          var dropIds = lifecycle().demotedItems();
+          for (var di = 0; di < dropIds.length; di++) state.order.drop(dropIds[di]);
+        }
       }
       recordTurn('assistant', evt.transcript, evt.item_id);
       // A repeated hearing check is not interview material: no backstops, no

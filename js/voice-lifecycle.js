@@ -138,6 +138,11 @@ export function createInterviewLifecycle() {
   // remembered so a demotion can exclude them retroactively.
   var awaitingOpening = false;
   var pendingSinceAck = [];
+  // Item ids excluded by the most recent demotion. The caller reads these
+  // right after a 'demoted' verdict and purges them from the transcript
+  // assembler: exclusion gates future writes, but a whisper that landed
+  // inside the settling window is already written and must be pulled out.
+  var lastDemotedItems = [];
 
   function is(p) { return phase === p; }
 
@@ -236,8 +241,14 @@ export function createInterviewLifecycle() {
       pendingSinceAck = [];
       return 'confirmed';
     }
+    var dropped = [];
     excludeItem(itemId);
-    for (var i = 0; i < pendingSinceAck.length; i++) excludeItem(pendingSinceAck[i]);
+    if (itemId) dropped.push(itemId);
+    for (var i = 0; i < pendingSinceAck.length; i++) {
+      excludeItem(pendingSinceAck[i]);
+      dropped.push(pendingSinceAck[i]);
+    }
+    lastDemotedItems = dropped;
     pendingSinceAck = [];
     awaitingOpening = false;
     // Internal, deliberate backward step — to() stays forward-only so no
@@ -249,6 +260,9 @@ export function createInterviewLifecycle() {
     greetingDone = true;
     return 'demoted';
   }
+
+  /** Item ids excluded by the most recent demotion, for assembler purge. */
+  function demotedItems() { return lastDemotedItems.slice(); }
 
   function isAwaitingOpening() { return awaitingOpening; }
 
@@ -285,6 +299,7 @@ export function createInterviewLifecycle() {
     isGreetingDone: isGreetingDone,
     noteUserCommitted: noteUserCommitted,
     noteAssistantTurn: noteAssistantTurn,
+    demotedItems: demotedItems,
     isAwaitingOpening: isAwaitingOpening,
     shouldCommit: shouldCommit,
     noteReconnect: noteReconnect

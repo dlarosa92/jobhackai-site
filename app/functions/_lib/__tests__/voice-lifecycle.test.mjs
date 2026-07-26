@@ -294,6 +294,20 @@ test('user speech committed inside the settling window is pulled back out on dem
   assert.equal(lc.shouldCommit('item_barge'), false, 'demotion excludes the whole round');
 });
 
+test('a demotion reports every item of its round for assembler purge', () => {
+  // Exclusion gates future writes; a whisper that landed inside the window is
+  // already written, so the caller purges these ids from the assembler.
+  const lc = lifecycleAt(LIFECYCLE.ACTIVE_INTERVIEW);
+  assert.deepEqual(lc.demotedItems(), [], 'nothing to purge before any demotion');
+  lc.noteUserCommitted('item_barge');
+  lc.noteAssistantTurn('item_check2', 'Can you hear me now?');
+  assert.deepEqual(lc.demotedItems(), ['item_check2', 'item_barge']);
+  // Each round replaces the list: the next demotion reports only its own items.
+  lc.noteUserCommitted('item_ack2');
+  lc.noteAssistantTurn('item_check3', 'How about now — can you hear me?');
+  assert.deepEqual(lc.demotedItems(), ['item_check3']);
+});
+
 test('multiple cannot-hear rounds converge, each round fully excluded', () => {
   const lc = lifecycleAt(LIFECYCLE.ACTIVE_INTERVIEW);
   assert.equal(lc.noteAssistantTurn('item_c2', 'Can you hear me now?'), 'demoted');
