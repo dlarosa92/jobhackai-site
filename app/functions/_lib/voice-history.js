@@ -95,8 +95,15 @@ export async function listVoiceSessions(env, userRowId, ent, nowMs = Date.now())
     if (expired && (activePlan || i !== 0)) continue;
 
     const fullAccess = sessionFullAccess(r, ent);
+    // A safety-ended session has no report by design. A few legacy safety rows
+    // were scored before suppression existed; their numbers must not leak into
+    // the progress strip, the "vs last session" baseline, or "Last time we
+    // said" either — treat the stored scorecard as if it were never written.
+    const safetyEnded = r.end_reason === 'ended_for_safety';
     let scorecard = null;
-    try { scorecard = r.scorecard_json ? JSON.parse(r.scorecard_json) : null; } catch (_) {}
+    if (!safetyEnded) {
+      try { scorecard = r.scorecard_json ? JSON.parse(r.scorecard_json) : null; } catch (_) {}
+    }
 
     sessions.push({
       sessionId: r.id,
@@ -107,7 +114,7 @@ export async function listVoiceSessions(env, userRowId, ent, nowMs = Date.now())
       // A safety-ended session is never scored, so it must not report
       // 'scoring': that chip would spin forever for a report that is
       // deliberately never generated.
-      status: r.end_reason === 'ended_for_safety' ? 'safety' : (scorecard ? 'ready' : 'scoring'),
+      status: safetyEnded ? 'safety' : (scorecard ? 'ready' : 'scoring'),
       endReason: r.end_reason || null,
       // A locked (expired) row must not leak its score through the API even
       // while the cleaner has yet to strip the stored scorecard.

@@ -157,7 +157,9 @@ await test('sessionFullAccess mirrors the session GET gate', () => {
 
 await test("a safety-ended session reports status 'safety', never a perpetual 'scoring'", async () => {
   const state = { sessions: [
-    sessionRow({ user_id: 1, entitlement_mode: 'subscription', scorecard_json: null, end_reason: 'ended_for_safety' }),
+    // Legacy row: mis-scored BEFORE suppression existed — the stored numbers
+    // must not surface anywhere
+    sessionRow({ user_id: 1, entitlement_mode: 'subscription', scorecard_json: JSON.stringify({ overall: 61, topImprovement: 'Stay professional under pressure' }), end_reason: 'ended_for_safety' }),
     sessionRow({ user_id: 1, entitlement_mode: 'subscription', scorecard_json: null, end_reason: null }),
     sessionRow({ user_id: 1, entitlement_mode: 'subscription', end_reason: 'user_ended' })
   ] };
@@ -167,7 +169,9 @@ await test("a safety-ended session reports status 'safety', never a perpetual 's
   // Safety row: its report is deliberately never generated
   assert.equal(safety.status, 'safety');
   assert.equal(safety.endReason, 'ended_for_safety');
+  // Even a legacy stored scorecard never leaks a score or coaching line
   assert.equal(safety.overall, null);
+  assert.equal(safety.topImprovement, null);
   // A genuinely still-scoring row keeps reporting scoring
   assert.equal(byId[state.sessions[1].id].status, 'scoring');
   // A normally scored row is untouched
