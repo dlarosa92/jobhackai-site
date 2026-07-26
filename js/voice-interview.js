@@ -1110,11 +1110,18 @@
       teardownConnection();
       // Send the local transcript tail so the fresh realtime session resumes
       // the conversation instead of restarting the interview from scratch.
+      // The tail alone cannot distinguish "still in the audio check" from
+      // "interview started, nothing committed yet" — both are empty. A drop
+      // right after the acknowledgement therefore also sends the lifecycle
+      // fact, or the server would rebuild audio-check instructions and the
+      // interviewer would replay the greeting into a live, committing
+      // interview.
       var res = await api('/api/voice/session', {
         method: 'POST',
         body: JSON.stringify({
           resumeSessionId: state.sessionId,
-          transcript: getTranscript().slice(-20)
+          transcript: getTranscript().slice(-20),
+          interviewStarted: lifecycle().is(PHASES.ACTIVE_INTERVIEW)
         })
       });
       if (!res.ok) throw new Error((res.data && res.data.error) || 'resume_failed');

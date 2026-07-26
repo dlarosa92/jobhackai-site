@@ -181,9 +181,13 @@ export async function onRequest(context) {
         resumeContext = buildResumeContext(tail);
       }
 
-      // firstName rides along for the one resume case that re-greets: a drop
-      // DURING the audio check has an empty transcript tail, so resumeContext
-      // is null and the fresh session runs the audio check again.
+      // An empty tail is ambiguous on its own: a drop DURING the audio check
+      // and a drop right AFTER the acknowledgement (interview live, nothing
+      // committed yet) both send no transcript. The client's lifecycle fact
+      // disambiguates: only a session whose interview never started re-runs
+      // the audio check — which is also why firstName rides along here.
+      // Old clients omit the flag and keep the re-check behavior.
+      const interviewStarted = body.interviewStarted === true;
       const minted = await mintClientSecret(env, {
         model,
         instructions: interviewerInstructions({
@@ -192,7 +196,8 @@ export async function onRequest(context) {
           jd: session.jd_excerpt,
           maxMinutes: MAX_SESSION_MINUTES,
           resumeContext,
-          firstName
+          firstName,
+          interviewStarted
         })
       });
       if (!minted) return errorResponse('Could not start the voice session. Please try again.', 502, origin, env, requestId);

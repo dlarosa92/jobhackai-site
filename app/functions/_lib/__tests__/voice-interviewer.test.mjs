@@ -376,6 +376,41 @@ test('a resumed session never re-runs the audio check', () => {
   assert.ok(resumed.includes('do not run an audio check'));
 });
 
+// PR #848 review: a drop right after the acknowledgement leaves an ACTIVE
+// interview with an EMPTY transcript tail — indistinguishable, by tail alone,
+// from a drop during the audio check. The client's interviewStarted flag is
+// what keeps the reconnect from replaying the check into a live interview.
+test('regression: interview started + empty tail resumes the interview, never the audio check', () => {
+  // The ambiguity is real: an empty tail builds no resume context...
+  assert.equal(buildResumeContext([]), null);
+  // ...so without the flag the instructions would re-run the check (old-client behavior):
+  const withoutFlag = interviewerInstructions({ ...BASE, firstName: 'Maya', resumeContext: null });
+  assert.ok(withoutFlag.includes('AUDIO CHECK'));
+  // With the flag, the session resumes straight into interview content:
+  const out = interviewerInstructions({ ...BASE, firstName: 'Maya', resumeContext: null, interviewStarted: true });
+  assert.ok(!out.includes('AUDIO CHECK'));
+  assert.ok(!out.includes('can you hear me clearly'));
+  assert.ok(out.includes('Never run an audio check'));
+  assert.ok(out.includes('do not greet them as if meeting them for the first time'));
+  assert.ok(out.includes('The audio check already happened'));
+  // It still opens the interview properly: role-aware welcome + first question
+  assert.ok(out.includes('welcoming them to the mock interview for the Senior Software Engineer role'));
+  assert.ok(out.includes('then your first question'));
+  // The greeting name has no business here
+  assert.ok(!out.includes('Maya'));
+});
+
+test('a real transcript tail takes precedence over the early-resume block', () => {
+  const out = interviewerInstructions({
+    ...BASE,
+    resumeContext: 'Interviewer: First question.\nCandidate: My answer.',
+    interviewStarted: true
+  });
+  assert.ok(out.includes('CONVERSATION_SO_FAR'));
+  assert.ok(!out.includes('The audio check already happened'));
+  assert.ok(!out.includes('AUDIO CHECK'));
+});
+
 test('the closing turn is mandated to be a statement, so the app can detect it deterministically', () => {
   const out = interviewerInstructions(BASE);
   assert.ok(out.includes('thanking them for their time'));
