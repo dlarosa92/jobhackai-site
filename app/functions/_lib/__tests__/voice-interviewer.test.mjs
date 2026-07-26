@@ -17,7 +17,8 @@ import {
   CONDUCT_WARNING_STAGE,
   CONDUCT_END_STAGE,
   VOICE_END_REASONS,
-  normalizeEndReason
+  normalizeEndReason,
+  shouldGenerateScorecard
 } from '../voice-interviewer.js';
 
 let passed = 0;
@@ -309,6 +310,22 @@ test('normalizeEndReason clamps to the allowlist and rejects junk', () => {
   assert.equal(normalizeEndReason(undefined), null);
   assert.equal(normalizeEndReason(42), null);
   assert.equal(normalizeEndReason({ reason: 'user_ended' }), null);
+});
+
+test('a safety-terminated session is never conventionally scored', () => {
+  // A scorer that only knows S/A/O frames a crisis disclosure as poor
+  // interview behavior — a real safety-ended dev session got exactly that
+  // report. No score exists for ending an interview to reach real help.
+  assert.equal(shouldGenerateScorecard('ended_for_safety'), false);
+  // Every other end still gets its report, including conduct terminations
+  assert.equal(shouldGenerateScorecard('user_ended'), true);
+  assert.equal(shouldGenerateScorecard('time_up'), true);
+  assert.equal(shouldGenerateScorecard('connection_lost'), true);
+  assert.equal(shouldGenerateScorecard('ended_by_interviewer'), true);
+  assert.equal(shouldGenerateScorecard('ended_by_interviewer_unwarned'), true);
+  // Legacy rows with no end_reason keep today's behavior
+  assert.equal(shouldGenerateScorecard(null), true);
+  assert.equal(shouldGenerateScorecard(undefined), true);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

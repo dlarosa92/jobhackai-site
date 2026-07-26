@@ -19,6 +19,7 @@ import {
   createClosingTurnGate,
   readToolCall,
   isSafetyReferral,
+  isConductWarningLine,
   LIVE_CANDIDATE_SPEECH_EVENTS,
   CONDUCT_TOOL,
   SAFETY_TOOL
@@ -296,6 +297,82 @@ test('gates are independent (no shared state across sessions)', () => {
   assert.equal(a.wasWarned(), true);
   assert.equal(b.wasWarned(), false);
   assert.equal(b.decide('end'), 'warn_instead');
+});
+
+// -- LIVE DEV REGRESSION: repeated abuse never ended the session ---------------
+//
+// Observed sequence in the failed release-gate test: first directed insult,
+// one professional warning, second directed insult, the interviewer says again
+// that she will not continue through the language... and then keeps asking
+// questions. Root cause was twofold: she spoke the warning without ever
+// calling conduct_action (so the gate heard nothing), and the escalation
+// required live speech events AND a new response, so a missing speech signal
+// silenced even explicit tool calls.
+
+test('LIVE REGRESSION: insult, warning, second insult, spoken warning - session ends, then silence', () => {
+  const g = createConductGate();
+  // First directed insult: the model warns via the tool (response A) and the
+  // transcript of its own warning line arrives for the same response.
+  assert.equal(g.decide('warning', 'call_1', 'resp_A'), 'warn');
+  assert.equal(g.noteSpokenWarning('resp_A'), 'ignore');
+  // Second directed insult: the model only SPEAKS the warning again, no tool.
+  assert.equal(g.noteSpokenWarning('resp_B'), 'end');
+  // Then silence: everything after the close is inert.
+  assert.equal(g.noteSpokenWarning('resp_C'), 'ignore');
+  assert.equal(g.decide('end', 'call_9', 'resp_C'), 'ignore');
+  assert.equal(g.decide('warning', 'call_10', 'resp_D'), 'ignore');
+  assert.equal(g.endReason(), 'ended_by_interviewer');
+});
+
+test('LIVE REGRESSION: purely spoken warnings, never a single tool call', () => {
+  const g = createConductGate();
+  assert.equal(g.noteSpokenWarning('resp_A'), 'warn');
+  assert.equal(g.noteSpokenWarning('resp_B'), 'end');
+});
+
+test('LIVE REGRESSION: dead speech events cannot silence tool escalation', () => {
+  // If input_audio_buffer events are never delivered, the old gate ignored
+  // every repeat call and the client answered "continue" - the fully armed
+  // gate produced the endless-warning loop itself. Response identity alone
+  // must now be sufficient.
+  const g = createConductGate();
+  assert.equal(g.decide('warning', 'call_1', 'resp_A'), 'warn');
+  // note: NO noteCandidateSpoke ever fires
+  assert.equal(g.decide('warning', 'call_2', 'resp_B'), 'end');
+});
+
+test('a spoken warning and its duplicate transcript event stay ONE warning', () => {
+  const g = createConductGate();
+  assert.equal(g.noteSpokenWarning('resp_A'), 'warn');
+  // GA + beta transcript event names can both surface the same response
+  assert.equal(g.noteSpokenWarning('resp_A'), 'ignore');
+  assert.equal(g.wasWarned(), true);
+});
+
+test('a spoken warning without ids needs independent evidence to end', () => {
+  const g = createConductGate();
+  assert.equal(g.noteSpokenWarning(''), 'warn');
+  // No response ids and no candidate speech: cannot prove a second incident
+  assert.equal(g.noteSpokenWarning(''), 'ignore');
+  g.noteCandidateSpoke(SPOKE);
+  assert.equal(g.noteSpokenWarning(''), 'end');
+});
+
+test('the warning REGISTER is detected; everyday interviewer speech is not', () => {
+  // The mandated register and close paraphrases
+  assert.equal(isConductWarningLine("I'm going to stop you there. That's not language I'll continue an interview through. Keep it professional and we'll carry on."), true);
+  assert.equal(isConductWarningLine('I will not continue the interview through that language.'), true);
+  assert.equal(isConductWarningLine('That language has no place in an interview.'), true);
+  assert.equal(isConductWarningLine("I won't be spoken to that way."), true);
+  // Everyday interviewer speech that shares the words
+  assert.equal(isConductWarningLine('Let me stop you there - what was the outcome?'), false);
+  assert.equal(isConductWarningLine('Why did you choose that language for the backend?'), false);
+  assert.equal(isConductWarningLine("We won't focus on that language today."), false);
+  assert.equal(isConductWarningLine('How do you keep it professional under pressure?'), false);
+  assert.equal(isConductWarningLine('Keep it professional.'), false);
+  assert.equal(isConductWarningLine('That language is not appropriate for this project.'), false);
+  assert.equal(isConductWarningLine(''), false);
+  assert.equal(isConductWarningLine(null), false);
 });
 
 // -- dev blocker 2: crisis guidance spoken, tool skipped, interview resumed ----

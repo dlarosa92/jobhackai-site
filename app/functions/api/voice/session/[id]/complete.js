@@ -10,7 +10,7 @@
 import { getBearer, verifyFirebaseIdToken } from '../../../../_lib/firebase-auth.js';
 import { getOrCreateUserByAuthId, getDb } from '../../../../_lib/db.js';
 import { voiceFeatureEnabled } from '../../../../_lib/voice-entitlements.js';
-import { normalizeEndReason } from '../../../../_lib/voice-interviewer.js';
+import { normalizeEndReason, shouldGenerateScorecard } from '../../../../_lib/voice-interviewer.js';
 import { generateAndStoreScorecard } from '../../../../_lib/voice-scorecard.js';
 import { errorResponse, successResponse, generateRequestId } from '../../../../_lib/error-handler.js';
 
@@ -53,16 +53,19 @@ export async function onRequest(context) {
     const d1User = await getOrCreateUserByAuthId(env, uid, null, { updateActivity: false });
     const sessionId = String(params.id || '');
     const session = await db.prepare(
-      `SELECT id, user_id, status, transcript_json FROM voice_sessions WHERE id = ?`
+      `SELECT id, user_id, status, transcript_json, end_reason FROM voice_sessions WHERE id = ?`
     ).bind(sessionId).first();
 
     if (!session || !d1User || session.user_id !== d1User.id) {
       return errorResponse('Session not found', 404, origin, env, requestId);
     }
     if (session.status === 'completed' && session.transcript_json) {
-      // Idempotent: keep the original completion, still ensure a scorecard exists
-      context.waitUntil(generateAndStoreScorecard(env, sessionId));
-      return successResponse({ sessionId, status: 'completed', alreadyCompleted: true }, 200, origin, env, requestId);
+      // Idempotent: keep the original completion, still ensure a scorecard
+      // exists — except for a safety-ended session, which is never scored.
+      if (shouldGenerateScorecard(session.end_reason)) {
+        context.waitUntil(generateAndStoreScorecard(env, sessionId));
+      }
+      return successResponse({ sessionId, status: 'completed', alreadyCompleted: true, endReason: session.end_reason || null }, 200, origin, env, requestId);
     }
 
     // Transcript: [{ speaker: 'user'|'assistant', text: '...' }, ...]
@@ -117,10 +120,15 @@ export async function onRequest(context) {
       console.warn(`[VOICE-CONDUCT] session=${sessionId} uid=${uid} end=${endReason}`);
     }
 
-    // Scorecard generation off the request path; client polls the session GET
-    context.waitUntil(generateAndStoreScorecard(env, sessionId));
+    // Scorecard generation off the request path; client polls the session GET.
+    // A safety-ended session is never scored (see shouldGenerateScorecard).
+    if (shouldGenerateScorecard(endReason)) {
+      context.waitUntil(generateAndStoreScorecard(env, sessionId));
+    } else {
+      console.log(`[VOICE-SAFETY] session=${sessionId} scorecard suppressed (ended_for_safety)`);
+    }
 
-    return successResponse({ sessionId, status: 'completed', costUsd }, 200, origin, env, requestId);
+    return successResponse({ sessionId, status: 'completed', costUsd, endReason }, 200, origin, env, requestId);
   } catch (err) {
     console.error('[VOICE-COMPLETE] Error:', err?.message || err);
     return errorResponse('Internal error', 500, origin, env, requestId);
