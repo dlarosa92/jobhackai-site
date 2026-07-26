@@ -54,7 +54,8 @@
     conductEnd: null,          // pending end, waiting for the closing turn
     endCause: null,            // 'conduct' | 'safety' | 'closing' — which reason the pending end carries
     lifecycle: null,           // interview lifecycle (voice-lifecycle.js); owns commit boundaries
-    turnWait: null             // { committedAtMs, cueTimer } — turn-start latency + waiting cue
+    turnWait: null,            // { committedAtMs, cueTimer } — turn-start latency + waiting cue
+    lastAssistantResponseId: ''  // most recent assistant response seen; straggler guard for the settling window
   };
 
   function $(id) { return document.getElementById(id); }
@@ -226,8 +227,10 @@
     var included = Object.create(null);
     var greetingDone = false;
     var spokeThisResponse = false;
+    var greetingContentConfirmed = false;
     var awaitingOpening = false;
     var pendingSinceAck = [];
+    var preAckResponseId = '';
     var lastDemotedItems = [];
     return {
       phase: function () { return phase; },
@@ -249,7 +252,12 @@
       noteAudioCheckTranscript: function (transcript) {
         if (phase !== PHASES.AUDIO_CHECK) return;
         spokeThisResponse = true;
-        if (fallbackIsHearingCheckTurn(typeof transcript === 'string' ? transcript : '')) greetingDone = true;
+        if (fallbackIsHearingCheckTurn(typeof transcript === 'string' ? transcript : '')) {
+          greetingDone = true;
+          greetingContentConfirmed = true;
+        } else if (greetingDone && !greetingContentConfirmed) {
+          greetingDone = false;
+        }
       },
       noteGreetingDone: function () {
         if (phase !== PHASES.AUDIO_CHECK) return;
@@ -257,7 +265,7 @@
         spokeThisResponse = false;
       },
       isGreetingDone: function () { return greetingDone; },
-      noteUserCommitted: function (itemId) {
+      noteUserCommitted: function (itemId, lastResponseId) {
         if (phase === PHASES.ACTIVE_INTERVIEW) {
           if (itemId && !excluded[itemId]) included[itemId] = true;
           if (awaitingOpening && itemId) pendingSinceAck.push(itemId);
@@ -268,12 +276,14 @@
           phase = PHASES.ACTIVE_INTERVIEW;
           awaitingOpening = true;
           pendingSinceAck = [];
+          preAckResponseId = typeof lastResponseId === 'string' ? lastResponseId : '';
           return 'begin_interview';
         }
         return 'excluded';
       },
-      noteAssistantTurn: function (itemId, transcript) {
+      noteAssistantTurn: function (itemId, transcript, responseId) {
         if (phase !== PHASES.ACTIVE_INTERVIEW || !awaitingOpening) return 'none';
+        if (responseId && preAckResponseId && responseId === preAckResponseId) return 'none';
         var text = typeof transcript === 'string' ? transcript.trim() : '';
         if (!text) return 'none';
         if (!fallbackIsHearingCheckTurn(text)) {
@@ -292,6 +302,7 @@
         awaitingOpening = false;
         phase = PHASES.AUDIO_CHECK;
         greetingDone = true;
+        greetingContentConfirmed = true;
         return 'demoted';
       },
       demotedItems: function () { return lastDemotedItems.slice(); },
@@ -304,7 +315,10 @@
         return phase === PHASES.ACTIVE_INTERVIEW;
       },
       noteReconnect: function () {
-        if (phase === PHASES.AUDIO_CHECK) greetingDone = false;
+        if (phase === PHASES.AUDIO_CHECK) {
+          greetingDone = false;
+          greetingContentConfirmed = false;
+        }
         spokeThisResponse = false;
       }
     };
@@ -838,9 +852,11 @@
 
   // VAD committed a candidate turn. The lifecycle classifies the item once,
   // permanently — and the first commit after the audio-check greeting is the
-  // acknowledgement that starts the official interview.
+  // acknowledgement that starts the official interview. The last-seen
+  // assistant response id rides along so the settling window can tell that
+  // response's late transcript apart from the turn that answers the ack.
   function handleUserCommitted(itemId) {
-    var action = lifecycle().noteUserCommitted(itemId || null);
+    var action = lifecycle().noteUserCommitted(itemId || null, state.lastAssistantResponseId);
     if (action === 'begin_interview') {
       setStatus('Live. The interviewer can hear you.', 'vi-live');
       track('voice_interview_begin', {});
@@ -894,9 +910,10 @@
       // this turn is another hearing check — the lifecycle walks back to
       // AUDIO_CHECK and excludes the whole round, so the exclusion gates the
       // recordTurn below (writes cannot be unwritten afterwards).
+      if (evt.response_id) state.lastAssistantResponseId = evt.response_id;
       var opening = 'none';
       if (!state.ending && !state.conductEnd) {
-        opening = lifecycle().noteAssistantTurn(evt.item_id, evt.transcript);
+        opening = lifecycle().noteAssistantTurn(evt.item_id, evt.transcript, evt.response_id || '');
       }
       if (opening === 'demoted') {
         console.warn('[VOICE] candidate could not hear; audio check repeating — round excluded');
@@ -954,6 +971,7 @@
     }
 
     if (type === 'response.created') {
+      if (evt.response && evt.response.id) state.lastAssistantResponseId = evt.response.id;
       // No new interviewer turns once the wrap-up is announced. Responses
       // are serial, so anything created during CLOSING is a new turn racing
       // the mic shutdown — cancel it before it speaks.
@@ -965,6 +983,7 @@
       return;
     }
     if (type === 'output_audio_buffer.started') {
+      if (evt.response_id) state.lastAssistantResponseId = evt.response_id;
       state.audioPlaying = true;
       // Which response is speaking, not merely that something is. A bare
       // "audio is playing" flag cannot tell the closing line apart from a
@@ -1182,6 +1201,7 @@
       // check. Nothing is committed to transcript or scoring before the
       // official interview begins.
       state.lifecycle = newInterviewLifecycle();
+      state.lastAssistantResponseId = '';
       clearTurnWait();
 
       show('vi-live-view');

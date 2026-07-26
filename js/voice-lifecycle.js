@@ -138,6 +138,13 @@ export function createInterviewLifecycle() {
   // remembered so a demotion can exclude them retroactively.
   var awaitingOpening = false;
   var pendingSinceAck = [];
+  // The assistant response that was already in flight (or just finished)
+  // when the window opened. Its transcript arriving LATE — after the
+  // acknowledgement — is a pre-ack straggler, not the turn that answers the
+  // acknowledgement, and must not settle the window: confirming on it lets
+  // the real hearing question arrive post-settlement and be committed, and
+  // a replayed greeting transcript would spuriously demote.
+  var preAckResponseId = '';
   // Item ids excluded by the most recent demotion. The caller reads these
   // right after a 'demoted' verdict and purges them from the transcript
   // assembler: exclusion gates future writes, but a whisper that landed
@@ -178,6 +185,10 @@ export function createInterviewLifecycle() {
   // Whether the response currently completing produced any spoken transcript
   // during the audio check. Arms the liveness fallback in noteGreetingDone.
   var spokeThisResponse = false;
+  // Whether the current arming was proven by content (the hearing question
+  // was actually seen) rather than guessed by the liveness fallback. Only a
+  // guessed arm may be revoked when its transcript finally shows up.
+  var greetingContentConfirmed = false;
 
   /**
    * An interviewer transcript arrived while the session is in AUDIO_CHECK.
@@ -186,12 +197,20 @@ export function createInterviewLifecycle() {
    * A racing VAD auto-response that said something else, or a greeting cut
    * off before the question, arms nothing — the model re-asks and the check
    * arms then.
+   *
+   * The reverse also holds: when events arrive out of order and the liveness
+   * fallback already armed on a transcript-less response.done, the response's
+   * transcript showing up late and NOT being the hearing question revokes
+   * that guess. A content-confirmed arm is never revoked.
    */
   function noteAudioCheckTranscript(transcript) {
     if (phase !== LIFECYCLE.AUDIO_CHECK) return;
     spokeThisResponse = true;
     if (isHearingCheckTurn(typeof transcript === 'string' ? transcript : '')) {
       greetingDone = true;
+      greetingContentConfirmed = true;
+    } else if (greetingDone && !greetingContentConfirmed) {
+      greetingDone = false;
     }
   }
 
@@ -219,9 +238,13 @@ export function createInterviewLifecycle() {
    * it is itself excluded from the transcript, and the interview goes ACTIVE
    * so the interviewer's reply (the opening + first question) is committed.
    *
+   * `lastResponseId` is the most recent assistant response the caller has
+   * seen; a window opened by this commit treats that response's late
+   * transcript as a pre-ack straggler (see noteAssistantTurn).
+   *
    * Returns 'begin_interview' | 'committed' | 'excluded'.
    */
-  function noteUserCommitted(itemId) {
+  function noteUserCommitted(itemId, lastResponseId) {
     if (phase === LIFECYCLE.ACTIVE_INTERVIEW) {
       if (itemId && !excluded[itemId]) included[itemId] = true;
       // Committed before the opening settled the provisional ack: remembered,
@@ -234,6 +257,7 @@ export function createInterviewLifecycle() {
       to(LIFECYCLE.ACTIVE_INTERVIEW);
       awaitingOpening = true;
       pendingSinceAck = [];
+      preAckResponseId = typeof lastResponseId === 'string' ? lastResponseId : '';
       return 'begin_interview';
     }
     return 'excluded';
@@ -257,9 +281,15 @@ export function createInterviewLifecycle() {
    *
    * The caller must consult this BEFORE handing the turn to the transcript
    * assembler: exclusion gates future writes, it cannot unwrite one.
+   *
+   * `responseId` guards against stragglers: a transcript belonging to the
+   * response that was already in flight when the window opened is pre-ack
+   * material arriving late (or a duplicate delivery) and settles nothing —
+   * the window waits for a genuinely post-acknowledgement turn.
    */
-  function noteAssistantTurn(itemId, transcript) {
+  function noteAssistantTurn(itemId, transcript, responseId) {
     if (phase !== LIFECYCLE.ACTIVE_INTERVIEW || !awaitingOpening) return 'none';
+    if (responseId && preAckResponseId && responseId === preAckResponseId) return 'none';
     var text = typeof transcript === 'string' ? transcript.trim() : '';
     if (!text) return 'none';
     if (!isHearingCheckTurn(text)) {
@@ -282,8 +312,9 @@ export function createInterviewLifecycle() {
     phase = LIFECYCLE.AUDIO_CHECK;
     // The repeated check is the greeting of this round: it has fully
     // generated (its transcript is what we just read), so the next commit is
-    // the next provisional acknowledgement.
+    // the next provisional acknowledgement. Content-proven by definition.
     greetingDone = true;
+    greetingContentConfirmed = true;
     return 'demoted';
   }
 
@@ -312,7 +343,10 @@ export function createInterviewLifecycle() {
 
   /** A reconnect landed. During the audio check the fresh session re-greets. */
   function noteReconnect() {
-    if (phase === LIFECYCLE.AUDIO_CHECK) greetingDone = false;
+    if (phase === LIFECYCLE.AUDIO_CHECK) {
+      greetingDone = false;
+      greetingContentConfirmed = false;
+    }
     spokeThisResponse = false;
   }
 

@@ -401,6 +401,61 @@ test('the spoken flag is per response: a later transcript-less response uses the
   assert.equal(lc.isGreetingDone(), true, 'liveness fallback applies per response');
 });
 
+test('out-of-order events: a fallback arm is revoked when its transcript turns out not to be the question', () => {
+  // response.done processed before the response's transcript (out-of-order
+  // delivery): the liveness fallback arms on the unknown response...
+  const lc = createInterviewLifecycle();
+  lc.to(LIFECYCLE.AUDIO_CHECK);
+  lc.noteGreetingDone();
+  assert.equal(lc.isGreetingDone(), true, 'fallback armed the unknown response');
+  // ...then the transcript arrives late and is NOT the hearing question:
+  // the guess is revoked, and the next commit stays pre-interview chatter.
+  lc.noteAudioCheckTranscript("I'm sorry, I didn't quite catch that.");
+  assert.equal(lc.isGreetingDone(), false, 'late knowledge revokes the guess');
+  assert.equal(lc.noteUserCommitted('item_x'), 'excluded');
+  // The real hearing question then arms by content as usual.
+  lc.noteAudioCheckTranscript('Hi. Before we begin, can you hear me clearly?');
+  assert.equal(lc.noteUserCommitted('item_ack'), 'begin_interview');
+});
+
+test('a late transcript that IS the question keeps a fallback arm (content-confirms it)', () => {
+  const lc = createInterviewLifecycle();
+  lc.to(LIFECYCLE.AUDIO_CHECK);
+  lc.noteGreetingDone();
+  lc.noteAudioCheckTranscript('Hi. Before we begin, can you hear me clearly?');
+  assert.equal(lc.isGreetingDone(), true);
+  // A later non-check line can never revoke a content-confirmed arm.
+  lc.noteAudioCheckTranscript('Take your time.');
+  assert.equal(lc.isGreetingDone(), true);
+});
+
+test('a pre-ack straggler transcript settles nothing: the window waits for a post-ack turn', () => {
+  // The greeting's response (r_pre) was last seen when the ack opened the
+  // window; its transcript arriving late — or replayed — is not the turn
+  // that answers the acknowledgement.
+  const lc = createInterviewLifecycle();
+  lc.to(LIFECYCLE.AUDIO_CHECK);
+  lc.noteGreetingDone();
+  assert.equal(lc.noteUserCommitted('item_ack', 'r_pre'), 'begin_interview');
+  // A replayed greeting transcript (hearing-check shaped!) from the pre-ack
+  // response must not spuriously demote the open window...
+  assert.equal(lc.noteAssistantTurn('item_greet', 'Hi. Before we begin, can you hear me clearly?', 'r_pre'), 'none');
+  assert.equal(lc.phase(), LIFECYCLE.ACTIVE_INTERVIEW);
+  assert.equal(lc.isAwaitingOpening(), true, 'the window is still open');
+  // ...and a late non-check straggler must not confirm it either — otherwise
+  // the real hearing question would arrive post-settlement and be committed.
+  assert.equal(lc.noteAssistantTurn('item_pre2', 'One moment.', 'r_pre'), 'none');
+  assert.equal(lc.isAwaitingOpening(), true);
+  // The genuinely post-ack turn settles as usual: here, a re-check demotes.
+  assert.equal(lc.noteAssistantTurn('item_recheck', 'Can you hear me clearly now?', 'r_post'), 'demoted');
+  assert.equal(lc.phase(), LIFECYCLE.AUDIO_CHECK);
+});
+
+test('settling without response ids keeps the previous behavior', () => {
+  const lc = lifecycleAt(LIFECYCLE.ACTIVE_INTERVIEW);   // helper passes no ids
+  assert.equal(lc.noteAssistantTurn('item_open', 'Welcome. Tell me about your current role.'), 'confirmed');
+});
+
 test('audio-check transcripts outside AUDIO_CHECK arm nothing', () => {
   const lc = lifecycleAt(LIFECYCLE.ACTIVE_INTERVIEW);
   lc.noteAssistantTurn('item_open', 'Welcome. First question: what drew you here?');   // settle
