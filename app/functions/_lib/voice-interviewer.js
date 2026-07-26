@@ -79,6 +79,17 @@ export function normalizeEndReason(reason) {
   return VOICE_END_REASONS.includes(value) ? value : null;
 }
 
+/**
+ * A safety-terminated session is never conventionally scored. The candidate
+ * disclosed a crisis, not interview performance, and a scorer that only knows
+ * S/A/O will frame the disclosure as poor interview behavior — a real report
+ * from a real safety-ended dev session did exactly that. No score exists for
+ * ending an interview to reach real help.
+ */
+export function shouldGenerateScorecard(endReason) {
+  return endReason !== 'ended_for_safety';
+}
+
 // Most recent conversation kept when building the resume context.
 export const RESUME_CONTEXT_MAX_CHARS = 1500;
 const RESUME_TURN_MAX_CHARS = 220;

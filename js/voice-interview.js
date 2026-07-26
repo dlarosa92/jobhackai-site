@@ -294,13 +294,29 @@
             if (stage === 'end') { deviated = true; return 'warn_instead'; }
             return 'warn';
           }
-          if (!spoke) return 'ignore';
-          // Same response as the warning = a replay, not a second incident
-          if (responseId && warnResponseId && responseId === warnResponseId) return 'ignore';
+          // Response identity first; speech guard only when ids are missing
+          if (responseId && warnResponseId) {
+            if (responseId === warnResponseId) return 'ignore';
+          } else if (!spoke) {
+            return 'ignore';
+          }
           ended = true;
           return 'end';
         }
         return 'ignore';
+      },
+      noteSpokenWarning: function (responseId) {
+        if (ended) return 'ignore';
+        if (!warned) {
+          warned = true;
+          spoke = false;
+          warnResponseId = responseId || '';
+          return 'warn';
+        }
+        if (responseId && warnResponseId && responseId === warnResponseId) return 'ignore';
+        if (!(responseId && warnResponseId) && !spoke) return 'ignore';
+        ended = true;
+        return 'end';
       },
       noteCandidateSpoke: function (eventType) {
         if (eventType !== 'input_audio_buffer.speech_started' &&
@@ -359,6 +375,57 @@
     return false;
   }
 
+  // Hand-synced copy of isConductWarningLine for the module-missing case.
+  function fallbackIsConductWarningLine(text) {
+    if (typeof text !== 'string' || text.length < 12) return false;
+    var sentences = text.replace(/([.!?])/g, '$1\n').split('\n');
+    var keepProfessional = false;
+    var stopYouThere = false;
+    for (var i = 0; i < sentences.length; i++) {
+      var t = sentences[i].toLowerCase();
+      if (!t || t.indexOf('?') >= 0) continue;
+      if (/\bnot language\b/.test(t)) return true;
+      if (/\b(?:won'?t|will not|would not|wouldn'?t|not going to|refuse to|cannot|can'?t)\b[^]{0,30}\b(?:continue|tolerate|accept|take|allow|put up with|listen to)\b[^]{0,40}\b(?:language|kind of talk|talk like that)\b/.test(t)) return true;
+      if (/\b(?:that|this|such) (?:language|kind of talk)\b[^]{0,50}\b(?:no place|doesn'?t belong|does not belong|not acceptable|isn'?t acceptable|not appropriate|isn'?t appropriate)\b[^]{0,40}\b(?:interview|professional|here)\b/.test(t)) return true;
+      if (/\b(?:won'?t|will not|not going to) (?:be )?(?:spoken|talked) to\b/.test(t)) return true;
+      if (/\bkeep (?:it|this|things) professional\b/.test(t)) keepProfessional = true;
+      if (/\bstop you (?:right )?there\b/.test(t)) stopYouThere = true;
+    }
+    return keepProfessional && stopYouThere;
+  }
+
+  // The conduct twin of the safety backstop, and the fix for the live failure:
+  // the interviewer spoke the warning register repeatedly and never called
+  // conduct_action once, so the gate never heard about any of it and the
+  // session could not end. The spoken line now counts. Detection alone never
+  // ends a session — the first hit records the one warning, and only a second
+  // conduct signal from a DIFFERENT response closes it, after which her line
+  // finishes playing and the session tears down: no further question is
+  // possible.
+  function maybeConductBackstop(transcript, responseId) {
+    if (state.ending || state.conductEnd) return;
+    var check;
+    if (typeof window.isConductWarningLine === 'function') {
+      check = window.isConductWarningLine;
+    } else {
+      reportConductModuleMissing();
+      check = fallbackIsConductWarningLine;
+    }
+    if (!check(String(transcript || ''))) return;
+    if (!state.conduct) state.conduct = newConductGate();
+    var decision = state.conduct.noteSpokenWarning(responseId || '');
+    if (decision === 'warn') {
+      console.warn('[VOICE] spoken conduct warning noted (no tool call)');
+      track('voice_conduct_action', { stage: 'warning_spoken' });
+      return;
+    }
+    if (decision === 'end') {
+      console.warn('[VOICE] second conduct violation; closing the session');
+      track('voice_conduct_action', { stage: 'end', via: 'spoken_warning' });
+      requestGuardedEnd('conduct', responseId || '');
+    }
+  }
+
   function maybeSafetyBackstop(transcript, responseId) {
     if (state.ending || state.conductEnd) return;
     var check;
@@ -387,7 +454,7 @@
       // stall the turns that follow. Replays are absorbed by the ledger above.
       answerToolCall(call.callId, {
         ok: false,
-        error: 'No action taken. Continue the interview.',
+        error: 'Duplicate or unactionable call; no action taken.',
         interview_continues: true
       });
       return;
@@ -520,6 +587,7 @@
     // GA + beta event names for assistant transcript
     if (type === 'response.output_audio_transcript.done' || type === 'response.audio_transcript.done') {
       recordTurn('assistant', evt.transcript, evt.item_id);
+      maybeConductBackstop(evt.transcript, evt.response_id);
       maybeSafetyBackstop(evt.transcript, evt.response_id);
       return;
     }
@@ -816,8 +884,15 @@
 
     show('vi-done-view');
     var doneStatus = $('vi-done-status');
-    if (doneStatus) doneStatus.textContent = 'We\'re reviewing your conversation using our S + A = O formula and interview rubric. This usually takes a few seconds.';
-    historyLiveScoring();
+    var isSafetyEnd = reason === 'ended_for_safety';
+    if (isSafetyEnd) {
+      // The safety view goes up immediately: no S+A=O copy, no scoring state,
+      // whatever happens to the save below.
+      renderSafetyEnd(null);
+    } else {
+      if (doneStatus) doneStatus.textContent = 'We\'re reviewing your conversation using our S + A = O formula and interview rubric. This usually takes a few seconds.';
+      historyLiveScoring();
+    }
 
     // Let any transcript still in flight land before the channel closes; the
     // wait is bounded and a timeout just means we store what we already have.
@@ -836,9 +911,21 @@
         })
       });
       track('voice_session_complete', { duration_seconds: durationSeconds, reason: reason || 'user_ended' });
+      if (isSafetyEnd) {
+        // Already showing the safety view; no polling for a scorecard the
+        // server deliberately never generates.
+        historyLiveClear(true);
+        return;
+      }
       pollScorecard(0);
     } catch (err) {
       console.error('[VOICE] complete failed:', err);
+      if (isSafetyEnd) {
+        // The safety view stays up regardless — never replace it with
+        // score-oriented error copy.
+        historyLiveClear(false);
+        return;
+      }
       if (doneStatus) doneStatus.textContent = 'The session ended but saving failed. Your session is recorded; check back shortly.';
       historyLiveClear(false);
     }
@@ -856,6 +943,11 @@
     setTimeout(async function () {
       try {
         var res = await api('/api/voice/session/' + encodeURIComponent(state.sessionId), { method: 'GET' });
+        if (res.ok && res.data && res.data.endReason === 'ended_for_safety') {
+          renderScorecard(res.data);
+          historyOnScorecardReady();
+          return;
+        }
         if (res.ok && res.data && res.data.scorecardReady) {
           renderScorecard(res.data);
           historyOnScorecardReady();
@@ -916,7 +1008,31 @@
     return '<p class="vi-sc-saved">' + escapeHtml(parts.join(' · ')) + '</p>';
   }
 
+  // The report view for a safety-ended session. Deliberately scoreless: the
+  // candidate disclosed a crisis, not interview performance, and a real dev
+  // session's report framed the disclosure as unprofessional behavior. Never
+  // again — no score, no coaching, no professionalism framing.
+  function renderSafetyEnd(data) {
+    var doneStatus = $('vi-done-status');
+    if (doneStatus) doneStatus.style.display = 'none';
+    var wrap = $('vi-scorecard');
+    if (!wrap) return;
+    var html = '<h2 class="vi-sc-title">Interview ended early for safety</h2>';
+    html += '<p class="vi-sc-block">This session closed so you could reach real help, and that was the right way for it to end. No score is given for a safety-ended session, and nothing about it counts against you.</p>';
+    html += '<p class="vi-sc-block">If you are in immediate danger, contact emergency services now, or call or text 988 in the US.</p>';
+    html += '<p class="vi-sc-block">You are welcome back to practice whenever you are ready.</p>';
+    if (data) html += savedLine(data);
+    wrap.innerHTML = html;
+  }
+
   function renderScorecard(data) {
+    // A safety-ended session never renders as a scorecard, even if one was
+    // stored before suppression existed — that legacy report is the one that
+    // misframed the safety statement.
+    if (data && data.endReason === 'ended_for_safety') {
+      renderSafetyEnd(data);
+      return;
+    }
     var wrap = $('vi-scorecard');
     var doneStatus = $('vi-done-status');
     if (doneStatus) doneStatus.style.display = 'none';
@@ -1123,6 +1239,11 @@
     // carve-out row reports 'scoring' (no stored scorecard) forever.
     if (!item.reportAvailable) {
       return '<span class="vi-history-chip vi-history-chip--partial">' + HISTORY_LOCK_SVG + 'Partial</span>';
+    }
+    // A safety-ended session has no report by design: never show it as
+    // scoring, never show a score.
+    if (item.status === 'safety' || item.endReason === 'ended_for_safety') {
+      return '<span class="vi-history-chip vi-history-chip--partial">Safety</span>';
     }
     // A report still being scored is 'Scoring…' even without full access —
     // the Partial lock only applies once there is a report to lock.
@@ -1450,7 +1571,9 @@
     if (doneStatus) doneStatus.textContent = 'Loading your report...';
     try {
       var res = await api('/api/voice/session/' + encodeURIComponent(sessionId), { method: 'GET' });
-      if (res.ok && res.data && res.data.scorecardReady) {
+      if (res.ok && res.data && res.data.endReason === 'ended_for_safety') {
+        renderScorecard(res.data);   // renders the safety view, never polls
+      } else if (res.ok && res.data && res.data.scorecardReady) {
         renderScorecard(res.data);
       } else if (res.ok) {
         pollScorecard(0);

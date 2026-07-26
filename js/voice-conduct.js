@@ -157,6 +157,46 @@ export function isSafetyReferral(text) {
 }
 
 /**
+ * Does this INTERVIEWER utterance contain the conduct-warning register — the
+ * "that's not language I'll continue an interview through" line?
+ *
+ * Same rationale as isSafetyReferral: the model speaks the warning and skips
+ * the tool, so the spoken line has to count. Detection alone never ends a
+ * session — it can record the one warning, and only a SECOND independent
+ * conduct signal (another spoken warning or a tool call, from a different
+ * response) closes it.
+ *
+ * Patterns are deliberately narrow, all in non-question sentences:
+ *   - "not language ..." (the mandated register)
+ *   - a refusal verb + continue/tolerate/accept + language ("I will not
+ *     continue the interview through that language")
+ *   - "that language has no place / doesn't belong / isn't acceptable ..."
+ *     anchored to interview/professional context, so programming-language
+ *     talk ("that language is not appropriate for this project") stays out
+ *   - "won't be spoken to / talked to (that way)"
+ *   - "keep it professional" counts ONLY alongside "stop you there" — either
+ *     alone is everyday interviewer speech ("let me stop you there — what was
+ *     the outcome?" is an interruption, not a warning)
+ */
+export function isConductWarningLine(text) {
+  if (typeof text !== 'string' || text.length < 12) return false;
+  var sentences = text.replace(/([.!?])/g, '$1\n').split('\n');
+  var keepProfessional = false;
+  var stopYouThere = false;
+  for (var i = 0; i < sentences.length; i++) {
+    var s = sentences[i].toLowerCase();
+    if (!s || s.indexOf('?') >= 0) continue;
+    if (/\bnot language\b/.test(s)) return true;
+    if (/\b(?:won'?t|will not|would not|wouldn'?t|not going to|refuse to|cannot|can'?t)\b[^]{0,30}\b(?:continue|tolerate|accept|take|allow|put up with|listen to)\b[^]{0,40}\b(?:language|kind of talk|talk like that)\b/.test(s)) return true;
+    if (/\b(?:that|this|such) (?:language|kind of talk)\b[^]{0,50}\b(?:no place|doesn'?t belong|does not belong|not acceptable|isn'?t acceptable|not appropriate|isn'?t appropriate)\b[^]{0,40}\b(?:interview|professional|here)\b/.test(s)) return true;
+    if (/\b(?:won'?t|will not|not going to) (?:be )?(?:spoken|talked) to\b/.test(s)) return true;
+    if (/\bkeep (?:it|this|things) professional\b/.test(s)) keepProfessional = true;
+    if (/\bstop you (?:right )?there\b/.test(s)) stopYouThere = true;
+  }
+  return keepProfessional && stopYouThere;
+}
+
+/**
  * The only realtime events allowed to mark "the candidate spoke again".
  *
  * Both fire live, while the candidate is at the microphone, and both precede the
@@ -196,19 +236,18 @@ export function createConductGate() {
    * defense. It is deliberately NOT the only one; see the note above.
    */
   // A repeat call once warned escalates to the end only when it is a genuine
-  // second incident, judged by two independent signals:
-  //   1. the candidate spoke again since the warning (live mic events), and
-  //   2. the call came from a DIFFERENT response than the warning itself.
-  // The second signal is what keeps replays inert even through mic noise:
-  // `speech_started` can fire on a cough or speaker bleed, but a replay is by
-  // definition the same response re-surfacing, while a real second incident is
-  // always a fresh response (the model only speaks again after a new candidate
-  // turn). When either response id is unknown, the speech guard alone decides,
-  // which keeps escalation working on API shapes that omit the id.
+  // second incident. The PRIMARY discriminator is response identity: a replay
+  // is the same response re-surfacing, while a real second incident is always
+  // a fresh response, because the model only speaks again after a new
+  // candidate turn. The live speech guard is only the FALLBACK for events
+  // that omit response ids — it must never be a second requirement, because
+  // requiring both meant that if `input_audio_buffer` events were not
+  // delivered, every repeat call was ignored and answered with an instruction
+  // to continue: the fully-armed gate produced exactly the endless-warnings
+  // failure it existed to prevent.
   function isSecondIncident(responseId) {
-    if (!spokeSinceWarning) return false;
-    if (responseId && warnResponseId && responseId === warnResponseId) return false;
-    return true;
+    if (responseId && warnResponseId) return responseId !== warnResponseId;
+    return spokeSinceWarning;
   }
 
   function decide(stage, callId, responseId) {
@@ -252,6 +291,33 @@ export function createConductGate() {
   }
 
   /**
+   * A conduct warning the interviewer SPOKE without reporting it through the
+   * tool. Live, the model said the warning register repeatedly and never
+   * called conduct_action once, so the gate never heard about any of it and
+   * the session could not end — the same skip-the-tool behavior that broke
+   * the safety close, fixed the same way: the spoken line is the decision.
+   * Returns 'warn' (first warning recorded), 'end' (second incident: close
+   * the session), or 'ignore' (duplicate transcript event, same response as
+   * the recorded warning, or no way to prove a second incident).
+   */
+  function noteSpokenWarning(responseId) {
+    if (ended) return 'ignore';
+    if (!warned) {
+      warned = true;
+      spokeSinceWarning = false;
+      warnResponseId = responseId || '';
+      return 'warn';
+    }
+    // The same response's own spoken line (or its duplicate transcript event)
+    // is the warning we already have, not a second one.
+    if (responseId && warnResponseId && responseId === warnResponseId) return 'ignore';
+    // Ids incomplete: only end with independent evidence of a second incident.
+    if (!(responseId && warnResponseId) && !spokeSinceWarning) return 'ignore';
+    ended = true;
+    return 'end';
+  }
+
+  /**
    * The candidate started or finished speaking, per `eventType`. Only the live
    * events in LIVE_CANDIDATE_SPEECH_EVENTS count; anything else — notably a late
    * whisper transcript, which may describe pre-warning audio — is rejected here
@@ -283,6 +349,7 @@ export function createConductGate() {
 
   return {
     decide: decide,
+    noteSpokenWarning: noteSpokenWarning,
     noteCandidateSpoke: noteCandidateSpoke,
     endReason: endReason,
     wasWarned: wasWarned,
@@ -409,4 +476,5 @@ if (typeof window !== 'undefined') {
   window.createClosingTurnGate = createClosingTurnGate;
   window.readVoiceToolCall = readToolCall;
   window.isSafetyReferral = isSafetyReferral;
+  window.isConductWarningLine = isConductWarningLine;
 }

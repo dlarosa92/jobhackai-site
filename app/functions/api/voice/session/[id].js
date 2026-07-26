@@ -51,7 +51,7 @@ export async function onRequest(context) {
     const d1User = await getOrCreateUserByAuthId(env, uid, null, { updateActivity: false });
     const session = await db.prepare(
       `SELECT id, user_id, role, seniority, status, entitlement_mode, started_at, ended_at,
-              duration_seconds, transcript_json, scorecard_json
+              duration_seconds, transcript_json, scorecard_json, end_reason
        FROM voice_sessions WHERE id = ?`
     ).bind(String(params.id || '')).first();
 
@@ -86,6 +86,7 @@ export async function onRequest(context) {
         scorecardReady: true,
         fullAccess: false,
         expired: true,
+        endReason: session.end_reason || null,
         scorecard: {
           topStrength: scorecard?.topStrength ?? null,
           topImprovement: scorecard?.topImprovement ?? null
@@ -120,6 +121,7 @@ export async function onRequest(context) {
       endedAt: session.ended_at,
       durationSeconds: session.duration_seconds,
       scorecardReady: !!scorecard,
+      endReason: session.end_reason || null,
       fullAccess,
       scorecard: fullAccess ? scorecard : partialScorecard(scorecard),
       transcript

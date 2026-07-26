@@ -155,6 +155,29 @@ await test('sessionFullAccess mirrors the session GET gate', () => {
   assert.equal(sessionFullAccess({ entitlement_mode: 'free' }, LAPSED_PAID_ENT), true, 'hasEverPaid keeps the free session unlocked');
 });
 
+await test("a safety-ended session reports status 'safety', never a perpetual 'scoring'", async () => {
+  const state = { sessions: [
+    // Legacy row: mis-scored BEFORE suppression existed — the stored numbers
+    // must not surface anywhere
+    sessionRow({ user_id: 1, entitlement_mode: 'subscription', scorecard_json: JSON.stringify({ overall: 61, topImprovement: 'Stay professional under pressure' }), end_reason: 'ended_for_safety' }),
+    sessionRow({ user_id: 1, entitlement_mode: 'subscription', scorecard_json: null, end_reason: null }),
+    sessionRow({ user_id: 1, entitlement_mode: 'subscription', end_reason: 'user_ended' })
+  ] };
+  const sessions = await listVoiceSessions(makeEnv(state), 1, SUB_ENT, NOW);
+  const byId = Object.fromEntries(sessions.map((x) => [x.sessionId, x]));
+  const safety = byId[state.sessions[0].id];
+  // Safety row: its report is deliberately never generated
+  assert.equal(safety.status, 'safety');
+  assert.equal(safety.endReason, 'ended_for_safety');
+  // Even a legacy stored scorecard never leaks a score or coaching line
+  assert.equal(safety.overall, null);
+  assert.equal(safety.topImprovement, null);
+  // A genuinely still-scoring row keeps reporting scoring
+  assert.equal(byId[state.sessions[1].id].status, 'scoring');
+  // A normally scored row is untouched
+  assert.equal(byId[state.sessions[2].id].status, 'ready');
+});
+
 await test('list returns at most 10 newest sessions with ownership enforced', async () => {
   const state = { sessions: [] };
   for (let i = 0; i < 14; i++) {
