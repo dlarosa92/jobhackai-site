@@ -88,6 +88,40 @@ export function isClosingAnnouncement(text) {
   return false;
 }
 
+/**
+ * Is this INTERVIEWER utterance another hearing check — "can you hear me
+ * clearly/now/okay?" — rather than interview content?
+ *
+ * Used for exactly one decision: when the candidate's audio-check reply was
+ * NOT a confirmation ("I can't hear you", "can you repeat?"), the model
+ * re-runs the check, and the provisional ACTIVE transition has to be walked
+ * back so the repeated check and the eventual real acknowledgement stay out
+ * of the transcript and scoring.
+ *
+ * Precision-biased on purpose: the register requires "hear me" (or an
+ * audio-is-it-working phrasing) inside a QUESTION sentence, which no real
+ * interview opening uses — "tell me about a time you were not heard" or
+ * "what if a customer says they can't hear you?" never match. A missed
+ * paraphrase ("is that better?") merely leaves that round committed, i.e.
+ * the pre-fix behavior; a false positive would swallow a real opening, so
+ * the asymmetry decides the bias.
+ */
+export function isHearingCheckTurn(text) {
+  if (typeof text !== 'string' || text.length < 8) return false;
+  var sentences = text.toLowerCase().replace(/([.!?])/g, '$1\n').split('\n');
+  for (var i = 0; i < sentences.length; i++) {
+    var s = sentences[i];
+    if (!s || s.indexOf('?') < 0) continue;   // hearing checks are questions
+    if (/\b(?:can|could|do|are) you hear me\b/.test(s)) return true;
+    if (/\bare you able to hear me\b/.test(s)) return true;
+    if (/\bhear(?:ing)? me (?:now|okay|ok|clearly|better|alright|all right|this time)\b/.test(s)) return true;
+    if (/\b(?:is|are) (?:my|the) (?:audio|sound|mic|microphone|voice)\b[^]{0,30}\b(?:coming through|working|clear(?:er)?|better|okay|ok|audible)\b/.test(s)) return true;
+    if (/\bam i coming through\b/.test(s)) return true;
+    if (/\bcoming through (?:okay|ok|clearly|clear|better|now|alright|all right)\b/.test(s)) return true;
+  }
+  return false;
+}
+
 export function createInterviewLifecycle() {
   var phase = LIFECYCLE.CONNECTING;
   // Permanent per-item verdicts. `excluded` wins over `included`, so an item
@@ -96,6 +130,14 @@ export function createInterviewLifecycle() {
   var excluded = Object.create(null);
   var included = Object.create(null);
   var greetingDone = false;
+  // The transition on the candidate's post-greeting commit is PROVISIONAL:
+  // at commit time the app cannot know whether they confirmed or said they
+  // cannot hear (the whisper transcript arrives too late to wait for). The
+  // first assistant transcript after the transition settles it — see
+  // noteAssistantTurn. Until then, user items committed in the window are
+  // remembered so a demotion can exclude them retroactively.
+  var awaitingOpening = false;
+  var pendingSinceAck = [];
 
   function is(p) { return phase === p; }
 
@@ -151,15 +193,64 @@ export function createInterviewLifecycle() {
   function noteUserCommitted(itemId) {
     if (phase === LIFECYCLE.ACTIVE_INTERVIEW) {
       if (itemId && !excluded[itemId]) included[itemId] = true;
+      // Committed before the opening settled the provisional ack: remembered,
+      // so a demotion can pull it back out of the transcript.
+      if (awaitingOpening && itemId) pendingSinceAck.push(itemId);
       return 'committed';
     }
     excludeItem(itemId);
     if (phase === LIFECYCLE.AUDIO_CHECK && greetingDone) {
       to(LIFECYCLE.ACTIVE_INTERVIEW);
+      awaitingOpening = true;
+      pendingSinceAck = [];
       return 'begin_interview';
     }
     return 'excluded';
   }
+
+  /**
+   * The first assistant transcript after a provisional acknowledgement
+   * settles what that acknowledgement actually was.
+   *
+   *   'confirmed' — the turn is interview content (the opening): the ack was
+   *                 real. Permanent: the window closes and never reopens, so
+   *                 a mid-interview "can you hear me?" after a blip can never
+   *                 drag the session backwards.
+   *   'demoted'   — the turn is unmistakably ANOTHER hearing check, so the
+   *                 candidate had said they could not hear: back to
+   *                 AUDIO_CHECK. The check turn and every user item committed
+   *                 in the window are excluded (exclusion wins over their
+   *                 earlier inclusion), the greeting stays armed, and the
+   *                 next commit is the next provisional acknowledgement.
+   *   'none'      — nothing to settle (no window open, or no usable text).
+   *
+   * The caller must consult this BEFORE handing the turn to the transcript
+   * assembler: exclusion gates future writes, it cannot unwrite one.
+   */
+  function noteAssistantTurn(itemId, transcript) {
+    if (phase !== LIFECYCLE.ACTIVE_INTERVIEW || !awaitingOpening) return 'none';
+    var text = typeof transcript === 'string' ? transcript.trim() : '';
+    if (!text) return 'none';
+    if (!isHearingCheckTurn(text)) {
+      awaitingOpening = false;
+      pendingSinceAck = [];
+      return 'confirmed';
+    }
+    excludeItem(itemId);
+    for (var i = 0; i < pendingSinceAck.length; i++) excludeItem(pendingSinceAck[i]);
+    pendingSinceAck = [];
+    awaitingOpening = false;
+    // Internal, deliberate backward step — to() stays forward-only so no
+    // outside caller can ever move the phase backwards.
+    phase = LIFECYCLE.AUDIO_CHECK;
+    // The repeated check is the greeting of this round: it has fully
+    // generated (its transcript is what we just read), so the next commit is
+    // the next provisional acknowledgement.
+    greetingDone = true;
+    return 'demoted';
+  }
+
+  function isAwaitingOpening() { return awaitingOpening; }
 
   /**
    * May this transcript be committed to the persisted transcript (and so to
@@ -193,6 +284,8 @@ export function createInterviewLifecycle() {
     noteGreetingDone: noteGreetingDone,
     isGreetingDone: isGreetingDone,
     noteUserCommitted: noteUserCommitted,
+    noteAssistantTurn: noteAssistantTurn,
+    isAwaitingOpening: isAwaitingOpening,
     shouldCommit: shouldCommit,
     noteReconnect: noteReconnect
   };
@@ -201,5 +294,6 @@ export function createInterviewLifecycle() {
 if (typeof window !== 'undefined') {
   window.createInterviewLifecycle = createInterviewLifecycle;
   window.isClosingAnnouncement = isClosingAnnouncement;
+  window.isHearingCheckTurn = isHearingCheckTurn;
   window.VOICE_LIFECYCLE = LIFECYCLE;
 }

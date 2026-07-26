@@ -214,6 +214,8 @@
     var excluded = Object.create(null);
     var included = Object.create(null);
     var greetingDone = false;
+    var awaitingOpening = false;
+    var pendingSinceAck = [];
     return {
       phase: function () { return phase; },
       is: function (p) { return phase === p; },
@@ -236,15 +238,36 @@
       noteUserCommitted: function (itemId) {
         if (phase === PHASES.ACTIVE_INTERVIEW) {
           if (itemId && !excluded[itemId]) included[itemId] = true;
+          if (awaitingOpening && itemId) pendingSinceAck.push(itemId);
           return 'committed';
         }
         if (itemId) excluded[itemId] = true;
         if (phase === PHASES.AUDIO_CHECK && greetingDone) {
           phase = PHASES.ACTIVE_INTERVIEW;
+          awaitingOpening = true;
+          pendingSinceAck = [];
           return 'begin_interview';
         }
         return 'excluded';
       },
+      noteAssistantTurn: function (itemId, transcript) {
+        if (phase !== PHASES.ACTIVE_INTERVIEW || !awaitingOpening) return 'none';
+        var text = typeof transcript === 'string' ? transcript.trim() : '';
+        if (!text) return 'none';
+        if (!fallbackIsHearingCheckTurn(text)) {
+          awaitingOpening = false;
+          pendingSinceAck = [];
+          return 'confirmed';
+        }
+        if (itemId) excluded[itemId] = true;
+        for (var i = 0; i < pendingSinceAck.length; i++) excluded[pendingSinceAck[i]] = true;
+        pendingSinceAck = [];
+        awaitingOpening = false;
+        phase = PHASES.AUDIO_CHECK;
+        greetingDone = true;
+        return 'demoted';
+      },
+      isAwaitingOpening: function () { return awaitingOpening; },
       shouldCommit: function (itemId) {
         if (itemId) {
           if (excluded[itemId]) return false;
@@ -254,6 +277,25 @@
       },
       noteReconnect: function () { if (phase === PHASES.AUDIO_CHECK) greetingDone = false; }
     };
+  }
+
+  // Hand-synced copy of isHearingCheckTurn for the module-missing case: the
+  // "candidate could not hear the greeting" round must stay out of the
+  // transcript even in degraded mode.
+  function fallbackIsHearingCheckTurn(text) {
+    if (typeof text !== 'string' || text.length < 8) return false;
+    var sentences = text.toLowerCase().replace(/([.!?])/g, '$1\n').split('\n');
+    for (var i = 0; i < sentences.length; i++) {
+      var s = sentences[i];
+      if (!s || s.indexOf('?') < 0) continue;
+      if (/\b(?:can|could|do|are) you hear me\b/.test(s)) return true;
+      if (/\bare you able to hear me\b/.test(s)) return true;
+      if (/\bhear(?:ing)? me (?:now|okay|ok|clearly|better|alright|all right|this time)\b/.test(s)) return true;
+      if (/\b(?:is|are) (?:my|the) (?:audio|sound|mic|microphone|voice)\b[^]{0,30}\b(?:coming through|working|clear(?:er)?|better|okay|ok|audible)\b/.test(s)) return true;
+      if (/\bam i coming through\b/.test(s)) return true;
+      if (/\bcoming through (?:okay|ok|clearly|clear|better|now|alright|all right)\b/.test(s)) return true;
+    }
+    return false;
   }
 
   // Hand-synced copy of isClosingAnnouncement for the module-missing case:
@@ -816,7 +858,24 @@
     }
     // GA + beta event names for assistant transcript
     if (type === 'response.output_audio_transcript.done' || type === 'response.audio_transcript.done') {
+      // Settle a provisional acknowledgement BEFORE the turn can reach the
+      // assembler: if the candidate had actually said they could not hear,
+      // this turn is another hearing check — the lifecycle walks back to
+      // AUDIO_CHECK and excludes the whole round, so the exclusion gates the
+      // recordTurn below (writes cannot be unwritten afterwards).
+      var opening = 'none';
+      if (!state.ending && !state.conductEnd) {
+        opening = lifecycle().noteAssistantTurn(evt.item_id, evt.transcript);
+      }
+      if (opening === 'demoted') {
+        console.warn('[VOICE] candidate could not hear; audio check repeating — round excluded');
+        setStatus('Connected. Quick audio check...', 'vi-connecting');
+        track('voice_audio_check_repeat', {});
+      }
       recordTurn('assistant', evt.transcript, evt.item_id);
+      // A repeated hearing check is not interview material: no backstops, no
+      // closing detection on it.
+      if (opening === 'demoted') return;
       maybeConductBackstop(evt.transcript, evt.response_id);
       maybeSafetyBackstop(evt.transcript, evt.response_id);
       maybeClosingAnnouncement(evt.transcript, evt.response_id);

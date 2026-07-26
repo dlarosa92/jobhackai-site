@@ -16,6 +16,7 @@ import assert from 'node:assert/strict';
 import {
   createInterviewLifecycle,
   isClosingAnnouncement,
+  isHearingCheckTurn,
   LIFECYCLE
 } from '../../../../js/voice-lifecycle.js';
 
@@ -245,6 +246,125 @@ test('greeting-done outside the audio check is ignored, so a late response.done 
   lc.noteGreetingDone();   // e.g. a straggler event after the interview began
   lc.to(LIFECYCLE.CLOSING);
   assert.equal(lc.noteUserCommitted('item_late'), 'excluded', 'no begin_interview from CLOSING');
+});
+
+// ------------------- the cannot-hear round (PR #848 review, P1 finding)
+
+test('the happy path confirms: the first real opening closes the window permanently', () => {
+  const lc = lifecycleAt(LIFECYCLE.ACTIVE_INTERVIEW);
+  assert.equal(lc.isAwaitingOpening(), true, 'the ack is provisional until the opening lands');
+  assert.equal(
+    lc.noteAssistantTurn('item_open', 'Welcome to your mock interview for the Data Analyst role. Tell me about a recent analysis you owned.'),
+    'confirmed'
+  );
+  assert.equal(lc.isAwaitingOpening(), false);
+  assert.equal(lc.shouldCommit('item_open'), true, 'the opening itself commits');
+});
+
+test('a cannot-hear reply demotes: the repeated check and the whole round stay excluded', () => {
+  const lc = createInterviewLifecycle();
+  lc.to(LIFECYCLE.AUDIO_CHECK);
+  lc.noteItem('item_greet');
+  lc.noteGreetingDone();
+  // The candidate replies — but it was "I can't hear you", not a confirmation.
+  assert.equal(lc.noteUserCommitted('item_cant_hear'), 'begin_interview');
+  // The model re-runs the check; the app walks the provisional transition back.
+  lc.noteItem('item_check2');
+  assert.equal(lc.noteAssistantTurn('item_check2', 'Let me try that again — can you hear me clearly now?'), 'demoted');
+  assert.equal(lc.phase(), LIFECYCLE.AUDIO_CHECK);
+  assert.equal(lc.shouldCommit('item_check2'), false, 'the repeated check never commits');
+  assert.equal(lc.shouldCommit('item_cant_hear'), false);
+  // The greeting stays armed: the next commit is the next provisional ack.
+  assert.equal(lc.isGreetingDone(), true);
+  assert.equal(lc.noteUserCommitted('item_real_ack'), 'begin_interview');
+  assert.equal(lc.phase(), LIFECYCLE.ACTIVE_INTERVIEW);
+  assert.equal(lc.shouldCommit('item_real_ack'), false, 'the real acknowledgement is excluded too');
+  // And the real opening confirms and commits.
+  lc.noteItem('item_open');
+  assert.equal(lc.noteAssistantTurn('item_open', 'Welcome. Walk me through a recent analysis you owned.'), 'confirmed');
+  assert.equal(lc.shouldCommit('item_open'), true);
+});
+
+test('user speech committed inside the settling window is pulled back out on demotion', () => {
+  const lc = lifecycleAt(LIFECYCLE.ACTIVE_INTERVIEW);   // provisional ack given
+  // The candidate barges in over the repeated check before its transcript lands.
+  assert.equal(lc.noteUserCommitted('item_barge'), 'committed');
+  assert.equal(lc.shouldCommit('item_barge'), true, 'included until the window settles');
+  assert.equal(lc.noteAssistantTurn('item_check2', 'Can you hear me now?'), 'demoted');
+  assert.equal(lc.shouldCommit('item_barge'), false, 'demotion excludes the whole round');
+});
+
+test('multiple cannot-hear rounds converge, each round fully excluded', () => {
+  const lc = lifecycleAt(LIFECYCLE.ACTIVE_INTERVIEW);
+  assert.equal(lc.noteAssistantTurn('item_c2', 'Can you hear me now?'), 'demoted');
+  assert.equal(lc.noteUserCommitted('item_ack2'), 'begin_interview');
+  assert.equal(lc.noteAssistantTurn('item_c3', 'How about now — are you able to hear me?'), 'demoted');
+  assert.equal(lc.noteUserCommitted('item_ack3'), 'begin_interview');
+  assert.equal(lc.noteAssistantTurn('item_open', 'Great. Welcome — tell me about your current role.'), 'confirmed');
+  for (const id of ['item_c2', 'item_ack2', 'item_c3', 'item_ack3']) {
+    assert.equal(lc.shouldCommit(id), false, `${id} must stay excluded`);
+  }
+  assert.equal(lc.shouldCommit('item_open'), true);
+});
+
+test('the window is one-shot: a mid-interview hearing check can never drag the session backwards', () => {
+  const lc = lifecycleAt(LIFECYCLE.ACTIVE_INTERVIEW);
+  assert.equal(lc.noteAssistantTurn('item_open', 'Welcome. First question: what drew you to this role?'), 'confirmed');
+  // Minutes later the interviewer checks the line after a blip — that is
+  // conversation now, not lifecycle.
+  assert.equal(lc.noteAssistantTurn('item_blip', 'Sorry, you cut out for a second — can you hear me okay?'), 'none');
+  assert.equal(lc.phase(), LIFECYCLE.ACTIVE_INTERVIEW);
+  assert.equal(lc.noteItem('item_blip'), true, 'the mid-interview check commits like any turn');
+});
+
+test('demotion is internal only: to() remains forward-only from ACTIVE', () => {
+  const lc = lifecycleAt(LIFECYCLE.ACTIVE_INTERVIEW);
+  assert.equal(lc.to(LIFECYCLE.AUDIO_CHECK), false);
+  assert.equal(lc.phase(), LIFECYCLE.ACTIVE_INTERVIEW);
+});
+
+test('settling never happens outside an open window: junk, empty, closing, terminal', () => {
+  const lc = lifecycleAt(LIFECYCLE.ACTIVE_INTERVIEW);
+  assert.equal(lc.noteAssistantTurn('item_x', ''), 'none', 'empty transcripts do not settle the window');
+  assert.equal(lc.noteAssistantTurn('item_x', '   '), 'none');
+  assert.equal(lc.isAwaitingOpening(), true, 'window still open after junk');
+  lc.to(LIFECYCLE.CLOSING);
+  assert.equal(lc.noteAssistantTurn('item_y', 'Can you hear me now?'), 'none');
+  lc.to(LIFECYCLE.COMPLETE);
+  assert.equal(lc.noteAssistantTurn('item_z', 'Can you hear me now?'), 'none');
+});
+
+test('a reconnect after a demotion re-greets like any audio-check drop', () => {
+  const lc = lifecycleAt(LIFECYCLE.ACTIVE_INTERVIEW);
+  lc.noteAssistantTurn('item_c2', 'Can you hear me now?');   // demoted
+  assert.equal(lc.phase(), LIFECYCLE.AUDIO_CHECK);
+  lc.noteReconnect();
+  assert.equal(lc.isGreetingDone(), false, 'the fresh session greets again');
+});
+
+// ------------------------------------ the hearing-check detector
+
+test('hearing-check turns are detected across the register', () => {
+  assert.equal(isHearingCheckTurn('Can you hear me clearly?'), true);
+  assert.equal(isHearingCheckTurn('Let me try that again. Can you hear me now?'), true);
+  assert.equal(isHearingCheckTurn('Hearing me okay this time?'), true);
+  assert.equal(isHearingCheckTurn('Is my audio coming through better?'), true);
+  assert.equal(isHearingCheckTurn('Am I coming through?'), true);
+  assert.equal(isHearingCheckTurn('Are you able to hear me alright?'), true);
+});
+
+test('precision bias: no real interview opening or question reads as a hearing check', () => {
+  // The mandated opening: statement + first question, no hearing register
+  assert.equal(isHearingCheckTurn('Welcome to your mock interview for the Senior Software Engineer role. Tell me about a recent project you led.'), false);
+  // Interview questions about hearing/audio-adjacent topics
+  assert.equal(isHearingCheckTurn('Tell me about a time you felt your ideas were not heard by your team?'), false);
+  assert.equal(isHearingCheckTurn('What would you do if a customer said they could not hear you on a support call?'), false);
+  assert.equal(isHearingCheckTurn('How do you make yourself heard in a loud, fast-moving incident channel?'), false);
+  // Statements never match: hearing checks are questions
+  assert.equal(isHearingCheckTurn('I can hear you clearly now, thank you.'), false);
+  // Junk
+  assert.equal(isHearingCheckTurn(''), false);
+  assert.equal(isHearingCheckTurn(null), false);
 });
 
 // ------------------------------------------- the closing-line detector
