@@ -363,6 +363,32 @@
     return false;
   }
 
+  // Hand-synced copy of isExplicitEndRequest for the module-missing case:
+  // without it, a spoken "end this interview" would once again be stored and
+  // scored as if it were an interview answer.
+  var FALLBACK_END_VERB = '(?:end|stop|finish|terminate|quit|wrap up)';
+  var FALLBACK_END_TARGET = new RegExp('\\b' + FALLBACK_END_VERB + '\\s+(?:this|the|our)\\s+(?:mock\\s+)?(?:interview|session|call)\\b');
+  var FALLBACK_END_IMPERATIVE = new RegExp('^(?:(?:please|ok|okay|alright|all right|hey|so|well|um|uh|yeah|yes|actually|just|now)[\\s,]+)*' + FALLBACK_END_VERB + '\\b');
+  var FALLBACK_END_HEAD = new RegExp('\\b(?:i (?:want|need|wanna) to|i(?: would|\'d) like to|i(?:\'m| am) (?:ready|going) to|let\'?s|can (?:you|we)|could (?:you|we)|would you|will you|please)\\s+(?:just |please |go ahead and )*' + FALLBACK_END_VERB + '\\b');
+  var FALLBACK_END_NARRATIVE = /^(?:when|whenever|if|once|after|before|because|since|unless|although|though|while|as soon as|in order to|so that)\b/;
+  var FALLBACK_END_REPORTED = /\b(?:usually|always|typically|normally|generally|used to|hypothetically|for example|for instance|they|he|she)\b/;
+
+  function fallbackIsExplicitEndRequest(text) {
+    if (typeof text !== 'string') return false;
+    var lower = text.toLowerCase().replace(/[‘’]/g, "'");
+    if (lower.length < 8 || lower.length > 240) return false;
+    var clauses = lower.replace(/([.!?,;])/g, '$1\n').split('\n');
+    for (var i = 0; i < clauses.length; i++) {
+      var c = clauses[i].trim();
+      if (!c) continue;
+      if (!FALLBACK_END_TARGET.test(c)) continue;
+      if (FALLBACK_END_NARRATIVE.test(c)) continue;
+      if (FALLBACK_END_REPORTED.test(c)) continue;
+      if (FALLBACK_END_IMPERATIVE.test(c) || FALLBACK_END_HEAD.test(c)) return true;
+    }
+    return false;
+  }
+
   // Lazily created so a realtime event arriving before startInterview (never
   // observed, but events are events) cannot throw on a null lifecycle.
   function lifecycle() {
@@ -850,6 +876,46 @@
     requestGuardedEnd('closing', responseId || '');
   }
 
+  // ---------- explicit spoken end request ----------
+
+  // The candidate asked, in plain words, for the interview to end. Live, that
+  // sentence ("I want to end this interview, can you end it for me?") was
+  // committed to the transcript, persisted, and then quoted back as scored
+  // feedback. It is a CONTROL utterance — the spoken equivalent of the End
+  // button — so it routes through the normal manual end and never becomes
+  // interview material.
+  //
+  // Returns true when it handled the utterance, in which case the caller must
+  // NOT record it. The check runs before recordTurn on purpose: exclusion gates
+  // future writes, it cannot unwrite one.
+  function handleSpokenEndRequest(transcript, itemId) {
+    if (state.ending) return false;
+    var lc = lifecycle();
+    if (!lc.is(PHASES.AUDIO_CHECK) && !lc.is(PHASES.ACTIVE_INTERVIEW)) return false;
+    var check;
+    if (typeof window.isExplicitEndRequest === 'function') {
+      check = window.isExplicitEndRequest;
+    } else {
+      reportLifecycleModuleMissing();
+      check = fallbackIsExplicitEndRequest;
+    }
+    if (!check(String(transcript || ''))) return false;
+
+    // Exclude the item, then pull its reserved slot out of the assembler: a
+    // slot that never receives a transcript would also hold the teardown flush
+    // open for its full timeout.
+    lc.excludeItem(itemId || null);
+    if (itemId && state.order && typeof state.order.drop === 'function') {
+      state.order.drop(itemId);
+    }
+    console.log('[VOICE] candidate asked to end the interview; ending it, and the request stays out of the transcript');
+    track('voice_manual_end', { via: 'spoken_request' });
+    // A conduct or safety close already in flight owns the ending; endInterview
+    // defers to it by itself. Either way the control utterance is already out.
+    endInterview('user_ended');
+    return true;
+  }
+
   // VAD committed a candidate turn. The lifecycle classifies the item once,
   // permanently — and the first commit after the audio-check greeting is the
   // acknowledgement that starts the official interview. The last-seen
@@ -891,6 +957,10 @@
     if (state.conduct) state.conduct.noteCandidateSpoke(type);
 
     if (type === 'conversation.item.input_audio_transcription.completed') {
+      // An unambiguous "end this interview" is a control utterance, not an
+      // answer: it ends the session through the manual-end path and is never
+      // recorded, so it cannot reach the stored transcript or the evaluation.
+      if (handleSpokenEndRequest(evt.transcript, evt.item_id)) return;
       recordTurn('user', evt.transcript, evt.item_id);
       return;
     }
@@ -1457,6 +1527,13 @@
     html += '<p class="vi-sc-block">You are welcome back to practice whenever you are ready.</p>';
     if (data) html += savedLine(data);
     wrap.innerHTML = html;
+    // #vi-scorecard ships hidden and renderScorecard unhides it on its last
+    // line; this path never did, so a safety session wrote its explanation into
+    // a hidden container and showed an empty panel — with the status line
+    // hidden too, nothing at all. Reopening a Safety row from history hit that
+    // every time. The safety state is deliberate and must be visible: scoreless
+    // is the point, blank is a bug.
+    wrap.style.display = '';
   }
 
   function renderScorecard(data) {

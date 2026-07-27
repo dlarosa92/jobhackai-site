@@ -122,6 +122,74 @@ export function isHearingCheckTurn(text) {
   return false;
 }
 
+/**
+ * Is this CANDIDATE utterance an unambiguous request to end the interview now?
+ *
+ * Live, a candidate said "I want to end this interview, can you end it for me?"
+ * The interview did close — but only because the interviewer happened to speak
+ * a wrap-up line — and the sentence itself was committed to the transcript,
+ * stored, and quoted back as scored feedback. It is a CONTROL utterance, the
+ * spoken equivalent of pressing End, and it belongs in neither the transcript
+ * nor the evaluation.
+ *
+ * Same precision bias as isClosingAnnouncement / isHearingCheckTurn, and for a
+ * stronger reason: a false positive ends a paid interview mid-answer. So a
+ * clause must satisfy ALL of:
+ *   - it names the thing being ended — "this/the/our (mock) interview |
+ *     session | call". "End it" alone is never enough
+ *   - the verb is the bare form (end, stop, finish, terminate, quit, wrap up),
+ *     so "I ended the interview early" and "ending the interview" cannot match
+ *   - it is in a request register: the clause opens with the verb (an
+ *     imperative, optionally after please/okay/so), or a first-or-second-person
+ *     request head sits immediately in front of it
+ *   - it is not narrative or hypothetical — a clause opening with
+ *     when/if/because..., or describing a habit or a third party, is someone
+ *     telling a story about ending an interview, which is ordinary interview
+ *     content
+ *
+ * A missed paraphrase is only today's behavior (the candidate presses End, or
+ * the interviewer wraps up), so the asymmetry decides the bias. Clauses are cut
+ * on commas as well as sentence enders, because the live example puts the
+ * request and a restatement of it in one sentence.
+ */
+var END_REQUEST_MAX_CHARS = 240;
+var END_REQUEST_VERB = '(?:end|stop|finish|terminate|quit|wrap up)';
+var END_REQUEST_TARGET = new RegExp(
+  '\\b' + END_REQUEST_VERB + '\\s+(?:this|the|our)\\s+(?:mock\\s+)?(?:interview|session|call)\\b'
+);
+var END_REQUEST_IMPERATIVE = new RegExp(
+  '^(?:(?:please|ok|okay|alright|all right|hey|so|well|um|uh|yeah|yes|actually|just|now)[\\s,]+)*' +
+  END_REQUEST_VERB + '\\b'
+);
+var END_REQUEST_HEAD = new RegExp(
+  '\\b(?:i (?:want|need|wanna) to|i(?: would|\'d) like to|i(?:\'m| am) (?:ready|going) to' +
+  '|let\'?s|can (?:you|we)|could (?:you|we)|would you|will you|please)' +
+  '\\s+(?:just |please |go ahead and )*' + END_REQUEST_VERB + '\\b'
+);
+// A clause that opens like this is setting up a story, a condition, or a
+// hypothetical, not making a request.
+var END_REQUEST_NARRATIVE =
+  /^(?:when|whenever|if|once|after|before|because|since|unless|although|though|while|as soon as|in order to|so that)\b/;
+// ...and one that talks about habits or other people is describing, not asking.
+var END_REQUEST_REPORTED =
+  /\b(?:usually|always|typically|normally|generally|used to|hypothetically|for example|for instance|they|he|she)\b/;
+
+export function isExplicitEndRequest(text) {
+  if (typeof text !== 'string') return false;
+  var lower = text.toLowerCase().replace(/[‘’]/g, "'");
+  if (lower.length < 8 || lower.length > END_REQUEST_MAX_CHARS) return false;
+  var clauses = lower.replace(/([.!?,;])/g, '$1\n').split('\n');
+  for (var i = 0; i < clauses.length; i++) {
+    var c = clauses[i].trim();
+    if (!c) continue;
+    if (!END_REQUEST_TARGET.test(c)) continue;
+    if (END_REQUEST_NARRATIVE.test(c)) continue;
+    if (END_REQUEST_REPORTED.test(c)) continue;
+    if (END_REQUEST_IMPERATIVE.test(c) || END_REQUEST_HEAD.test(c)) return true;
+  }
+  return false;
+}
+
 export function createInterviewLifecycle() {
   var phase = LIFECYCLE.CONNECTING;
   // Permanent per-item verdicts. `excluded` wins over `included`, so an item
@@ -372,5 +440,6 @@ if (typeof window !== 'undefined') {
   window.createInterviewLifecycle = createInterviewLifecycle;
   window.isClosingAnnouncement = isClosingAnnouncement;
   window.isHearingCheckTurn = isHearingCheckTurn;
+  window.isExplicitEndRequest = isExplicitEndRequest;
   window.VOICE_LIFECYCLE = LIFECYCLE;
 }

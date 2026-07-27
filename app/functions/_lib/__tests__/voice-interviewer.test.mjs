@@ -19,7 +19,9 @@ import {
   VOICE_END_REASONS,
   normalizeEndReason,
   shouldGenerateScorecard,
-  voiceFirstName
+  voiceFirstName,
+  realtimeSessionConfig,
+  VOICE_OUTPUT_SPEED
 } from '../voice-interviewer.js';
 
 let passed = 0;
@@ -344,8 +346,9 @@ test('a fresh session opens with the audio check, personalized when a first name
   const out = interviewerInstructions({ ...BASE, firstName: 'Maya' });
   assert.ok(out.includes('AUDIO CHECK'));
   assert.ok(out.includes('Say exactly: "Hi, Maya. Before we begin, can you hear me clearly?"'));
-  // The name is used exactly once — in the greeting.
-  assert.equal(out.split('Maya').length - 1, 1);
+  // The name appears exactly twice: bound once as a session fact, spoken once
+  // in the greeting. Both are the same resolved value — see the name tests.
+  assert.equal(out.split('Maya').length - 1, 2);
   // After confirmation, the official interview opens role-aware.
   assert.ok(out.includes('your next turn starts the official interview'));
   assert.ok(out.includes('welcoming them to the mock interview for the Senior Software Engineer role'));
@@ -396,8 +399,12 @@ test('regression: interview started + empty tail resumes the interview, never th
   // It still opens the interview properly: role-aware welcome + first question
   assert.ok(out.includes('welcoming them to the mock interview for the Senior Software Engineer role'));
   assert.ok(out.includes('then your first question'));
-  // The greeting name has no business here
-  assert.ok(!out.includes('Maya'));
+  // The audio-check GREETING has no business here — but the candidate's name
+  // still does: a reconnect must not turn them into a stranger, and the close
+  // that follows has to use the same name the sound check used.
+  assert.ok(!out.includes('Hi, Maya.'));
+  assert.ok(out.includes("The candidate's name is Maya."));
+  assert.equal(out.split('Maya').length - 1, 1, 'bound once, never re-stated');
 });
 
 test('a real transcript tail takes precedence over the early-resume block', () => {
@@ -444,6 +451,107 @@ test('voiceFirstName drops anything unsafe or unusable rather than speaking it',
 test('the completed end reason is a normal scored completion', () => {
   assert.equal(normalizeEndReason('completed'), 'completed');
   assert.equal(shouldGenerateScorecard('completed'), true);
+});
+
+// ---- one candidate name, for the whole session ----
+//
+// Live, the sound check greeted the candidate as "Dawn" and the closing turn
+// called them "Matt". The name only ever existed inside the audio-check
+// greeting string: the resume paths never use that string, and the mandated
+// closing turn could not see it, so the model supplied a name of its own.
+
+test('the resolved name is bound as a session fact, not just spoken in the greeting', () => {
+  const out = interviewerInstructions({ ...BASE, firstName: 'Dawn' });
+  assert.ok(out.includes("The candidate's name is Dawn."));
+  assert.ok(out.includes('That is their name for this whole session and the only one you may use'));
+  // Sound check, closing, and everything between are covered by one value...
+  assert.ok(out.includes('greet them by it in the audio check, use it again when you close'));
+  // ...and no other name may be substituted later, by drift or by invention.
+  assert.ok(out.includes('Never call them by any other name'));
+  assert.ok(out.includes('never switch to a different one part way through'));
+  assert.ok(out.includes('use no name at all rather than a name you are not certain of'));
+  // The name binding is a shared rule, so it sits ahead of the opening block.
+  assert.ok(out.indexOf("The candidate's name is Dawn.") < out.indexOf('AUDIO CHECK'));
+});
+
+test('the same name reaches every opening: fresh, resumed with a tail, and resumed early', () => {
+  const bound = "The candidate's name is Dawn.";
+  const fresh = interviewerInstructions({ ...BASE, firstName: 'Dawn' });
+  const resumed = interviewerInstructions({
+    ...BASE, firstName: 'Dawn',
+    resumeContext: 'Interviewer: Tell me about a project.\nCandidate: I led the checkout rebuild.'
+  });
+  const early = interviewerInstructions({ ...BASE, firstName: 'Dawn', interviewStarted: true });
+  for (const [label, out] of [['fresh', fresh], ['resumed', resumed], ['early resume', early]]) {
+    assert.ok(out.includes(bound), `${label} must carry the bound name`);
+  }
+  // Only the fresh session speaks it in the audio-check greeting.
+  assert.ok(fresh.includes('Hi, Dawn.'));
+  assert.ok(!resumed.includes('Hi, Dawn.'));
+  assert.ok(!early.includes('Hi, Dawn.'));
+});
+
+test('with no usable name the prompt forbids guessing one and forbids asking for it', () => {
+  const out = interviewerInstructions(BASE);
+  assert.ok(out.includes("You do not know the candidate's name"));
+  assert.ok(out.includes('Greet them, interview them, and close without one'));
+  assert.ok(out.includes('Never guess or invent a name for them'));
+  assert.ok(out.includes('never ask them what their name is'));
+  // The neutral greeting, unchanged.
+  assert.ok(out.includes('Say exactly: "Hi. Before we begin, can you hear me clearly?"'));
+  // ...and it never claims to know a name it does not have.
+  assert.ok(!out.includes("The candidate's name is"));
+});
+
+test('the no-name form is used for every opening too, not just a fresh session', () => {
+  for (const extra of [{}, { resumeContext: 'Interviewer: A question.\nCandidate: An answer.' }, { interviewStarted: true }]) {
+    const out = interviewerInstructions({ ...BASE, firstName: '', ...extra });
+    assert.ok(out.includes("You do not know the candidate's name"));
+    assert.ok(!out.includes("The candidate's name is"));
+  }
+});
+
+test('an unsafe display name is dropped to the no-name form, never spoken', () => {
+  // voiceFirstName is the single resolution point; anything it rejects must
+  // reach the prompt as "no name", not as a partially-sanitized string.
+  const out = interviewerInstructions({ ...BASE, firstName: voiceFirstName('!!') });
+  assert.ok(out.includes("You do not know the candidate's name"));
+  assert.ok(!out.includes("The candidate's name is"));
+});
+
+// ---- calmer default pace ----
+
+test('the interviewer is told to speak at a calm, measured pace', () => {
+  const out = interviewerInstructions(BASE);
+  assert.ok(out.includes('- Speak at a calm, measured interview pace, with natural phrasing; do not rush.'));
+  // One instruction, not a pacing lecture spread across the prompt.
+  assert.equal(out.split('do not rush').length - 1, 1);
+});
+
+test('the realtime session request sends output speed 0.9', () => {
+  assert.equal(VOICE_OUTPUT_SPEED, 0.9);
+  const cfg = realtimeSessionConfig({ model: 'gpt-realtime-mini', instructions: 'x', voice: 'marin' });
+  assert.equal(cfg.audio.output.speed, 0.9);
+  assert.equal(cfg.audio.output.voice, 'marin');
+});
+
+test('semantic VAD stays automatic: no fixed silence cutoff, no response delay', () => {
+  const cfg = realtimeSessionConfig({ model: 'gpt-realtime-mini', instructions: 'x', voice: 'marin' });
+  // Automatic mode, exactly as before this pass — the type and nothing else.
+  assert.deepEqual(cfg.audio.input.turn_detection, { type: 'semantic_vad' });
+  const serialized = JSON.stringify(cfg);
+  for (const knob of ['silence_duration_ms', 'prefix_padding_ms', 'threshold', 'eagerness', 'idle_timeout_ms', 'create_response']) {
+    assert.ok(!serialized.includes(knob), `turn timing must stay automatic: found ${knob}`);
+  }
+});
+
+test('the rest of the realtime session shape is unchanged', () => {
+  const cfg = realtimeSessionConfig({ model: 'gpt-realtime-mini', instructions: 'INSTRUCTIONS', voice: 'marin' });
+  assert.equal(cfg.type, 'realtime');
+  assert.equal(cfg.model, 'gpt-realtime-mini');
+  assert.equal(cfg.instructions, 'INSTRUCTIONS');
+  assert.deepEqual(cfg.tools, INTERVIEWER_TOOLS);
+  assert.deepEqual(cfg.audio.input.transcription, { model: 'whisper-1' });
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
