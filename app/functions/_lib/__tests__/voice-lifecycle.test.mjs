@@ -609,9 +609,10 @@ test('the plain ways a candidate asks to stop are recognized', () => {
     'I need to end this interview, something came up.',
     "Let's end the interview here.",
     'Can we finish this interview now?',
-    "I'm ready to end this session.",
     'Would you terminate the interview, please?',
-    'Alright, wrap up the interview.'
+    'Alright, wrap up the interview.',
+    'Can you end the interview now please?',
+    'Please stop this session, thanks.'
   ];
   for (const ask of asks) {
     assert.equal(isExplicitEndRequest(ask), true, `should recognize: ${ask}`);
@@ -643,6 +644,38 @@ test('interview ANSWERS that talk about ending things are never treated as a req
   for (const answer of answers) {
     assert.equal(isExplicitEndRequest(answer), false, `should NOT match: ${answer}`);
   }
+});
+
+// PR #849 review (Cursor Bugbot, and worse than reported once probed): six
+// plausible answers ended the session. Two registers were doing the damage —
+// a statement of INTENT reads exactly like a candidate narrating what they
+// would do as the interviewer, and a request that carries on past the thing it
+// names is not a request at all, it is the start of an answer.
+test('regression: a candidate narrating what THEY would do never ends the session', () => {
+  const answers = [
+    // "How would you handle a candidate who was abusive in an interview?"
+    "So in that situation I'm going to end the interview and tell them politely.",
+    "Once I have asked my questions, I'm ready to end the interview.",
+    // Support and CX roles talk about ending calls constantly.
+    "When the customer confirms, I'm ready to end the call.",
+    'So I want to end the call on a positive note.',
+    "I'm going to end this interview once I have covered the last point.",
+    // "How do you close an interview?"
+    'I want to end the interview with a strong question of my own.',
+    'Sometimes I want to end the interview early but I stay to the end.'
+  ];
+  for (const answer of answers) {
+    assert.equal(isExplicitEndRequest(answer), false, `should NOT match: ${answer}`);
+  }
+});
+
+test('the target must end the clause: a request stops there, an answer carries on', () => {
+  // Same head, same target, same verb — only the tail differs.
+  assert.equal(isExplicitEndRequest('I want to end this interview.'), true);
+  assert.equal(isExplicitEndRequest('I want to end this interview now.'), true);
+  assert.equal(isExplicitEndRequest('I want to end this interview by summarizing what we covered.'), false);
+  assert.equal(isExplicitEndRequest('Can you end the interview?'), true);
+  assert.equal(isExplicitEndRequest('Can you end the interview the way a good recruiter does?'), false);
 });
 
 test('junk, silence, and rambling never trip the detector', () => {

@@ -141,8 +141,15 @@ export function isHearingCheckTurn(text) {
  *     so "I ended the interview early" and "ending the interview" cannot match
  *   - it is in a request register: the clause opens with the verb (an
  *     imperative, optionally after please/okay/so), or a first-or-second-person
- *     request head sits immediately in front of it
- *   - it is not narrative or hypothetical — a clause opening with
+ *     request head sits immediately in front of it. Statements of intent
+ *     ("I'm going to end the interview", "I'm ready to end the call") are NOT
+ *     a request register: that is exactly how a candidate narrates what they
+ *     would do as the interviewer, and it cost a paid session to find out
+ *   - the named target ENDS the clause, bar a short closer like "now" or
+ *     "please". A request stops there; an answer carries on — "I want to end
+ *     the interview with a strong question of my own" is how someone answers
+ *     "how do you close an interview?", and it must never end their session
+ *   - it is not narrative, habitual, or hypothetical — a clause opening with
  *     when/if/because..., or describing a habit or a third party, is someone
  *     telling a story about ending an interview, which is ordinary interview
  *     content
@@ -154,15 +161,20 @@ export function isHearingCheckTurn(text) {
  */
 var END_REQUEST_MAX_CHARS = 240;
 var END_REQUEST_VERB = '(?:end|stop|finish|terminate|quit|wrap up)';
+// What may follow the named target and still leave the clause a request.
+var END_REQUEST_CLOSER =
+  '(?:\\s+(?:right now|now|here|please|early|for me|today|then|already|at this point' +
+  '|if (?:that\'?s )?(?:ok|okay|alright)|if you can|if possible|ok|okay|thanks|thank you))*';
 var END_REQUEST_TARGET = new RegExp(
-  '\\b' + END_REQUEST_VERB + '\\s+(?:this|the|our)\\s+(?:mock\\s+)?(?:interview|session|call)\\b'
+  '\\b' + END_REQUEST_VERB + '\\s+(?:this|the|our)\\s+(?:mock\\s+)?(?:interview|session|call)\\b' +
+  END_REQUEST_CLOSER + '\\s*[.!?,;]?\\s*$'
 );
 var END_REQUEST_IMPERATIVE = new RegExp(
   '^(?:(?:please|ok|okay|alright|all right|hey|so|well|um|uh|yeah|yes|actually|just|now)[\\s,]+)*' +
   END_REQUEST_VERB + '\\b'
 );
 var END_REQUEST_HEAD = new RegExp(
-  '\\b(?:i (?:want|need|wanna) to|i(?: would|\'d) like to|i(?:\'m| am) (?:ready|going) to' +
+  '\\b(?:i (?:want|need|wanna) to|i(?: would|\'d) like to' +
   '|let\'?s|can (?:you|we)|could (?:you|we)|would you|will you|please)' +
   '\\s+(?:just |please |go ahead and )*' + END_REQUEST_VERB + '\\b'
 );
@@ -172,7 +184,7 @@ var END_REQUEST_NARRATIVE =
   /^(?:when|whenever|if|once|after|before|because|since|unless|although|though|while|as soon as|in order to|so that)\b/;
 // ...and one that talks about habits or other people is describing, not asking.
 var END_REQUEST_REPORTED =
-  /\b(?:usually|always|typically|normally|generally|used to|hypothetically|for example|for instance|they|he|she)\b/;
+  /\b(?:usually|always|typically|normally|generally|sometimes|often|occasionally|rarely|seldom|never|tend to|used to|hypothetically|for example|for instance|they|he|she)\b/;
 
 export function isExplicitEndRequest(text) {
   if (typeof text !== 'string') return false;

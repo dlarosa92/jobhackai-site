@@ -367,11 +367,12 @@
   // without it, a spoken "end this interview" would once again be stored and
   // scored as if it were an interview answer.
   var FALLBACK_END_VERB = '(?:end|stop|finish|terminate|quit|wrap up)';
-  var FALLBACK_END_TARGET = new RegExp('\\b' + FALLBACK_END_VERB + '\\s+(?:this|the|our)\\s+(?:mock\\s+)?(?:interview|session|call)\\b');
+  var FALLBACK_END_CLOSER = '(?:\\s+(?:right now|now|here|please|early|for me|today|then|already|at this point|if (?:that\'?s )?(?:ok|okay|alright)|if you can|if possible|ok|okay|thanks|thank you))*';
+  var FALLBACK_END_TARGET = new RegExp('\\b' + FALLBACK_END_VERB + '\\s+(?:this|the|our)\\s+(?:mock\\s+)?(?:interview|session|call)\\b' + FALLBACK_END_CLOSER + '\\s*[.!?,;]?\\s*$');
   var FALLBACK_END_IMPERATIVE = new RegExp('^(?:(?:please|ok|okay|alright|all right|hey|so|well|um|uh|yeah|yes|actually|just|now)[\\s,]+)*' + FALLBACK_END_VERB + '\\b');
-  var FALLBACK_END_HEAD = new RegExp('\\b(?:i (?:want|need|wanna) to|i(?: would|\'d) like to|i(?:\'m| am) (?:ready|going) to|let\'?s|can (?:you|we)|could (?:you|we)|would you|will you|please)\\s+(?:just |please |go ahead and )*' + FALLBACK_END_VERB + '\\b');
+  var FALLBACK_END_HEAD = new RegExp('\\b(?:i (?:want|need|wanna) to|i(?: would|\'d) like to|let\'?s|can (?:you|we)|could (?:you|we)|would you|will you|please)\\s+(?:just |please |go ahead and )*' + FALLBACK_END_VERB + '\\b');
   var FALLBACK_END_NARRATIVE = /^(?:when|whenever|if|once|after|before|because|since|unless|although|though|while|as soon as|in order to|so that)\b/;
-  var FALLBACK_END_REPORTED = /\b(?:usually|always|typically|normally|generally|used to|hypothetically|for example|for instance|they|he|she)\b/;
+  var FALLBACK_END_REPORTED = /\b(?:usually|always|typically|normally|generally|sometimes|often|occasionally|rarely|seldom|never|tend to|used to|hypothetically|for example|for instance|they|he|she)\b/;
 
   function fallbackIsExplicitEndRequest(text) {
     if (typeof text !== 'string') return false;
