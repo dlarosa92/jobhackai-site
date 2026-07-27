@@ -148,6 +148,26 @@ export function createTranscriptOrder() {
     });
   }
 
+  // Retroactively remove an item's turn from the assembled transcript. The
+  // lifecycle (js/voice-lifecycle.js) walks a provisionally-ACTIVE audio-check
+  // round back AFTER its events may already have flowed through here, so
+  // gating future writes is not enough: a whisper that already filled its
+  // slot has to be pulled back out. The slot is detached, not deleted — a
+  // tombstone stays in byId so a late transcript for the same id fills the
+  // detached object instead of re-entering through the unknown-id append
+  // path. Dropping a pending slot can complete a flush, so waiters settle.
+  function drop(id) {
+    if (!id) return;
+    var slot = byId[id];
+    if (!slot) {
+      byId[id] = { id: id, speaker: '', text: '' };
+      return;
+    }
+    var at = slots.indexOf(slot);
+    if (at >= 0) slots.splice(at, 1);
+    settleWaiters();
+  }
+
   // A transcript arrived. Fills its reserved slot, or appends when the id is
   // unknown/absent (graceful degradation to arrival order).
   function setText(id, speaker, text) {
@@ -195,6 +215,7 @@ export function createTranscriptOrder() {
     noteItem: noteItem,
     setText: setText,
     append: append,
+    drop: drop,
     list: list,
     pendingCount: pendingCount,
     flushTranscript: flushTranscript,

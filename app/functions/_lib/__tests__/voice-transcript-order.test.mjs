@@ -320,6 +320,73 @@ asyncTest('reset releases an in-progress flush instead of hanging it', async () 
   assert.equal(await flushed, false);
 });
 
+// ---- drop(): retroactive removal for a walked-back audio-check round ----
+// (PR #848: exclusion in the lifecycle gates future writes; a whisper that
+// already filled its slot has to be pulled back out of the assembly.)
+
+test('drop removes an already-filled turn from the assembled transcript', () => {
+  const o = createTranscriptOrder();
+  o.noteItem('item_a');
+  o.noteItem('item_b');
+  o.setText('item_a', 'user', 'hello hello is this working');
+  o.setText('item_b', 'assistant', 'Can you hear me now?');
+  o.drop('item_a');
+  o.drop('item_b');
+  assert.deepEqual(o.list(), []);
+});
+
+test('a late transcript for a dropped id is inert — it cannot re-enter via the append path', () => {
+  const o = createTranscriptOrder();
+  o.noteItem('item_a');
+  o.drop('item_a');
+  o.setText('item_a', 'user', 'late whisper of a dropped turn');
+  assert.deepEqual(o.list(), []);
+  // Even an id never announced here stays out once dropped
+  o.drop('item_never_seen');
+  o.setText('item_never_seen', 'user', 'straggler');
+  assert.deepEqual(o.list(), []);
+});
+
+test('drop leaves unrelated turns and ordering untouched', () => {
+  const o = createTranscriptOrder();
+  o.noteItem('item_q');
+  o.noteItem('item_x');
+  o.noteItem('item_a');
+  o.setText('item_q', 'assistant', 'First question.');
+  o.setText('item_x', 'user', 'window chatter');
+  o.setText('item_a', 'user', 'Real answer.');
+  o.drop('item_x');
+  assert.deepEqual(o.list(), [
+    { speaker: 'assistant', text: 'First question.' },
+    { speaker: 'user', text: 'Real answer.' }
+  ]);
+});
+
+test('dropping a pending slot stops it counting toward a flush', () => {
+  const o = createTranscriptOrder();
+  o.noteItem('item_pending');
+  assert.equal(o.pendingCount(), 1);
+  o.drop('item_pending');
+  assert.equal(o.pendingCount(), 0);
+});
+
+asyncTest('dropping the last pending slot completes an in-flight flush without the timeout', async () => {
+  const o = createTranscriptOrder();
+  o.noteItem('item_pending');
+  const flushed = o.flushTranscript({ timeoutMs: 5000 });
+  o.drop('item_pending');
+  assert.equal(await flushed, true, 'flush must settle on the drop, not run to timeout');
+});
+
+test('drop(null) and dropping unknown ids are safe no-ops for the assembly', () => {
+  const o = createTranscriptOrder();
+  o.noteItem('item_a');
+  o.setText('item_a', 'user', 'kept');
+  o.drop(null);
+  o.drop(undefined);
+  assert.deepEqual(o.list(), [{ speaker: 'user', text: 'kept' }]);
+});
+
 for (const run of asyncTests) await run();
 
 console.log(`\n${passed} passed, ${failed} failed`);
