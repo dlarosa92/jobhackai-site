@@ -145,19 +145,29 @@ export function isHearingCheckTurn(text) {
  *     ("I'm going to end the interview", "I'm ready to end the call") are NOT
  *     a request register: that is exactly how a candidate narrates what they
  *     would do as the interviewer, and it cost a paid session to find out
- *   - the named target ENDS the clause, bar a short closer like "now" or
- *     "please". A request stops there; an answer carries on — "I want to end
- *     the interview with a strong question of my own" is how someone answers
- *     "how do you close an interview?", and it must never end their session
- *   - it is not narrative, habitual, or hypothetical — a clause opening with
- *     when/if/because..., or describing a habit or a third party, is someone
- *     telling a story about ending an interview, which is ordinary interview
- *     content
+ *   - nothing after the named target continues the VERB PHRASE. A request
+ *     stops where it names the thing, or adds a new clause of its own — a
+ *     reason, a courtesy, a restatement ("..., something came up", "..., can
+ *     you end it for me?"). An answer keeps describing HOW the ending happens,
+ *     and that continuation attaches to the verb: "I want to end the interview
+ *     with a strong question of my own" is how someone answers "how do you
+ *     close an interview?", and it must never end their session. Prepositions,
+ *     -ly adverbs, and and/or/but are therefore what disqualifies a
+ *     continuation, whether they follow the target directly or after a comma
+ *   - it is not narrative, habitual, hypothetical, or reported — a sentence
+ *     opening with when/if/because..., or describing a habit, a third party,
+ *     or something the candidate told someone, is a story about ending an
+ *     interview, which is ordinary interview content
  *
  * A missed paraphrase is only today's behavior (the candidate presses End, or
- * the interviewer wraps up), so the asymmetry decides the bias. Clauses are cut
- * on commas as well as sentence enders, because the live example puts the
- * request and a restatement of it in one sentence.
+ * the interviewer wraps up), so the asymmetry decides the bias.
+ *
+ * Clauses are SENTENCES, not comma-separated fragments. Cutting on commas
+ * looked safer and was the opposite: it let "I want to end the interview,
+ * ideally, with a strong question of my own" pass on its first fragment while
+ * the rest of the sentence said plainly that it was an answer. The guards and
+ * the continuation rule now see the whole sentence, which is the only scope at
+ * which they can tell a request from a description of one.
  */
 var END_REQUEST_MAX_CHARS = 240;
 var END_REQUEST_VERB = '(?:end|stop|finish|terminate|quit|wrap up)';
@@ -167,8 +177,30 @@ var END_REQUEST_CLOSER =
   '|if (?:that\'?s )?(?:ok|okay|alright)|if you can|if possible|ok|okay|thanks|thank you))*';
 var END_REQUEST_TARGET = new RegExp(
   '\\b' + END_REQUEST_VERB + '\\s+(?:this|the|our)\\s+(?:mock\\s+)?(?:interview|session|call)\\b' +
-  END_REQUEST_CLOSER + '\\s*[.!?,;]?\\s*$'
+  END_REQUEST_CLOSER,
+  'g'
 );
+// An opener that continues the VERB PHRASE rather than starting a new clause:
+// the sentence is still saying HOW the interview ends, so it is describing an
+// ending, not asking for one.
+var END_REQUEST_CONTINUATION =
+  /^(?:with|without|by|on|in|into|at|about|around|over|under|using|through|as|like|after|before|for|to|from|so|and|or|but|then|while|\w+ly)\b/;
+
+/**
+ * Everything after the target in the same sentence. True when it leaves the
+ * sentence a request: nothing at all, or new clauses of its own.
+ */
+function endRequestTailIsClean(rest) {
+  var text = rest.replace(/[.!?]+\s*$/, '').trim();
+  if (!text) return true;                  // the request stopped where it named the thing
+  if (!/^[,;]/.test(text)) return false;   // ran straight on: "...the interview the way a recruiter does"
+  var parts = text.split(/[,;]/);
+  for (var i = 0; i < parts.length; i++) {
+    var part = parts[i].trim();
+    if (part && END_REQUEST_CONTINUATION.test(part)) return false;
+  }
+  return true;
+}
 var END_REQUEST_IMPERATIVE = new RegExp(
   '^(?:(?:please|ok|okay|alright|all right|hey|so|well|um|uh|yeah|yes|actually|just|now)[\\s,]+)*' +
   END_REQUEST_VERB + '\\b'
@@ -182,22 +214,29 @@ var END_REQUEST_HEAD = new RegExp(
 // hypothetical, not making a request.
 var END_REQUEST_NARRATIVE =
   /^(?:when|whenever|if|once|after|before|because|since|unless|although|though|while|as soon as|in order to|so that)\b/;
-// ...and one that talks about habits or other people is describing, not asking.
+// ...and one that talks about habits, other people, or what the candidate told
+// someone is describing, not asking.
 var END_REQUEST_REPORTED =
-  /\b(?:usually|always|typically|normally|generally|sometimes|often|occasionally|rarely|seldom|never|tend to|used to|hypothetically|for example|for instance|they|he|she)\b/;
+  /\b(?:usually|always|typically|normally|generally|sometimes|often|occasionally|rarely|seldom|never|tend to|used to|hypothetically|for example|for instance|they|he|she|told|asked|said)\b/;
 
 export function isExplicitEndRequest(text) {
   if (typeof text !== 'string') return false;
   var lower = text.toLowerCase().replace(/[‘’]/g, "'");
   if (lower.length < 8 || lower.length > END_REQUEST_MAX_CHARS) return false;
-  var clauses = lower.replace(/([.!?,;])/g, '$1\n').split('\n');
-  for (var i = 0; i < clauses.length; i++) {
-    var c = clauses[i].trim();
-    if (!c) continue;
-    if (!END_REQUEST_TARGET.test(c)) continue;
-    if (END_REQUEST_NARRATIVE.test(c)) continue;
-    if (END_REQUEST_REPORTED.test(c)) continue;
-    if (END_REQUEST_IMPERATIVE.test(c) || END_REQUEST_HEAD.test(c)) return true;
+  var sentences = lower.replace(/([.!?])/g, '$1\n').split('\n');
+  for (var i = 0; i < sentences.length; i++) {
+    var s = sentences[i].trim();
+    if (!s) continue;
+    if (END_REQUEST_NARRATIVE.test(s)) continue;
+    if (END_REQUEST_REPORTED.test(s)) continue;
+    if (!END_REQUEST_IMPERATIVE.test(s) && !END_REQUEST_HEAD.test(s)) continue;
+    // Every occurrence, not just the first: an early mention that continues
+    // the verb phrase must not hide a later one that does not.
+    END_REQUEST_TARGET.lastIndex = 0;
+    var hit;
+    while ((hit = END_REQUEST_TARGET.exec(s)) !== null) {
+      if (endRequestTailIsClean(s.slice(hit.index + hit[0].length))) return true;
+    }
   }
   return false;
 }

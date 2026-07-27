@@ -669,13 +669,40 @@ test('regression: a candidate narrating what THEY would do never ends the sessio
   }
 });
 
-test('the target must end the clause: a request stops there, an answer carries on', () => {
+test('nothing may continue the verb phrase: a request stops, an answer carries on', () => {
   // Same head, same target, same verb — only the tail differs.
   assert.equal(isExplicitEndRequest('I want to end this interview.'), true);
   assert.equal(isExplicitEndRequest('I want to end this interview now.'), true);
   assert.equal(isExplicitEndRequest('I want to end this interview by summarizing what we covered.'), false);
   assert.equal(isExplicitEndRequest('Can you end the interview?'), true);
   assert.equal(isExplicitEndRequest('Can you end the interview the way a good recruiter does?'), false);
+});
+
+// PR #849 review (Codex, P1): splitting on commas let an answer pass on its
+// first fragment while the rest of the sentence said plainly it was an answer.
+// Sentences are the unit now — but a request may still add clauses of its own,
+// which is the whole reason the live example needed sub-sentence handling.
+test('regression: a comma does not let an answer escape the continuation rule', () => {
+  const answers = [
+    'I want to end the interview, ideally, with a strong question of my own.',
+    'I want to end the interview, honestly, on a really positive note.',
+    'I want to end the interview, you know, by summarizing the outcome.',
+    // Reported speech: describing a request you made elsewhere is not making one.
+    'I told my manager I want to end the interview.',
+    'She asked me to end the interview.'
+  ];
+  for (const answer of answers) {
+    assert.equal(isExplicitEndRequest(answer), false, `should NOT match: ${answer}`);
+  }
+});
+
+test('a request may still add a reason, a courtesy, or a restatement of itself', () => {
+  // The live sentence restates the request in a second clause — losing this to
+  // a blanket sentence-only rule would undo the whole fix.
+  assert.equal(isExplicitEndRequest('I want to end this interview, can you end it for me?'), true);
+  assert.equal(isExplicitEndRequest('I need to end this interview, something came up.'), true);
+  assert.equal(isExplicitEndRequest('Please end this interview, I have to go.'), true);
+  assert.equal(isExplicitEndRequest('Can we finish this interview, if that is okay?'), true);
 });
 
 test('junk, silence, and rambling never trip the detector', () => {

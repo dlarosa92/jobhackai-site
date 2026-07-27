@@ -368,24 +368,41 @@
   // scored as if it were an interview answer.
   var FALLBACK_END_VERB = '(?:end|stop|finish|terminate|quit|wrap up)';
   var FALLBACK_END_CLOSER = '(?:\\s+(?:right now|now|here|please|early|for me|today|then|already|at this point|if (?:that\'?s )?(?:ok|okay|alright)|if you can|if possible|ok|okay|thanks|thank you))*';
-  var FALLBACK_END_TARGET = new RegExp('\\b' + FALLBACK_END_VERB + '\\s+(?:this|the|our)\\s+(?:mock\\s+)?(?:interview|session|call)\\b' + FALLBACK_END_CLOSER + '\\s*[.!?,;]?\\s*$');
+  var FALLBACK_END_TARGET = new RegExp('\\b' + FALLBACK_END_VERB + '\\s+(?:this|the|our)\\s+(?:mock\\s+)?(?:interview|session|call)\\b' + FALLBACK_END_CLOSER, 'g');
   var FALLBACK_END_IMPERATIVE = new RegExp('^(?:(?:please|ok|okay|alright|all right|hey|so|well|um|uh|yeah|yes|actually|just|now)[\\s,]+)*' + FALLBACK_END_VERB + '\\b');
   var FALLBACK_END_HEAD = new RegExp('\\b(?:i (?:want|need|wanna) to|i(?: would|\'d) like to|let\'?s|can (?:you|we)|could (?:you|we)|would you|will you|please)\\s+(?:just |please |go ahead and )*' + FALLBACK_END_VERB + '\\b');
   var FALLBACK_END_NARRATIVE = /^(?:when|whenever|if|once|after|before|because|since|unless|although|though|while|as soon as|in order to|so that)\b/;
-  var FALLBACK_END_REPORTED = /\b(?:usually|always|typically|normally|generally|sometimes|often|occasionally|rarely|seldom|never|tend to|used to|hypothetically|for example|for instance|they|he|she)\b/;
+  var FALLBACK_END_REPORTED = /\b(?:usually|always|typically|normally|generally|sometimes|often|occasionally|rarely|seldom|never|tend to|used to|hypothetically|for example|for instance|they|he|she|told|asked|said)\b/;
+  var FALLBACK_END_CONTINUATION = /^(?:with|without|by|on|in|into|at|about|around|over|under|using|through|as|like|after|before|for|to|from|so|and|or|but|then|while|\w+ly)\b/;
+
+  function fallbackEndTailIsClean(rest) {
+    var text = rest.replace(/[.!?]+\s*$/, '').trim();
+    if (!text) return true;
+    if (!/^[,;]/.test(text)) return false;
+    var parts = text.split(/[,;]/);
+    for (var i = 0; i < parts.length; i++) {
+      var part = parts[i].trim();
+      if (part && FALLBACK_END_CONTINUATION.test(part)) return false;
+    }
+    return true;
+  }
 
   function fallbackIsExplicitEndRequest(text) {
     if (typeof text !== 'string') return false;
     var lower = text.toLowerCase().replace(/[‘’]/g, "'");
     if (lower.length < 8 || lower.length > 240) return false;
-    var clauses = lower.replace(/([.!?,;])/g, '$1\n').split('\n');
-    for (var i = 0; i < clauses.length; i++) {
-      var c = clauses[i].trim();
-      if (!c) continue;
-      if (!FALLBACK_END_TARGET.test(c)) continue;
-      if (FALLBACK_END_NARRATIVE.test(c)) continue;
-      if (FALLBACK_END_REPORTED.test(c)) continue;
-      if (FALLBACK_END_IMPERATIVE.test(c) || FALLBACK_END_HEAD.test(c)) return true;
+    var sentences = lower.replace(/([.!?])/g, '$1\n').split('\n');
+    for (var i = 0; i < sentences.length; i++) {
+      var s = sentences[i].trim();
+      if (!s) continue;
+      if (FALLBACK_END_NARRATIVE.test(s)) continue;
+      if (FALLBACK_END_REPORTED.test(s)) continue;
+      if (!FALLBACK_END_IMPERATIVE.test(s) && !FALLBACK_END_HEAD.test(s)) continue;
+      FALLBACK_END_TARGET.lastIndex = 0;
+      var hit;
+      while ((hit = FALLBACK_END_TARGET.exec(s)) !== null) {
+        if (fallbackEndTailIsClean(s.slice(hit.index + hit[0].length))) return true;
+      }
     }
     return false;
   }
