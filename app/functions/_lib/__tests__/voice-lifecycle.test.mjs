@@ -17,6 +17,7 @@ import {
   createInterviewLifecycle,
   isClosingAnnouncement,
   isHearingCheckTurn,
+  isExplicitEndRequest,
   LIFECYCLE
 } from '../../../../js/voice-lifecycle.js';
 
@@ -583,6 +584,144 @@ test('a session ended during the audio check (manual end, failure) completes cle
   assert.equal(lc.to(LIFECYCLE.COMPLETE), true);
   assert.equal(lc.shouldCommit('item_greeting'), false);
   assert.equal(lc.shouldCommit(null), false);
+});
+
+// ------------------------- regression 7: explicit spoken end request
+
+// Live: the candidate said "I want to end this interview, can you end it for
+// me?" The session closed, but the sentence was stored in the transcript and
+// came back as scored report feedback. It is a control utterance, and the
+// detector below is what keeps it out. Precision is the whole design: a false
+// positive ends a paid interview mid-answer.
+
+test('the live sentence that started this is recognized', () => {
+  assert.equal(isExplicitEndRequest('I want to end this interview, can you end it for me?'), true);
+});
+
+test('the plain ways a candidate asks to stop are recognized', () => {
+  const asks = [
+    'Please end this interview.',
+    'Can you end the interview?',
+    'Could you please end this session?',
+    'End the interview.',
+    'Okay, stop the interview please.',
+    "I'd like to end the interview now.",
+    'I need to end this interview, something came up.',
+    "Let's end the interview here.",
+    'Can we finish this interview now?',
+    'Would you terminate the interview, please?',
+    'Alright, wrap up the interview.',
+    'Can you end the interview now please?',
+    'Please stop this session, thanks.'
+  ];
+  for (const ask of asks) {
+    assert.equal(isExplicitEndRequest(ask), true, `should recognize: ${ask}`);
+  }
+});
+
+test('interview ANSWERS that talk about ending things are never treated as a request', () => {
+  const answers = [
+    // Past tense and narrative: the bare-verb rule alone kills these.
+    'I ended the interview process at my last company after two rounds.',
+    'We were ending the interview loop early because the req was frozen.',
+    'The hiring manager wanted to end the interview but I asked for five more minutes.',
+    // Habits, hypotheticals, conditions.
+    'When I want to end the interview I thank them and follow up in writing.',
+    'If you need to end the interview early, you should say so up front.',
+    'I usually end the interview by asking what success looks like in ninety days.',
+    'As a manager I always end the interview on time, whatever is left unasked.',
+    // Named but not this session.
+    'My last interview ran long and nobody ended it cleanly.',
+    'I had to end a project halfway through when the budget was cut.',
+    'Tell me about a time you had to stop a launch.',
+    // Register present, target absent: "end it" is never enough on its own.
+    'Can you end it for me?',
+    'Just stop it there.',
+    // Unrelated uses of the words.
+    'I want to end my current role on good terms.',
+    'We finished the session with the client ahead of schedule.'
+  ];
+  for (const answer of answers) {
+    assert.equal(isExplicitEndRequest(answer), false, `should NOT match: ${answer}`);
+  }
+});
+
+// PR #849 review (Cursor Bugbot, and worse than reported once probed): six
+// plausible answers ended the session. Two registers were doing the damage —
+// a statement of INTENT reads exactly like a candidate narrating what they
+// would do as the interviewer, and a request that carries on past the thing it
+// names is not a request at all, it is the start of an answer.
+test('regression: a candidate narrating what THEY would do never ends the session', () => {
+  const answers = [
+    // "How would you handle a candidate who was abusive in an interview?"
+    "So in that situation I'm going to end the interview and tell them politely.",
+    "Once I have asked my questions, I'm ready to end the interview.",
+    // Support and CX roles talk about ending calls constantly.
+    "When the customer confirms, I'm ready to end the call.",
+    'So I want to end the call on a positive note.',
+    "I'm going to end this interview once I have covered the last point.",
+    // "How do you close an interview?"
+    'I want to end the interview with a strong question of my own.',
+    'Sometimes I want to end the interview early but I stay to the end.'
+  ];
+  for (const answer of answers) {
+    assert.equal(isExplicitEndRequest(answer), false, `should NOT match: ${answer}`);
+  }
+});
+
+test('nothing may continue the verb phrase: a request stops, an answer carries on', () => {
+  // Same head, same target, same verb — only the tail differs.
+  assert.equal(isExplicitEndRequest('I want to end this interview.'), true);
+  assert.equal(isExplicitEndRequest('I want to end this interview now.'), true);
+  assert.equal(isExplicitEndRequest('I want to end this interview by summarizing what we covered.'), false);
+  assert.equal(isExplicitEndRequest('Can you end the interview?'), true);
+  assert.equal(isExplicitEndRequest('Can you end the interview the way a good recruiter does?'), false);
+});
+
+// PR #849 review (Codex, P1): splitting on commas let an answer pass on its
+// first fragment while the rest of the sentence said plainly it was an answer.
+// Sentences are the unit now — but a request may still add clauses of its own,
+// which is the whole reason the live example needed sub-sentence handling.
+test('regression: a comma does not let an answer escape the continuation rule', () => {
+  const answers = [
+    'I want to end the interview, ideally, with a strong question of my own.',
+    'I want to end the interview, honestly, on a really positive note.',
+    'I want to end the interview, you know, by summarizing the outcome.',
+    // Reported speech: describing a request you made elsewhere is not making one.
+    'I told my manager I want to end the interview.',
+    'She asked me to end the interview.'
+  ];
+  for (const answer of answers) {
+    assert.equal(isExplicitEndRequest(answer), false, `should NOT match: ${answer}`);
+  }
+});
+
+test('a request may still add a reason, a courtesy, or a restatement of itself', () => {
+  // The live sentence restates the request in a second clause — losing this to
+  // a blanket sentence-only rule would undo the whole fix.
+  assert.equal(isExplicitEndRequest('I want to end this interview, can you end it for me?'), true);
+  assert.equal(isExplicitEndRequest('I need to end this interview, something came up.'), true);
+  assert.equal(isExplicitEndRequest('Please end this interview, I have to go.'), true);
+  assert.equal(isExplicitEndRequest('Can we finish this interview, if that is okay?'), true);
+});
+
+test('junk, silence, and rambling never trip the detector', () => {
+  assert.equal(isExplicitEndRequest(''), false);
+  assert.equal(isExplicitEndRequest('   '), false);
+  assert.equal(isExplicitEndRequest(null), false);
+  assert.equal(isExplicitEndRequest(undefined), false);
+  assert.equal(isExplicitEndRequest(42), false);
+  assert.equal(isExplicitEndRequest('end'), false, 'too short to be an intent');
+  // A genuine end request is short. A 300-character answer that happens to
+  // contain the words is an answer, and falls back to today's behavior.
+  const rambling = 'So the way I think about it is ' + 'a lot of context '.repeat(14) + 'and then I want to end the interview.';
+  assert.ok(rambling.length > 240);
+  assert.equal(isExplicitEndRequest(rambling), false);
+});
+
+test('curly apostrophes from whisper are handled like straight ones', () => {
+  assert.equal(isExplicitEndRequest('I’d like to end this interview now.'), true);
+  assert.equal(isExplicitEndRequest('Let’s stop the interview here.'), true);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
