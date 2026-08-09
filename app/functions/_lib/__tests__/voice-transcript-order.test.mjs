@@ -387,6 +387,106 @@ test('drop(null) and dropping unknown ids are safe no-ops for the assembly', () 
   assert.deepEqual(o.list(), [{ speaker: 'user', text: 'kept' }]);
 });
 
+// ---- ASR noise fragments (live QA: standalone "You: you" and "You: Bye." turns) ----
+
+test('NOISE: a standalone "you" after a complete answer is dropped (observed live)', () => {
+  const o = createTranscriptOrder();
+  o.noteItem('a1');
+  o.noteItem('u1');
+  o.noteItem('u2');
+  o.setText('a1', 'assistant', 'Could you share a specific example with a dollar figure?');
+  o.setText('u1', 'user', 'We brought shrink down to 1.9%, roughly a $180,000 annualized improvement.');
+  o.setText('u2', 'user', 'you');
+  assert.deepEqual(o.list(), [
+    { speaker: 'assistant', text: 'Could you share a specific example with a dollar figure?' },
+    { speaker: 'user', text: 'We brought shrink down to 1.9%, roughly a $180,000 annualized improvement.' }
+  ]);
+});
+
+test('NOISE: a standalone "Bye." is dropped regardless of case and punctuation', () => {
+  const o = createTranscriptOrder();
+  o.noteItem('a1');
+  o.noteItem('u1');
+  o.setText('a1', 'assistant', 'Could you give an example of adjusting labor mid-shift?');
+  o.setText('u1', 'user', 'Bye.');
+  assert.deepEqual(o.list(), [
+    { speaker: 'assistant', text: 'Could you give an example of adjusting labor mid-shift?' }
+  ]);
+});
+
+test('NOISE: legitimate short answers are never dropped', () => {
+  for (const answer of ['Yes.', 'No.', 'Okay.', 'Sure.', 'Yeah.', 'Right.']) {
+    const o = createTranscriptOrder();
+    o.noteItem('a1');
+    o.noteItem('u1');
+    o.setText('a1', 'assistant', 'Is there anything else you would like to add?');
+    o.setText('u1', 'user', answer);
+    assert.equal(o.list().length, 2, `"${answer}" must survive`);
+    assert.equal(o.list()[1].text, answer);
+  }
+});
+
+test('NOISE: hyphenated affirmations survive the tokenizer ("Mm-hmm.", "Uh-huh.")', () => {
+  for (const answer of ['Mm-hmm.', 'Uh-huh.']) {
+    const o = createTranscriptOrder();
+    o.noteItem('u1');
+    o.setText('u1', 'user', answer);
+    assert.deepEqual(o.list(), [{ speaker: 'user', text: answer }], `"${answer}" must survive`);
+  }
+});
+
+test('NOISE: an all-filler multi-token turn is dropped', () => {
+  const o = createTranscriptOrder();
+  o.noteItem('u1');
+  o.setText('u1', 'user', 'Uh, um.');
+  assert.deepEqual(o.list(), []);
+});
+
+test('NOISE: filler inside a real answer is never edited out — whole turns only', () => {
+  const o = createTranscriptOrder();
+  o.noteItem('u1');
+  o.setText('u1', 'user', 'Um, I led the migration.');
+  assert.deepEqual(o.list(), [{ speaker: 'user', text: 'Um, I led the migration.' }]);
+});
+
+test('NOISE: assistant turns are never filtered, even a closing "Bye."', () => {
+  const o = createTranscriptOrder();
+  o.noteItem('a1');
+  o.setText('a1', 'assistant', 'Bye.');
+  assert.deepEqual(o.list(), [{ speaker: 'assistant', text: 'Bye.' }]);
+});
+
+test('NOISE: removal happens at list() time — a noise slot still fills for flush purposes', () => {
+  const o = createTranscriptOrder();
+  o.noteItem('u1');
+  assert.equal(o.pendingCount(), 1);
+  o.setText('u1', 'user', 'you');
+  assert.equal(o.pendingCount(), 0);
+  assert.deepEqual(o.list(), []);
+});
+
+asyncTest('NOISE: a noise transcript still settles an in-flight flush', async () => {
+  const o = createTranscriptOrder();
+  o.noteItem('u1');
+  const flush = o.flushTranscript({ timeoutMs: 2000 });
+  o.setText('u1', 'user', 'you');
+  assert.equal(await flush, true);
+  assert.deepEqual(o.list(), []);
+});
+
+test('NOISE: removing a noise turn between identical real turns lets the dedupe collapse them', () => {
+  // Documented side effect: the two identical turns become adjacent, which is
+  // exactly the replay-collapse the dedupe exists for.
+  const o = createTranscriptOrder();
+  o.noteItem('u1');
+  o.noteItem('u2');
+  o.noteItem('u3');
+  o.setText('u1', 'user', 'I led the migration.');
+  o.setText('u2', 'user', 'you');
+  o.setText('u3', 'user', 'I led the migration.');
+  assert.deepEqual(o.list(), [{ speaker: 'user', text: 'I led the migration.' }]);
+});
+
 for (const run of asyncTests) await run();
 
 console.log(`\n${passed} passed, ${failed} failed`);

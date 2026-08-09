@@ -245,6 +245,63 @@ test('an ordinary answer that merely mentions ending an interview is kept and sc
   } finally { h.dispose(); }
 });
 
+// ---- ASR noise fragments (live QA: standalone "You: you" / "You: Bye." turns) ----
+
+test('a whisper noise fragment ("You.") never reaches the persisted transcript', async () => {
+  const h = await liveInterviewWithOneAnswer();
+  try {
+    h.event({ type: 'conversation.item.created', item: { id: 'u3' } });
+    h.event({ type: 'input_audio_buffer.committed', item_id: 'u3' });
+    h.event({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'u3', transcript: 'You.' });
+    await h.settle();
+    h.event({ type: 'conversation.item.created', item: { id: 'u4' } });
+    h.event({ type: 'input_audio_buffer.committed', item_id: 'u4' });
+    h.event({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'u4', transcript: 'Please end this interview.' });
+    await h.settle();
+
+    const transcript = h.completeBodies()[0].transcript;
+    assert.deepEqual(transcript, [
+      { speaker: 'assistant', text: 'Welcome to the mock interview for the Product Manager role. Tell me about a launch you owned.' },
+      { speaker: 'user', text: 'I owned the checkout relaunch and cut drop-off by eighteen percent in one quarter.' }
+    ], 'the noise fragment is gone; every real turn survives in order');
+  } finally { h.dispose(); }
+});
+
+test('a legitimate one-word answer ("Yes.") is kept — the noise filter never overreaches', async () => {
+  const h = await liveInterviewWithOneAnswer();
+  try {
+    h.event({ type: 'conversation.item.created', item: { id: 'u3' } });
+    h.event({ type: 'input_audio_buffer.committed', item_id: 'u3' });
+    h.event({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'u3', transcript: 'Yes.' });
+    await h.settle();
+    h.event({ type: 'conversation.item.created', item: { id: 'u4' } });
+    h.event({ type: 'input_audio_buffer.committed', item_id: 'u4' });
+    h.event({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'u4', transcript: 'Please end this interview.' });
+    await h.settle();
+
+    const spoken = h.completeBodies()[0].transcript.map((t) => t.text);
+    assert.ok(spoken.includes('Yes.'), 'a real short answer must be stored and scored');
+  } finally { h.dispose(); }
+});
+
+test('a stray "Bye." neither ends the session nor reaches the transcript', async () => {
+  const h = await liveInterviewWithOneAnswer();
+  try {
+    h.event({ type: 'conversation.item.created', item: { id: 'u3' } });
+    h.event({ type: 'input_audio_buffer.committed', item_id: 'u3' });
+    h.event({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'u3', transcript: 'Bye.' });
+    await h.settle();
+    assert.equal(h.completeBodies().length, 0, '"Bye." is not an end request; the interview stays live');
+
+    h.event({ type: 'conversation.item.created', item: { id: 'u4' } });
+    h.event({ type: 'input_audio_buffer.committed', item_id: 'u4' });
+    h.event({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'u4', transcript: 'Please end this interview.' });
+    await h.settle();
+    const spoken = h.completeBodies()[0].transcript.map((t) => t.text);
+    assert.ok(!spoken.includes('Bye.'), 'the noise fragment stays out of storage');
+  } finally { h.dispose(); }
+});
+
 test('the hand-synced fallback holds when js/voice-lifecycle.js fails to load', async () => {
   const h = await liveInterviewWithOneAnswer({ withoutModules: ['isExplicitEndRequest'] });
   try {

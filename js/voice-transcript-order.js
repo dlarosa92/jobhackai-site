@@ -42,6 +42,36 @@ function echoTokens(text) {
   return String(text).toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
 }
 
+// Whisper transcribes silence and non-speech noise as short stock phrases —
+// a live dev session's stored transcript carried standalone "you" and "Bye."
+// CANDIDATE turns that neither the dedupe nor the echo filter (min 5 tokens)
+// could touch. A user turn made ENTIRELY of these tokens is ASR noise, not an
+// answer. Precision-biased closed allowlist: anything that can be a real
+// answer — "Yes.", "No.", "Okay.", "Sure.", "Yeah.", "Mm-hmm.", "Uh-huh." —
+// is deliberately NOT here and is always kept. Assistant turns are model
+// output, not ASR, and are never filtered.
+var NOISE_MAX_TOKENS = 3;
+var NOISE_TOKENS = {
+  you: true,                                   // whisper's canonical silence hallucination
+  bye: true, goodbye: true, 'bye-bye': true,   // noise phrase (observed live as "Bye.")
+  uh: true, um: true, er: true, erm: true,     // pure hesitations / interjections
+  ah: true, oh: true, eh: true,
+  hm: true, hmm: true, mm: true, mmm: true
+};
+
+// Only leading/trailing punctuation is stripped, so hyphenated affirmations
+// ("mm-hmm", "uh-huh") stay single tokens outside the allowlist and survive.
+export function isNoiseFragment(text) {
+  var tokens = String(text).toLowerCase().split(/\s+/)
+    .map(function (t) { return t.replace(/^[^a-z0-9-]+|[^a-z0-9-]+$/g, ''); })
+    .filter(Boolean);
+  if (tokens.length === 0 || tokens.length > NOISE_MAX_TOKENS) return false;
+  for (var i = 0; i < tokens.length; i++) {
+    if (!NOISE_TOKENS[tokens[i]]) return false;
+  }
+  return true;
+}
+
 // Is filled[at] (a user turn) a near-verbatim copy of an assistant turn within
 // ECHO_WINDOW positions on either side? Both directions matter: the echo's
 // conversation item can be created before or after the line it echoes.
@@ -183,7 +213,8 @@ export function createTranscriptOrder() {
   }
 
   // Ordered, placeholder-free, with identical consecutive same-speaker lines
-  // collapsed (dedupes realtime event replays) and microphone echo removed.
+  // collapsed (dedupes realtime event replays), ASR noise fragments dropped,
+  // and microphone echo removed.
   function list() {
     var filled = [];
     for (var i = 0; i < slots.length; i++) {
@@ -194,6 +225,7 @@ export function createTranscriptOrder() {
     var out = [];
     for (var j = 0; j < filled.length; j++) {
       var t = filled[j];
+      if (t.speaker === 'user' && isNoiseFragment(t.text)) continue;
       if (t.speaker === 'user' && isEchoOfNeighbor(filled, j)) continue;
       var prev = out[out.length - 1];
       if (prev && prev.speaker === t.speaker && prev.text === t.text) continue;
