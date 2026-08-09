@@ -2,16 +2,21 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "wrangler-dev",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": ["wrangler", "dev", "--env", "dev"],
-      "port": 8787
+      "name": "wrangler-pages-dev",
+      "runtimeExecutable": "/usr/bin/env",
+      "runtimeArgs": [
+        "PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin",
+        "sh",
+        "-c",
+        "cd app && npx wrangler pages dev .. --port 8788"
+      ],
+      "port": 8788
     },
     {
       "name": "firebase-hosting",
       "runtimeExecutable": "npx",
       "runtimeArgs": ["firebase", "emulators:start", "--only", "hosting"],
-      "port": 5000
+      "port": 5050
     },
     {
       "name": "static-http",
