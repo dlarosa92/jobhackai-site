@@ -8,7 +8,7 @@
         "PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin",
         "sh",
         "-c",
-        "cd app && npx wrangler pages dev .. --port 8788"
+        "cd app && npx wrangler pages dev .. --port 8788 --d1 JOBHACKAI_DB=c5c0eee5-a223-4ea2-974e-f4aee5a28bab --d1 INTERVIEW_QUESTIONS_DB=c5c0eee5-a223-4ea2-974e-f4aee5a28bab"
       ],
       "port": 8788
     },
