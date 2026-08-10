@@ -9,6 +9,7 @@
 import assert from 'node:assert/strict';
 import {
   interviewerInstructions,
+  spokenSeniority,
   buildResumeContext,
   RESUME_CONTEXT_MAX_CHARS,
   INTERVIEWER_TOOLS,
@@ -35,7 +36,9 @@ const BASE = { role: 'Software Engineer', seniority: 'Senior', jd: null, maxMinu
 
 test('base instructions include role, minutes, and preserved audit rules', () => {
   const out = interviewerInstructions(BASE);
-  assert.ok(out.includes('Senior Software Engineer position'));
+  assert.ok(out.includes('for a Software Engineer position at the senior level'));
+  // The display value is never concatenated in front of the role text.
+  assert.ok(!out.includes('Senior Software Engineer'));
   assert.ok(out.includes('up to 20 minutes'));
   assert.ok(out.includes('one question at a time'));
   assert.ok(out.includes('Never ask something the candidate already answered'));
@@ -351,7 +354,7 @@ test('a fresh session opens with the audio check, personalized when a first name
   assert.equal(out.split('Maya').length - 1, 2);
   // After confirmation, the official interview opens role-aware.
   assert.ok(out.includes('your next turn starts the official interview'));
-  assert.ok(out.includes('welcoming them to the mock interview for the Senior Software Engineer role'));
+  assert.ok(out.includes('welcoming them to the mock interview for the Software Engineer role at the senior level'));
   // Audio-check material is never interview material.
   assert.ok(out.includes('never treat anything said during it as interview material'));
 });
@@ -397,7 +400,7 @@ test('regression: interview started + empty tail resumes the interview, never th
   assert.ok(out.includes('do not greet them as if meeting them for the first time'));
   assert.ok(out.includes('The audio check already happened'));
   // It still opens the interview properly: role-aware welcome + first question
-  assert.ok(out.includes('welcoming them to the mock interview for the Senior Software Engineer role'));
+  assert.ok(out.includes('welcoming them to the mock interview for the Software Engineer role at the senior level'));
   assert.ok(out.includes('then your first question'));
   // The audio-check GREETING has no business here — but the candidate's name
   // still does: a reconnect must not turn them into a stranger, and the close
@@ -552,6 +555,68 @@ test('the rest of the realtime session shape is unchanged', () => {
   assert.equal(cfg.instructions, 'INSTRUCTIONS');
   assert.deepEqual(cfg.tools, INTERVIEWER_TOOLS);
   assert.deepEqual(cfg.audio.input.transcription, { model: 'whisper-1' });
+});
+
+// ---- spoken seniority (live QA: "the Director Plus Kroger Store Manager role") ----
+
+test('spokenSeniority maps display values to natural spoken clauses', () => {
+  assert.equal(spokenSeniority('Director+'), 'the director level or above');
+  assert.equal(spokenSeniority('Mid'), 'the mid level');
+  assert.equal(spokenSeniority('Senior'), 'the senior level');
+  assert.equal(spokenSeniority('Intern'), 'the intern level');
+  assert.equal(spokenSeniority(''), '');
+  assert.equal(spokenSeniority(null), '');
+  assert.equal(spokenSeniority(undefined), '');
+  // Seniority is clamped but not whitelisted at the API, so unknown values
+  // fall back to the same shape and a trailing '+' is never spoken as "plus".
+  assert.equal(spokenSeniority('VP+'), 'the vp level or above');
+  assert.equal(spokenSeniority('Staff'), 'the staff level');
+});
+
+test('Director+ is spoken as "director level or above", never the display token', () => {
+  const out = interviewerInstructions({ ...BASE, seniority: 'Director+' });
+  assert.ok(out.includes('for a Software Engineer position at the director level or above'));
+  assert.ok(out.includes('welcoming them to the mock interview for the Software Engineer role at the director level or above'));
+  assert.ok(out.includes('relevant to a Software Engineer candidate at the director level or above'));
+  assert.ok(!out.includes('Director+'));
+});
+
+test('every opening branch uses the level phrasing, never the raw display value', () => {
+  const fresh = interviewerInstructions({ ...BASE, seniority: 'Director+' });
+  const early = interviewerInstructions({ ...BASE, seniority: 'Director+', interviewStarted: true });
+  for (const [label, out] of [['fresh', fresh], ['early resume', early]]) {
+    assert.ok(out.includes('welcoming them to the mock interview for the Software Engineer role at the director level or above'), `${label} welcome`);
+    assert.ok(!out.includes('Director+'), `${label} display token`);
+  }
+  // A resume with a transcript tail has no welcome line, but the shared rules
+  // still carry the spoken phrasing and never the display token.
+  const resumed = interviewerInstructions({
+    ...BASE, seniority: 'Director+',
+    resumeContext: 'Interviewer: A question.\nCandidate: An answer.'
+  });
+  assert.ok(resumed.includes('position at the director level or above'));
+  assert.ok(!resumed.includes('Director+'));
+});
+
+test('no seniority leaves the role text bare with no dangling clause', () => {
+  const out = interviewerInstructions({ ...BASE, seniority: '' });
+  assert.ok(out.includes('for a Software Engineer position.'));
+  assert.ok(out.includes('for the Software Engineer role, then your first question'));
+  assert.ok(!out.includes(' at the  level'));
+});
+
+// ---- selective acknowledgment (live QA: "It sounds like... It sounds like...") ----
+
+test('acknowledgment is selective and never repetitive', () => {
+  const out = interviewerInstructions(BASE);
+  assert.ok(out.includes('Acknowledge selectively, not ritually'));
+  assert.ok(out.includes('go straight to your next question'));
+  assert.ok(out.includes('Never stack two acknowledgment sentences'));
+  assert.ok(out.includes('never restate the same idea twice in different words'));
+  assert.ok(out.includes('never summarize their answer back to them before every question'));
+  // The neutrality ban is preserved verbatim.
+  assert.ok(out.includes('never "great", "excellent", or "that makes sense"'));
+  assert.ok(!out.includes('Vary your acknowledgments'));
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
