@@ -181,7 +181,12 @@ export async function cacheCustomerId(env, uid, customerId) {
       return;
     }
   } catch (guardErr) {
-    console.warn('[BILLING] ownership guard check failed (continuing):', guardErr?.message || guardErr);
+    // Fail closed: if ownership cannot be verified, nothing is cached or
+    // persisted. Writing anyway on a transient D1 error could attach another
+    // user's customer id — the exact cross-user routing failure this guard
+    // exists to prevent. The id is re-cached on the next successful call.
+    console.error('[BILLING] ownership guard unavailable; refusing to cache customer id (fail closed):', guardErr?.message || guardErr);
+    return;
   }
 
   try {

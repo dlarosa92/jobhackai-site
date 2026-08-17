@@ -16,6 +16,7 @@ import {
 } from '../_lib/billing-utils.js';
 import { assertStripeKeyMatchesEnvironment, redactId } from '../_lib/stripe-environment.js';
 import { assertNoCrossUserStripeIds, selectUidOwnedCustomers, readSubscriptionPeriod } from '../_lib/stripe-identity.js';
+import { buildUpgradeCheckoutSessionBody } from '../_lib/billing-ownership.js';
 
 /**
  * POST /api/upgrade-plan
@@ -98,19 +99,7 @@ export async function onRequest(context) {
         return json({ ok: false, code: 'INVALID_PLAN' }, 400, origin, env);
       }
 
-      const sessionBody = {
-        mode: 'subscription',
-        customer: customerId,
-        'line_items[0][price]': priceId,
-        'line_items[0][quantity]': 1,
-        success_url: returnUrl,
-        cancel_url: returnUrl,
-        allow_promotion_codes: 'true',
-        payment_method_collection: 'always',
-        'metadata[firebaseUid]': uid,
-        'metadata[plan]': targetPlan,
-        'metadata[upgrade_source]': source
-      };
+      const sessionBody = buildUpgradeCheckoutSessionBody(env, { uid, customerId, priceId, targetPlan, returnUrl, source });
 
       const sessionSeed = `checkout-${targetPlan}:${(crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`)}`;
       const idem = await makeUpgradeIdemKey(uid, sessionSeed);

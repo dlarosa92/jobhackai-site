@@ -13,7 +13,7 @@ import {
   kvCusKey
 } from '../_lib/billing-utils.js';
 import { assertStripeKeyMatchesEnvironment, redactId } from '../_lib/stripe-environment.js';
-import { partitionCustomersByUidClaim } from '../_lib/stripe-identity.js';
+import { resolveCustomerByEmailOwnership } from '../_lib/billing-ownership.js';
 export async function onRequest(context) {
   const { request, env } = context;
   const origin = request.headers.get('Origin') || '';
@@ -158,88 +158,19 @@ export async function onRequest(context) {
     }
 
     // Step 3: Only if both KV and D1 miss (or stale IDs are cleared), search
-    // Stripe by email — but email matching alone NEVER selects a customer.
-    // Only customers stamped with THIS user's firebaseUid are eligible;
-    // un-stamped matches are never adopted and never stamped. If an
-    // un-stamped email match carries an active subscription, checkout is
-    // blocked (ownership is unprovable and proceeding could double-bill);
-    // otherwise a fresh, properly-owned customer is created below.
+    // Stripe by email. Resolution rules live in _lib/billing-ownership.js
+    // (unit-tested): uid-proven selection only, and un-stamped customers
+    // with an active subscription block checkout even when an owned
+    // customer also exists.
     if (!customerId && email) {
-      let customers;
-      try {
-        const searchRes = await stripe(env, `/customers?email=${encodeURIComponent(email)}&limit=100`);
-        if (!searchRes.ok) throw new Error(`customer search returned ${searchRes.status}`);
-        const searchData = await searchRes.json();
-        customers = (searchData?.data || []).filter((c) => c && c.deleted !== true);
-      } catch (searchError) {
-        // Fail closed: without the search we cannot rule out an existing
-        // active subscription under this email, and creating a second
-        // customer could double-bill. Retryable.
-        console.error('🔴 [CHECKOUT] Email ownership check failed, blocking checkout:', searchError?.message || searchError);
-        return json({
-          ok: false,
-          error: 'Unable to verify billing ownership. Please try again in a moment.',
-          code: 'OWNERSHIP_CHECK_UNAVAILABLE'
-        }, 503, origin, env);
+      const resolution = await resolveCustomerByEmailOwnership(env, uid, email);
+      if (resolution.block) {
+        return json({ ok: false, error: resolution.block.error, code: resolution.block.code }, resolution.block.status, origin, env);
       }
-
-      const { owned, unproven } = partitionCustomersByUidClaim(customers, uid);
-      if (owned.length > 0) {
-        console.log('🟡 [CHECKOUT] Found customers matching firebaseUid', { count: owned.length });
-        if (owned.length > 1) {
-          // All candidates are provably this user's; prefer the one with an
-          // active subscription, else the newest.
-          for (const candidate of owned) {
-            const subsCheckRes = await stripe(env, `/subscriptions?customer=${candidate.id}&status=all&limit=10`);
-            if (subsCheckRes.ok) {
-              const subsCheckData = await subsCheckRes.json();
-              const hasActive = (subsCheckData?.data || []).some((s) =>
-                s && ['active', 'trialing', 'past_due'].includes(s.status)
-              );
-              if (hasActive) {
-                matchedCustomer = candidate;
-                break;
-              }
-            }
-          }
-          if (!matchedCustomer) {
-            matchedCustomer = [...owned].sort((a, b) => b.created - a.created)[0];
-          }
-        } else {
-          matchedCustomer = owned[0];
-        }
-        if (matchedCustomer?.id) {
-          customerId = matchedCustomer.id;
-          console.log('✅ [CHECKOUT] Selected uid-owned customer', redactId(customerId));
-        }
-      } else if (unproven.length > 0) {
-        for (const candidate of unproven.slice(0, 10)) {
-          let hasActive = false;
-          try {
-            const subsCheckRes = await stripe(env, `/subscriptions?customer=${candidate.id}&status=all&limit=10`);
-            if (!subsCheckRes.ok) throw new Error(`subscription check returned ${subsCheckRes.status}`);
-            const subsCheckData = await subsCheckRes.json();
-            hasActive = (subsCheckData?.data || []).some((s) =>
-              s && ['active', 'trialing', 'past_due'].includes(s.status)
-            );
-          } catch (subsCheckErr) {
-            console.error('🔴 [CHECKOUT] Could not verify un-stamped customer, blocking checkout:', subsCheckErr?.message || subsCheckErr);
-            return json({
-              ok: false,
-              error: 'Unable to verify billing ownership. Please try again in a moment.',
-              code: 'OWNERSHIP_CHECK_UNAVAILABLE'
-            }, 503, origin, env);
-          }
-          if (hasActive) {
-            console.error(`🔴 [CHECKOUT] Un-stamped customer ${redactId(candidate.id)} under this email has an active subscription; blocking checkout (support required)`);
-            return json({
-              ok: false,
-              error: 'An existing subscription is associated with this email but cannot be verified automatically. Please contact support.',
-              code: 'EXISTING_SUBSCRIPTION_UNVERIFIED'
-            }, 409, origin, env);
-          }
-        }
-        console.log('🟡 [CHECKOUT] Email matches exist but none are uid-owned and none have active subscriptions; creating a fresh customer');
+      if (resolution.matchedCustomer?.id) {
+        matchedCustomer = resolution.matchedCustomer;
+        customerId = matchedCustomer.id;
+        console.log('✅ [CHECKOUT] Selected uid-owned customer', redactId(customerId));
       }
     }
 

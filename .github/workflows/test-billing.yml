@@ -59,5 +59,8 @@ jobs:
       - name: Reconciliation core tests
         run: node app/functions/_lib/__tests__/billing-reconcile.test.mjs
 
+      - name: Endpoint ownership guards (PR #851 review round)
+        run: node app/functions/_lib/__tests__/billing-endpoint-guards.test.mjs
+
       - name: Migration 022/023 verification (sqlite3)
         run: bash scripts/verify-billing-migrations.sh
