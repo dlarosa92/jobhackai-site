@@ -10,7 +10,13 @@
 //   INVALID_TEST        — Stripe 404 carrying the "similar object exists in
 //                         test mode" hint → affirmatively test data → clear
 //   NOT_FOUND_LIVE      — Stripe 404 without the hint → clear, flag for review
-//   CUSTOMER_ONLY_KEEP  — no subscription id; live customer owned by this row
+//   CUSTOMER_ONLY_KEEP  — no subscription id; live customer owned by this
+//                         row, and the row claims no paid entitlement
+//   CUSTOMER_ONLY_PAID_CLAIM — no subscription id; owned live customer BUT
+//                         the row still claims paid access (paid/trial plan
+//                         or active-ish status) with no subscription
+//                         anywhere to back it → repair: plan to free,
+//                         status/periods cleared, customer id RETAINED
 //   CUSTOMER_ONLY_CLEAR — no subscription id; customer test/missing/foreign
 //   MIXED               — live owned customer but invalid subscription id →
 //                         keep customer id, clear subscription fields
@@ -124,7 +130,16 @@ export function classifyRow(row, stripeState) {
 
   // No subscription id on the row.
   if (hasCus) {
-    if (customerOwned) return { class: 'CUSTOMER_ONLY_KEEP' };
+    if (customerOwned) {
+      // An owned customer justifies keeping the CUSTOMER ID — it never
+      // justifies keeping a paid plan that no subscription backs. Rows that
+      // still claim entitlement here must be repaired (customer id retained).
+      const entitlementClaim = PAID_PLANS.has(row.plan) || row.plan === 'trial'
+        || ['active', 'trialing', 'past_due', 'unpaid'].includes(String(row.subscription_status || ''));
+      return entitlementClaim
+        ? { class: 'CUSTOMER_ONLY_PAID_CLAIM', reason: 'paid_claim_without_subscription' }
+        : { class: 'CUSTOMER_ONLY_KEEP' };
+    }
     if (cus && cus.found === false) {
       return { class: 'CUSTOMER_ONLY_CLEAR', reason: cus.testModeHint ? 'test_customer' : 'customer_not_found_live' };
     }
@@ -160,7 +175,7 @@ export function classifyAll(rows, stripeStateByRowId) {
     classes[result.class].push({ id: row.id, auth_id: row.auth_id, sub_last4: subLast4(row.stripe_subscription_id), reason: result.reason || null });
   }
   const duplicates = duplicateGroups(rows);
-  const repairClasses = ['INVALID_TEST', 'NOT_FOUND_LIVE', 'CUSTOMER_ONLY_CLEAR', 'MIXED', 'AMBIGUOUS'];
+  const repairClasses = ['INVALID_TEST', 'NOT_FOUND_LIVE', 'CUSTOMER_ONLY_CLEAR', 'CUSTOMER_ONLY_PAID_CLAIM', 'MIXED', 'AMBIGUOUS'];
   return {
     classes,
     duplicates,
@@ -273,6 +288,7 @@ export function buildApplySql(runId, rows, classification, allowlist, legitBackf
     if (!row) throw new Error(`repair row ${entry.id} not present in row data`);
     if (row.auth_id !== entry.auth_id) throw new Error(`repair row ${entry.id} auth_id drifted — refusing`);
     const keepCustomer = (classification.classes.MIXED || []).some((r) => r.id === entry.id)
+      || (classification.classes.CUSTOMER_ONLY_PAID_CLAIM || []).some((r) => r.id === entry.id)
       || (classification.classes.CUSTOMER_ONLY_KEEP || []).some((r) => r.id === entry.id);
     const newValues = {
       plan: 'free',

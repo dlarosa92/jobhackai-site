@@ -62,7 +62,19 @@ assert.strictEqual(classifyRow(row(), {
 }).class, 'AMBIGUOUS');
 
 // CUSTOMER_ONLY split.
+// (PR #851 F2) An owned customer justifies keeping the CUSTOMER ID, never a
+// paid plan no subscription backs: a paid-claiming row is a repair case.
+// The pre-fix suite wrongly asserted KEEP here (the fixture defaults to
+// plan 'essential'), which is how the gap shipped.
 assert.strictEqual(classifyRow(row({ stripe_subscription_id: null }), {
+  customer: { found: true, deleted: false, firebaseUid: 'uid_A' }
+}).class, 'CUSTOMER_ONLY_PAID_CLAIM');
+// Active-ish status alone (even with plan free) is also a paid claim.
+assert.strictEqual(classifyRow(row({ stripe_subscription_id: null, plan: 'free', subscription_status: 'active' }), {
+  customer: { found: true, deleted: false, firebaseUid: 'uid_A' }
+}).class, 'CUSTOMER_ONLY_PAID_CLAIM');
+// A genuinely free row with an owned customer is the true KEEP case.
+assert.strictEqual(classifyRow(row({ stripe_subscription_id: null, plan: 'free', subscription_status: null, has_ever_paid: 0 }), {
   customer: { found: true, deleted: false, firebaseUid: 'uid_A' }
 }).class, 'CUSTOMER_ONLY_KEEP');
 assert.strictEqual(classifyRow(row({ stripe_subscription_id: null }), {
@@ -99,6 +111,28 @@ assert.strictEqual(classifyRow(row({ stripe_subscription_id: null, stripe_custom
   assert.strictEqual(classification.counts.INVALID_TEST, 2);
   assert.deepStrictEqual(classification.repairRowIds, [2, 3]);
   assert.strictEqual(classification.readyForUniqueIndex, false);
+}
+
+// ── (PR #851 F2) paid customer-only rows enter the repair set and the apply
+// batch frees them while RETAINING the owned customer id ──
+{
+  const paidClaimRow = row({ id: 10, auth_id: 'uid_K', plan: 'pro', stripe_customer_id: 'cus_K1234', stripe_subscription_id: null, subscription_status: 'active', trial_ends_at: null });
+  const freeKeepRow = row({ id: 11, auth_id: 'uid_F', plan: 'free', stripe_customer_id: 'cus_F1234', stripe_subscription_id: null, subscription_status: null, has_ever_paid: 0 });
+  const ownedState = (uid) => ({ customer: { found: true, deleted: false, firebaseUid: uid } });
+  const classification = classifyAll([paidClaimRow, freeKeepRow], { 10: ownedState('uid_K'), 11: ownedState('uid_F') });
+
+  assert.strictEqual(classification.counts.CUSTOMER_ONLY_PAID_CLAIM, 1);
+  assert.strictEqual(classification.counts.CUSTOMER_ONLY_KEEP, 1);
+  assert.deepStrictEqual(classification.repairRowIds, [10], 'paid claim repairs; genuine keep does not');
+
+  const allowlist = { legit: [], repair: [{ id: 10, auth_id: 'uid_K' }], expected: { legit: 0, repair: 1 } };
+  const sql = buildApplySql('run_pc_1', [paidClaimRow, freeKeepRow], classification, allowlist, {}, '2026-08-17T00:00:00.000Z');
+  const stmts = sql.split('\n');
+  assert.strictEqual(stmts.length, 2);
+  assert.ok(stmts[1].includes("plan = 'free'"), 'false paid entitlement cleared');
+  assert.ok(stmts[1].includes('subscription_status = NULL'));
+  assert.ok(stmts[1].includes("stripe_customer_id = 'cus_K1234'"), 'owned customer id RETAINED');
+  assert.ok(!/\bDELETE\b/i.test(sql));
 }
 
 // ── allowlist drift ──
