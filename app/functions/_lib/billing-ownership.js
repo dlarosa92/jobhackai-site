@@ -6,6 +6,12 @@ import { stripe } from './billing-utils.js';
 import { partitionCustomersByUidClaim } from './stripe-identity.js';
 import { redactId } from './stripe-environment.js';
 
+// Subscription statuses that still represent (or may recover into) paid
+// entitlement. Includes 'unpaid': the webhook keeps the plan through
+// unpaid dunning, so a customer stuck in 'unpaid' is still a double-billing
+// risk at checkout and must trip the block below.
+export const ENTITLED_SUBSCRIPTION_STATUSES = ['active', 'trialing', 'past_due', 'unpaid'];
+
 // Email-search customer resolution for checkout.
 //
 // Rules (hotfix R2-5 + PR #851 review round):
@@ -51,7 +57,7 @@ export async function resolveCustomerByEmailOwnership(env, uid, email) {
       if (!subsCheckRes.ok) throw new Error(`subscription check returned ${subsCheckRes.status}`);
       const subsCheckData = await subsCheckRes.json();
       hasActive = (subsCheckData?.data || []).some((s) =>
-        s && ['active', 'trialing', 'past_due'].includes(s.status)
+        s && ENTITLED_SUBSCRIPTION_STATUSES.includes(s.status)
       );
     } catch (subsCheckErr) {
       console.error('🔴 [CHECKOUT] Could not verify un-stamped customer, blocking checkout:', subsCheckErr?.message || subsCheckErr);
@@ -88,7 +94,7 @@ export async function resolveCustomerByEmailOwnership(env, uid, email) {
       if (subsCheckRes.ok) {
         const subsCheckData = await subsCheckRes.json();
         const hasActive = (subsCheckData?.data || []).some((s) =>
-          s && ['active', 'trialing', 'past_due'].includes(s.status)
+          s && ENTITLED_SUBSCRIPTION_STATUSES.includes(s.status)
         );
         if (hasActive) {
           matchedCustomer = candidate;

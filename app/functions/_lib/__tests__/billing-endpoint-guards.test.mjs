@@ -38,8 +38,10 @@ const subsRoute = (cusId, statuses) => ({
   assert.strictEqual(r.block.code, 'EXISTING_SUBSCRIPTION_UNVERIFIED');
 }
 
-// past_due / trialing on the un-stamped customer block too.
-for (const status of ['past_due', 'trialing']) {
+// past_due / trialing / unpaid on the un-stamped customer block too —
+// 'unpaid' included (Bugbot round 2): the webhook keeps the plan through
+// unpaid dunning, so it is still a double-billing risk at checkout.
+for (const status of ['past_due', 'trialing', 'unpaid']) {
   const stub = stubStripeFetch([
     searchRoute([ownedCus, legacyCus]),
     subsRoute('cus_legacy', [status])
@@ -80,6 +82,20 @@ for (const status of ['past_due', 'trialing']) {
   const r = await resolveCustomerByEmailOwnership(ENV, 'uid_A', 'a@example.com');
   stub.restore();
   assert.strictEqual(r.matchedCustomer?.id, 'cus_owned');
+}
+
+// (Bugbot round 2) An 'unpaid' subscription also marks the entitled owned
+// customer — the newer empty one must not win.
+{
+  const owned2 = { id: 'cus_owned2', created: 200, metadata: { firebaseUid: 'uid_A' } };
+  const stub = stubStripeFetch([
+    searchRoute([ownedCus, owned2]),
+    subsRoute('cus_owned', ['unpaid']),
+    subsRoute('cus_owned2', [])
+  ]);
+  const r = await resolveCustomerByEmailOwnership(ENV, 'uid_A', 'a@example.com');
+  stub.restore();
+  assert.strictEqual(r.matchedCustomer?.id, 'cus_owned', 'unpaid counts as the entitled subscription');
 }
 
 // Un-stamped with active subscription and NO owned match → still blocks.
