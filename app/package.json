@@ -23,7 +23,17 @@
     "test:ats": "node functions/_lib/__tests__/ats-test-suite.test.mjs",
     "test:ats:verbose": "node functions/_lib/__tests__/ats-test-suite.test.mjs --verbose",
     "test:ats-engine": "node functions/_lib/__tests__/ats-scoring-engine.test.mjs",
-    "test:grammar": "node functions/_lib/__tests__/grammar-engine.test.mjs"
+    "test:grammar": "node functions/_lib/__tests__/grammar-engine.test.mjs",
+    "test:billing": "npm run test:billing:env && npm run test:billing:period && npm run test:billing:identity && npm run test:billing:db && npm run test:billing:mode-gate && npm run test:billing:webhook && npm run test:billing:trial && npm run test:billing:reconcile",
+    "test:billing:env": "node functions/_lib/__tests__/stripe-environment.test.mjs",
+    "test:billing:period": "node functions/_lib/__tests__/subscription-period.test.mjs",
+    "test:billing:identity": "node functions/_lib/__tests__/stripe-identity.test.mjs",
+    "test:billing:db": "node functions/_lib/__tests__/update-user-plan-period.test.mjs",
+    "test:billing:mode-gate": "node functions/_lib/__tests__/stripe-webhook-mode-gate.test.mjs",
+    "test:billing:webhook": "node functions/_lib/__tests__/stripe-webhook-identity.test.mjs",
+    "test:billing:trial": "node functions/_lib/__tests__/trial-conversion.test.mjs",
+    "test:billing:reconcile": "node functions/_lib/__tests__/billing-reconcile.test.mjs",
+    "test:billing:migrations": "bash ../scripts/verify-billing-migrations.sh"
   },
   "dependencies": {
     "firebase": "^10.7.0",
