@@ -1,10 +1,13 @@
 import {
-  isProductionEnvironment,
+  isExplicitNonProductionEnvironment,
   notFoundInProductionResponse,
   STANDARD_SECURITY_HEADERS
 } from './_lib/debug-access.js';
 
-const PRODUCTION_ONLY_DEBUG_PATHS = new Set([
+// Diagnostic pages/endpoints, reachable ONLY when ENVIRONMENT is explicitly
+// a known non-production value (fail closed: a missing or misspelled
+// ENVIRONMENT blocks them instead of exposing them).
+const NON_PRODUCTION_ONLY_DEBUG_PATHS = new Set([
   '/api/ats-health',
   '/api/test-openai',
   '/auth-test',
@@ -20,10 +23,24 @@ const PRODUCTION_ONLY_DEBUG_PATHS = new Set([
   '/stripe-test.html'
 ]);
 
+// Retired legacy routes, blocked in EVERY environment as a second layer of
+// defense: even if a deleted legacy file (e.g. api/stripe.js — the
+// unauthenticated legacy handler) is accidentally restored, the route stays
+// closed. Keep in sync with the retired-file list in the hotfix runbook.
+const RETIRED_PATHS = new Set([
+  '/api/stripe',
+  '/api/subscription',
+  '/api/auth'
+]);
+
 export async function onRequest({ request, next, env }) {
   const pathname = request ? new URL(request.url).pathname.replace(/\/+$/, '') || '/' : null;
 
-  if (pathname && isProductionEnvironment(env) && PRODUCTION_ONLY_DEBUG_PATHS.has(pathname)) {
+  if (pathname && RETIRED_PATHS.has(pathname)) {
+    return notFoundInProductionResponse();
+  }
+
+  if (pathname && NON_PRODUCTION_ONLY_DEBUG_PATHS.has(pathname) && !isExplicitNonProductionEnvironment(env)) {
     return notFoundInProductionResponse();
   }
 
