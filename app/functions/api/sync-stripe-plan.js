@@ -1,5 +1,7 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { updateUserPlan, getUserPlanData } from '../_lib/db.js';
+import { assertStripeKeyMatchesEnvironment, redactId } from '../_lib/stripe-environment.js';
+import { assertNoCrossUserStripeIds, selectUidOwnedCustomers, readSubscriptionPeriod } from '../_lib/stripe-identity.js';
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -15,6 +17,14 @@ export async function onRequest(context) {
   try {
     console.log('🔄 Sync Stripe plan request received');
 
+    // Refuse to import Stripe state into a database whose environment does
+    // not match the configured key's mode (prevents test data reaching prod).
+    const keyCheck = assertStripeKeyMatchesEnvironment(env);
+    if (!keyCheck.ok) {
+      console.error(`[SYNC-STRIPE-PLAN] stripe key/environment mismatch: ${keyCheck.reason}`);
+      return json({ ok: false, error: 'configuration error' }, 503, origin, env);
+    }
+
     // Verify Firebase auth token
     const token = getBearer(request);
     if (!token) {
@@ -28,7 +38,7 @@ export async function onRequest(context) {
       const tokenResult = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
       uid = tokenResult.uid;
       email = tokenResult.payload?.email;
-      console.log('✅ Token verified:', { uid, email });
+      console.log('✅ Token verified for uid', redactId(uid));
     } catch (tokenError) {
       console.error('❌ Token verification failed:', tokenError);
       return json({ ok: false, error: 'Invalid authentication token' }, 401, origin, env);
@@ -43,12 +53,12 @@ export async function onRequest(context) {
     
     // Step 2: If KV miss, try D1 (authoritative)
     if (!customerId) {
-      console.log('🟡 [SYNC-STRIPE-PLAN] No customer in KV for uid', uid);
+      console.log('🟡 [SYNC-STRIPE-PLAN] No customer in KV for uid', redactId(uid));
       try {
         const userPlan = await getUserPlanData(env, uid);
         if (userPlan?.stripeCustomerId) {
           customerId = userPlan.stripeCustomerId;
-          console.log('✅ [SYNC-STRIPE-PLAN] Found customer ID in D1:', customerId);
+          console.log('✅ [SYNC-STRIPE-PLAN] Found customer ID in D1:', redactId(customerId));
           // Cache it in KV for next time
           await env.JOBHACKAI_KV.put(`cusByUid:${uid}`, customerId);
         }
@@ -71,10 +81,14 @@ export async function onRequest(context) {
             const searchData = await searchRes.json();
             if (searchData.data && searchData.data.length > 0) {
               const emailMatches = searchData.data;
-              const uidMatches = emailMatches.filter((c) => c?.metadata?.firebaseUid === uid);
-              const candidates = uidMatches.length > 0 ? uidMatches : emailMatches;
-              if (uidMatches.length > 0) {
-                console.log('🟡 [SYNC-STRIPE-PLAN] Found customers matching firebaseUid', { count: uidMatches.length });
+              // Email matching alone never selects a customer: only exact
+              // firebaseUid metadata matches are eligible. Un-stamped and
+              // foreign-stamped matches are never adopted (and never
+              // stamped) — a user whose ownership cannot be proven syncs to
+              // the free default instead of guessing.
+              const candidates = selectUidOwnedCustomers(emailMatches, uid);
+              if (candidates.length > 0) {
+                console.log('🟡 [SYNC-STRIPE-PLAN] Found customers matching firebaseUid', { count: candidates.length });
               }
 
               // Find customer with active subscription, or use most recent
@@ -102,17 +116,18 @@ export async function onRequest(context) {
                 
                 // If no active subscription found, use most recent
                 if (!foundCustomer) {
-                  foundCustomer = candidates.sort((a, b) => b.created - a.created)[0].id;
+                  foundCustomer = candidates.sort((a, b) => b.created - a.created)[0]?.id || null;
                 }
               } else {
-                foundCustomer = candidates[0].id;
+                // May be empty when every email match belongs to another user
+                foundCustomer = candidates[0]?.id || null;
               }
               
               if (foundCustomer) {
                 customerId = foundCustomer;
                 // Cache it for next time
                 await env.JOBHACKAI_KV.put(`cusByUid:${uid}`, customerId);
-                console.log('✅ [SYNC-STRIPE-PLAN] Found customer by email (last resort) and cached:', customerId);
+                console.log('✅ [SYNC-STRIPE-PLAN] Found customer by email (last resort) and cached:', redactId(customerId));
               }
             }
           }
@@ -131,7 +146,7 @@ export async function onRequest(context) {
       }
     }
 
-    console.log('🔍 Found customer ID:', customerId);
+    console.log('🔍 Found customer ID:', redactId(customerId));
 
     // Get all subscriptions from Stripe (paginate to avoid missing older paid subs)
     const subscriptions = [];
@@ -220,28 +235,35 @@ export async function onRequest(context) {
     let fullSub = latestSub; // Fallback to list result
     if (fullSubResponse.ok) {
       fullSub = await fullSubResponse.json();
-      console.log('✅ Fetched full subscription object with metadata:', fullSub.metadata);
+      console.log('✅ Fetched full subscription object; metadata keys:', Object.keys(fullSub.metadata || {}));
     } else {
       console.warn('⚠️ Could not fetch full subscription, using list result');
     }
-    
+
     const status = fullSub.status;
     const items = fullSub.items?.data || [];
     const priceId = items[0]?.price?.id || '';
     const cancelAtPeriodEnd = fullSub.cancel_at_period_end;
     const cancelAt = fullSub.cancel_at;
-    const currentPeriodEnd = fullSub.current_period_end;
+    // Period fields may live on the subscription root or on subscription
+    // items depending on the (unpinned) Stripe API version. An ambiguous or
+    // missing period source is a critical failure: this endpoint writes the
+    // period to D1, and writing a guessed date is worse than failing.
+    const period = readSubscriptionPeriod(fullSub, { priceToPlan: (pid) => priceToPlan(env, pid) });
+    if (period.error) {
+      console.error(`[SYNC-STRIPE-PLAN] subscription period unresolved (${period.error}); refusing to sync`);
+      return json({ ok: false, error: 'subscription period could not be determined', code: `PERIOD_${period.error.toUpperCase()}` }, 502, origin, env);
+    }
     const schedule = fullSub.schedule;
-    
-    console.log('🔍 Latest subscription:', { 
-      status, 
-      priceId, 
+
+    console.log('🔍 Latest subscription:', {
+      status,
       trialEnd: fullSub.trial_end,
-      metadata: fullSub.metadata,
       cancelAtPeriodEnd,
       cancelAt,
-      currentPeriodEnd,
-      schedule
+      currentPeriodStart: period.currentPeriodStart,
+      currentPeriodEnd: period.currentPeriodEnd,
+      schedule: !!schedule
     });
 
     let plan = 'free';
@@ -313,9 +335,17 @@ export async function onRequest(context) {
       }
     }
 
+    // Never attach a customer/subscription id that another user's row already
+    // holds — duplicate ids are exactly how the wrong user got updated.
+    const guard = await assertNoCrossUserStripeIds(env, { uid, stripeCustomerId: customerId, stripeSubscriptionId: fullSub.id });
+    if (!guard.ok) {
+      console.error(`[SYNC-STRIPE-PLAN] cross-user Stripe id conflict; no mutation for uid=${redactId(uid)}`);
+      return json({ ok: false, error: 'billing ownership conflict; contact support', code: 'OWNERSHIP_CONFLICT' }, 409, origin, env);
+    }
+
     // Update D1 with correct plan (source of truth)
-    console.log(`✍️ [SYNC-STRIPE-PLAN] Writing to D1: users.plan = ${plan} for uid=${uid}`);
-    
+    console.log(`✍️ [SYNC-STRIPE-PLAN] Writing to D1: users.plan = ${plan} for uid=${redactId(uid)}`);
+
     try {
       await updateUserPlan(env, uid, {
         plan: plan,
@@ -323,14 +353,15 @@ export async function onRequest(context) {
         stripeSubscriptionId: fullSub.id,
         subscriptionStatus: status,
         trialEndsAt: trialEndsAt || null, // null clears the field (undefined is skipped)
-        currentPeriodEnd: currentPeriodEnd ? new Date(currentPeriodEnd * 1000).toISOString() : null, // null clears the field (undefined is skipped)
+        currentPeriodStart: period.currentPeriodStart, // null clears the field (undefined is skipped)
+        currentPeriodEnd: period.currentPeriodEnd, // null clears the field (undefined is skipped)
         cancelAt: (cancelAtPeriodEnd && cancelAt) ? new Date(cancelAt * 1000).toISOString() : null, // null clears the field (undefined is skipped)
         scheduledPlan: scheduledPlan || null, // null clears the field (undefined is skipped)
         scheduledAt: scheduledAt || null, // null clears the field (undefined is skipped)
         hasEverPaid: (isPaidPlan(plan) || everPaidFromStripe) ? 1 : undefined
       });
       console.log(`✅ [SYNC-STRIPE-PLAN] D1 write completed: ${plan}`);
-      
+
       // TEMPORARY: Also write to KV during migration period for safety
       await env.JOBHACKAI_KV?.put(`planByUid:${uid}`, plan);
       if (trialEndsAt) {
@@ -339,8 +370,8 @@ export async function onRequest(context) {
       if (cancelAtPeriodEnd && cancelAt) {
         await env.JOBHACKAI_KV?.put(`cancelAtByUid:${uid}`, String(cancelAt));
       }
-      if (currentPeriodEnd) {
-        await env.JOBHACKAI_KV?.put(`periodEndByUid:${uid}`, String(currentPeriodEnd));
+      if (period.currentPeriodEnd) {
+        await env.JOBHACKAI_KV?.put(`periodEndByUid:${uid}`, String(Math.floor(new Date(period.currentPeriodEnd).getTime() / 1000)));
       }
       if (scheduledPlan && scheduledAt) {
         await env.JOBHACKAI_KV?.put(`scheduledPlanByUid:${uid}`, scheduledPlan);
@@ -351,14 +382,14 @@ export async function onRequest(context) {
       throw dbError;
     }
 
-    return json({ 
-      ok: true, 
-      plan, 
+    return json({
+      ok: true,
+      plan,
       trialEndsAt,
       cancelAt: cancelAt ? new Date(cancelAt * 1000).toISOString() : null,
-      currentPeriodEnd: currentPeriodEnd ? new Date(currentPeriodEnd * 1000).toISOString() : null,
+      currentPeriodEnd: period.currentPeriodEnd,
       subscriptionStatus: status,
-      priceId 
+      priceId
     }, 200, origin, env);
 
   } catch (error) {

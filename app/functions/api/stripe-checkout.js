@@ -12,6 +12,8 @@ import {
   cacheCustomerId,
   kvCusKey
 } from '../_lib/billing-utils.js';
+import { assertStripeKeyMatchesEnvironment, redactId } from '../_lib/stripe-environment.js';
+import { partitionCustomersByUidClaim } from '../_lib/stripe-identity.js';
 export async function onRequest(context) {
   const { request, env } = context;
   const origin = request.headers.get('Origin') || '';
@@ -50,6 +52,14 @@ export async function onRequest(context) {
       console.log('🔴 [CHECKOUT] Missing STRIPE_SECRET_KEY');
       return json({ ok: false, error: 'Server configuration error' }, 500, origin, env);
     }
+    // Production must run with a live-mode key, QA/dev with a test-mode key.
+    // Refusing here keeps a mis-keyed environment from ever creating Stripe
+    // objects or caching their ids into this environment's database.
+    const keyCheck = assertStripeKeyMatchesEnvironment(env);
+    if (!keyCheck.ok) {
+      console.error(`[CHECKOUT] stripe key/environment mismatch: ${keyCheck.reason}`);
+      return json({ ok: false, error: 'configuration error' }, 503, origin, env);
+    }
 
     const token = getBearer(request);
     if (!token) {
@@ -81,7 +91,7 @@ export async function onRequest(context) {
       try {
         const eligible = await isTrialEligible(env, uid, email);
         if (!eligible) {
-          console.log('🔴 [CHECKOUT] Trial not eligible for user', uid);
+          console.log('🔴 [CHECKOUT] Trial not eligible for user', redactId(uid));
           return json({
             ok: false,
             error: 'Trial already used. Please select a paid plan.',
@@ -118,13 +128,13 @@ export async function onRequest(context) {
     
     // Step 2: If KV miss, try D1 (authoritative)
     if (!customerId) {
-      console.log('🟡 [CHECKOUT] No customer in KV for uid', uid);
+      console.log('🟡 [CHECKOUT] No customer in KV for uid', redactId(uid));
       try {
         const userPlan = await getUserPlanData(env, uid);
         if (userPlan?.stripeCustomerId) {
           customerId = userPlan.stripeCustomerId;
           customerIdSource = 'd1';
-          console.log('✅ [CHECKOUT] Found customer ID in D1:', customerId);
+          console.log('✅ [CHECKOUT] Found customer ID in D1:', redactId(customerId));
           // Cache it in KV for next time
           try {
             await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
@@ -147,55 +157,95 @@ export async function onRequest(context) {
       if (!customerId) matchedCustomer = null;
     }
 
-    // Step 3: Only if both KV and D1 miss (or stale IDs are cleared), fallback to Stripe email search.
+    // Step 3: Only if both KV and D1 miss (or stale IDs are cleared), search
+    // Stripe by email — but email matching alone NEVER selects a customer.
+    // Only customers stamped with THIS user's firebaseUid are eligible;
+    // un-stamped matches are never adopted and never stamped. If an
+    // un-stamped email match carries an active subscription, checkout is
+    // blocked (ownership is unprovable and proceeding could double-bill);
+    // otherwise a fresh, properly-owned customer is created below.
     if (!customerId && email) {
+      let customers;
       try {
         const searchRes = await stripe(env, `/customers?email=${encodeURIComponent(email)}&limit=100`);
+        if (!searchRes.ok) throw new Error(`customer search returned ${searchRes.status}`);
         const searchData = await searchRes.json();
-        const customers = searchRes.ok
-          ? (searchData?.data || []).filter((c) => c && c.deleted !== true)
-          : [];
-        if (customers.length > 0) {
-          const uidMatches = customers.filter((c) => c?.metadata?.firebaseUid === uid);
-          const candidates = uidMatches.length > 0 ? uidMatches : customers;
-          if (uidMatches.length > 0) {
-            console.log('🟡 [CHECKOUT] Found customers matching firebaseUid', { count: uidMatches.length });
-          }
+        customers = (searchData?.data || []).filter((c) => c && c.deleted !== true);
+      } catch (searchError) {
+        // Fail closed: without the search we cannot rule out an existing
+        // active subscription under this email, and creating a second
+        // customer could double-bill. Retryable.
+        console.error('🔴 [CHECKOUT] Email ownership check failed, blocking checkout:', searchError?.message || searchError);
+        return json({
+          ok: false,
+          error: 'Unable to verify billing ownership. Please try again in a moment.',
+          code: 'OWNERSHIP_CHECK_UNAVAILABLE'
+        }, 503, origin, env);
+      }
 
-          if (candidates.length > 1) {
-            for (const candidate of candidates) {
-              const subsCheckRes = await stripe(env, `/subscriptions?customer=${candidate.id}&status=all&limit=10`);
-              if (subsCheckRes.ok) {
-                const subsCheckData = await subsCheckRes.json();
-                const hasActive = (subsCheckData?.data || []).some((s) =>
-                  s && ['active', 'trialing', 'past_due'].includes(s.status)
-                );
-                if (hasActive) {
-                  matchedCustomer = candidate;
-                  break;
-                }
+      const { owned, unproven } = partitionCustomersByUidClaim(customers, uid);
+      if (owned.length > 0) {
+        console.log('🟡 [CHECKOUT] Found customers matching firebaseUid', { count: owned.length });
+        if (owned.length > 1) {
+          // All candidates are provably this user's; prefer the one with an
+          // active subscription, else the newest.
+          for (const candidate of owned) {
+            const subsCheckRes = await stripe(env, `/subscriptions?customer=${candidate.id}&status=all&limit=10`);
+            if (subsCheckRes.ok) {
+              const subsCheckData = await subsCheckRes.json();
+              const hasActive = (subsCheckData?.data || []).some((s) =>
+                s && ['active', 'trialing', 'past_due'].includes(s.status)
+              );
+              if (hasActive) {
+                matchedCustomer = candidate;
+                break;
               }
             }
-            if (!matchedCustomer) {
-              matchedCustomer = candidates.sort((a, b) => b.created - a.created)[0];
-            }
-          } else {
-            matchedCustomer = candidates[0];
           }
-
-          if (matchedCustomer?.id) {
-            customerId = matchedCustomer.id;
-            console.log('✅ [CHECKOUT] Found customer by email fallback', customerId);
+          if (!matchedCustomer) {
+            matchedCustomer = [...owned].sort((a, b) => b.created - a.created)[0];
+          }
+        } else {
+          matchedCustomer = owned[0];
+        }
+        if (matchedCustomer?.id) {
+          customerId = matchedCustomer.id;
+          console.log('✅ [CHECKOUT] Selected uid-owned customer', redactId(customerId));
+        }
+      } else if (unproven.length > 0) {
+        for (const candidate of unproven.slice(0, 10)) {
+          let hasActive = false;
+          try {
+            const subsCheckRes = await stripe(env, `/subscriptions?customer=${candidate.id}&status=all&limit=10`);
+            if (!subsCheckRes.ok) throw new Error(`subscription check returned ${subsCheckRes.status}`);
+            const subsCheckData = await subsCheckRes.json();
+            hasActive = (subsCheckData?.data || []).some((s) =>
+              s && ['active', 'trialing', 'past_due'].includes(s.status)
+            );
+          } catch (subsCheckErr) {
+            console.error('🔴 [CHECKOUT] Could not verify un-stamped customer, blocking checkout:', subsCheckErr?.message || subsCheckErr);
+            return json({
+              ok: false,
+              error: 'Unable to verify billing ownership. Please try again in a moment.',
+              code: 'OWNERSHIP_CHECK_UNAVAILABLE'
+            }, 503, origin, env);
+          }
+          if (hasActive) {
+            console.error(`🔴 [CHECKOUT] Un-stamped customer ${redactId(candidate.id)} under this email has an active subscription; blocking checkout (support required)`);
+            return json({
+              ok: false,
+              error: 'An existing subscription is associated with this email but cannot be verified automatically. Please contact support.',
+              code: 'EXISTING_SUBSCRIPTION_UNVERIFIED'
+            }, 409, origin, env);
           }
         }
-      } catch (searchError) {
-        console.log('🟡 [CHECKOUT] Email fallback failed (non-fatal)', searchError?.message || searchError);
+        console.log('🟡 [CHECKOUT] Email matches exist but none are uid-owned and none have active subscriptions; creating a fresh customer');
       }
     }
 
     // Step 4: Only create new Stripe customer if all lookups are missing
     if (!customerId) {
-      console.log('🔵 [CHECKOUT] Creating new Stripe customer for uid', uid);
+      console.log('🔵 [CHECKOUT] Creating new Stripe customer for uid', redactId(uid));
       try {
         const res = await stripe(env, '/customers', {
           method: 'POST',
@@ -274,18 +324,10 @@ export async function onRequest(context) {
 
     if (customerId) {
       await cacheCustomerId(env, uid, customerId);
-
-      if (matchedCustomer && !matchedCustomer?.metadata?.firebaseUid) {
-        try {
-          await stripe(env, `/customers/${customerId}`, {
-            method: 'POST',
-            headers: stripeFormHeaders(env),
-            body: form({ 'metadata[firebaseUid]': uid })
-          });
-        } catch (e) {
-          console.log('🟡 [CHECKOUT] Failed to backfill customer metadata', e?.message || e);
-        }
-      }
+      // No metadata backfill: every customer reaching this point is either
+      // uid-owned already or was created above with metadata[firebaseUid].
+      // Stamping ownership onto a guessed customer is how subscriptions got
+      // attached to the wrong user during the incident.
     }
 
     // Guard against duplicate subscriptions for paid plans.
@@ -308,8 +350,8 @@ export async function onRequest(context) {
     if (activeSubs.length > 0) {
       const currentPlan = getPlanFromSubscription(activeSubs[0], env);
       console.log('🟡 [CHECKOUT] Active subscription exists, blocking checkout', {
-        uid,
-        customerId,
+        uid: redactId(uid),
+        customerId: redactId(customerId),
         currentPlan
       });
       return json({
@@ -340,6 +382,13 @@ export async function onRequest(context) {
     if (plan === 'trial') {
       sessionBody['subscription_data[trial_period_days]'] = '3';
       sessionBody['subscription_data[metadata][original_plan]'] = plan;
+    }
+
+    // Stamp ownership onto the subscription itself so webhooks can resolve
+    // the user from the strongest source without a customer lookup.
+    // (subscription_data is only valid for subscription-mode sessions.)
+    if (sessionBody.mode === 'subscription') {
+      sessionBody['subscription_data[metadata][firebaseUid]'] = uid;
     }
     
     // Generate idempotency key (forceNew for fresh session if requested from frontend)

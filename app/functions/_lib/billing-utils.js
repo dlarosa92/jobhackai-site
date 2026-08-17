@@ -4,6 +4,8 @@
  */
 
 import { updateUserPlan, getUserPlanData } from './db.js';
+import { assertNoCrossUserStripeIds } from './stripe-identity.js';
+import { redactId } from './stripe-environment.js';
 
 /**
  * KV key for storing customer ID by Firebase UID
@@ -126,8 +128,8 @@ export async function resolveStaleCustomerFromKV(env, uid, customerId, customerI
   }
 
   console.log(`${logPrefix} Stored customer is stale in Stripe.`, {
-    uid,
-    customerId,
+    uid: redactId(uid),
+    customerId: redactId(customerId),
     reason: validation.reason
   });
 
@@ -141,7 +143,7 @@ export async function resolveStaleCustomerFromKV(env, uid, customerId, customerI
         if (d1Validation.valid) {
           d1HasDifferentValidId = true;
           customerId = d1CustomerId;
-          console.log(`${logPrefix} D1 has valid customer; KV was stale`, { uid, customerId });
+          console.log(`${logPrefix} D1 has valid customer; KV was stale`, { uid: redactId(uid), customerId: redactId(customerId) });
         }
       }
     } catch (e) {
@@ -168,6 +170,20 @@ export async function resolveStaleCustomerFromKV(env, uid, customerId, customerI
  */
 export async function cacheCustomerId(env, uid, customerId) {
   if (!customerId) return;
+
+  // Never cache or persist a customer id that another user's row already
+  // holds — duplicate stripe_customer_id values are how webhook events got
+  // routed to the wrong user during the billing-integrity incident.
+  try {
+    const guard = await assertNoCrossUserStripeIds(env, { uid, stripeCustomerId: customerId, stripeSubscriptionId: null });
+    if (!guard.ok) {
+      console.error(`[BILLING] cross-user customer id conflict; not caching ${redactId(customerId)} for uid=${redactId(uid)}`);
+      return;
+    }
+  } catch (guardErr) {
+    console.warn('[BILLING] ownership guard check failed (continuing):', guardErr?.message || guardErr);
+  }
+
   try {
     await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
   } catch (_) {}
