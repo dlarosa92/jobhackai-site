@@ -106,6 +106,10 @@ explicitly authorized them.
 15. Confirm the report identifies exactly the approved records (expected: 2
     LEGIT, 12 repair-class rows). The row identities are runtime data from
     this report — the operator builds the allowlist file from it.
+    Any `CUSTOMER_ONLY_UNLINKED_SUB` rows (owned customer with a live but
+    never-linked subscription, or an unverifiable subscription list) are in
+    NEITHER set: apply cannot free them and the allowlist rejects them —
+    resolve manually by relinking the subscription id, then re-run preflight.
 16. **STOP — owner approves the preflight report + allowlist file.**
 17. Apply:
     `node app/scripts/billing-reconcile.mjs --apply --allowlist=prod-allowlist.json --run-id=prod_repair_1 --env=prod`

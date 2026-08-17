@@ -12,11 +12,22 @@
 //   NOT_FOUND_LIVE      — Stripe 404 without the hint → clear, flag for review
 //   CUSTOMER_ONLY_KEEP  — no subscription id; live customer owned by this
 //                         row, and the row claims no paid entitlement
-//   CUSTOMER_ONLY_PAID_CLAIM — no subscription id; owned live customer BUT
-//                         the row still claims paid access (paid/trial plan
-//                         or active-ish status) with no subscription
-//                         anywhere to back it → repair: plan to free,
-//                         status/periods cleared, customer id RETAINED
+//   CUSTOMER_ONLY_PAID_CLAIM — no subscription id; owned live customer; the
+//                         row claims paid access AND the customer's live
+//                         Stripe subscription list was checked and is
+//                         VERIFIED EMPTY of entitled statuses → repair:
+//                         plan to free, status/periods cleared, customer id
+//                         RETAINED
+//   CUSTOMER_ONLY_UNLINKED_SUB — no subscription id in D1, owned customer,
+//                         paid claim, and the customer HAS a live
+//                         entitled-status subscription (or the list could
+//                         not be verified). A missing D1 link is not proof
+//                         of no subscription — this is likely a paying
+//                         customer whose webhook write failed. Deliberately
+//                         in NEITHER the legit nor the repair set: apply can
+//                         never free it, and the drift comparison rejects
+//                         hand-adding it. Operator resolves by relinking the
+//                         subscription id, then re-runs preflight.
 //   CUSTOMER_ONLY_CLEAR — no subscription id; customer test/missing/foreign
 //   MIXED               — live owned customer but invalid subscription id →
 //                         keep customer id, clear subscription fields
@@ -41,6 +52,9 @@ export const BILLING_FIELDS = [
 ];
 
 const PAID_PLANS = new Set(['essential', 'pro', 'premium']);
+// Mirrors the app's dunning policy (webhook + billing-ownership): these
+// statuses still represent, or may recover into, paid entitlement.
+const ENTITLED_STATUSES = new Set(['active', 'trialing', 'past_due', 'unpaid']);
 
 // ── Value safety (the generated SQL is executed via `wrangler d1 execute
 // --file`, which has no bind parameters — every interpolated value must be
@@ -90,6 +104,10 @@ export function subLast4(subscriptionId) {
 //                   cancelAtIso }
 //   customer:     null | { found:false, testModeHint:boolean }
 //               | { found:true, deleted:boolean, firebaseUid:string|null }
+//   customerSubscriptions: (sub-less rows with a found customer only)
+//                 { statuses: string[] } — statuses of the customer's LIVE
+//                 subscriptions, listed by the CLI. Absent/invalid ⇒ the
+//                 paid claim cannot be verified ⇒ never auto-freed.
 export function classifyRow(row, stripeState) {
   const hasSub = Boolean(row.stripe_subscription_id);
   const hasCus = Boolean(row.stripe_customer_id);
@@ -132,13 +150,26 @@ export function classifyRow(row, stripeState) {
   if (hasCus) {
     if (customerOwned) {
       // An owned customer justifies keeping the CUSTOMER ID — it never
-      // justifies keeping a paid plan that no subscription backs. Rows that
-      // still claim entitlement here must be repaired (customer id retained).
+      // justifies keeping a paid plan that no subscription backs.
       const entitlementClaim = PAID_PLANS.has(row.plan) || row.plan === 'trial'
-        || ['active', 'trialing', 'past_due', 'unpaid'].includes(String(row.subscription_status || ''));
-      return entitlementClaim
-        ? { class: 'CUSTOMER_ONLY_PAID_CLAIM', reason: 'paid_claim_without_subscription' }
-        : { class: 'CUSTOMER_ONLY_KEEP' };
+        || ENTITLED_STATUSES.has(String(row.subscription_status || ''));
+      if (!entitlementClaim) return { class: 'CUSTOMER_ONLY_KEEP' };
+
+      // A missing D1 subscription id is NOT proof that no subscription
+      // exists — the incident involved webhook write failures, so a paying
+      // customer's link may simply never have been persisted. Free the row
+      // only when the customer's live subscription list was checked and is
+      // verified empty of entitled statuses; otherwise hold it for operator
+      // resolution (relink), never auto-downgrade.
+      const subs = stripeState?.customerSubscriptions;
+      if (!subs || !Array.isArray(subs.statuses)) {
+        return { class: 'CUSTOMER_ONLY_UNLINKED_SUB', reason: 'subscriptions_unverified' };
+      }
+      const liveEntitled = subs.statuses.filter((s) => ENTITLED_STATUSES.has(s)).length;
+      if (liveEntitled > 0) {
+        return { class: 'CUSTOMER_ONLY_UNLINKED_SUB', reason: 'live_subscription_not_linked' };
+      }
+      return { class: 'CUSTOMER_ONLY_PAID_CLAIM', reason: 'paid_claim_without_subscription' };
     }
     if (cus && cus.found === false) {
       return { class: 'CUSTOMER_ONLY_CLEAR', reason: cus.testModeHint ? 'test_customer' : 'customer_not_found_live' };
@@ -175,6 +206,10 @@ export function classifyAll(rows, stripeStateByRowId) {
     classes[result.class].push({ id: row.id, auth_id: row.auth_id, sub_last4: subLast4(row.stripe_subscription_id), reason: result.reason || null });
   }
   const duplicates = duplicateGroups(rows);
+  // CUSTOMER_ONLY_UNLINKED_SUB is deliberately in NEITHER the legit nor the
+  // repair set: apply must never free a row whose owned customer may carry a
+  // live unlinked subscription. It surfaces in counts/classes for operator
+  // resolution, and compareToAllowlist rejects hand-adding it to repair.
   const repairClasses = ['INVALID_TEST', 'NOT_FOUND_LIVE', 'CUSTOMER_ONLY_CLEAR', 'CUSTOMER_ONLY_PAID_CLAIM', 'MIXED', 'AMBIGUOUS'];
   return {
     classes,

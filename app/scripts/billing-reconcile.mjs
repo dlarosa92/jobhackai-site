@@ -156,6 +156,19 @@ async function verifyRowAgainstStripe(row) {
     } else {
       throw new Error(`stripe customer lookup failed (${status}) for row ${row.id} — aborting (transient?)`);
     }
+
+    // Sub-less rows: a missing D1 subscription id is not proof that no
+    // subscription exists. List the customer's LIVE subscriptions so the
+    // classifier can distinguish a false paid claim (verified empty →
+    // repair to free) from an unlinked real subscription (→ operator
+    // resolution, never auto-freed).
+    if (!row.stripe_subscription_id && state.customer.found && !state.customer.deleted) {
+      const list = await stripeGet(`/subscriptions?customer=${row.stripe_customer_id}&status=all&limit=25`);
+      if (list.status !== 200) {
+        throw new Error(`stripe subscription list failed (${list.status}) for row ${row.id} — aborting (transient?)`);
+      }
+      state.customerSubscriptions = { statuses: (list.body?.data || []).map((s) => s?.status).filter(Boolean) };
+    }
   }
   return state;
 }

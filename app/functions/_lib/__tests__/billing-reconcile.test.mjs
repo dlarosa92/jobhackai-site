@@ -63,20 +63,48 @@ assert.strictEqual(classifyRow(row(), {
 
 // CUSTOMER_ONLY split.
 // (PR #851 F2) An owned customer justifies keeping the CUSTOMER ID, never a
-// paid plan no subscription backs: a paid-claiming row is a repair case.
-// The pre-fix suite wrongly asserted KEEP here (the fixture defaults to
-// plan 'essential'), which is how the gap shipped.
+// paid plan no subscription backs: a paid-claiming row is a repair case —
+// but ONLY when the customer's live subscription list was checked and is
+// verified empty (Bugbot round 2). The pre-fix suite wrongly asserted KEEP
+// here (the fixture defaults to plan 'essential'), which is how the gap
+// shipped.
+const ownedCustomer = { found: true, deleted: false, firebaseUid: 'uid_A' };
 assert.strictEqual(classifyRow(row({ stripe_subscription_id: null }), {
-  customer: { found: true, deleted: false, firebaseUid: 'uid_A' }
+  customer: ownedCustomer,
+  customerSubscriptions: { statuses: [] }
 }).class, 'CUSTOMER_ONLY_PAID_CLAIM');
 // Active-ish status alone (even with plan free) is also a paid claim.
 assert.strictEqual(classifyRow(row({ stripe_subscription_id: null, plan: 'free', subscription_status: 'active' }), {
-  customer: { found: true, deleted: false, firebaseUid: 'uid_A' }
+  customer: ownedCustomer,
+  customerSubscriptions: { statuses: [] }
+}).class, 'CUSTOMER_ONLY_PAID_CLAIM');
+// Ended subscriptions on the customer do not block the repair.
+assert.strictEqual(classifyRow(row({ stripe_subscription_id: null }), {
+  customer: ownedCustomer,
+  customerSubscriptions: { statuses: ['canceled', 'incomplete_expired'] }
 }).class, 'CUSTOMER_ONLY_PAID_CLAIM');
 // A genuinely free row with an owned customer is the true KEEP case.
 assert.strictEqual(classifyRow(row({ stripe_subscription_id: null, plan: 'free', subscription_status: null, has_ever_paid: 0 }), {
-  customer: { found: true, deleted: false, firebaseUid: 'uid_A' }
+  customer: ownedCustomer
 }).class, 'CUSTOMER_ONLY_KEEP');
+
+// (Bugbot round 2) A LIVE entitled-status subscription that was never linked
+// in D1 means a likely paying customer: NEVER auto-freed.
+for (const liveStatus of ['active', 'trialing', 'past_due', 'unpaid']) {
+  const r = classifyRow(row({ stripe_subscription_id: null }), {
+    customer: ownedCustomer,
+    customerSubscriptions: { statuses: ['canceled', liveStatus] }
+  });
+  assert.strictEqual(r.class, 'CUSTOMER_ONLY_UNLINKED_SUB', `${liveStatus} must hold the row for relinking`);
+  assert.strictEqual(r.reason, 'live_subscription_not_linked');
+}
+// An UNVERIFIED subscription list is treated the same way — freeing requires
+// verified absence, never assumption.
+{
+  const r = classifyRow(row({ stripe_subscription_id: null }), { customer: ownedCustomer });
+  assert.strictEqual(r.class, 'CUSTOMER_ONLY_UNLINKED_SUB');
+  assert.strictEqual(r.reason, 'subscriptions_unverified');
+}
 assert.strictEqual(classifyRow(row({ stripe_subscription_id: null }), {
   customer: { found: false, testModeHint: true }
 }).class, 'CUSTOMER_ONLY_CLEAR');
@@ -118,12 +146,29 @@ assert.strictEqual(classifyRow(row({ stripe_subscription_id: null, stripe_custom
 {
   const paidClaimRow = row({ id: 10, auth_id: 'uid_K', plan: 'pro', stripe_customer_id: 'cus_K1234', stripe_subscription_id: null, subscription_status: 'active', trial_ends_at: null });
   const freeKeepRow = row({ id: 11, auth_id: 'uid_F', plan: 'free', stripe_customer_id: 'cus_F1234', stripe_subscription_id: null, subscription_status: null, has_ever_paid: 0 });
-  const ownedState = (uid) => ({ customer: { found: true, deleted: false, firebaseUid: uid } });
+  const ownedState = (uid, statuses = []) => ({
+    customer: { found: true, deleted: false, firebaseUid: uid },
+    customerSubscriptions: { statuses }
+  });
   const classification = classifyAll([paidClaimRow, freeKeepRow], { 10: ownedState('uid_K'), 11: ownedState('uid_F') });
 
   assert.strictEqual(classification.counts.CUSTOMER_ONLY_PAID_CLAIM, 1);
   assert.strictEqual(classification.counts.CUSTOMER_ONLY_KEEP, 1);
   assert.deepStrictEqual(classification.repairRowIds, [10], 'paid claim repairs; genuine keep does not');
+
+  // (Bugbot round 2) An unlinked-live-sub row joins NEITHER set: it never
+  // enters repairRowIds, and hand-adding it to the allowlist is rejected as
+  // drift — apply can never free it.
+  const unlinkedRow = row({ id: 12, auth_id: 'uid_U', plan: 'pro', stripe_customer_id: 'cus_U1234', stripe_subscription_id: null, subscription_status: 'active' });
+  const withUnlinked = classifyAll([paidClaimRow, freeKeepRow, unlinkedRow], {
+    10: ownedState('uid_K'), 11: ownedState('uid_F'), 12: ownedState('uid_U', ['active'])
+  });
+  assert.strictEqual(withUnlinked.counts.CUSTOMER_ONLY_UNLINKED_SUB, 1);
+  assert.deepStrictEqual(withUnlinked.repairRowIds, [10], 'unlinked-sub row excluded from the repair set');
+  const forced = compareToAllowlist(withUnlinked, {
+    legit: [], repair: [{ id: 10, auth_id: 'uid_K' }, { id: 12, auth_id: 'uid_U' }], expected: {}
+  });
+  assert.strictEqual(forced.ok, false, 'allowlist cannot force an unlinked-sub row into repair');
 
   const allowlist = { legit: [], repair: [{ id: 10, auth_id: 'uid_K' }], expected: { legit: 0, repair: 1 } };
   const sql = buildApplySql('run_pc_1', [paidClaimRow, freeKeepRow], classification, allowlist, {}, '2026-08-17T00:00:00.000Z');
