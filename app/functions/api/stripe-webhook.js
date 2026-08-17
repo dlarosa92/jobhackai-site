@@ -133,11 +133,15 @@ export async function onRequest(context) {
     return new Response('[ignored-wrong-mode]', { status: 200, headers: respHeaders });
   }
 
-  // ── KV fast-path (performance aid, read-only). The evt: marker is written
-  // only after a durable commit, so a hit can only assert what the ledger
-  // already records. A miss falls through to the authoritative claim.
+  // ── KV fast-path (performance aid, read-only). The evtl: marker is
+  // written only after a durable commit, so a hit can only assert what the
+  // ledger already records. A miss falls through to the authoritative claim.
+  // Deliberately NOT the legacy `evt:` key: the previous webhook wrote that
+  // marker BEFORE processing, so trusting it during the 24h rollout window
+  // would silently drop retries of events the old code marked but never
+  // durably processed. Legacy keys age out on their own TTL.
   try {
-    const seen = await env.JOBHACKAI_KV?.get(`evt:${event.id}`);
+    const seen = await env.JOBHACKAI_KV?.get(`evtl:${event.id}`);
     if (seen) return new Response('[ok]', { status: 200, headers: respHeaders });
   } catch (_) { /* KV unavailable: ledger decides */ }
 
@@ -164,7 +168,7 @@ export async function onRequest(context) {
     return new Response('event ledger unavailable', { status: 503, headers: respHeaders });
   }
   if (claim.outcome === 'already_processed') {
-    try { await env.JOBHACKAI_KV?.put(`evt:${event.id}`, '1', { expirationTtl: 86400 }); } catch (_) { /* no-op */ }
+    try { await env.JOBHACKAI_KV?.put(`evtl:${event.id}`, '1', { expirationTtl: 86400 }); } catch (_) { /* no-op */ }
     return new Response('[ok]', { status: 200, headers: respHeaders });
   }
   if (claim.outcome === 'in_flight') {
@@ -234,7 +238,7 @@ export async function onRequest(context) {
   for (const run of ctx.fireAndForget) {
     try { context.waitUntil(run()); } catch (e) { console.warn('[WEBHOOK] post-commit telemetry step failed (non-blocking):', e?.message || e); }
   }
-  try { await env.JOBHACKAI_KV?.put(`evt:${event.id}`, '1', { expirationTtl: 86400 }); } catch (_) { /* no-op */ }
+  try { await env.JOBHACKAI_KV?.put(`evtl:${event.id}`, '1', { expirationTtl: 86400 }); } catch (_) { /* no-op */ }
   await releaseLock();
 
   return new Response('[ok]', { status: 200, headers: respHeaders });
@@ -497,6 +501,12 @@ async function handleSubscriptionCreated(env, event, ctx) {
   } else if (status === 'active') {
     // Extract plan from price ID (auto-converts trial to essential)
     effectivePlan = plan || 'essential';
+  } else if (status === 'past_due' || status === 'unpaid') {
+    // Dunning keeps paid access: invoice.payment_failed writes status only,
+    // and sync-stripe-plan explicitly preserves the plan for past_due/unpaid
+    // ("still has access"). Downgrading here made entitlement flap between
+    // the webhook and sync while Stripe retried the charge.
+    effectivePlan = plan || 'essential';
   }
 
   const trialEndsAtISO = sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null;
@@ -601,6 +611,10 @@ async function handleSubscriptionUpdated(env, event, ctx) {
   if (status === 'trialing' && originalPlan === 'trial') {
     effectivePlan = 'trial';
   } else if (status === 'active') {
+    effectivePlan = plan || 'essential';
+  } else if (status === 'past_due' || status === 'unpaid') {
+    // Dunning keeps paid access — see handleSubscriptionCreated. The status
+    // itself is still written as past_due/unpaid below.
     effectivePlan = plan || 'essential';
   }
 
@@ -813,26 +827,14 @@ async function handleInvoicePaymentFailed(env, event, ctx) {
     return noop('non_subscription_invoice');
   }
 
-  const owner = await resolveOwnerUid(env, { customerId });
-  if (owner.conflict) return critical('owner_conflict');
-  const uid = owner.uid;
-  if (!uid) return critical('unresolved_owner');
-
-  // Skip deleted users — other handlers check this too
-  const d1Tombstone = await isDeletedUser(env, uid);
-  const kvTombstone = await env.JOBHACKAI_KV?.get(`deleted:${uid}`);
-  if (d1Tombstone || kvTombstone) {
-    console.log(`⏭️ [WEBHOOK] Skipping invoice.payment_failed: user ${redactId(uid)} was deleted (tombstone found)`);
-    return noop('tombstoned_user');
-  }
-
-  // Fetch the actual subscription status from Stripe before writing to D1.
-  // Stripe fires invoice.payment_failed on every retry attempt, but the
-  // subscription may still be 'active' while smart retries are pending.
-  // Only update D1 if Stripe has actually transitioned the subscription.
-  // Fetch failures are retryable — defaulting to past_due would write a
-  // guessed status.
-  let subStatus;
+  // Fetch the subscription FIRST: its status gates the write below, and its
+  // metadata.firebaseUid is the strongest ownership source (all new
+  // subscriptions are stamped at checkout) — resolving from the customer
+  // alone failed invoices whose customer lacks metadata. Stripe fires
+  // invoice.payment_failed on every retry attempt while the subscription may
+  // still be 'active'; fetch failures are retryable — defaulting to past_due
+  // would write a guessed status.
+  let subData;
   try {
     const subRes = await fetch(`https://api.stripe.com/v1/subscriptions/${subscriptionId}`, {
       headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}` }
@@ -847,11 +849,24 @@ async function handleInvoicePaymentFailed(env, event, ctx) {
       console.error(`[WEBHOOK] subscription status fetch returned ${subRes.status}`);
       return transient('subscription_fetch_failed');
     }
-    const subData = await subRes.json();
-    subStatus = subData.status || 'past_due';
+    subData = await subRes.json();
   } catch (fetchErr) {
     console.error('[WEBHOOK] subscription status fetch error:', fetchErr?.message || fetchErr);
     return transient('subscription_fetch_failed');
+  }
+  const subStatus = subData.status || 'past_due';
+
+  const owner = await resolveOwnerUid(env, { subscription: subData, customerId });
+  if (owner.conflict) return critical('owner_conflict');
+  const uid = owner.uid;
+  if (!uid) return critical('unresolved_owner');
+
+  // Skip deleted users — other handlers check this too
+  const d1Tombstone = await isDeletedUser(env, uid);
+  const kvTombstone = await env.JOBHACKAI_KV?.get(`deleted:${uid}`);
+  if (d1Tombstone || kvTombstone) {
+    console.log(`⏭️ [WEBHOOK] Skipping invoice.payment_failed: user ${redactId(uid)} was deleted (tombstone found)`);
+    return noop('tombstoned_user');
   }
 
   // Skip if subscription is still active (retries pending) or in a terminal

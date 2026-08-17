@@ -188,4 +188,39 @@ import { stubStripeFetch } from './billing-test-helper.mjs';
   assert.strictEqual(db.__state.writes, 0);
 }
 
+// 13. (PR #851 F1) A LEGACY `evt:` marker — written by the old webhook
+//     BEFORE processing — must NOT be trusted: the event still processes
+//     fully through the ledger. Only the new `evtl:` marker short-circuits.
+{
+  const db = createFakeD1({ users: [seedUser()] });
+  const kv = createFakeKV({ 'evt:evt_legacy_1': '1' }); // old-code marker, no ledger row
+  const env = makeEnv({ DB: db, JOBHACKAI_KV: kv });
+  const stub = stubStripeFetch([customerStub]);
+  const sub = makeSubscription({
+    id: 'sub_gate01', customer: 'cus_gate01', status: 'active',
+    priceId: 'price_essential_test', metadata: { firebaseUid: 'uid_A' },
+    itemPeriodStart: START, itemPeriodEnd: END
+  });
+  const event = makeEvent('customer.subscription.created', sub, { id: 'evt_legacy_1' });
+  const res = await postWebhook(onRequest, env, event);
+  stub.restore();
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(db.usersByAuthId('uid_A').plan, 'essential', 'legacy marker must not suppress processing');
+  assert.strictEqual(db.ledgerRow('evt_legacy_1')?.status, 'processed', 'ledger row created despite legacy marker');
+  assert.ok(kv.__puts.includes('evtl:evt_legacy_1'), 'post-commit marker uses the versioned key');
+}
+
+// 14. (PR #851 F1) The versioned `evtl:` marker (only ever written after a
+//     durable commit) short-circuits with zero writes.
+{
+  const db = createFakeD1({ users: [seedUser()] });
+  const kv = createFakeKV({ 'evtl:evt_new_1': '1' });
+  const env = makeEnv({ DB: db, JOBHACKAI_KV: kv });
+  const sub = makeSubscription({ id: 'sub_gate01', customer: 'cus_gate01', metadata: { firebaseUid: 'uid_A' }, itemPeriodStart: START, itemPeriodEnd: END });
+  const res = await postWebhook(onRequest, env, makeEvent('customer.subscription.created', sub, { id: 'evt_new_1' }));
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(db.__state.writes, 0, 'evtl: fast-path performs zero D1 writes');
+  assert.strictEqual(kv.writeCount, 0, 'evtl: fast-path performs zero KV writes');
+}
+
 console.log('stripe-webhook-mode-gate.test.mjs: all assertions passed');

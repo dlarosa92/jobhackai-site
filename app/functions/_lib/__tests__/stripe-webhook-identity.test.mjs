@@ -386,4 +386,73 @@ const cusStub = (uid, id = 'cus_A') =>
   assert.strictEqual(db.usersByAuthId('uid_C').plan, 'essential', 'third user processed normally');
 }
 
+// 19. (PR #851 F5) past_due subscription.updated keeps the paid plan —
+//     dunning writes the status but never downgrades entitlement.
+{
+  const db = createFakeD1({ users: [user({ plan: 'pro', stripe_customer_id: 'cus_A', stripe_subscription_id: 'sub_1', subscription_status: 'active' })] });
+  const env = makeEnv({ DB: db, JOBHACKAI_KV: createFakeKV() });
+  const stub = stubStripeFetch([cusStub('uid_A')]);
+  const sub = makeSubscription({ id: 'sub_1', customer: 'cus_A', status: 'past_due', priceId: 'price_pro_test', metadata: { firebaseUid: 'uid_A' }, itemPeriodStart: START, itemPeriodEnd: END });
+  const event = makeEvent('customer.subscription.updated', sub);
+  const res = await postWebhook(onRequest, env, event);
+  stub.restore();
+  assert.strictEqual(res.status, 200);
+  const row = db.usersByAuthId('uid_A');
+  assert.strictEqual(row.plan, 'pro', 'past_due must not downgrade the plan');
+  assert.strictEqual(row.subscription_status, 'past_due', 'the dunning status itself is written');
+  assert.strictEqual(db.ledgerRow(event.id)?.status, 'processed');
+}
+
+// 19b. (PR #851 F5) past_due subscription.created also maps the plan from
+//      the price instead of writing free.
+{
+  const db = createFakeD1({ users: [user()] });
+  const env = makeEnv({ DB: db, JOBHACKAI_KV: createFakeKV() });
+  const stub = stubStripeFetch([cusStub('uid_A')]);
+  const sub = makeSubscription({ id: 'sub_1', customer: 'cus_A', status: 'past_due', priceId: 'price_essential_test', metadata: { firebaseUid: 'uid_A' }, itemPeriodStart: START, itemPeriodEnd: END });
+  const res = await postWebhook(onRequest, env, makeEvent('customer.subscription.created', sub));
+  stub.restore();
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(db.usersByAuthId('uid_A').plan, 'essential');
+  assert.strictEqual(db.usersByAuthId('uid_A').subscription_status, 'past_due');
+}
+
+// 19c. (PR #851 F5) past_due never fires trial-conversion side effects —
+//      conversion requires status === 'active'.
+{
+  const db = createFakeD1({
+    users: [user({ plan: 'trial', stripe_customer_id: 'cus_A', stripe_subscription_id: 'sub_1', subscription_status: 'trialing' })],
+    feature_daily_usage: [{ user_id: 1, feature: 'interview_questions', used: 3 }],
+    usage_events: [{ user_id: 1, feature: 'resume_feedback', at: 'x' }]
+  });
+  const env = makeEnv({ DB: db, JOBHACKAI_KV: createFakeKV(), GA4_MEASUREMENT_ID: 'G-TEST', GA4_API_SECRET: 's' });
+  const stub = stubStripeFetch([cusStub('uid_A')]);
+  const sub = makeSubscription({ id: 'sub_1', customer: 'cus_A', status: 'past_due', priceId: 'price_essential_test', metadata: { firebaseUid: 'uid_A', original_plan: 'trial' }, itemPeriodStart: START, itemPeriodEnd: END });
+  const res = await postWebhook(onRequest, env, makeEvent('customer.subscription.updated', sub));
+  const ga4 = stub.calls.filter((c) => c.url.includes('google-analytics'));
+  stub.restore();
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(db.usersByAuthId('uid_A').plan, 'essential', 'plan maps from price even in dunning');
+  assert.strictEqual(db.__state.tables.feature_daily_usage.length, 1, 'no usage reset without an active conversion');
+  assert.strictEqual(db.__state.tables.usage_events.length, 1);
+  assert.strictEqual(ga4.length, 0, 'no conversion GA4 in dunning');
+}
+
+// 20. (PR #851 F7) invoice.payment_failed resolves the owner via the
+//     SUBSCRIPTION's firebaseUid when the customer carries no metadata.
+{
+  const db = createFakeD1({ users: [user({ plan: 'essential', stripe_customer_id: 'cus_A', stripe_subscription_id: 'sub_1', subscription_status: 'active' })] });
+  const env = makeEnv({ DB: db, JOBHACKAI_KV: createFakeKV() });
+  const stub = stubStripeFetch([
+    { match: '/v1/customers/cus_A', reply: { json: { id: 'cus_A', email: 'a@example.com', metadata: {} } } },
+    { match: '/v1/subscriptions/sub_1', reply: { json: makeSubscription({ id: 'sub_1', customer: 'cus_A', status: 'past_due', metadata: { firebaseUid: 'uid_A' }, itemPeriodStart: START, itemPeriodEnd: END }) } }
+  ]);
+  const event = makeEvent('invoice.payment_failed', { id: 'in_10', customer: 'cus_A', subscription: 'sub_1' });
+  const res = await postWebhook(onRequest, env, event);
+  stub.restore();
+  assert.strictEqual(res.status, 200, 'stamped subscription must resolve the owner despite a metadata-less customer');
+  assert.strictEqual(db.usersByAuthId('uid_A').subscription_status, 'past_due');
+  assert.strictEqual(db.ledgerRow(event.id)?.status, 'processed');
+}
+
 console.log('stripe-webhook-identity.test.mjs: all assertions passed');
