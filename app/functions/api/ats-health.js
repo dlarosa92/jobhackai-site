@@ -1,7 +1,7 @@
 // ATS Health endpoint
 // Returns "ok" and verifies JOBHACKAI_KV is readable
 
-import { isProductionEnvironment, notFoundInProductionResponse } from '../_lib/debug-access.js';
+import { isExplicitNonProductionEnvironment, notFoundInProductionResponse } from '../_lib/debug-access.js';
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -38,7 +38,7 @@ export async function onRequest(context) {
   const { request, env } = context;
   const origin = request.headers.get('Origin') || '';
 
-  if (isProductionEnvironment(env)) {
+  if (!isExplicitNonProductionEnvironment(env)) {
     return notFoundInProductionResponse();
   }
 

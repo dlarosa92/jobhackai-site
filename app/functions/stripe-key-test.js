@@ -1,7 +1,7 @@
-import { isProductionEnvironment, notFoundInProductionResponse } from './_lib/debug-access.js';
+import { isExplicitNonProductionEnvironment, notFoundInProductionResponse } from './_lib/debug-access.js';
 
 export async function onRequest({ env }) {
-  if (isProductionEnvironment(env)) {
+  if (!isExplicitNonProductionEnvironment(env)) {
     return notFoundInProductionResponse();
   }
 
