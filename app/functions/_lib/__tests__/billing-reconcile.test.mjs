@@ -33,6 +33,20 @@ assert.strictEqual(classifyRow(row(), {
   customer: { found: true, deleted: false, firebaseUid: 'uid_A' }
 }).class, 'LEGIT');
 
+// (PR #852 review) 'unpaid' is an entitled dunning status: a linked unpaid
+// subscription on an owned customer is LEGIT, never MIXED/repaired.
+for (const status of ['trialing', 'past_due', 'unpaid']) {
+  assert.strictEqual(classifyRow(row(), {
+    subscription: { found: true, status, customerId: 'cus_A1234' },
+    customer: { found: true, deleted: false, firebaseUid: 'uid_A' }
+  }).class, 'LEGIT', `${status} must classify LEGIT`);
+}
+// An ENDED subscription on an owned customer is still MIXED.
+assert.strictEqual(classifyRow(row(), {
+  subscription: { found: true, status: 'canceled', customerId: 'cus_A1234' },
+  customer: { found: true, deleted: false, firebaseUid: 'uid_A' }
+}).class, 'MIXED');
+
 // INVALID_TEST: live 404 with the test-mode hint, unowned customer.
 assert.strictEqual(classifyRow(row(), {
   subscription: { found: false, testModeHint: true },

@@ -5,7 +5,7 @@
 // data from D1 and verification state from live Stripe.
 //
 // Classifications (per the hotfix plan):
-//   LEGIT               — live subscription (active/trialing) + live customer
+//   LEGIT               — live entitled subscription (active/trialing/past_due/unpaid) + live customer
 //                         stamped with this row's auth_id → backfill from Stripe
 //   INVALID_TEST        — Stripe 404 carrying the "similar object exists in
 //                         test mode" hint → affirmatively test data → clear
@@ -122,7 +122,7 @@ export function classifyRow(row, stripeState) {
 
   if (hasSub) {
     if (sub?.found) {
-      const liveStatus = ['active', 'trialing', 'past_due'].includes(sub.status);
+      const liveStatus = ENTITLED_STATUSES.has(sub.status);
       if (liveStatus && customerOwned && sub.customerId === row.stripe_customer_id) {
         return { class: 'LEGIT' };
       }

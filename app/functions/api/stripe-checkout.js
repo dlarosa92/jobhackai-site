@@ -13,7 +13,7 @@ import {
   kvCusKey
 } from '../_lib/billing-utils.js';
 import { assertStripeKeyMatchesEnvironment, redactId } from '../_lib/stripe-environment.js';
-import { resolveCustomerByEmailOwnership } from '../_lib/billing-ownership.js';
+import { resolveCustomerByEmailOwnership, ENTITLED_SUBSCRIPTION_STATUSES } from '../_lib/billing-ownership.js';
 export async function onRequest(context) {
   const { request, env } = context;
   const origin = request.headers.get('Origin') || '';
@@ -276,7 +276,7 @@ export async function onRequest(context) {
       }, 503, origin, env);
     }
     const activeSubs = subs.filter((sub) =>
-      sub && ['active', 'trialing', 'past_due'].includes(sub.status)
+      sub && ENTITLED_SUBSCRIPTION_STATUSES.includes(sub.status)
     );
     if (activeSubs.length > 0) {
       const currentPlan = getPlanFromSubscription(activeSubs[0], env);

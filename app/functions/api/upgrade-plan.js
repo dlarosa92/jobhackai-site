@@ -15,8 +15,8 @@ import {
   invalidateBillingCaches
 } from '../_lib/billing-utils.js';
 import { assertStripeKeyMatchesEnvironment, redactId } from '../_lib/stripe-environment.js';
-import { assertNoCrossUserStripeIds, selectUidOwnedCustomers, readSubscriptionPeriod } from '../_lib/stripe-identity.js';
-import { buildUpgradeCheckoutSessionBody } from '../_lib/billing-ownership.js';
+import { assertNoCrossUserStripeIds, readSubscriptionPeriod } from '../_lib/stripe-identity.js';
+import { buildUpgradeCheckoutSessionBody, resolveCustomerByEmailOwnership, ENTITLED_SUBSCRIPTION_STATUSES } from '../_lib/billing-ownership.js';
 
 /**
  * POST /api/upgrade-plan
@@ -83,14 +83,17 @@ export async function onRequest(context) {
       returnUrl
     });
 
-    const customerId = await resolveCustomerId(env, uid, email);
+    const { customerId, block } = await resolveCustomerId(env, uid, email);
+    if (block) {
+      return json({ ok: false, code: block.code, error: block.error }, block.status, origin, env);
+    }
     if (!customerId) {
       return json({ ok: false, code: 'CUSTOMER_NOT_FOUND' }, 500, origin, env);
     }
 
     const subs = await listSubscriptions(env, customerId);
     const activeSubs = subs.filter((sub) =>
-      sub && ['active', 'trialing', 'past_due'].includes(sub.status)
+      sub && ENTITLED_SUBSCRIPTION_STATUSES.includes(sub.status)
     );
 
     if (activeSubs.length === 0) {
@@ -342,55 +345,20 @@ async function resolveCustomerId(env, uid, email) {
   }
 
   if (!customerId && email) {
-    try {
-      const searchRes = await stripe(env, `/customers?email=${encodeURIComponent(email)}&limit=100`);
-      const searchData = await searchRes.json();
-      const customers = searchRes.ok
-        ? (searchData?.data || []).filter((c) => c && c.deleted !== true)
-        : [];
-      if (customers.length > 0) {
-        // Email matching alone never selects a customer: only exact
-        // firebaseUid metadata matches are eligible. Un-stamped matches are
-        // never adopted (and never stamped); with no provable customer the
-        // caller creates a fresh, correctly-stamped one below, and the
-        // upgrade then fails safely with "no subscription" instead of
-        // mutating a customer this user may not own.
-        const candidates = selectUidOwnedCustomers(customers, uid);
-        if (candidates.length > 0) {
-          console.log('[BILLING-UPGRADE] Found customers matching firebaseUid', { count: candidates.length });
-        }
-
-        if (candidates.length > 1) {
-          for (const candidate of candidates) {
-            const subsRes = await stripe(env, `/subscriptions?customer=${candidate.id}&status=all&limit=10`);
-            if (subsRes.ok) {
-              const subsData = await subsRes.json();
-              const hasActive = (subsData?.data || []).some((sub) =>
-                sub && ['active', 'trialing', 'past_due'].includes(sub.status)
-              );
-              if (hasActive) {
-                matchedCustomer = candidate;
-                break;
-              }
-            }
-          }
-          if (!matchedCustomer) {
-            matchedCustomer = candidates.sort((a, b) => b.created - a.created)[0];
-          }
-        } else {
-          matchedCustomer = candidates[0];
-        }
-
-        if (matchedCustomer?.id) {
-          customerId = matchedCustomer.id;
-          console.log('[BILLING-UPGRADE] Found Stripe customer by email fallback', {
-            customerId: redactId(customerId),
-            matchedUidPresent: !!matchedCustomer?.metadata?.firebaseUid
-          });
-        }
-      }
-    } catch (e) {
-      console.log('[BILLING-UPGRADE] Stripe email search failed', e?.message || e);
+    // Same ownership rules as checkout (_lib/billing-ownership.js): email
+    // matching alone never selects a customer, un-stamped matches are never
+    // adopted, and an un-stamped customer with an entitled subscription
+    // blocks the request — otherwise we would create a second billable
+    // customer for someone who is already paying.
+    const resolution = await resolveCustomerByEmailOwnership(env, uid, email);
+    if (resolution.block) return { customerId: null, block: resolution.block };
+    matchedCustomer = resolution.matchedCustomer;
+    if (matchedCustomer?.id) {
+      customerId = matchedCustomer.id;
+      console.log('[BILLING-UPGRADE] Found Stripe customer by email fallback', {
+        customerId: redactId(customerId),
+        matchedUidPresent: !!matchedCustomer?.metadata?.firebaseUid
+      });
     }
   }
 
@@ -402,7 +370,7 @@ async function resolveCustomerId(env, uid, email) {
     });
     if (!res.ok) {
       console.log('[BILLING-UPGRADE] Stripe customer create failed', res.status);
-      return null;
+      return { customerId: null, block: null };
     }
     const customer = await res.json();
     customerId = customer?.id || null;
@@ -415,7 +383,7 @@ async function resolveCustomerId(env, uid, email) {
     // uid-owned already or was created above with metadata[firebaseUid].
   }
 
-  return customerId;
+  return { customerId, block: null };
 }
 
 async function makeUpgradeIdemKey(uid, seed) {
@@ -484,7 +452,7 @@ function json(body, status, origin, env) {
 
 async function cancelOtherSubscriptions(env, subs, keepSubId) {
   const toCancel = (subs || []).filter((sub) =>
-    sub && sub.id && sub.id !== keepSubId && ['active', 'trialing', 'past_due'].includes(sub.status)
+    sub && sub.id && sub.id !== keepSubId && ENTITLED_SUBSCRIPTION_STATUSES.includes(sub.status)
   );
   for (const sub of toCancel) {
     try {

@@ -38,6 +38,19 @@ const subsRoute = (cusId, statuses) => ({
   assert.strictEqual(r.block.code, 'EXISTING_SUBSCRIPTION_UNVERIFIED');
 }
 
+// (PR #852 review) EVERY un-stamped match is scanned, not just the first ten:
+// an entitled subscription on the 12th customer must still block.
+{
+  const legacy = Array.from({ length: 12 }, (_, i) => ({ id: `cus_lx${String(i + 1).padStart(2, '0')}`, created: i, metadata: {} }));
+  const stub = stubStripeFetch([
+    searchRoute([ownedCus, ...legacy]),
+    ...legacy.map((c, i) => subsRoute(c.id, i === 11 ? ['active'] : ['canceled']))
+  ]);
+  const r = await resolveCustomerByEmailOwnership(ENV, 'uid_A', 'a@example.com');
+  stub.restore();
+  assert.strictEqual(r.block?.status, 409, 'an entitled subscription beyond the 10th un-stamped customer must still block');
+}
+
 // past_due / trialing / unpaid on the un-stamped customer block too —
 // 'unpaid' included (Bugbot round 2): the webhook keeps the plan through
 // unpaid dunning, so it is still a double-billing risk at checkout.

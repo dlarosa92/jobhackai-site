@@ -18,6 +18,7 @@
 // Guarantees:
 //   * preflight/verify perform ZERO writes (SELECTs + Stripe GETs only)
 //   * apply re-runs preflight and ABORTS on any drift from the allowlist
+//   * apply refuses a --run-id that already has audit rows (rollback integrity)
 //   * every touched row gets a before/after audit record in
 //     billing_repair_audit, in the SAME transactional batch as its UPDATE
 //     (one `wrangler d1 execute --file` invocation)
@@ -277,6 +278,13 @@ async function main() {
     if (!args.allowlist) throw new Error('--apply requires --allowlist=<file> (the operator-approved preflight sets)');
     assertSafeRunId(args.runId || '');
     const allowlist = JSON.parse(readFileSync(args.allowlist, 'utf8'));
+
+    // A reused run id would interleave two applies' before-images and make a
+    // later --rollback restore the wrong state; refuse it up front.
+    const priorAudit = wranglerD1Json(db, `SELECT COUNT(*) AS n FROM billing_repair_audit WHERE run_id = '${args.runId}'`);
+    if (Number(priorAudit?.[0]?.n) > 0) {
+      throw new Error(`run id ${args.runId} already has ${priorAudit[0].n} audit rows — choose a new --run-id`);
+    }
 
     // Recheck Stripe immediately before writing; abort on any drift.
     const { rows, stripeStateByRowId, classification } = await runPreflight(db);

@@ -18,7 +18,7 @@ export const ENTITLED_SUBSCRIPTION_STATUSES = ['active', 'trialing', 'past_due',
 //   * Email matching alone never selects a customer — only exact
 //     metadata.firebaseUid matches are eligible; un-stamped matches are
 //     never adopted and never stamped.
-//   * Un-stamped customers with an active/trialing/past_due subscription
+//   * Un-stamped customers with an active/trialing/past_due/unpaid subscription
 //     block checkout REGARDLESS of whether an owned customer also exists:
 //     the later duplicate-subscription guard inspects only the selected
 //     customer, so proceeding here could create a second subscription for
@@ -49,8 +49,10 @@ export async function resolveCustomerByEmailOwnership(env, uid, email) {
   const { owned, unproven } = partitionCustomersByUidClaim(customers, uid);
 
   // The un-stamped active-subscription check runs FIRST and unconditionally
-  // — never only in the no-owned-match branch.
-  for (const candidate of unproven.slice(0, 10)) {
+  // — never only in the no-owned-match branch — and over EVERY un-stamped
+  // match (the search returns up to 100): skipping any of them would let an
+  // entitled subscription slip past this guard.
+  for (const candidate of unproven) {
     let hasActive = false;
     try {
       const subsCheckRes = await stripe(env, `/subscriptions?customer=${candidate.id}&status=all&limit=10`);

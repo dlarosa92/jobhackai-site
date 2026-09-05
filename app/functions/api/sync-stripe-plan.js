@@ -2,6 +2,7 @@ import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { updateUserPlan, getUserPlanData } from '../_lib/db.js';
 import { assertStripeKeyMatchesEnvironment, redactId } from '../_lib/stripe-environment.js';
 import { assertNoCrossUserStripeIds, selectUidOwnedCustomers, readSubscriptionPeriod } from '../_lib/stripe-identity.js';
+import { ENTITLED_SUBSCRIPTION_STATUSES } from '../_lib/billing-ownership.js';
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -212,7 +213,7 @@ export async function onRequest(context) {
     }
 
     const activeSubs = subscriptions.filter((sub) =>
-      sub && ['active', 'trialing', 'past_due'].includes(sub.status)
+      sub && ENTITLED_SUBSCRIPTION_STATUSES.includes(sub.status)
     );
     if (activeSubs.length === 0) {
       await updateUserPlan(env, uid, {
