@@ -12,6 +12,15 @@ import { redactId } from './stripe-environment.js';
 // risk at checkout and must trip the block below.
 export const ENTITLED_SUBSCRIPTION_STATUSES = ['active', 'trialing', 'past_due', 'unpaid'];
 
+// Duplicate-subscription consolidation (upgrade-plan): every OTHER entitled
+// subscription is cancelled once the chosen one carries the target plan.
+// Ended subscriptions are left alone (nothing to cancel).
+export function selectSubscriptionsToCancel(subs, keepSubId) {
+  return (subs || []).filter((sub) =>
+    sub && sub.id && sub.id !== keepSubId && ENTITLED_SUBSCRIPTION_STATUSES.includes(sub.status)
+  );
+}
+
 // Email-search customer resolution for checkout.
 //
 // Rules (hotfix R2-5 + PR #851 review round):

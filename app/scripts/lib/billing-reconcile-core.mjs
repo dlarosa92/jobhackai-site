@@ -258,10 +258,19 @@ export function compareToAllowlist(classification, allowlist) {
 
 // ── Apply SQL generation ─────────────────────────────────────────────────
 
-function auditInsert(runId, mode, row, newValues) {
+function auditInsert(runId, mode, row, newValues, { reserveRunId = false } = {}) {
   const oldValues = {};
   for (const f of BILLING_FIELDS) oldValues[f] = row[f] ?? null;
-  return `INSERT INTO billing_repair_audit (run_id, mode, user_row_id, auth_id, stripe_customer_id, stripe_subscription_id, old_values_json, new_values_json) VALUES (${sqlValue(runId)}, ${sqlValue(mode)}, ${assertSafeRowId(row.id)}, ${sqlValue(row.auth_id)}, ${sqlValue(row.stripe_customer_id)}, ${sqlValue(row.stripe_subscription_id)}, ${sqlValue(JSON.stringify(oldValues))}, ${sqlValue(JSON.stringify(newValues))});`;
+  // Run-id reservation, atomic with the batch: on the FIRST audit row of an
+  // apply, new_values_json (NOT NULL) is nulled out if any audit row already
+  // exists for this run id, so the whole transactional batch fails instead of
+  // interleaving two applies under one id. The CLI's pre-check gives a clear
+  // error early but cannot exclude a concurrent invocation on its own.
+  const newJson = sqlValue(JSON.stringify(newValues));
+  const newValuesExpr = reserveRunId
+    ? `CASE WHEN EXISTS (SELECT 1 FROM billing_repair_audit WHERE run_id = ${sqlValue(runId)}) THEN NULL ELSE ${newJson} END`
+    : newJson;
+  return `INSERT INTO billing_repair_audit (run_id, mode, user_row_id, auth_id, stripe_customer_id, stripe_subscription_id, old_values_json, new_values_json) VALUES (${sqlValue(runId)}, ${sqlValue(mode)}, ${assertSafeRowId(row.id)}, ${sqlValue(row.auth_id)}, ${sqlValue(row.stripe_customer_id)}, ${sqlValue(row.stripe_subscription_id)}, ${sqlValue(JSON.stringify(oldValues))}, ${newValuesExpr});`;
 }
 
 function updateStatement(rowId, newValues) {
@@ -273,7 +282,8 @@ function updateStatement(rowId, newValues) {
  * Build the full apply batch: for every touched row, an audit INSERT
  * (before+after images) followed by the UPDATE. Executed by the CLI as ONE
  * `wrangler d1 execute --file` invocation (transactional batch). Contains
- * no DELETE statements by construction.
+ * no DELETE statements by construction. The first audit INSERT doubles as
+ * an atomic run-id reservation (see auditInsert).
  *
  * @param {string} runId
  * @param {Array} rows - full D1 rows (billing fields present)
@@ -314,7 +324,7 @@ export function buildApplySql(runId, rows, classification, allowlist, legitBackf
       has_ever_paid: 1,
       plan_updated_at: runTimestampIso
     };
-    statements.push(auditInsert(runId, 'apply', row, newValues));
+    statements.push(auditInsert(runId, 'apply', row, newValues, { reserveRunId: statements.length === 0 }));
     statements.push(updateStatement(row.id, newValues));
   }
 
@@ -339,7 +349,7 @@ export function buildApplySql(runId, rows, classification, allowlist, legitBackf
       has_ever_paid: entry.reset_has_ever_paid ? 0 : (row.has_ever_paid ?? 0),
       plan_updated_at: runTimestampIso
     };
-    statements.push(auditInsert(runId, 'apply', row, newValues));
+    statements.push(auditInsert(runId, 'apply', row, newValues, { reserveRunId: statements.length === 0 }));
     statements.push(updateStatement(row.id, newValues));
   }
 

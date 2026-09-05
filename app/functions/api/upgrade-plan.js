@@ -16,7 +16,7 @@ import {
 } from '../_lib/billing-utils.js';
 import { assertStripeKeyMatchesEnvironment, redactId } from '../_lib/stripe-environment.js';
 import { assertNoCrossUserStripeIds, readSubscriptionPeriod } from '../_lib/stripe-identity.js';
-import { buildUpgradeCheckoutSessionBody, resolveCustomerByEmailOwnership, ENTITLED_SUBSCRIPTION_STATUSES } from '../_lib/billing-ownership.js';
+import { buildUpgradeCheckoutSessionBody, resolveCustomerByEmailOwnership, selectSubscriptionsToCancel, ENTITLED_SUBSCRIPTION_STATUSES } from '../_lib/billing-ownership.js';
 
 /**
  * POST /api/upgrade-plan
@@ -451,9 +451,7 @@ function json(body, status, origin, env) {
 }
 
 async function cancelOtherSubscriptions(env, subs, keepSubId) {
-  const toCancel = (subs || []).filter((sub) =>
-    sub && sub.id && sub.id !== keepSubId && ENTITLED_SUBSCRIPTION_STATUSES.includes(sub.status)
-  );
+  const toCancel = selectSubscriptionsToCancel(subs, keepSubId);
   for (const sub of toCancel) {
     try {
       const res = await stripe(env, `/subscriptions/${sub.id}`, { method: 'DELETE' });

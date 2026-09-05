@@ -9,8 +9,8 @@
 // the CI job) can run in bare Node without the firebase-auth/jose import
 // chain that the endpoint entry files pull in.
 import assert from 'node:assert';
-import { resolveCustomerByEmailOwnership, buildUpgradeCheckoutSessionBody } from '../billing-ownership.js';
-import { cacheCustomerId } from '../billing-utils.js';
+import { resolveCustomerByEmailOwnership, buildUpgradeCheckoutSessionBody, selectSubscriptionsToCancel } from '../billing-ownership.js';
+import { cacheCustomerId, statusRank, pickBestSubscription } from '../billing-utils.js';
 import { createFakeD1, createFakeKV, stubStripeFetch } from './billing-test-helper.mjs';
 
 const ENV = { STRIPE_SECRET_KEY: 'sk_test_x', ENVIRONMENT: 'qa' };
@@ -215,6 +215,48 @@ const guardUser = () => ({ id: 1, auth_id: 'uid_A', email: 'a@example.com', plan
     'the subscription itself must carry firebaseUid so customer.subscription.* events resolve ownership');
   assert.strictEqual(body['line_items[0][price]'], 'price_pro');
   assert.strictEqual(body['metadata[plan]'], 'pro');
+}
+
+// ── (PR #855 review) 'unpaid' ranks as entitled dunning, above ended statuses ──
+{
+  assert.ok(statusRank('active') > statusRank('trialing'), 'active > trialing');
+  assert.ok(statusRank('trialing') > statusRank('past_due'), 'trialing > past_due');
+  assert.ok(statusRank('past_due') > statusRank('unpaid'), 'past_due > unpaid');
+  assert.ok(statusRank('unpaid') > statusRank('canceled') && statusRank('unpaid') > statusRank('incomplete_expired'), 'unpaid outranks ended/unknown statuses');
+  // Same plan, newer non-entitled sub: the unpaid one must still be chosen
+  // (previously both ranked 0 and creation date decided).
+  const unpaid = { id: 'sub_unpaid', status: 'unpaid', created: 100 };
+  const newerEnded = { id: 'sub_ended', status: 'incomplete_expired', created: 200 };
+  assert.strictEqual(pickBestSubscription([newerEnded, unpaid], ENV).bestSub.id, 'sub_unpaid', 'an unpaid subscription beats a newer non-entitled one');
+}
+
+// ── (PR #855 review, Bugbot scenario) higher-plan unpaid + lower-plan past_due/trialing ──
+// Policy: status before plan. The survivor is the subscription Stripe is still
+// collecting on; upgrade-plan then moves it to the requested plan and cancels
+// the rest. Ranking unpaid at/above past_due would make the unpaid Premium
+// "current" and an upgrade request would hit ALREADY_ON_PLAN / the downgrade
+// path, leaving both subscriptions alive.
+{
+  const PRICE_ENV = { ...ENV, STRIPE_PRICE_ESSENTIAL_MONTHLY: 'price_ess', STRIPE_PRICE_PRO_MONTHLY: 'price_pro', STRIPE_PRICE_PREMIUM_MONTHLY: 'price_prem' };
+  const sub = (id, status, priceId, created) => ({ id, status, created, items: { data: [{ price: { id: priceId } }] } });
+  const premiumUnpaid = sub('sub_prem_unpaid', 'unpaid', 'price_prem', 300);
+  const essentialPastDue = sub('sub_ess_past_due', 'past_due', 'price_ess', 100);
+  const essentialTrialing = sub('sub_ess_trialing', 'trialing', 'price_ess', 100);
+  const essentialActive = sub('sub_ess_active', 'active', 'price_ess', 100);
+
+  for (const [label, lower] of [['past_due', essentialPastDue], ['trialing', essentialTrialing], ['active', essentialActive]]) {
+    const { bestSub, currentPlan } = pickBestSubscription([premiumUnpaid, lower], PRICE_ENV);
+    assert.strictEqual(bestSub.id, lower.id, `lower-plan ${label} survives over higher-plan unpaid`);
+    assert.strictEqual(currentPlan, 'essential', 'current plan follows the survivor, so an upgrade request proceeds instead of ALREADY_ON_PLAN');
+    const cancel = selectSubscriptionsToCancel([premiumUnpaid, lower], bestSub.id);
+    assert.deepStrictEqual(cancel.map((s) => s.id), ['sub_prem_unpaid'], `only the unpaid duplicate is cancelled (${label} case)`);
+  }
+  // Plan still breaks ties WITHIN a status: two unpaid subs → keep the higher plan.
+  const essentialUnpaid = sub('sub_ess_unpaid', 'unpaid', 'price_ess', 400);
+  assert.strictEqual(pickBestSubscription([essentialUnpaid, premiumUnpaid], PRICE_ENV).bestSub.id, 'sub_prem_unpaid', 'same status → higher plan wins');
+  // Ended subscriptions are never in the cancellation set.
+  const canceledPremium = sub('sub_prem_canceled', 'canceled', 'price_prem', 500);
+  assert.deepStrictEqual(selectSubscriptionsToCancel([essentialActive, canceledPremium, premiumUnpaid], 'sub_ess_active').map((s) => s.id), ['sub_prem_unpaid']);
 }
 
 console.log('billing-endpoint-guards.test.mjs: all assertions passed');
