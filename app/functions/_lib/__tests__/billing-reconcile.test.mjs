@@ -33,6 +33,20 @@ assert.strictEqual(classifyRow(row(), {
   customer: { found: true, deleted: false, firebaseUid: 'uid_A' }
 }).class, 'LEGIT');
 
+// (PR #852 review) 'unpaid' is an entitled dunning status: a linked unpaid
+// subscription on an owned customer is LEGIT, never MIXED/repaired.
+for (const status of ['trialing', 'past_due', 'unpaid']) {
+  assert.strictEqual(classifyRow(row(), {
+    subscription: { found: true, status, customerId: 'cus_A1234' },
+    customer: { found: true, deleted: false, firebaseUid: 'uid_A' }
+  }).class, 'LEGIT', `${status} must classify LEGIT`);
+}
+// An ENDED subscription on an owned customer is still MIXED.
+assert.strictEqual(classifyRow(row(), {
+  subscription: { found: true, status: 'canceled', customerId: 'cus_A1234' },
+  customer: { found: true, deleted: false, firebaseUid: 'uid_A' }
+}).class, 'MIXED');
+
 // INVALID_TEST: live 404 with the test-mode hint, unowned customer.
 assert.strictEqual(classifyRow(row(), {
   subscription: { found: false, testModeHint: true },
@@ -241,6 +255,11 @@ assert.strictEqual(classifyRow(row({ stripe_subscription_id: null, stripe_custom
   assert.strictEqual(stmts.length, 4, 'audit INSERT + UPDATE per touched row');
   assert.ok(stmts[0].startsWith('INSERT INTO billing_repair_audit'), 'audit precedes its update');
   assert.ok(stmts[1].startsWith('UPDATE users SET'), 'update follows audit');
+  // (PR #855 review) the FIRST audit insert reserves the run id atomically with
+  // the batch: its NOT NULL new_values_json is nulled if rows already exist.
+  const guard = "CASE WHEN EXISTS (SELECT 1 FROM billing_repair_audit WHERE run_id = 'run_test_1') THEN NULL ELSE";
+  assert.ok(stmts[0].includes(guard), 'first audit insert carries the run-id reservation guard');
+  assert.ok(stmts.slice(1).every((s) => !s.includes('CASE WHEN EXISTS')), 'only the first statement carries the guard');
   assert.ok(stmts[1].includes("current_period_start = '2026-08-01T00:00:00.000Z'"), 'legit backfill writes periods');
   assert.ok(stmts[3].includes("plan = 'free'"), 'repair row goes free');
   assert.ok(stmts[3].includes('has_ever_paid = 0'), 'reset_has_ever_paid honored');

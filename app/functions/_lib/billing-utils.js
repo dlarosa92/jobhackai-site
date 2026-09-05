@@ -348,10 +348,21 @@ export function planRank(plan) {
  * @returns {number} Numeric rank (0 for unknown)
  */
 export function statusRank(status) {
+  // Entitled statuses only; everything else (canceled, incomplete, …) is 0.
+  // Ordering is by recoverability, and pickBestSubscription applies status
+  // BEFORE plan: when duplicates exist, the survivor is the subscription most
+  // likely to collect (active > trialing > past_due > unpaid), and the upgrade
+  // flow then moves that survivor to the plan the user actually requested.
+  // Ranking 'unpaid' at/above past_due would make a higher-plan unpaid sub
+  // "current", so an upgrade request would hit ALREADY_ON_PLAN or the
+  // downgrade path and the duplicates would never be consolidated.
+  // 'unpaid' still ranks above every ended status so it is never cancelled in
+  // favour of a canceled/incomplete one. Locked in by billing-endpoint-guards.
   const ranks = {
-    active: 3,
-    trialing: 2,
-    past_due: 1
+    active: 4,
+    trialing: 3,
+    past_due: 2,
+    unpaid: 1
   };
   return ranks[status] ?? 0;
 }
