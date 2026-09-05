@@ -1,0 +1,66 @@
+# Billing/webhook integrity suite (Stripe/D1 hotfix). Kept separate from
+# test-ats-scoring.yml so the dev0 branch's heavy edits to that workflow
+# merge cleanly.
+name: Billing Tests
+
+on:
+  push:
+    branches: [main, develop, dev0]
+    paths:
+      - 'app/functions/api/**'
+      - 'app/functions/_lib/**'
+      - 'app/functions/_middleware.js'
+      - 'app/db/**'
+      - 'app/scripts/**'
+      - 'scripts/verify-billing-migrations.sh'
+      - '.github/workflows/test-billing.yml'
+  pull_request:
+    branches: [main, develop, dev0]
+    paths:
+      - 'app/functions/api/**'
+      - 'app/functions/_lib/**'
+      - 'app/functions/_middleware.js'
+      - 'app/db/**'
+      - 'app/scripts/**'
+      - 'scripts/verify-billing-migrations.sh'
+      - '.github/workflows/test-billing.yml'
+
+jobs:
+  billing-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Environment / mode-gate unit tests
+        run: node app/functions/_lib/__tests__/stripe-environment.test.mjs
+
+      - name: Subscription period rule tests
+        run: node app/functions/_lib/__tests__/subscription-period.test.mjs
+
+      - name: Identity resolution + ownership guard tests
+        run: node app/functions/_lib/__tests__/stripe-identity.test.mjs
+
+      - name: updateUserPlan period/unique tests
+        run: node app/functions/_lib/__tests__/update-user-plan-period.test.mjs
+
+      - name: Webhook mode-gate end-to-end tests
+        run: node app/functions/_lib/__tests__/stripe-webhook-mode-gate.test.mjs
+
+      - name: Webhook identity/idempotency/atomicity end-to-end tests
+        run: node app/functions/_lib/__tests__/stripe-webhook-identity.test.mjs
+
+      - name: Trial-conversion exactly-once matrix
+        run: node app/functions/_lib/__tests__/trial-conversion.test.mjs
+
+      - name: Reconciliation core tests
+        run: node app/functions/_lib/__tests__/billing-reconcile.test.mjs
+
+      - name: Endpoint ownership guards (PR #851 review round)
+        run: node app/functions/_lib/__tests__/billing-endpoint-guards.test.mjs
+
+      - name: Migration 022/023 verification (sqlite3)
+        run: bash scripts/verify-billing-migrations.sh

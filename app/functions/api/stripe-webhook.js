@@ -1,5 +1,38 @@
-import { updateUserPlan, getUserPlanData, resetFeatureDailyUsage, resetUsageEvents, getDb, getOrCreateUserByAuthId, isDeletedUser } from '../_lib/db.js';
+// Stripe webhook — hardened write path (billing integrity hotfix).
+//
+// Request lifecycle:
+//   1. Signature verification (constant-time HMAC, 5-minute tolerance).
+//   2. Mode gate: production processes ONLY live events, qa/dev ONLY test
+//      events; unknown ENVIRONMENT is a config error (503). Wrong-mode
+//      events are acknowledged with ZERO D1 and ZERO KV writes.
+//   3. Durable idempotency claim in stripe_event_ledger (migration 022 —
+//      hard pre-deploy dependency; missing ledger fails closed with 503).
+//      KV is a performance aid only: the evt: marker is written only after
+//      a successful commit, the processing: lock only damps races.
+//   4. Handlers COMPUTE their critical writes (prepared statements) and
+//      queue side effects; they perform no billing writes themselves.
+//   5. One atomic db.batch() commits every critical write PLUS the ledger
+//      processed-mark, so billing state and idempotency can never diverge
+//      across a crash. Non-D1 effects (KV caches, GA4, email) run only
+//      after the batch commits: at-most-once, never duplicated.
+//   6. Critical failures (unresolved owner, ownership conflict, ambiguous
+//      period, write failure) mark the ledger row 'failed' and return 5xx
+//      so Stripe retries and operators can see stuck events:
+//        SELECT * FROM stripe_event_ledger WHERE status='failed';
+
+import {
+  getUserPlanData,
+  getDb,
+  getOrCreateUserByAuthId,
+  isDeletedUser,
+  buildUserPlanUpdateStatement,
+  buildResetFeatureDailyUsageStatement,
+  buildResetUsageEventsStatement
+} from '../_lib/db.js';
 import { stripe, pickBestSubscription } from '../_lib/billing-utils.js';
+import { resolveExpectedLivemode, assertStripeKeyMatchesEnvironment, redactId } from '../_lib/stripe-environment.js';
+import { resolveOwnerUid, assertNoCrossUserStripeIds, readSubscriptionPeriod, TransientStripeError } from '../_lib/stripe-identity.js';
+import { claimEvent, buildMarkProcessedStatement, markEventFailed } from '../_lib/stripe-event-ledger.js';
 import { sendEmail } from '../_lib/email.js';
 import { subscriptionCancelledEmail, paymentFailedEmail } from '../_lib/email-templates.js';
 
@@ -52,696 +85,820 @@ function hardcodedPlanAmountDollars(plan) {
   return null;
 }
 
+// Handler outcomes:
+//   { kind: 'ok' }                 — critical writes staged in ctx; commit them.
+//   { kind: 'noop', note }         — deliberate no-op; commit just the processed-mark.
+//   { kind: 'transient', reason }  — retryable failure; ledger 'failed' + 503.
+//   { kind: 'critical', reason }   — identity/ownership/period failure; ledger 'failed' + 500.
+const ok = () => ({ kind: 'ok' });
+const noop = (note) => ({ kind: 'noop', note });
+const transient = (reason) => ({ kind: 'transient', reason });
+const critical = (reason) => ({ kind: 'critical', reason });
+
 export async function onRequest(context) {
   const { request, env } = context;
   const origin = env.FRONTEND_URL || 'https://dev.jobhackai.io';
-  
-  if (request.method !== 'POST') return new Response('Method not allowed', { status: 405, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
+  const respHeaders = { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' };
+
+  if (request.method !== 'POST') return new Response('Method not allowed', { status: 405, headers: respHeaders });
 
   // Read raw body for signature verification
   const raw = await request.text();
   const valid = await verifyStripeWebhook(env, request, raw);
-  if (!valid) return new Response('Invalid signature', { status: 401, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
+  if (!valid) return new Response('Invalid signature', { status: 401, headers: respHeaders });
 
   const event = JSON.parse(raw);
+  if (!event?.id || typeof event.id !== 'string') {
+    return new Response('malformed event', { status: 400, headers: respHeaders });
+  }
 
-  // Event de-duplication (24h) AFTER verification
+  // ── Mode gate (ZERO-WRITE: nothing below has touched D1 or KV yet) ──
+  // A valid signature only proves the sender holds OUR webhook secret; it says
+  // nothing about live vs test mode. Production may only process live events,
+  // QA/dev may only process test events. A validly signed event from the wrong
+  // mode is acknowledged (200) so Stripe does not retry it forever, but it
+  // must never populate production storage — no ledger row, no KV markers.
+  const modeResolution = resolveExpectedLivemode(env);
+  if (modeResolution.configError) {
+    console.error('[WEBHOOK] ENVIRONMENT unset or unrecognized; refusing event (fail closed)');
+    return new Response('configuration error', { status: 503, headers: respHeaders });
+  }
+  const keyCheck = assertStripeKeyMatchesEnvironment(env);
+  if (!keyCheck.ok) {
+    console.error(`[WEBHOOK] stripe key/environment mismatch: ${keyCheck.reason}`);
+    return new Response('configuration error', { status: 503, headers: respHeaders });
+  }
+  if (event.livemode !== modeResolution.expected) {
+    console.warn(`[WEBHOOK] mode_mismatch type=${event.type} livemode=${event.livemode} expected=${modeResolution.expected} evt=${redactId(event.id)} — ignored with zero writes`);
+    return new Response('[ignored-wrong-mode]', { status: 200, headers: respHeaders });
+  }
+
+  // ── KV fast-path (performance aid, read-only). The evtl: marker is
+  // written only after a durable commit, so a hit can only assert what the
+  // ledger already records. A miss falls through to the authoritative claim.
+  // Deliberately NOT the legacy `evt:` key: the previous webhook wrote that
+  // marker BEFORE processing, so trusting it during the 24h rollout window
+  // would silently drop retries of events the old code marked but never
+  // durably processed. Legacy keys age out on their own TTL.
   try {
-    if (event && event.id) {
-      const seenKey = `evt:${event.id}`;
-      const seen = await env.JOBHACKAI_KV?.get(seenKey);
-      if (seen) {
-        return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
-      }
-      await env.JOBHACKAI_KV?.put(seenKey, '1', { expirationTtl: 86400 });
-    }
-  } catch (_) { /* no-op */ }
+    const seen = await env.JOBHACKAI_KV?.get(`evtl:${event.id}`);
+    if (seen) return new Response('[ok]', { status: 200, headers: respHeaders });
+  } catch (_) { /* KV unavailable: ledger decides */ }
 
-  // Processing lock for shared KV (prevents Dev + QA double-processing)
+  // ── Processing lock, read side (performance aid: damps racing instances
+  // cheaply). Never authoritative for success — a locked event answers 503
+  // so Stripe retries, and the ledger claim below serializes true ownership.
   const lockKey = `processing:${event.id}`;
   try {
     const alreadyProcessing = await env.JOBHACKAI_KV?.get(lockKey);
     if (alreadyProcessing) {
-      console.log(`⏭️ Event ${event.id} already being processed by another environment`);
-      return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
+      console.log(`⏸️ [WEBHOOK] ${redactId(event.id)} is being processed elsewhere; asking Stripe to retry`);
+      return new Response('in flight', { status: 503, headers: respHeaders });
     }
-    await env.JOBHACKAI_KV?.put(lockKey, '1', { expirationTtl: 60 }); // 60s lock
   } catch (_) { /* ignore lock failures */ }
-
-  // Helper to update plan in D1 (source of truth) with timestamp-based ordering protection
-  // Prevents out-of-order webhooks from overwriting newer states with older data
-  // Returns true when the row was written, false when the update was skipped
-  // (no uid, or out-of-order event). Callers gate downstream side effects
-  // like GA4 conversion events on this return value so a stale or replayed
-  // webhook doesn't double-count conversions in GA4.
-  const updatePlanInD1 = async (uid, planData, eventTimestampSeconds) => {
-    if (!uid) return false;
-    try {
-      // Get current plan_updated_at timestamp for ordering check
-      if (eventTimestampSeconds !== undefined && Number.isFinite(eventTimestampSeconds)) {
-        const currentPlanData = await getUserPlanData(env, uid);
-
-        if (currentPlanData && currentPlanData.planUpdatedAt) {
-          // Convert stored ISO 8601 datetime to Unix timestamp for comparison
-          const storedTimestamp = Math.floor(new Date(currentPlanData.planUpdatedAt).getTime() / 1000);
-          const eventTimestamp = Math.floor(Number(eventTimestampSeconds));
-
-          if (eventTimestamp < storedTimestamp) {
-            console.log(`⏭️ [WEBHOOK] Skipping out-of-order event: event.created=${eventTimestamp} < stored=${storedTimestamp} for uid=${uid}`);
-            return false; // Skip update - this event is older than what we already have
-          }
-        }
-      }
-
-      // Convert event timestamp to ISO 8601 string for storage (if provided)
-      if (eventTimestampSeconds !== undefined && Number.isFinite(eventTimestampSeconds)) {
-        planData.planEventTimestamp = new Date(eventTimestampSeconds * 1000).toISOString();
-      } else {
-        // No event timestamp provided - use current time (fallback for non-webhook updates)
-        planData.planEventTimestamp = undefined;
-      }
-
-      // Write to D1 (source of truth)
-      const success = await updateUserPlan(env, uid, planData);
-      
-      if (!success) {
-        console.error(`❌ [WEBHOOK] D1 write failed for uid=${uid}`);
-        throw new Error(`Failed to update plan in D1 for uid=${uid}`);
-      }
-      
-      // Invalidate KV keys for all plan/usage as soon as D1 is updated (cache only)
-      if (env.JOBHACKAI_KV) {
-        try {
-          await env.JOBHACKAI_KV.delete(kvPlanKey(uid));
-          await env.JOBHACKAI_KV.delete(`trialUsedByUid:${uid}`);
-          await env.JOBHACKAI_KV.delete(`trialEndByUid:${uid}`);
-          await env.JOBHACKAI_KV.delete(`billingStatus:${uid}`);
-          // Delete all monthly feedbackUsage keys for this UID
-          const monthsToDelete = [];
-          const today = new Date();
-          for (let i = 0; i < 14; i++) { // Cover at least 12 months back + 2 future months safety
-            const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-            const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-            monthsToDelete.push(`feedbackUsage:${uid}:${monthKey}`);
-          }
-          for (const key of monthsToDelete) {
-            await env.JOBHACKAI_KV.delete(key);
-          }
-          await env.JOBHACKAI_KV.delete(`atsUsage:${uid}:lifetime`);
-        } catch (kvErr) {
-          console.warn('[WEBHOOK] KV cache invalidation error:', kvErr);
-        }
-      }
-      return true;
-    } catch (error) {
-      console.error('[WEBHOOK] Error updating plan in D1:', error);
-      throw error;
-    }
+  const releaseLock = async () => {
+    try { await env.JOBHACKAI_KV?.delete(lockKey); } catch (_) { /* no-op */ }
   };
 
-  // Resolve uid (and email) from customer metadata when possible
-  const fetchCustomerInfo = async (customerId) => {
-    if (!customerId) return { uid: null, email: null };
-    const res = await fetch(`https://api.stripe.com/v1/customers/${customerId}`, {
-      headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}` }
-    });
-    const c = await res.json();
-    return { uid: c?.metadata?.firebaseUid || null, email: c?.email || null };
-  };
-  // Backward-compat helper used by event handlers
-  const fetchUidFromCustomer = async (customerId) => {
-    const { uid } = await fetchCustomerInfo(customerId);
-    return uid;
-  };
-
-  try {
-    if (event.type === 'checkout.session.completed') {
-      console.log('🎯 WEBHOOK: checkout.session.completed received');
-      const sessionId = event.data?.object?.id;
-      const sessionMetadata = event.data?.object?.metadata || {};
-      const originalPlan = sessionMetadata.plan;
-      
-      // Expand line items to reliably get price id
-      const r = await fetch(`https://api.stripe.com/v1/checkout/sessions/${sessionId}?expand[]=line_items.data.price`, {
-        headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}` }
-      });
-      const sess = await r.json();
-      const priceId = sess?.line_items?.data?.[0]?.price?.id || '';
-      const customerId = sess?.customer || event.data?.object?.customer || null;
-      const { uid, email: customerEmail } = await fetchCustomerInfo(customerId);
-      
-      // Determine effective plan based on original plan and subscription status
-      let effectivePlan = 'free';
-      if (originalPlan === 'trial') {
-        effectivePlan = 'trial'; // Show as trial immediately
-        // Trial usage will be tracked in D1 (source of truth). Do not write authoritative KV flags.
-        console.log(`✅ TRIAL STARTED (tracked in D1): ${uid}`);
-      } else {
-        effectivePlan = priceToPlan(env, priceId) || 'essential';
-      }
-      
-      console.log(`📝 CHECKOUT DATA: originalPlan=${originalPlan}, priceId=${priceId}, effectivePlan=${effectivePlan}, customerId=${customerId}, uid=${uid}`);
-      if (effectivePlan && uid) {
-        // Ensure user row exists in D1. First-time subscribers may not have a row yet
-        // (checkout.session.completed is the first webhook after payment).
-        // However, skip if a tombstone exists — the account was intentionally deleted.
-        const db = getDb(env);
-        const existingUser = db ? await db.prepare('SELECT id FROM users WHERE auth_id = ?').bind(uid).first() : null;
-        if (!existingUser) {
-          // Check D1 tombstone first (authoritative); KV as fallback when D1 unavailable
-          const d1Tombstone = await isDeletedUser(env, uid);
-          const kvTombstone = await env.JOBHACKAI_KV?.get(`deleted:${uid}`);
-          if (d1Tombstone || kvTombstone) {
-            console.log(`⏭️ [WEBHOOK] Skipping checkout plan update: user ${uid} was deleted (tombstone found)`);
-            return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
-          }
-          try {
-            await getOrCreateUserByAuthId(env, uid, customerEmail, { updateActivity: false });
-            console.log(`✅ [WEBHOOK] Created missing user row for first-time subscriber: ${uid}`);
-          } catch (createErr) {
-            console.error(`❌ [WEBHOOK] Failed to create user row for ${uid}:`, createErr?.message || createErr);
-            return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
-          }
-        }
-        // Get subscription details if available
-        const subscriptionId = sess?.subscription || null;
-        let subscription = null;
-        if (subscriptionId) {
-          try {
-            const subRes = await fetch(`https://api.stripe.com/v1/subscriptions/${subscriptionId}`, {
-              headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}` }
-            });
-            subscription = await subRes.json();
-          } catch (e) {
-            console.warn('[WEBHOOK] Failed to fetch subscription details:', e);
-          }
-        }
-        
-        // Determine trial end date. Prefer subscription.trial_end if available.
-        let trialEndsAtISO = subscription?.trial_end ? new Date(subscription.trial_end * 1000).toISOString() : null;
-
-        // If this was a trial and we couldn't fetch subscription details (or trial_end is missing),
-        // set a conservative fallback so the user is marked as having used a trial and cannot re-use it.
-        // The checkout session uses a 3-day trial (see checkout flow), so use 3 days as fallback.
-        if (effectivePlan === 'trial' && !trialEndsAtISO) {
-          const FALLBACK_TRIAL_DAYS = 3;
-          trialEndsAtISO = new Date(Date.now() + FALLBACK_TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
-          console.warn(`[WEBHOOK] subscription.trial_end missing for uid=${uid}; using fallback trialEndsAt=${trialEndsAtISO}`);
-        }
-
-        console.log(`✍️ WRITING TO D1: users.plan = ${effectivePlan} for uid=${uid}`);
-        const planApplied = await updatePlanInD1(uid, {
-          plan: effectivePlan,
-          stripeCustomerId: customerId,
-          stripeSubscriptionId: subscriptionId,
-          subscriptionStatus: subscription?.status || 'active',
-          trialEndsAt: trialEndsAtISO,
-          currentPeriodEnd: subscription?.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null,
-          hasEverPaid: isPaidPlan(effectivePlan) ? 1 : undefined
-        }, event.created);
-        console.log(`✅ D1 WRITE ${planApplied ? 'SUCCESS' : 'SKIPPED (out-of-order)'}: ${uid} → ${effectivePlan}`);
-
-        // GA4 conversion: trial_start for $0 trials, purchase for paid plans.
-        // Use a synthetic client_id keyed on uid (the user_id config from
-        // the browser merges these sessions in GA4's identity graph).
-        // Telemetry is fire-and-forget via context.waitUntil so a slow GA4
-        // endpoint can't push the webhook past Stripe's ~20s timeout.
-        // Skip on stale/replayed webhooks (planApplied === false) so we
-        // don't inflate trial_start / purchase counts in GA4.
-        if (planApplied) {
-          let sessionAmount = null;
-          if (sess?.amount_total != null) {
-            const total = Number(sess.amount_total);
-            if (Number.isFinite(total)) sessionAmount = total / 100;
-          }
-          const planAmount =
-            sessionAmount ??
-            subscriptionPriceAmountDollars(subscription) ??
-            hardcodedPlanAmountDollars(effectivePlan);
-          if (effectivePlan === 'trial') {
-            context.waitUntil(sendGa4Event(env, {
-              clientId: `server.${uid}`,
-              userId: uid,
-              name: 'trial_start',
-              params: {
-                plan: 'trial',
-                source: 'stripe_checkout',
-                session_id: sessionId
-              }
-            }));
-          } else if (isPaidPlan(effectivePlan)) {
-            if (planAmount == null) {
-              console.warn(`[WEBHOOK] purchase event skipped: could not determine planAmount for plan=${effectivePlan} session=${sessionId}`);
-            } else {
-              context.waitUntil(sendGa4Event(env, {
-                clientId: `server.${uid}`,
-                userId: uid,
-                name: 'purchase',
-                params: {
-                  transaction_id: sessionId,
-                  currency: (sess?.currency || 'usd').toUpperCase(),
-                  value: planAmount,
-                  plan: effectivePlan,
-                  items: [{
-                    item_id: priceId || effectivePlan,
-                    item_name: effectivePlan,
-                    price: planAmount,
-                    quantity: 1
-                  }]
-                }
-              }));
-            }
-          }
-        }
-      } else {
-        console.warn(`⚠️ SKIPPED PLAN UPDATE: effectivePlan=${effectivePlan}, uid=${uid}`);
-      }
-    }
-
-    if (event.type === 'customer.subscription.created') {
-      console.log(`🎯 WEBHOOK: ${event.type} received`);
-      const status = event.data.object.status;
-      const metadata = event.data.object.metadata || {};
-      const originalPlan = metadata.original_plan;
-      const items = event.data.object.items?.data || [];
-      const pId = items[0]?.price?.id || '';
-      const plan = priceToPlan(env, pId);
-      const customerId = event.data.object.customer || null;
-      const { uid, email: customerEmail } = await fetchCustomerInfo(customerId);
-
-      let effectivePlan = 'free';
-      if (status === 'trialing' && originalPlan === 'trial') {
-        effectivePlan = 'trial'; // User is in trial period
-      } else if (status === 'active') {
-        // Extract plan from price ID (auto-converts trial to essential)
-        effectivePlan = plan || 'essential';
-      }
-
-      const sub = event.data.object;
-      const trialEndsAtISO = sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null;
-
-      // Ensure user row exists in D1 for first-time subscribers.
-      // Skip if a tombstone exists — the account was intentionally deleted.
-      if (uid) {
-        const db = getDb(env);
-        const existingUser = db ? await db.prepare('SELECT id FROM users WHERE auth_id = ?').bind(uid).first() : null;
-        if (!existingUser) {
-          const d1Tombstone = await isDeletedUser(env, uid);
-          const kvTombstone = await env.JOBHACKAI_KV?.get(`deleted:${uid}`);
-          if (d1Tombstone || kvTombstone) {
-            console.log(`⏭️ [WEBHOOK] Skipping subscription.created plan update: user ${uid} was deleted (tombstone found)`);
-            return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
-          }
-          try {
-            await getOrCreateUserByAuthId(env, uid, customerEmail, { updateActivity: false });
-            console.log(`✅ [WEBHOOK] Ensured user row exists for subscriber: ${uid}`);
-          } catch (createErr) {
-            console.error(`❌ [WEBHOOK] Failed to create user row for ${uid}:`, createErr?.message || createErr);
-            return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
-          }
-        }
-      }
-
-      console.log(`📝 SUBSCRIPTION DATA: status=${status}, priceId=${pId}, basePlan=${plan}, effectivePlan=${effectivePlan}, uid=${uid}`);
-      console.log(`🔄 TRIAL CONVERSION CHECK:`, {
-        eventType: event.type,
-        currentStatus: status,
-        originalPlan: originalPlan,
-        priceId: pId,
-        mappedPlan: plan,
-        effectivePlan: effectivePlan,
-        trialEndsAt: trialEndsAtISO,
-        subscriptionId: sub.id
-      });
-      console.log(`✍️ WRITING TO D1: users.plan = ${effectivePlan} for uid=${uid}`);
-      
-      const planApplied = await updatePlanInD1(uid, {
-        plan: effectivePlan,
-        stripeCustomerId: customerId,
-        stripeSubscriptionId: sub.id,
-        subscriptionStatus: status,
-        trialEndsAt: trialEndsAtISO,
-        currentPeriodEnd: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
-        hasEverPaid: isPaidPlan(effectivePlan) ? 1 : undefined
-      }, event.created);
-      
-      console.log(`✅ D1 WRITE ${planApplied ? 'SUCCESS' : 'SKIPPED (out-of-order)'}: ${uid} → ${effectivePlan}${trialEndsAtISO ? ` (trial ends: ${trialEndsAtISO})` : ''}`);
-    }
-
-    if (event.type === 'customer.subscription.updated') {
-      console.log('🎯 WEBHOOK: customer.subscription.updated received');
-      const sub = event.data.object;
-      const customerId = sub.customer || null;
-      const { uid, email: customerEmail } = await fetchCustomerInfo(customerId);
-
-      // Ensure user row exists in D1 for first-time subscribers.
-      // Skip if a tombstone exists — the account was intentionally deleted.
-      if (uid) {
-        const db = getDb(env);
-        const existingUser = db ? await db.prepare('SELECT id FROM users WHERE auth_id = ?').bind(uid).first() : null;
-        if (!existingUser) {
-          const d1Tombstone = await isDeletedUser(env, uid);
-          const kvTombstone = await env.JOBHACKAI_KV?.get(`deleted:${uid}`);
-          if (d1Tombstone || kvTombstone) {
-            console.log(`⏭️ [WEBHOOK] Skipping subscription.updated plan update: user ${uid} was deleted (tombstone found)`);
-            return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
-          }
-          try {
-            await getOrCreateUserByAuthId(env, uid, customerEmail, { updateActivity: false });
-            console.log(`✅ [WEBHOOK] Ensured user row exists for subscriber: ${uid}`);
-          } catch (createErr) {
-            console.error(`❌ [WEBHOOK] Failed to create user row for ${uid}:`, createErr?.message || createErr);
-            return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
-          }
-        }
-      }
-
-      // Handle scheduled cancellation
-      let cancelAt = null;
-      if (sub.cancel_at_period_end === true && sub.cancel_at) {
-        cancelAt = new Date(sub.cancel_at * 1000).toISOString();
-        console.log(`✅ CANCELLATION SCHEDULED: ${uid} → ${cancelAt}`);
-      }
-      
-      // Handle scheduled plan changes (downgrades)
-      let scheduledPlan = null;
-      let scheduledAt = null;
-      const schedulePlan = sub.schedule;
-      if (schedulePlan) {
-        // Fetch schedule details from Stripe
-        const schedRes = await fetch(`https://api.stripe.com/v1/subscription_schedules/${schedulePlan}`, {
-          headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}` }
-        });
-        const schedData = await schedRes.json();
-        
-        if (schedData && schedData.phases && schedData.phases.length > 1) {
-          const nextPhase = schedData.phases[1];
-          const nextPriceId = nextPhase.items[0]?.price;
-          scheduledPlan = priceToPlan(env, nextPriceId);
-          scheduledAt = nextPhase.start_date ? new Date(nextPhase.start_date * 1000).toISOString() : null;
-          
-          if (scheduledPlan && scheduledAt) {
-            console.log(`✅ PLAN CHANGE SCHEDULED: ${uid} → ${scheduledPlan} at ${scheduledAt}`);
-          }
-        }
-      }
-      
-      // Determine effective plan status
-      const status = sub.status;
-      const metadata = sub.metadata || {};
-      const originalPlan = metadata.original_plan;
-      const items = sub.items?.data || [];
-      const pId = items[0]?.price?.id || '';
-      const plan = priceToPlan(env, pId);
-      
-      // Get previous plan from D1 to detect trial conversion
-      let previousPlan = null;
-      try {
-        const { getUserPlanData } = await import('../../_lib/db.js');
-        const existingPlanData = await getUserPlanData(env, uid);
-        previousPlan = existingPlanData?.plan || null;
-      } catch (e) {
-        console.warn('⚠️ Could not fetch previous plan for comparison:', e.message);
-      }
-      
-      let effectivePlan = 'free';
-      if (status === 'trialing' && originalPlan === 'trial') {
-        effectivePlan = 'trial';
-      } else if (status === 'active') {
-        effectivePlan = plan || 'essential';
-      }
-      
-      const trialEndsAtISO = sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null;
-      
-      // Enhanced logging for trial conversion detection
-      console.log(`🔄 TRIAL CONVERSION CHECK:`, {
-        eventType: event.type,
-        previousStatus: previousPlan || 'unknown', // Use actual previousPlan value, not assumed 'trial'
-        currentStatus: status,
-        previousPlan: previousPlan,
-        originalPlan: originalPlan,
-        priceId: pId,
-        mappedPlan: plan,
-        effectivePlan: effectivePlan,
-        trialEndsAt: trialEndsAtISO,
-        subscriptionId: sub.id,
-        isTrialConversion: previousPlan === 'trial' && effectivePlan !== 'trial' && status === 'active'
-      });
-      
-      const isTrialConversion = previousPlan === 'trial' && effectivePlan !== 'trial' && status === 'active';
-
-      if (isTrialConversion) {
-        console.log(`🎉 TRIAL CONVERTED: ${uid} → ${effectivePlan} (trial expired, subscription now active)`);
-      }
-
-      console.log(`✍️ UPDATING D1: users.plan = ${effectivePlan} for uid=${uid}`);
-      const planApplied = await updatePlanInD1(uid, {
-        plan: effectivePlan,
-        stripeCustomerId: customerId,
-        stripeSubscriptionId: sub.id,
-        subscriptionStatus: status,
-        trialEndsAt: trialEndsAtISO,
-        currentPeriodEnd: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
-        cancelAt: cancelAt || null, // null clears the field (undefined is skipped)
-        scheduledPlan: scheduledPlan || null, // null clears the field (undefined is skipped)
-        scheduledAt: scheduledAt || null, // null clears the field (undefined is skipped)
-        hasEverPaid: isPaidPlan(effectivePlan) ? 1 : undefined
-      }, event.created);
-
-      console.log(`✅ D1 UPDATE ${planApplied ? 'SUCCESS' : 'SKIPPED (out-of-order)'}: ${uid} → ${effectivePlan}${trialEndsAtISO ? ` (trial ends: ${trialEndsAtISO})` : ''}`);
-
-      if (planApplied && isTrialConversion) {
-        // Reset usage when converting from trial to paid plan
-        // This ensures users get a fresh start with their new plan limits.
-        // Gated on planApplied so a stale or replayed webhook (whose D1
-        // write was skipped by updatePlanInD1's ordering check) doesn't
-        // wipe out usage the user has legitimately accumulated since the
-        // real conversion was already processed.
-        if (['essential', 'pro', 'premium'].includes(effectivePlan)) {
-          console.log('[WEBHOOK] Resetting usage for trial conversion', {
-            uid,
-            fromPlan: previousPlan,
-            toPlan: effectivePlan
-          });
-
-          // Reset interview questions usage (uses feature_daily_usage table)
-          await resetFeatureDailyUsage(env, uid, 'interview_questions').catch((error) => {
-            console.error('[WEBHOOK] Failed to reset interview questions usage (non-blocking):', error);
-          });
-
-          // Reset resume feedback usage (uses usage_events table)
-          await resetUsageEvents(env, uid, 'resume_feedback').catch((error) => {
-            console.error('[WEBHOOK] Failed to reset resume feedback usage (non-blocking):', error);
-          });
-        }
-
-        // GA4 conversion: trial → paid is a real `purchase`. Without this
-        // event, blog/social attribution loses the highest-value step.
-        // Fire-and-forget via context.waitUntil so the webhook returns
-        // immediately and Stripe doesn't retry on a slow GA4 endpoint.
-        // Gated on planApplied so a stale or replayed webhook (whose D1
-        // write was skipped by updatePlanInD1's ordering check) doesn't
-        // double-count the conversion in GA4. Match checkout.session:
-        // only emit purchase for paid tiers, not free-tier transitions.
-        if (isPaidPlan(effectivePlan)) {
-          const convertedPlanAmount =
-            subscriptionPriceAmountDollars(sub) ?? hardcodedPlanAmountDollars(effectivePlan);
-          if (convertedPlanAmount == null) {
-            console.warn(`[WEBHOOK] trial-conversion purchase event skipped: could not determine planAmount for plan=${effectivePlan} subId=${sub?.id}`);
-          } else {
-            context.waitUntil(sendGa4Event(env, {
-              clientId: `server.${uid}`,
-              userId: uid,
-              name: 'purchase',
-              params: {
-                transaction_id: `${sub.id}.trial_converted`,
-                currency: (sub?.currency || 'usd').toUpperCase(),
-                value: convertedPlanAmount,
-                plan: effectivePlan,
-                converted_from: 'trial',
-                items: [{
-                  item_id: pId || effectivePlan,
-                  item_name: effectivePlan,
-                  price: convertedPlanAmount,
-                  quantity: 1
-                }]
-              }
-            }));
-          }
-        }
-      }
-    }
-
-    if (event.type === 'customer.subscription.deleted') {
-      console.log('🎯 WEBHOOK: customer.subscription.deleted received');
-      const deletedSub = event.data?.object || {};
-      const customerId = deletedSub.customer || null;
-      const uid = await fetchUidFromCustomer(customerId);
-      console.log(`📝 DELETION DATA: customerId=${customerId}, uid=${uid}`);
-      const deletedItems = deletedSub?.items?.data || [];
-      const deletedPriceId = deletedItems[0]?.price?.id || '';
-      const deletedPlan = priceToPlan(env, deletedPriceId);
-
-      let handledByActiveSub = false;
-      if (customerId && uid) {
-        try {
-          const subsRes = await stripe(env, `/subscriptions?customer=${customerId}&status=all&limit=25`);
-          if (subsRes.ok) {
-            const subsData = await subsRes.json();
-            const activeSubs = (subsData.data || []).filter((sub) =>
-              sub && ['active', 'trialing', 'past_due'].includes(sub.status)
-            );
-            if (activeSubs.length > 0) {
-              const { bestSub, currentPlan } = pickBestSubscription(activeSubs, env);
-              const trialEndsAtISO = bestSub.trial_end ? new Date(bestSub.trial_end * 1000).toISOString() : null;
-              const currentPeriodEnd = bestSub.current_period_end ? new Date(bestSub.current_period_end * 1000).toISOString() : null;
-              const cancelAt = (bestSub.cancel_at_period_end && bestSub.cancel_at)
-                ? new Date(bestSub.cancel_at * 1000).toISOString()
-                : null;
-
-              console.log(`✍️ [WEBHOOK] Remaining active subscription found, keeping plan ${currentPlan} for uid=${uid}`);
-              await updatePlanInD1(uid, {
-                plan: currentPlan,
-                stripeCustomerId: customerId,
-                stripeSubscriptionId: bestSub.id,
-                subscriptionStatus: bestSub.status,
-                trialEndsAt: trialEndsAtISO,
-                currentPeriodEnd,
-                cancelAt,
-                scheduledPlan: null,
-                scheduledAt: null,
-                hasEverPaid: isPaidPlan(currentPlan) ? 1 : undefined
-              }, event.created);
-              handledByActiveSub = true;
-            }
-          } else {
-            console.warn('[WEBHOOK] Failed to list subscriptions on deletion', subsRes.status);
-          }
-        } catch (subErr) {
-          console.warn('[WEBHOOK] Subscription lookup error on deletion', subErr?.message || subErr);
-        }
-      }
-
-      if (!handledByActiveSub) {
-        console.log(`✍️ WRITING TO D1: users.plan = free for uid=${uid}`);
-        await updatePlanInD1(uid, {
-          plan: 'free',
-          stripeSubscriptionId: null,
-          subscriptionStatus: 'canceled',
-          cancelAt: null, // Clear cancellation date
-          scheduledPlan: null, // Clear scheduled plan
-          scheduledAt: null, // Clear scheduled date
-          hasEverPaid: isPaidPlan(deletedPlan) ? 1 : undefined
-        }, event.created);
-
-        // Clean up resume data when subscription is deleted (KV cleanup)
-        await env.JOBHACKAI_KV?.delete(`user:${uid}:lastResume`);
-        await env.JOBHACKAI_KV?.delete(`usage:${uid}`);
-        console.log(`✅ D1 WRITE SUCCESS: ${uid} → free (resume data cleaned up)`);
-
-        // Send subscription cancelled email (non-blocking)
-        // Note: Stripe may also send its own cancellation email; we send ours for consistency
-        if (uid) {
-          try {
-            // getUserPlanData does not return email, so query users table directly
-            const db = getDb(env);
-            const userRow = db ? await db.prepare('SELECT email FROM users WHERE auth_id = ?').bind(uid).first() : null;
-            if (userRow?.email) {
-              const userName = userRow.email.split('@')[0];
-              const periodEnd = deletedSub.current_period_end
-                ? new Date(deletedSub.current_period_end * 1000).toISOString()
-                : null;
-              const { subject, html } = subscriptionCancelledEmail(userName, deletedPlan, periodEnd);
-              const emailPromise = sendEmail(env, { to: userRow.email, subject, html }).catch((e) => {
-                console.warn('[WEBHOOK] Failed to send cancellation email (non-blocking):', e.message);
-              });
-              context.waitUntil(emailPromise);
-            }
-          } catch (emailErr) {
-            console.warn('[WEBHOOK] Error sending cancellation email (non-blocking):', emailErr.message);
-          }
-        }
-      }
-    }
-
-    // ─── Payment failure: mark subscription past_due, notify user ───
-    if (event.type === 'invoice.payment_failed') {
-      console.log('🎯 WEBHOOK: invoice.payment_failed received');
-      const invoice = event.data?.object || {};
-      const customerId = invoice.customer || null;
-      const subscriptionId = invoice.subscription || null;
-      const { uid, email: customerEmail } = await fetchCustomerInfo(customerId);
-
-      // Only handle subscription invoices — one-time invoices (e.g. metered charges)
-      // have no subscription and should not affect subscription status.
-      if (!subscriptionId) {
-        console.log(`⏭️ [WEBHOOK] invoice.payment_failed: skipping non-subscription invoice ${invoice.id}`);
-      } else if (uid) {
-        // Skip deleted users — other handlers check this too
-        const d1Tombstone = await isDeletedUser(env, uid);
-        const kvTombstone = await env.JOBHACKAI_KV?.get(`deleted:${uid}`);
-        if (d1Tombstone || kvTombstone) {
-          console.log(`⏭️ [WEBHOOK] Skipping invoice.payment_failed: user ${uid} was deleted (tombstone found)`);
-          return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
-        }
-
-        // Fetch the actual subscription status from Stripe before writing to D1.
-        // Stripe fires invoice.payment_failed on every retry attempt, but the
-        // subscription may still be 'active' while smart retries are pending.
-        // Only update D1 if Stripe has actually transitioned the subscription.
-        let subStatus = 'past_due';
-        try {
-          const subRes = await fetch(`https://api.stripe.com/v1/subscriptions/${subscriptionId}`, {
-            headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}` }
-          });
-          if (subRes.ok) {
-            const subData = await subRes.json();
-            subStatus = subData.status || 'past_due';
-          }
-        } catch (fetchErr) {
-          console.warn(`⚠️ [WEBHOOK] Could not fetch subscription status, defaulting to past_due:`, fetchErr.message);
-        }
-
-        // Skip if subscription is still active (retries pending) or in a terminal
-        // state handled by other webhook events (e.g. customer.subscription.deleted).
-        const terminalStatuses = new Set(['active', 'canceled', 'incomplete_expired']);
-        if (terminalStatuses.has(subStatus)) {
-          console.log(`⏭️ [WEBHOOK] invoice.payment_failed: subscription ${subscriptionId} is ${subStatus}, skipping D1 update`);
-        } else {
-          await updatePlanInD1(uid, {
-            subscriptionStatus: subStatus
-          }, event.created);
-          console.log(`⚠️ [WEBHOOK] Marked subscription ${subStatus} for uid=${uid} (invoice ${invoice.id})`);
-
-          // Send payment failure email (non-blocking)
-          try {
-            const db = getDb(env);
-            const userRow = db ? await db.prepare('SELECT email, plan FROM users WHERE auth_id = ?').bind(uid).first() : null;
-            if (userRow?.email) {
-              const userName = userRow.email.split('@')[0];
-              const planName = userRow.plan || 'current';
-              const { subject, html } = paymentFailedEmail(userName, planName, env.FRONTEND_URL);
-              const emailPromise = sendEmail(env, { to: userRow.email, subject, html }).catch((e) => {
-                console.warn('[WEBHOOK] Failed to send payment failure email (non-blocking):', e.message);
-              });
-              context.waitUntil(emailPromise);
-            }
-          } catch (emailErr) {
-            console.warn('[WEBHOOK] Error sending payment failure email (non-blocking):', emailErr.message);
-          }
-        }
-      } else {
-        console.warn(`⚠️ [WEBHOOK] invoice.payment_failed: could not resolve uid for customer ${customerId}`);
-      }
-    }
-
-  } catch (err) {
-    console.error('❌ WEBHOOK ERROR:', err.message || err);
-    // swallow errors to avoid endless retries; state can heal on next login fetch
+  // ── Durable idempotency claim (AUTHORITATIVE). Fail closed when the
+  // ledger is unavailable: migration 022 must precede this code. Nothing —
+  // D1 or KV — has been written when the claim is refused.
+  const claim = await claimEvent(env, event);
+  if (claim.outcome === 'unavailable') {
+    return new Response('event ledger unavailable', { status: 503, headers: respHeaders });
+  }
+  if (claim.outcome === 'already_processed') {
+    try { await env.JOBHACKAI_KV?.put(`evtl:${event.id}`, '1', { expirationTtl: 86400 }); } catch (_) { /* no-op */ }
+    return new Response('[ok]', { status: 200, headers: respHeaders });
+  }
+  if (claim.outcome === 'in_flight') {
+    return new Response('in flight', { status: 503, headers: respHeaders });
   }
 
-  return new Response('[ok]', { status: 200, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } });
+  // Lock write side: taken only once the claim is ours, so refused/failed
+  // claims leave KV untouched.
+  try { await env.JOBHACKAI_KV?.put(lockKey, '1', { expirationTtl: 60 }); } catch (_) { /* no-op */ }
+
+  // ── Route the event. Handlers stage critical writes into ctx and queue
+  // side effects; nothing is written until the atomic commit below.
+  const ctx = {
+    statements: [],    // critical D1 writes — committed with the processed-mark
+    postCommit: [],    // awaited after commit (KV cache invalidation)
+    fireAndForget: []  // context.waitUntil after commit (GA4, email)
+  };
+
+  let outcome;
+  try {
+    outcome = await routeEvent(context, env, event, ctx);
+  } catch (err) {
+    if (err instanceof TransientStripeError) {
+      outcome = transient('transient_stripe_failure');
+    } else {
+      console.error(`❌ [WEBHOOK] handler exception for ${event.type} evt=${redactId(event.id)}:`, err?.message || err);
+      outcome = transient('handler_exception');
+    }
+  }
+
+  if (outcome.kind === 'transient' || outcome.kind === 'critical') {
+    console.error(`❌ [WEBHOOK] ${outcome.kind} failure (${outcome.reason}) type=${event.type} evt=${redactId(event.id)}`);
+    await markEventFailed(env, event.id, outcome.reason);
+    await releaseLock();
+    const status = outcome.kind === 'transient' ? 503 : 500;
+    return new Response(`event failed: ${outcome.reason}`, { status, headers: respHeaders });
+  }
+
+  if (outcome.kind === 'noop' && outcome.note) {
+    console.log(`⏭️ [WEBHOOK] no-op (${outcome.note}) type=${event.type} evt=${redactId(event.id)}`);
+  }
+
+  // ── Atomic commit: every critical write + the processed-mark, together.
+  const db = getDb(env);
+  const batch = [...ctx.statements, buildMarkProcessedStatement(db, event.id)];
+  try {
+    await db.batch(batch);
+  } catch (err) {
+    const msg = String(err?.message || '');
+    const isUnique = msg.includes('UNIQUE constraint failed');
+    const reason = isUnique ? 'unique_index_conflict' : 'batch_write_failed';
+    console.error(`❌ [WEBHOOK] atomic commit failed (${reason}) evt=${redactId(event.id)}: ${msg.slice(0, 200)}`);
+    await markEventFailed(env, event.id, reason);
+    await releaseLock();
+    // Unique-index refusals (023) are ownership conflicts: operator-visible,
+    // retried by Stripe, resolved by the reconciliation script.
+    return new Response(`event failed: ${reason}`, { status: isUnique ? 500 : 503, headers: respHeaders });
+  }
+
+  // Post-commit effects: at-most-once by construction (a retry after commit
+  // returns 200 at the ledger before reaching any handler). A crash here can
+  // lose one of these, never duplicate it — KV repopulates on read; a lost
+  // GA4/email event is the accepted, logged trade-off.
+  for (const run of ctx.postCommit) {
+    try { await run(); } catch (e) { console.warn('[WEBHOOK] post-commit cache step failed (non-blocking):', e?.message || e); }
+  }
+  for (const run of ctx.fireAndForget) {
+    try { context.waitUntil(run()); } catch (e) { console.warn('[WEBHOOK] post-commit telemetry step failed (non-blocking):', e?.message || e); }
+  }
+  try { await env.JOBHACKAI_KV?.put(`evtl:${event.id}`, '1', { expirationTtl: 86400 }); } catch (_) { /* no-op */ }
+  await releaseLock();
+
+  return new Response('[ok]', { status: 200, headers: respHeaders });
 }
+
+async function routeEvent(context, env, event, ctx) {
+  switch (event.type) {
+    case 'checkout.session.completed': return handleCheckoutCompleted(env, event, ctx);
+    case 'customer.subscription.created': return handleSubscriptionCreated(env, event, ctx);
+    case 'customer.subscription.updated': return handleSubscriptionUpdated(env, event, ctx);
+    case 'customer.subscription.deleted': return handleSubscriptionDeleted(env, event, ctx);
+    case 'invoice.payment_failed': return handleInvoicePaymentFailed(env, event, ctx);
+    default: return noop(`unhandled_event_type:${event.type}`);
+  }
+}
+
+// ── Shared staging helpers ──────────────────────────────────────────────
+
+// Stage the users-row plan write with the same timestamp-ordering protection
+// updateUserPlan callers rely on: an event older than the row's
+// plan_updated_at is skipped (planApplied=false) so out-of-order webhooks
+// never overwrite newer state, and callers gate side effects (GA4, resets)
+// on planApplied so stale replays can't double-count.
+//
+// `preloadedPlanData` lets callers that already read the row (trial
+// conversion detection) share one read; pass `undefined` to let this helper
+// read. Reads happen here, pre-batch; the returned staging is write-only.
+async function stagePlanUpdate(env, ctx, uid, planData, eventTimestampSeconds, preloadedPlanData) {
+  if (!uid) return { planApplied: false };
+
+  if (eventTimestampSeconds !== undefined && Number.isFinite(eventTimestampSeconds)) {
+    const currentPlanData = preloadedPlanData !== undefined
+      ? preloadedPlanData
+      : await getUserPlanData(env, uid);
+    if (currentPlanData?.planUpdatedAt) {
+      const storedTimestamp = Math.floor(new Date(currentPlanData.planUpdatedAt).getTime() / 1000);
+      const eventTimestamp = Math.floor(Number(eventTimestampSeconds));
+      if (eventTimestamp < storedTimestamp) {
+        console.log(`⏭️ [WEBHOOK] Skipping out-of-order event: event.created=${eventTimestamp} < stored=${storedTimestamp} for uid=${redactId(uid)}`);
+        return { planApplied: false };
+      }
+    }
+    planData = { ...planData, planEventTimestamp: new Date(eventTimestampSeconds * 1000).toISOString() };
+  }
+
+  const stmt = buildUserPlanUpdateStatement(getDb(env), uid, planData);
+  if (stmt) ctx.statements.push(stmt);
+
+  // Cache invalidation belongs after the commit (KV is never authoritative).
+  ctx.postCommit.push(async () => {
+    if (!env.JOBHACKAI_KV) return;
+    await env.JOBHACKAI_KV.delete(kvPlanKey(uid));
+    await env.JOBHACKAI_KV.delete(`trialUsedByUid:${uid}`);
+    await env.JOBHACKAI_KV.delete(`trialEndByUid:${uid}`);
+    await env.JOBHACKAI_KV.delete(`billingStatus:${uid}`);
+    // Delete all monthly feedbackUsage keys for this UID (12 months back + safety)
+    const today = new Date();
+    for (let i = 0; i < 14; i++) {
+      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      await env.JOBHACKAI_KV.delete(`feedbackUsage:${uid}:${monthKey}`);
+    }
+    await env.JOBHACKAI_KV.delete(`atsUsage:${uid}:lifetime`);
+  });
+
+  return { planApplied: true };
+}
+
+// Ensure the user row exists for first-time subscribers (get-or-create is
+// idempotent, so it is safe to run before the atomic batch). Tombstoned
+// users are a deliberate no-op: the account was intentionally deleted.
+async function ensureUserRow(env, uid, email, eventLabel) {
+  const db = getDb(env);
+  const existingUser = db ? await db.prepare('SELECT id FROM users WHERE auth_id = ?').bind(uid).first() : null;
+  if (existingUser) return { ok: true };
+
+  const d1Tombstone = await isDeletedUser(env, uid);
+  const kvTombstone = await env.JOBHACKAI_KV?.get(`deleted:${uid}`);
+  if (d1Tombstone || kvTombstone) {
+    console.log(`⏭️ [WEBHOOK] Skipping ${eventLabel}: user ${redactId(uid)} was deleted (tombstone found)`);
+    return { outcome: noop('tombstoned_user') };
+  }
+  try {
+    await getOrCreateUserByAuthId(env, uid, email, { updateActivity: false });
+    console.log(`✅ [WEBHOOK] Ensured user row exists for subscriber: ${redactId(uid)}`);
+    return { ok: true };
+  } catch (createErr) {
+    console.error(`❌ [WEBHOOK] Failed to create user row for ${redactId(uid)}:`, createErr?.message || createErr);
+    return { outcome: transient('user_row_create_failed') };
+  }
+}
+
+// ── Handlers ────────────────────────────────────────────────────────────
+
+async function handleCheckoutCompleted(env, event, ctx) {
+  console.log('🎯 WEBHOOK: checkout.session.completed received');
+  const sessionId = event.data?.object?.id;
+  const sessionMetadata = event.data?.object?.metadata || {};
+  const originalPlan = sessionMetadata.plan;
+
+  // Expand line items to reliably get price id
+  let sess;
+  try {
+    const r = await fetch(`https://api.stripe.com/v1/checkout/sessions/${sessionId}?expand[]=line_items.data.price`, {
+      headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}` }
+    });
+    if (!r.ok) {
+      console.error(`[WEBHOOK] checkout session fetch returned ${r.status} for ${redactId(sessionId)}`);
+      return transient('session_fetch_failed');
+    }
+    sess = await r.json();
+  } catch (e) {
+    console.error('[WEBHOOK] checkout session fetch error:', e?.message || e);
+    return transient('session_fetch_failed');
+  }
+
+  const priceId = sess?.line_items?.data?.[0]?.price?.id || '';
+  const customerId = sess?.customer || event.data?.object?.customer || null;
+  const owner = await resolveOwnerUid(env, { session: event.data?.object, customerId });
+  if (owner.conflict) return critical('owner_conflict');
+  const { uid, email: customerEmail } = owner;
+  if (!uid) return critical('unresolved_owner');
+
+  // Determine effective plan based on original plan and subscription status
+  let effectivePlan = 'free';
+  if (originalPlan === 'trial') {
+    effectivePlan = 'trial'; // Show as trial immediately
+    // Trial usage is tracked in D1 (source of truth); no authoritative KV flags.
+    console.log(`✅ TRIAL STARTED (tracked in D1): ${redactId(uid)}`);
+  } else {
+    effectivePlan = priceToPlan(env, priceId) || 'essential';
+  }
+  console.log(`📝 CHECKOUT DATA: originalPlan=${originalPlan}, effectivePlan=${effectivePlan}, customerId=${redactId(customerId)}, uid=${redactId(uid)}`);
+
+  const rowCheck = await ensureUserRow(env, uid, customerEmail, 'checkout plan update');
+  if (rowCheck.outcome) return rowCheck.outcome;
+
+  // Get subscription details if available. A session that references a
+  // subscription we cannot read is retryable — writing null periods for a
+  // real subscription would silently degrade billing data.
+  const subscriptionId = sess?.subscription || null;
+  let subscription = null;
+  if (subscriptionId) {
+    try {
+      const subRes = await fetch(`https://api.stripe.com/v1/subscriptions/${subscriptionId}`, {
+        headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}` }
+      });
+      if (!subRes.ok) {
+        console.error(`[WEBHOOK] subscription fetch returned ${subRes.status} for ${redactId(subscriptionId)}`);
+        return transient('subscription_fetch_failed');
+      }
+      subscription = await subRes.json();
+    } catch (e) {
+      console.error('[WEBHOOK] subscription fetch error:', e?.message || e);
+      return transient('subscription_fetch_failed');
+    }
+  }
+
+  // Determine trial end date. Prefer subscription.trial_end if available.
+  let trialEndsAtISO = subscription?.trial_end ? new Date(subscription.trial_end * 1000).toISOString() : null;
+
+  // If this was a trial and trial_end is missing, set a conservative fallback
+  // so the user is marked as having used a trial and cannot re-use it.
+  // The checkout session uses a 3-day trial (see checkout flow).
+  if (effectivePlan === 'trial' && !trialEndsAtISO) {
+    const FALLBACK_TRIAL_DAYS = 3;
+    trialEndsAtISO = new Date(Date.now() + FALLBACK_TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+    console.warn(`[WEBHOOK] subscription.trial_end missing for uid=${redactId(uid)}; using fallback trialEndsAt=${trialEndsAtISO}`);
+  }
+
+  const guard = await assertNoCrossUserStripeIds(env, { uid, stripeCustomerId: customerId, stripeSubscriptionId: subscriptionId });
+  if (!guard.ok) return critical('cross_user_id_conflict');
+
+  const period = readSubscriptionPeriod(subscription, { priceToPlan: (pid) => priceToPlan(env, pid) });
+  if (period.error) return critical(`period_${period.error}`);
+
+  console.log(`✍️ STAGING D1 WRITE: users.plan = ${effectivePlan} for uid=${redactId(uid)}`);
+  const { planApplied } = await stagePlanUpdate(env, ctx, uid, {
+    plan: effectivePlan,
+    stripeCustomerId: customerId,
+    stripeSubscriptionId: subscriptionId,
+    subscriptionStatus: subscription?.status || 'active',
+    trialEndsAt: trialEndsAtISO,
+    currentPeriodStart: period.currentPeriodStart,
+    currentPeriodEnd: period.currentPeriodEnd,
+    hasEverPaid: isPaidPlan(effectivePlan) ? 1 : undefined
+  }, event.created);
+  console.log(`✅ D1 WRITE ${planApplied ? 'STAGED' : 'SKIPPED (out-of-order)'}: ${redactId(uid)} → ${effectivePlan}`);
+
+  // GA4 conversion: trial_start for $0 trials, purchase for paid plans.
+  // Runs post-commit and only when the plan write actually applied, so a
+  // stale or replayed webhook never inflates GA4 counts.
+  if (planApplied) {
+    let sessionAmount = null;
+    if (sess?.amount_total != null) {
+      const total = Number(sess.amount_total);
+      if (Number.isFinite(total)) sessionAmount = total / 100;
+    }
+    const planAmount =
+      sessionAmount ??
+      subscriptionPriceAmountDollars(subscription) ??
+      hardcodedPlanAmountDollars(effectivePlan);
+    if (effectivePlan === 'trial') {
+      ctx.fireAndForget.push(() => sendGa4Event(env, {
+        clientId: `server.${uid}`,
+        userId: uid,
+        name: 'trial_start',
+        params: {
+          plan: 'trial',
+          source: 'stripe_checkout',
+          session_id: sessionId
+        }
+      }));
+    } else if (isPaidPlan(effectivePlan)) {
+      if (planAmount == null) {
+        console.warn(`[WEBHOOK] purchase event skipped: could not determine planAmount for plan=${effectivePlan} session=${redactId(sessionId)}`);
+      } else {
+        ctx.fireAndForget.push(() => sendGa4Event(env, {
+          clientId: `server.${uid}`,
+          userId: uid,
+          name: 'purchase',
+          params: {
+            transaction_id: sessionId,
+            currency: (sess?.currency || 'usd').toUpperCase(),
+            value: planAmount,
+            plan: effectivePlan,
+            items: [{
+              item_id: priceId || effectivePlan,
+              item_name: effectivePlan,
+              price: planAmount,
+              quantity: 1
+            }]
+          }
+        }));
+      }
+    }
+  }
+  return ok();
+}
+
+async function handleSubscriptionCreated(env, event, ctx) {
+  console.log(`🎯 WEBHOOK: ${event.type} received`);
+  const sub = event.data.object;
+  const status = sub.status;
+  const metadata = sub.metadata || {};
+  const originalPlan = metadata.original_plan;
+  const items = sub.items?.data || [];
+  const pId = items[0]?.price?.id || '';
+  const plan = priceToPlan(env, pId);
+  const customerId = sub.customer || null;
+
+  const owner = await resolveOwnerUid(env, { subscription: sub, customerId });
+  if (owner.conflict) return critical('owner_conflict');
+  const { uid, email: customerEmail } = owner;
+  if (!uid) return critical('unresolved_owner');
+
+  let effectivePlan = 'free';
+  if (status === 'trialing' && originalPlan === 'trial') {
+    effectivePlan = 'trial'; // User is in trial period
+  } else if (status === 'active') {
+    // Extract plan from price ID (auto-converts trial to essential)
+    effectivePlan = plan || 'essential';
+  } else if (status === 'past_due' || status === 'unpaid') {
+    // Dunning keeps paid access: invoice.payment_failed writes status only,
+    // and sync-stripe-plan explicitly preserves the plan for past_due/unpaid
+    // ("still has access"). Downgrading here made entitlement flap between
+    // the webhook and sync while Stripe retried the charge.
+    effectivePlan = plan || 'essential';
+  }
+
+  const trialEndsAtISO = sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null;
+
+  const rowCheck = await ensureUserRow(env, uid, customerEmail, 'subscription.created plan update');
+  if (rowCheck.outcome) return rowCheck.outcome;
+
+  console.log(`📝 SUBSCRIPTION DATA: status=${status}, basePlan=${plan}, effectivePlan=${effectivePlan}, uid=${redactId(uid)}`);
+
+  const guard = await assertNoCrossUserStripeIds(env, { uid, stripeCustomerId: customerId, stripeSubscriptionId: sub.id });
+  if (!guard.ok) return critical('cross_user_id_conflict');
+
+  const period = readSubscriptionPeriod(sub, { priceToPlan: (pid) => priceToPlan(env, pid) });
+  if (period.error) return critical(`period_${period.error}`);
+
+  console.log(`✍️ STAGING D1 WRITE: users.plan = ${effectivePlan} for uid=${redactId(uid)}`);
+  const { planApplied } = await stagePlanUpdate(env, ctx, uid, {
+    plan: effectivePlan,
+    stripeCustomerId: customerId,
+    stripeSubscriptionId: sub.id,
+    subscriptionStatus: status,
+    trialEndsAt: trialEndsAtISO,
+    currentPeriodStart: period.currentPeriodStart,
+    currentPeriodEnd: period.currentPeriodEnd,
+    hasEverPaid: isPaidPlan(effectivePlan) ? 1 : undefined
+  }, event.created);
+  console.log(`✅ D1 WRITE ${planApplied ? 'STAGED' : 'SKIPPED (out-of-order)'}: ${redactId(uid)} → ${effectivePlan}${trialEndsAtISO ? ` (trial ends: ${trialEndsAtISO})` : ''}`);
+  return ok();
+}
+
+async function handleSubscriptionUpdated(env, event, ctx) {
+  console.log('🎯 WEBHOOK: customer.subscription.updated received');
+  const sub = event.data.object;
+  const customerId = sub.customer || null;
+
+  const owner = await resolveOwnerUid(env, { subscription: sub, customerId });
+  if (owner.conflict) return critical('owner_conflict');
+  const { uid, email: customerEmail } = owner;
+  if (!uid) return critical('unresolved_owner');
+
+  const rowCheck = await ensureUserRow(env, uid, customerEmail, 'subscription.updated plan update');
+  if (rowCheck.outcome) return rowCheck.outcome;
+
+  // Handle scheduled cancellation
+  let cancelAt = null;
+  if (sub.cancel_at_period_end === true && sub.cancel_at) {
+    cancelAt = new Date(sub.cancel_at * 1000).toISOString();
+    console.log(`✅ CANCELLATION SCHEDULED: ${redactId(uid)} → ${cancelAt}`);
+  }
+
+  // Handle scheduled plan changes (downgrades). Schedule data feeds a
+  // critical write (scheduled_plan/scheduled_at); an unreadable schedule is
+  // retryable, not guessable.
+  let scheduledPlan = null;
+  let scheduledAt = null;
+  if (sub.schedule) {
+    try {
+      const schedRes = await fetch(`https://api.stripe.com/v1/subscription_schedules/${sub.schedule}`, {
+        headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}` }
+      });
+      if (!schedRes.ok) {
+        console.error(`[WEBHOOK] schedule fetch returned ${schedRes.status} for ${redactId(sub.schedule)}`);
+        return transient('schedule_fetch_failed');
+      }
+      const schedData = await schedRes.json();
+      if (schedData && schedData.phases && schedData.phases.length > 1) {
+        const nextPhase = schedData.phases[1];
+        const nextPriceId = nextPhase.items[0]?.price;
+        scheduledPlan = priceToPlan(env, nextPriceId);
+        scheduledAt = nextPhase.start_date ? new Date(nextPhase.start_date * 1000).toISOString() : null;
+        if (scheduledPlan && scheduledAt) {
+          console.log(`✅ PLAN CHANGE SCHEDULED: ${redactId(uid)} → ${scheduledPlan} at ${scheduledAt}`);
+        }
+      }
+    } catch (e) {
+      console.error('[WEBHOOK] schedule fetch error:', e?.message || e);
+      return transient('schedule_fetch_failed');
+    }
+  }
+
+  // Determine effective plan status
+  const status = sub.status;
+  const metadata = sub.metadata || {};
+  const originalPlan = metadata.original_plan;
+  const items = sub.items?.data || [];
+  const pId = items[0]?.price?.id || '';
+  const plan = priceToPlan(env, pId);
+
+  // One read serves both trial-conversion detection and the ordering guard.
+  // If D1 cannot be read, retry: proceeding would either lose the conversion
+  // side effects forever or skip the ordering protection.
+  let existingPlanData;
+  try {
+    existingPlanData = await getUserPlanData(env, uid);
+  } catch (e) {
+    console.error('[WEBHOOK] could not read current plan data:', e?.message || e);
+    return transient('d1_read_failed');
+  }
+  const previousPlan = existingPlanData?.plan || null;
+
+  let effectivePlan = 'free';
+  if (status === 'trialing' && originalPlan === 'trial') {
+    effectivePlan = 'trial';
+  } else if (status === 'active') {
+    effectivePlan = plan || 'essential';
+  } else if (status === 'past_due' || status === 'unpaid') {
+    // Dunning keeps paid access — see handleSubscriptionCreated. The status
+    // itself is still written as past_due/unpaid below.
+    effectivePlan = plan || 'essential';
+  }
+
+  const trialEndsAtISO = sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null;
+  const isTrialConversion = previousPlan === 'trial' && effectivePlan !== 'trial' && status === 'active';
+
+  console.log(`🔄 TRIAL CONVERSION CHECK:`, {
+    eventType: event.type,
+    currentStatus: status,
+    previousPlan,
+    originalPlan,
+    mappedPlan: plan,
+    effectivePlan,
+    trialEndsAt: trialEndsAtISO,
+    subscriptionId: redactId(sub.id),
+    isTrialConversion
+  });
+  if (isTrialConversion) {
+    console.log(`🎉 TRIAL CONVERTED: ${redactId(uid)} → ${effectivePlan} (trial expired, subscription now active)`);
+  }
+
+  const guard = await assertNoCrossUserStripeIds(env, { uid, stripeCustomerId: customerId, stripeSubscriptionId: sub.id });
+  if (!guard.ok) return critical('cross_user_id_conflict');
+
+  const period = readSubscriptionPeriod(sub, { priceToPlan: (pid) => priceToPlan(env, pid) });
+  if (period.error) return critical(`period_${period.error}`);
+
+  console.log(`✍️ STAGING D1 UPDATE: users.plan = ${effectivePlan} for uid=${redactId(uid)}`);
+  const { planApplied } = await stagePlanUpdate(env, ctx, uid, {
+    plan: effectivePlan,
+    stripeCustomerId: customerId,
+    stripeSubscriptionId: sub.id,
+    subscriptionStatus: status,
+    trialEndsAt: trialEndsAtISO,
+    currentPeriodStart: period.currentPeriodStart,
+    currentPeriodEnd: period.currentPeriodEnd,
+    cancelAt: cancelAt || null, // null clears the field (undefined is skipped)
+    scheduledPlan: scheduledPlan || null, // null clears the field
+    scheduledAt: scheduledAt || null, // null clears the field
+    hasEverPaid: isPaidPlan(effectivePlan) ? 1 : undefined
+  }, event.created, existingPlanData);
+  console.log(`✅ D1 UPDATE ${planApplied ? 'STAGED' : 'SKIPPED (out-of-order)'}: ${redactId(uid)} → ${effectivePlan}${trialEndsAtISO ? ` (trial ends: ${trialEndsAtISO})` : ''}`);
+
+  if (planApplied && isTrialConversion) {
+    // Usage resets are critical writes: they ride the SAME atomic batch as
+    // the plan change and the ledger processed-mark, so a crash can never
+    // apply the plan without the resets (or vice versa) — and a replayed
+    // event re-reads previousPlan (now paid), so they can never run twice.
+    if (['essential', 'pro', 'premium'].includes(effectivePlan)) {
+      console.log('[WEBHOOK] Staging usage resets for trial conversion', {
+        uid: redactId(uid),
+        fromPlan: previousPlan,
+        toPlan: effectivePlan
+      });
+      const db = getDb(env);
+      const resetInterview = buildResetFeatureDailyUsageStatement(db, uid, 'interview_questions');
+      const resetFeedback = buildResetUsageEventsStatement(db, uid, 'resume_feedback');
+      if (resetInterview) ctx.statements.push(resetInterview);
+      if (resetFeedback) ctx.statements.push(resetFeedback);
+    }
+
+    // GA4 conversion: trial → paid is a real `purchase`. Post-commit and
+    // gated on planApplied, so stale/replayed webhooks never double-count.
+    if (isPaidPlan(effectivePlan)) {
+      const convertedPlanAmount =
+        subscriptionPriceAmountDollars(sub) ?? hardcodedPlanAmountDollars(effectivePlan);
+      if (convertedPlanAmount == null) {
+        console.warn(`[WEBHOOK] trial-conversion purchase event skipped: could not determine planAmount for plan=${effectivePlan} subId=${redactId(sub?.id)}`);
+      } else {
+        ctx.fireAndForget.push(() => sendGa4Event(env, {
+          clientId: `server.${uid}`,
+          userId: uid,
+          name: 'purchase',
+          params: {
+            transaction_id: `${sub.id}.trial_converted`,
+            currency: (sub?.currency || 'usd').toUpperCase(),
+            value: convertedPlanAmount,
+            plan: effectivePlan,
+            converted_from: 'trial',
+            items: [{
+              item_id: pId || effectivePlan,
+              item_name: effectivePlan,
+              price: convertedPlanAmount,
+              quantity: 1
+            }]
+          }
+        }));
+      }
+    }
+  }
+  return ok();
+}
+
+async function handleSubscriptionDeleted(env, event, ctx) {
+  console.log('🎯 WEBHOOK: customer.subscription.deleted received');
+  const deletedSub = event.data?.object || {};
+  const customerId = deletedSub.customer || null;
+
+  const owner = await resolveOwnerUid(env, { subscription: deletedSub, customerId });
+  if (owner.conflict) return critical('owner_conflict');
+  const uid = owner.uid;
+  if (!uid) return critical('unresolved_owner');
+
+  console.log(`📝 DELETION DATA: customerId=${redactId(customerId)}, uid=${redactId(uid)}`);
+  const deletedItems = deletedSub?.items?.data || [];
+  const deletedPriceId = deletedItems[0]?.price?.id || '';
+  const deletedPlan = priceToPlan(env, deletedPriceId);
+
+  // If the customer still has another active subscription, keep the user on
+  // that plan instead of downgrading to free. An unreadable subscription
+  // list is retryable — guessing "no active subs" here would wrongly
+  // downgrade a paying user.
+  if (customerId) {
+    let subsData;
+    try {
+      const subsRes = await stripe(env, `/subscriptions?customer=${customerId}&status=all&limit=25`);
+      if (!subsRes.ok) {
+        console.error(`[WEBHOOK] subscription list returned ${subsRes.status} on deletion`);
+        return transient('subscription_list_failed');
+      }
+      subsData = await subsRes.json();
+    } catch (subErr) {
+      console.error('[WEBHOOK] subscription list error on deletion:', subErr?.message || subErr);
+      return transient('subscription_list_failed');
+    }
+
+    const activeSubs = (subsData.data || []).filter((s) =>
+      s && ['active', 'trialing', 'past_due'].includes(s.status)
+    );
+    if (activeSubs.length > 0) {
+      const { bestSub, currentPlan } = pickBestSubscription(activeSubs, env);
+      const trialEndsAtISO = bestSub.trial_end ? new Date(bestSub.trial_end * 1000).toISOString() : null;
+      const period = readSubscriptionPeriod(bestSub, { priceToPlan: (pid) => priceToPlan(env, pid) });
+      if (period.error) return critical(`period_${period.error}`);
+      const cancelAt = (bestSub.cancel_at_period_end && bestSub.cancel_at)
+        ? new Date(bestSub.cancel_at * 1000).toISOString()
+        : null;
+
+      const guard = await assertNoCrossUserStripeIds(env, { uid, stripeCustomerId: customerId, stripeSubscriptionId: bestSub.id });
+      if (!guard.ok) return critical('cross_user_id_conflict');
+
+      console.log(`✍️ [WEBHOOK] Remaining active subscription found, keeping plan ${currentPlan} for uid=${redactId(uid)}`);
+      await stagePlanUpdate(env, ctx, uid, {
+        plan: currentPlan,
+        stripeCustomerId: customerId,
+        stripeSubscriptionId: bestSub.id,
+        subscriptionStatus: bestSub.status,
+        trialEndsAt: trialEndsAtISO,
+        currentPeriodStart: period.currentPeriodStart,
+        currentPeriodEnd: period.currentPeriodEnd,
+        cancelAt,
+        scheduledPlan: null,
+        scheduledAt: null,
+        hasEverPaid: isPaidPlan(currentPlan) ? 1 : undefined
+      }, event.created);
+      return ok();
+    }
+  }
+
+  console.log(`✍️ STAGING D1 WRITE: users.plan = free for uid=${redactId(uid)}`);
+  await stagePlanUpdate(env, ctx, uid, {
+    plan: 'free',
+    stripeSubscriptionId: null,
+    subscriptionStatus: 'canceled',
+    currentPeriodStart: null, // Subscription ended: clear the billing period
+    currentPeriodEnd: null,
+    cancelAt: null, // Clear cancellation date
+    scheduledPlan: null, // Clear scheduled plan
+    scheduledAt: null, // Clear scheduled date
+    hasEverPaid: isPaidPlan(deletedPlan) ? 1 : undefined
+  }, event.created);
+
+  // Resume-data cleanup is cache-only: post-commit.
+  ctx.postCommit.push(async () => {
+    await env.JOBHACKAI_KV?.delete(`user:${uid}:lastResume`);
+    await env.JOBHACKAI_KV?.delete(`usage:${uid}`);
+  });
+
+  // Subscription cancelled email (post-commit, fire-and-forget). The user
+  // row read happens now (pre-batch reads are fine); the period end here is
+  // display-only, so a period error degrades to "no date" instead of
+  // failing the event — the critical write above already clears the period.
+  try {
+    const db = getDb(env);
+    const userRow = db ? await db.prepare('SELECT email FROM users WHERE auth_id = ?').bind(uid).first() : null;
+    if (userRow?.email) {
+      const userName = userRow.email.split('@')[0];
+      const periodEnd = readSubscriptionPeriod(deletedSub, { priceToPlan: (pid) => priceToPlan(env, pid) }).currentPeriodEnd;
+      const { subject, html } = subscriptionCancelledEmail(userName, deletedPlan, periodEnd);
+      ctx.fireAndForget.push(() => sendEmail(env, { to: userRow.email, subject, html }).catch((e) => {
+        console.warn('[WEBHOOK] Failed to send cancellation email (non-blocking):', e.message);
+      }));
+    }
+  } catch (emailErr) {
+    console.warn('[WEBHOOK] Error preparing cancellation email (non-blocking):', emailErr.message);
+  }
+  return ok();
+}
+
+async function handleInvoicePaymentFailed(env, event, ctx) {
+  console.log('🎯 WEBHOOK: invoice.payment_failed received');
+  const invoice = event.data?.object || {};
+  const customerId = invoice.customer || null;
+  const subscriptionId = invoice.subscription || null;
+
+  // Only handle subscription invoices — one-time invoices (e.g. metered
+  // charges) have no subscription and should not affect subscription status.
+  if (!subscriptionId) {
+    console.log(`⏭️ [WEBHOOK] invoice.payment_failed: skipping non-subscription invoice ${redactId(invoice.id)}`);
+    return noop('non_subscription_invoice');
+  }
+
+  // Fetch the subscription FIRST: its status gates the write below, and its
+  // metadata.firebaseUid is the strongest ownership source (all new
+  // subscriptions are stamped at checkout) — resolving from the customer
+  // alone failed invoices whose customer lacks metadata. Stripe fires
+  // invoice.payment_failed on every retry attempt while the subscription may
+  // still be 'active'; fetch failures are retryable — defaulting to past_due
+  // would write a guessed status.
+  let subData;
+  try {
+    const subRes = await fetch(`https://api.stripe.com/v1/subscriptions/${subscriptionId}`, {
+      headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}` }
+    });
+    if (subRes.status === 404) {
+      // Subscription no longer exists in this mode: terminal state is owned
+      // by customer.subscription.deleted, not this handler.
+      console.log(`⏭️ [WEBHOOK] invoice.payment_failed: subscription ${redactId(subscriptionId)} not found; deletion event owns terminal state`);
+      return noop('subscription_not_found');
+    }
+    if (!subRes.ok) {
+      console.error(`[WEBHOOK] subscription status fetch returned ${subRes.status}`);
+      return transient('subscription_fetch_failed');
+    }
+    subData = await subRes.json();
+  } catch (fetchErr) {
+    console.error('[WEBHOOK] subscription status fetch error:', fetchErr?.message || fetchErr);
+    return transient('subscription_fetch_failed');
+  }
+  const subStatus = subData.status || 'past_due';
+
+  const owner = await resolveOwnerUid(env, { subscription: subData, customerId });
+  if (owner.conflict) return critical('owner_conflict');
+  const uid = owner.uid;
+  if (!uid) return critical('unresolved_owner');
+
+  // Skip deleted users — other handlers check this too
+  const d1Tombstone = await isDeletedUser(env, uid);
+  const kvTombstone = await env.JOBHACKAI_KV?.get(`deleted:${uid}`);
+  if (d1Tombstone || kvTombstone) {
+    console.log(`⏭️ [WEBHOOK] Skipping invoice.payment_failed: user ${redactId(uid)} was deleted (tombstone found)`);
+    return noop('tombstoned_user');
+  }
+
+  // Skip if subscription is still active (retries pending) or in a terminal
+  // state handled by other webhook events (e.g. customer.subscription.deleted).
+  const terminalStatuses = new Set(['active', 'canceled', 'incomplete_expired']);
+  if (terminalStatuses.has(subStatus)) {
+    console.log(`⏭️ [WEBHOOK] invoice.payment_failed: subscription ${redactId(subscriptionId)} is ${subStatus}, skipping D1 update`);
+    return noop(`subscription_status_${subStatus}`);
+  }
+
+  await stagePlanUpdate(env, ctx, uid, { subscriptionStatus: subStatus }, event.created);
+  console.log(`⚠️ [WEBHOOK] Staged subscription status ${subStatus} for uid=${redactId(uid)} (invoice ${redactId(invoice.id)})`);
+
+  // Payment failure email (post-commit, fire-and-forget)
+  try {
+    const db = getDb(env);
+    const userRow = db ? await db.prepare('SELECT email, plan FROM users WHERE auth_id = ?').bind(uid).first() : null;
+    if (userRow?.email) {
+      const userName = userRow.email.split('@')[0];
+      const planName = userRow.plan || 'current';
+      const { subject, html } = paymentFailedEmail(userName, planName, env.FRONTEND_URL);
+      ctx.fireAndForget.push(() => sendEmail(env, { to: userRow.email, subject, html }).catch((e) => {
+        console.warn('[WEBHOOK] Failed to send payment failure email (non-blocking):', e.message);
+      }));
+    }
+  } catch (emailErr) {
+    console.warn('[WEBHOOK] Error preparing payment failure email (non-blocking):', emailErr.message);
+  }
+  return ok();
+}
+
+// ── Verification & plan mapping ─────────────────────────────────────────
 
 async function verifyStripeWebhook(env, req, rawBody) {
   const sig = req.headers.get('stripe-signature') || '';

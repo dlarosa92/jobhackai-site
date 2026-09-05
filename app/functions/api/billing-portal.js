@@ -8,6 +8,7 @@ import {
   cacheCustomerId,
   kvCusKey
 } from '../_lib/billing-utils.js';
+import { assertStripeKeyMatchesEnvironment } from '../_lib/stripe-environment.js';
 
 /**
  * POST /api/billing-portal
@@ -31,6 +32,14 @@ export async function onRequest(context) {
       origin,
       hasAuth: !!request.headers.get('authorization')
     });
+
+    // Portal sessions mutate live billing; refuse when the configured key's
+    // mode contradicts the environment (prod=live only, qa/dev=test only).
+    const keyCheck = assertStripeKeyMatchesEnvironment(env);
+    if (!keyCheck.ok) {
+      console.error(`[BILLING-PORTAL] stripe key/environment mismatch: ${keyCheck.reason}`);
+      return json({ ok: false, error: 'configuration error' }, 503, origin, env);
+    }
 
     const token = getBearer(request);
     if (!token) {
