@@ -60,3 +60,6 @@ test-results/
 playwright-report/
 app/tests/.auth/
 *.bak
+
+# Local D1 backups and reconciliation evidence (contain user data) — never commit
+backups/
