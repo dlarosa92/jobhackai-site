@@ -3,6 +3,7 @@ import { getUserPlanData } from '../_lib/db.js';
 import { stripe, listSubscriptions, getPlanFromSubscription, invalidateBillingCaches } from '../_lib/billing-utils.js';
 import { assertStripeKeyMatchesEnvironment } from '../_lib/stripe-environment.js';
 import { readSubscriptionPeriod } from '../_lib/stripe-identity.js';
+import { ENTITLED_SUBSCRIPTION_STATUSES } from '../_lib/billing-ownership.js';
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -40,7 +41,7 @@ export async function onRequest(context) {
     return new Response(JSON.stringify({ ok: false, error: 'Failed to retrieve subscriptions from Stripe' }), { status: 502, headers: corsHeaders(origin, env) });
   }
   const activeSubs = subs.filter((sub) =>
-    sub && ['active', 'trialing', 'past_due'].includes(sub.status)
+    sub && ENTITLED_SUBSCRIPTION_STATUSES.includes(sub.status)
   );
 
   if (activeSubs.length === 0) {

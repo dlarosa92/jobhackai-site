@@ -14,7 +14,17 @@ export async function onRequest(context) {
       });
     }
     
-    const { uid, payload } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
+    let uid, payload;
+    try {
+      ({ uid, payload } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID));
+    } catch (_) {
+      // An expired/invalid token is an auth failure, not a server error; the
+      // dashboard post-checkout poll refreshes its token on 401.
+      return new Response(JSON.stringify({ error: 'unauthorized' }), {
+        status: 401,
+        headers: corsHeaders(origin, env)
+      });
+    }
     const email = payload?.email || null;
 
     // Fetch plan data from D1 (source of truth)

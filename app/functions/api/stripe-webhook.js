@@ -30,6 +30,7 @@ import {
   buildResetUsageEventsStatement
 } from '../_lib/db.js';
 import { stripe, pickBestSubscription } from '../_lib/billing-utils.js';
+import { ENTITLED_SUBSCRIPTION_STATUSES } from '../_lib/billing-ownership.js';
 import { resolveExpectedLivemode, assertStripeKeyMatchesEnvironment, redactId } from '../_lib/stripe-environment.js';
 import { resolveOwnerUid, assertNoCrossUserStripeIds, readSubscriptionPeriod, TransientStripeError } from '../_lib/stripe-identity.js';
 import { claimEvent, buildMarkProcessedStatement, markEventFailed } from '../_lib/stripe-event-ledger.js';
@@ -742,7 +743,7 @@ async function handleSubscriptionDeleted(env, event, ctx) {
     }
 
     const activeSubs = (subsData.data || []).filter((s) =>
-      s && ['active', 'trialing', 'past_due'].includes(s.status)
+      s && ENTITLED_SUBSCRIPTION_STATUSES.includes(s.status)
     );
     if (activeSubs.length > 0) {
       const { bestSub, currentPlan } = pickBestSubscription(activeSubs, env);
