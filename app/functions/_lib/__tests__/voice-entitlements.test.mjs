@@ -383,6 +383,16 @@ await test('createVoiceSessionRow always inserts for free/pack (consume already 
   assert.equal(p.inserted, true);
 });
 
+await test('unpaid dunning retains unlimited voice for entitled plans', async () => {
+  for (const plan of ['weekly', 'monthly', 'essential', 'pro', 'premium']) {
+    const state = { users: new Map([['dunning', userRow({ plan, subscription_status: 'unpaid', free_session_used: 1, current_period_end: new Date(Date.now() + 86400000).toISOString() })]]), sessionCount: 0 };
+    const entitlement = await getVoiceEntitlement({ DB: fakeDb(state) }, 'dunning');
+    assert.equal(entitlement.canStart, true);
+    assert.equal(entitlement.unlimited, true);
+    assert.equal(entitlement.mode, 'subscription');
+  }
+});
+
 await test('canceled subscription falls back to free taste / paywall', async () => {
   const state = {
     users: new Map([['u10', userRow({ plan: 'free', subscription_status: 'canceled', free_session_used: 0 })]]),

@@ -385,6 +385,11 @@ export function compareToAllowlist(classification, allowlist) {
 
 // ── Apply SQL generation ─────────────────────────────────────────────────
 
+function rowBeforeImagePredicate(row) {
+  return [`id = ${assertSafeRowId(row.id)}`, `auth_id IS ${sqlValue(row.auth_id)}`,
+    ...BILLING_FIELDS.map((f) => `${f} IS ${sqlValue(row[f] ?? null)}`)].join(' AND ');
+}
+
 function auditInsert(runId, mode, row, newValues, { reserveRunId = false } = {}) {
   const oldValues = {};
   for (const f of BILLING_FIELDS) oldValues[f] = row[f] ?? null;
@@ -394,15 +399,21 @@ function auditInsert(runId, mode, row, newValues, { reserveRunId = false } = {})
   // interleaving two applies under one id. The CLI's pre-check gives a clear
   // error early but cannot exclude a concurrent invocation on its own.
   const newJson = sqlValue(JSON.stringify(newValues));
-  const newValuesExpr = reserveRunId
-    ? `CASE WHEN EXISTS (SELECT 1 FROM billing_repair_audit WHERE run_id = ${sqlValue(runId)}) THEN NULL ELSE ${newJson} END`
+  const refusalConditions = [];
+  if (reserveRunId) refusalConditions.push(`EXISTS (SELECT 1 FROM billing_repair_audit WHERE run_id = ${sqlValue(runId)})`);
+  // Executed inside the same transaction as the update. A deleted row,
+  // changed owner, or newer billing write aborts every audit/update in this
+  // run instead of silently overwriting a post-preflight subscription.
+  if (mode === 'apply') refusalConditions.push(`NOT EXISTS (SELECT 1 FROM users WHERE ${rowBeforeImagePredicate(row)})`);
+  const newValuesExpr = refusalConditions.length
+    ? `CASE WHEN ${refusalConditions.join(' OR ')} THEN NULL ELSE ${newJson} END`
     : newJson;
   return `INSERT INTO billing_repair_audit (run_id, mode, user_row_id, auth_id, stripe_customer_id, stripe_subscription_id, old_values_json, new_values_json) VALUES (${sqlValue(runId)}, ${sqlValue(mode)}, ${assertSafeRowId(row.id)}, ${sqlValue(row.auth_id)}, ${sqlValue(row.stripe_customer_id)}, ${sqlValue(row.stripe_subscription_id)}, ${sqlValue(JSON.stringify(oldValues))}, ${newValuesExpr});`;
 }
 
-function updateStatement(rowId, newValues) {
+function updateStatement(rowId, newValues, beforeImage = null) {
   const sets = BILLING_FIELDS.map((f) => `${f} = ${sqlValue(newValues[f])}`).join(', ');
-  return `UPDATE users SET ${sets}, updated_at = datetime('now') WHERE id = ${assertSafeRowId(rowId)};`;
+  return `UPDATE users SET ${sets}, updated_at = datetime('now') WHERE ${beforeImage ? rowBeforeImagePredicate(beforeImage) : `id = ${assertSafeRowId(rowId)}`};`;
 }
 
 /**
@@ -452,7 +463,7 @@ export function buildApplySql(runId, rows, classification, allowlist, legitBackf
       plan_updated_at: runTimestampIso
     };
     statements.push(auditInsert(runId, 'apply', row, newValues, { reserveRunId: statements.length === 0 }));
-    statements.push(updateStatement(row.id, newValues));
+    statements.push(updateStatement(row.id, newValues, row));
   }
 
   for (const entry of allowlist.repair || []) {
@@ -479,7 +490,7 @@ export function buildApplySql(runId, rows, classification, allowlist, legitBackf
       plan_updated_at: runTimestampIso
     };
     statements.push(auditInsert(runId, 'apply', row, newValues, { reserveRunId: statements.length === 0 }));
-    statements.push(updateStatement(row.id, newValues));
+    statements.push(updateStatement(row.id, newValues, row));
   }
 
   if (statements.length === 0) throw new Error('allowlist produced zero statements — nothing to apply');

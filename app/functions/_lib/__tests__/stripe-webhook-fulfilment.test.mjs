@@ -326,4 +326,38 @@ await test('recipient guard still holds with the session marker: missing recipie
   assert.strictEqual(db.eventLogRow('cs_pack_f'), null, 'session marker rolled back too — the session is still fulfillable on retry');
 });
 
+await test('incomplete subscription events preserve existing paid access and pack credits', async () => {
+  for (const type of ['customer.subscription.created', 'customer.subscription.updated']) {
+    for (const status of ['incomplete', 'incomplete_expired']) {
+      const before = user({ plan: 'monthly', subscription_status: 'active', stripe_customer_id: 'cus_F', stripe_subscription_id: 'sub_existing', voice_sessions_remaining: 5 });
+      const db = createFakeD1({ users: [before] });
+      const env = devEnv({ DB: db, JOBHACKAI_KV: createFakeKV() });
+      const sub = makeSubscription({ id: 'sub_unfinished', customer: 'cus_F', status, priceId: 'price_monthly_test', metadata: { firebaseUid: 'uid_F' } });
+      const stub = stubStripeFetch([cusStub]);
+      const res = await postWebhook(onRequest, env, makeEvent(type, sub, { livemode: false }));
+      stub.restore();
+      assert.strictEqual(res.status, 200);
+      const row = db.usersByAuthId('uid_F');
+      assert.strictEqual(row.plan, 'monthly');
+      assert.strictEqual(row.stripe_subscription_id, 'sub_existing');
+      assert.strictEqual(row.voice_sessions_remaining, 5);
+    }
+  }
+});
+
+await test('missing Checkout line items recover the subscription price; unknown prices never grant Essential', async () => {
+  for (const [priceId, expectedStatus] of [['price_monthly_test', 200], ['price_unknown', 500]]) {
+    const db = createFakeD1({ users: [user()] });
+    const env = devEnv({ DB: db, JOBHACKAI_KV: createFakeKV() });
+    const sess = makeCheckoutSession({ id: 'cs_no_lines', mode: 'subscription', customer: 'cus_F', subscription: 'sub_no_lines', metadata: { plan: 'monthly', firebaseUid: 'uid_F' } });
+    delete sess.line_items;
+    const sub = makeSubscription({ id: 'sub_no_lines', customer: 'cus_F', status: 'active', priceId, metadata: { firebaseUid: 'uid_F' }, itemPeriodStart: START, itemPeriodEnd: END });
+    const stub = stubStripeFetch([sessionStub(sess), { match: '/v1/subscriptions/sub_no_lines', reply: { json: sub } }, cusStub]);
+    const res = await postWebhook(onRequest, env, completedEvent(sess));
+    stub.restore();
+    assert.strictEqual(res.status, expectedStatus);
+    assert.strictEqual(db.usersByAuthId('uid_F').plan, expectedStatus === 200 ? 'monthly' : 'free');
+  }
+});
+
 console.log(`\n${passed} passed${process.exitCode ? ', with failures' : ''}`);

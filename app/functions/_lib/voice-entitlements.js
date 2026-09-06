@@ -15,12 +15,13 @@
  */
 
 import { getDb } from './db.js';
+import { ENTITLED_SUBSCRIPTION_STATUSES } from './billing-ownership.js';
 
 export const PACK_SESSION_COUNT = 5;
 export const PACK_EXPIRY_DAYS = 90;
 export const DEFAULT_FAIR_USE_CAP = 60; // sessions per calendar month
 
-const ACTIVE_SUB_STATUSES = new Set(['active', 'trialing', 'past_due']);
+const ACTIVE_SUB_STATUSES = new Set(ENTITLED_SUBSCRIPTION_STATUSES);
 
 // Plans whose active subscription grants unlimited voice sessions.
 // Grandfathering rule: any user with an active Stripe subscription whose price

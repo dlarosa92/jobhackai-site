@@ -257,7 +257,7 @@ assert.strictEqual(classifyRow(row({ stripe_subscription_id: null, stripe_custom
   assert.ok(stmts[1].startsWith('UPDATE users SET'), 'update follows audit');
   // (PR #855 review) the FIRST audit insert reserves the run id atomically with
   // the batch: its NOT NULL new_values_json is nulled if rows already exist.
-  const guard = "CASE WHEN EXISTS (SELECT 1 FROM billing_repair_audit WHERE run_id = 'run_test_1') THEN NULL ELSE";
+  const guard = "CASE WHEN EXISTS (SELECT 1 FROM billing_repair_audit WHERE run_id = 'run_test_1')";
   assert.ok(stmts[0].includes(guard), 'first audit insert carries the run-id reservation guard');
   assert.ok(stmts.slice(1).every((s) => !s.includes('CASE WHEN EXISTS')), 'only the first statement carries the guard');
   assert.ok(stmts[1].includes("current_period_start = '2026-08-01T00:00:00.000Z'"), 'legit backfill writes periods');

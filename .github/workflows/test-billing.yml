@@ -59,6 +59,9 @@ jobs:
       - name: Reconciliation core tests
         run: node app/functions/_lib/__tests__/billing-reconcile.test.mjs
 
+      - name: Reconciliation drift aborts the full SQLite transaction
+        run: node app/functions/_lib/__tests__/billing-reconcile-drift.test.mjs
+
       - name: Endpoint ownership guards (PR #851 review round)
         run: node app/functions/_lib/__tests__/billing-endpoint-guards.test.mjs
 

@@ -590,7 +590,7 @@ async function handleCheckoutCompleted(env, event, ctx) {
     // Trial usage is tracked in D1 (source of truth); no authoritative KV flags.
     console.log(`✅ TRIAL STARTED (tracked in D1): ${redactId(uid)}`);
   } else {
-    effectivePlan = priceToPlan(env, priceId) || 'essential';
+    effectivePlan = priceToPlan(env, priceId);
   }
   console.log(`📝 CHECKOUT DATA: originalPlan=${originalPlan}, effectivePlan=${effectivePlan}, customerId=${redactId(customerId)}, uid=${redactId(uid)}`);
 
@@ -630,6 +630,14 @@ async function handleCheckoutCompleted(env, event, ctx) {
   if (!ENTITLED_SUBSCRIPTION_STATUSES.includes(subscription?.status)) {
     console.log(`⏳ [WEBHOOK] session ${redactId(sessionId)} subscription is ${subscription?.status}; not entitled yet — no plan write`);
     return noop(`subscription_not_entitled:${subscription?.status}`);
+  }
+  // The retrieved subscription is authoritative if Checkout's line-item
+  // expansion is absent. Metadata alone never supplies a paid entitlement.
+  if (originalPlan !== 'trial') {
+    const mappedItems = (subscription.items?.data || [])
+      .map((item) => priceToPlan(env, item?.price?.id)).filter(Boolean);
+    if (mappedItems.length !== 1) return critical('subscription_price_unrecognized_or_ambiguous');
+    effectivePlan = mappedItems[0];
   }
   if (!paymentSettled) {
     // Entitled subscription but the session's payment is still pending: the
@@ -724,6 +732,9 @@ async function handleSubscriptionCreated(env, event, ctx) {
   console.log(`🎯 WEBHOOK: ${event.type} received`);
   const sub = event.data.object;
   const status = sub.status;
+  if (!ENTITLED_SUBSCRIPTION_STATUSES.includes(status)) {
+    return noop(`subscription_not_entitled:${status}`);
+  }
   const metadata = sub.metadata || {};
   const originalPlan = metadata.original_plan;
   const items = sub.items?.data || [];
@@ -739,15 +750,17 @@ async function handleSubscriptionCreated(env, event, ctx) {
   let effectivePlan = 'free';
   if (status === 'trialing' && originalPlan === 'trial') {
     effectivePlan = 'trial'; // User is in trial period
-  } else if (status === 'active') {
+  } else if (status === 'active' || status === 'trialing') {
     // Extract plan from price ID (auto-converts trial to essential)
-    effectivePlan = plan || 'essential';
+    if (!plan) return critical('subscription_price_unrecognized');
+    effectivePlan = plan;
   } else if (status === 'past_due' || status === 'unpaid') {
     // Dunning keeps paid access: invoice.payment_failed writes status only,
     // and sync-stripe-plan explicitly preserves the plan for past_due/unpaid
     // ("still has access"). Downgrading here made entitlement flap between
     // the webhook and sync while Stripe retried the charge.
-    effectivePlan = plan || 'essential';
+    if (!plan) return critical('subscription_price_unrecognized');
+    effectivePlan = plan;
   }
 
   const trialEndsAtISO = sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null;
@@ -781,6 +794,11 @@ async function handleSubscriptionCreated(env, event, ctx) {
 async function handleSubscriptionUpdated(env, event, ctx) {
   console.log('🎯 WEBHOOK: customer.subscription.updated received');
   const sub = event.data.object;
+  // An unfinished second checkout must not replace an existing paid
+  // subscription or erase pack entitlements. A later active event can grant.
+  if (['incomplete', 'incomplete_expired'].includes(sub.status)) {
+    return noop(`subscription_not_entitled:${sub.status}`);
+  }
   const customerId = sub.customer || null;
 
   const owner = await resolveOwnerUid(env, { subscription: sub, customerId });
@@ -851,12 +869,14 @@ async function handleSubscriptionUpdated(env, event, ctx) {
   let effectivePlan = 'free';
   if (status === 'trialing' && originalPlan === 'trial') {
     effectivePlan = 'trial';
-  } else if (status === 'active') {
-    effectivePlan = plan || 'essential';
+  } else if (status === 'active' || status === 'trialing') {
+    if (!plan) return critical('subscription_price_unrecognized');
+    effectivePlan = plan;
   } else if (status === 'past_due' || status === 'unpaid') {
     // Dunning keeps paid access — see handleSubscriptionCreated. The status
     // itself is still written as past_due/unpaid below.
-    effectivePlan = plan || 'essential';
+    if (!plan) return critical('subscription_price_unrecognized');
+    effectivePlan = plan;
   }
 
   const trialEndsAtISO = sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null;

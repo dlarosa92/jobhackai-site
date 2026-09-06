@@ -36,7 +36,7 @@
     "test:voice:client": "node functions/_lib/__tests__/voice-client.test.mjs",
     "test:voice:history": "node functions/_lib/__tests__/voice-history.test.mjs",
     "test:voice": "npm run test:voice:entitlements && npm run test:voice:lifecycle && npm run test:voice:conduct && npm run test:voice:interviewer && npm run test:voice:client && npm run test:voice:history && npm run test:voice:transcript-order && npm run test:voice:transcripts:unit",
-    "test:billing": "npm run test:billing:env && npm run test:billing:period && npm run test:billing:identity && npm run test:billing:db && npm run test:billing:mode-gate && npm run test:billing:webhook && npm run test:billing:trial && npm run test:billing:reconcile && npm run test:billing:guards && npm run test:billing:pack && npm run test:billing:voice-plans && npm run test:billing:reconcile-voice && npm run test:billing:env-gate && npm run test:billing:cli-guards && npm run test:billing:fulfilment && npm run test:billing:cutover",
+    "test:billing": "npm run test:billing:env && npm run test:billing:period && npm run test:billing:identity && npm run test:billing:db && npm run test:billing:mode-gate && npm run test:billing:webhook && npm run test:billing:trial && npm run test:billing:reconcile && npm run test:billing:guards && npm run test:billing:pack && npm run test:billing:voice-plans && npm run test:billing:reconcile-voice && npm run test:billing:env-gate && npm run test:billing:cli-guards && npm run test:billing:fulfilment && npm run test:billing:cutover && npm run test:billing:drift",
     "test:billing:guards": "node functions/_lib/__tests__/billing-endpoint-guards.test.mjs",
     "test:billing:env": "node functions/_lib/__tests__/stripe-environment.test.mjs",
     "test:billing:period": "node functions/_lib/__tests__/subscription-period.test.mjs",
@@ -53,7 +53,8 @@
     "test:billing:cli-guards": "node functions/_lib/__tests__/billing-reconcile-guards.test.mjs",
     "test:billing:fulfilment": "node functions/_lib/__tests__/stripe-webhook-fulfilment.test.mjs",
     "test:billing:migrations": "bash ../scripts/verify-billing-migrations.sh",
-    "test:billing:cutover": "node functions/_lib/__tests__/dev-cutover.test.mjs"
+    "test:billing:cutover": "node functions/_lib/__tests__/dev-cutover.test.mjs",
+    "test:billing:drift": "node functions/_lib/__tests__/billing-reconcile-drift.test.mjs"
   },
   "dependencies": {
     "firebase": "^10.7.0",
