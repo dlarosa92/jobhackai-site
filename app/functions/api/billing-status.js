@@ -1,6 +1,8 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { getUserPlanData } from '../_lib/db.js';
-import { stripe, pickBestSubscription } from '../_lib/billing-utils.js';
+import { stripe, pickBestSubscription, priceIdToPlan } from '../_lib/billing-utils.js';
+import { redactId } from '../_lib/stripe-environment.js';
+import { selectUidOwnedCustomers, readSubscriptionPeriod } from '../_lib/stripe-identity.js';
 
 /**
  * GET /api/billing-status
@@ -85,13 +87,16 @@ export async function onRequest(context) {
       const searchData = await searchRes.json();
       
       if (searchRes.ok && searchData.data && searchData.data.length > 0) {
-        console.log('🟡 [BILLING-STATUS] Found', searchData.data.length, 'customers with email', email);
+        console.log('🟡 [BILLING-STATUS] Found', searchData.data.length, 'customers for the requesting email');
 
         const emailMatches = searchData.data;
-        const uidMatches = emailMatches.filter((c) => c?.metadata?.firebaseUid === uid);
-        const candidates = uidMatches.length > 0 ? uidMatches : emailMatches;
-        if (uidMatches.length > 0) {
-          console.log('🟡 [BILLING-STATUS] Found customers matching firebaseUid', { count: uidMatches.length });
+        // Email matching alone never selects a customer: only exact
+        // firebaseUid metadata matches are eligible. Reporting an un-stamped
+        // or foreign customer's subscription state would be a cross-user
+        // leak; a user with no provable customer reports the free plan.
+        const candidates = selectUidOwnedCustomers(emailMatches, uid);
+        if (candidates.length > 0) {
+          console.log('🟡 [BILLING-STATUS] Found customers matching firebaseUid', { count: candidates.length });
         }
 
         // If multiple customers exist, find the one with an active subscription
@@ -112,7 +117,7 @@ export async function onRequest(context) {
               
               if (hasActive) {
                 customerId = customer.id;
-                console.log('🟡 [BILLING-STATUS] Found customer with active subscription', customerId);
+                console.log('🟡 [BILLING-STATUS] Found customer with active subscription', redactId(customerId));
                 break;
               }
             }
@@ -120,14 +125,28 @@ export async function onRequest(context) {
           
           // If no customer with active subscription found, use the most recent one
           if (!customerId) {
-            customerId = candidates.sort((a, b) => b.created - a.created)[0].id;
-            console.log('🟡 [BILLING-STATUS] No active subscriptions found, using most recent customer', customerId);
+            customerId = candidates.sort((a, b) => b.created - a.created)[0]?.id || null;
+            console.log('🟡 [BILLING-STATUS] No active subscriptions found, using most recent customer', redactId(customerId));
           }
         } else {
-          customerId = candidates[0].id;
-          console.log('🟡 [BILLING-STATUS] Found single customer by email', customerId);
+          customerId = candidates[0]?.id || null;
+          console.log('🟡 [BILLING-STATUS] Found single customer by email', redactId(customerId));
         }
-        
+
+        // All email matches may belong to other users (foreign firebaseUid) —
+        // then this user simply has no Stripe customer: report free plan.
+        if (!customerId) {
+          console.log('🟡 [BILLING-STATUS] No usable customer for this user - returning free plan');
+          return json({
+            ok: true,
+            plan: 'free',
+            status: 'none',
+            trialEndsAt: null,
+            currentPeriodEnd: null,
+            hasPaymentMethod: false
+          }, 200, origin, env);
+        }
+
         // Cache it for next time
         await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
       } else {
@@ -144,7 +163,7 @@ export async function onRequest(context) {
     }
 
     // Get active subscriptions for this customer
-    console.log('🔵 [BILLING-STATUS] Fetching subscriptions for customer', customerId);
+    console.log('🔵 [BILLING-STATUS] Fetching subscriptions for customer', redactId(customerId));
     const subsRes = await stripe(env, `/subscriptions?customer=${customerId}&status=all&limit=10`);
     const subsData = await subsRes.json();
 
@@ -175,10 +194,9 @@ export async function onRequest(context) {
 
     const { bestSub, currentPlan } = pickBestSubscription(activeOrTrialing, env);
     console.log('🔵 [BILLING-STATUS] Best subscription', {
-      id: bestSub.id,
+      id: redactId(bestSub.id),
       status: bestSub.status,
-      priceId: bestSub.items?.data?.[0]?.price?.id,
-      metadata: bestSub.metadata
+      metadataKeys: Object.keys(bestSub.metadata || {})
     });
     const plan = currentPlan || 'free';
     
@@ -195,12 +213,17 @@ export async function onRequest(context) {
       }
     }
     
+    // Period end may live on the subscription root or on subscription items
+    // depending on the (unpinned) Stripe API version; response stays epoch ms.
+    // Display-only read: an unresolved period is recorded (the reader logs
+    // the exact reason) and reported as "no date" — never a guessed date.
+    const periodEndIso = readSubscriptionPeriod(bestSub, { priceToPlan: (pid) => priceIdToPlan(env, pid) }).currentPeriodEnd;
     const result = {
       ok: true,
       plan: plan,
       status: bestSub.status,
       trialEndsAt: bestSub.trial_end ? bestSub.trial_end * 1000 : null,
-      currentPeriodEnd: bestSub.current_period_end ? bestSub.current_period_end * 1000 : null,
+      currentPeriodEnd: periodEndIso ? Date.parse(periodEndIso) : null,
       hasPaymentMethod: hasPaymentMethod
     };
 

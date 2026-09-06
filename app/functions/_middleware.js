@@ -1,10 +1,14 @@
 import {
-  isProductionEnvironment,
+  isExplicitNonProductionEnvironment,
   notFoundInProductionResponse,
   STANDARD_SECURITY_HEADERS
 } from './_lib/debug-access.js';
+import { isDevCutoverPaused } from './_lib/dev-cutover.js';
 
-const PRODUCTION_ONLY_DEBUG_PATHS = new Set([
+// Diagnostic pages/endpoints, reachable ONLY when ENVIRONMENT is explicitly
+// a known non-production value (fail closed: a missing or misspelled
+// ENVIRONMENT blocks them instead of exposing them).
+const NON_PRODUCTION_ONLY_DEBUG_PATHS = new Set([
   '/api/ats-health',
   '/api/test-openai',
   '/auth-test',
@@ -20,10 +24,38 @@ const PRODUCTION_ONLY_DEBUG_PATHS = new Set([
   '/stripe-test.html'
 ]);
 
+// Retired legacy routes, blocked in EVERY environment as a second layer of
+// defense: even if a deleted legacy file (e.g. api/stripe.js — the
+// unauthenticated legacy handler) is accidentally restored, the route stays
+// closed. Keep in sync with the retired-file list in the hotfix runbook.
+const RETIRED_PATHS = new Set([
+  '/api/stripe',
+  '/api/subscription',
+  '/api/auth'
+]);
+
 export async function onRequest({ request, next, env }) {
+  // Covers webhook deliveries and GET handlers that can write, as well as
+  // POST requests. Stripe retries the 503; no event is acknowledged or lost.
+  if (isDevCutoverPaused(env)) {
+    return new Response('Development maintenance in progress. Please try again shortly.', {
+      status: 503,
+      headers: {
+        ...STANDARD_SECURITY_HEADERS,
+        'content-type': 'text/plain; charset=utf-8',
+        'cache-control': 'no-store',
+        'retry-after': '120',
+        'x-jobhackai-maintenance': 'dev-cutover'
+      }
+    });
+  }
   const pathname = request ? new URL(request.url).pathname.replace(/\/+$/, '') || '/' : null;
 
-  if (pathname && isProductionEnvironment(env) && PRODUCTION_ONLY_DEBUG_PATHS.has(pathname)) {
+  if (pathname && RETIRED_PATHS.has(pathname)) {
+    return notFoundInProductionResponse();
+  }
+
+  if (pathname && NON_PRODUCTION_ONLY_DEBUG_PATHS.has(pathname) && !isExplicitNonProductionEnvironment(env)) {
     return notFoundInProductionResponse();
   }
 

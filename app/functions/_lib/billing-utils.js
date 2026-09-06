@@ -4,6 +4,8 @@
  */
 
 import { updateUserPlan, getUserPlanData } from './db.js';
+import { assertNoCrossUserStripeIds } from './stripe-identity.js';
+import { redactId } from './stripe-environment.js';
 
 /**
  * KV key for storing customer ID by Firebase UID
@@ -126,8 +128,8 @@ export async function resolveStaleCustomerFromKV(env, uid, customerId, customerI
   }
 
   console.log(`${logPrefix} Stored customer is stale in Stripe.`, {
-    uid,
-    customerId,
+    uid: redactId(uid),
+    customerId: redactId(customerId),
     reason: validation.reason
   });
 
@@ -141,7 +143,7 @@ export async function resolveStaleCustomerFromKV(env, uid, customerId, customerI
         if (d1Validation.valid) {
           d1HasDifferentValidId = true;
           customerId = d1CustomerId;
-          console.log(`${logPrefix} D1 has valid customer; KV was stale`, { uid, customerId });
+          console.log(`${logPrefix} D1 has valid customer; KV was stale`, { uid: redactId(uid), customerId: redactId(customerId) });
         }
       }
     } catch (e) {
@@ -168,6 +170,25 @@ export async function resolveStaleCustomerFromKV(env, uid, customerId, customerI
  */
 export async function cacheCustomerId(env, uid, customerId) {
   if (!customerId) return;
+
+  // Never cache or persist a customer id that another user's row already
+  // holds — duplicate stripe_customer_id values are how webhook events got
+  // routed to the wrong user during the billing-integrity incident.
+  try {
+    const guard = await assertNoCrossUserStripeIds(env, { uid, stripeCustomerId: customerId, stripeSubscriptionId: null });
+    if (!guard.ok) {
+      console.error(`[BILLING] cross-user customer id conflict; not caching ${redactId(customerId)} for uid=${redactId(uid)}`);
+      return;
+    }
+  } catch (guardErr) {
+    // Fail closed: if ownership cannot be verified, nothing is cached or
+    // persisted. Writing anyway on a transient D1 error could attach another
+    // user's customer id — the exact cross-user routing failure this guard
+    // exists to prevent. The id is re-cached on the next successful call.
+    console.error('[BILLING] ownership guard unavailable; refusing to cache customer id (fail closed):', guardErr?.message || guardErr);
+    return;
+  }
+
   try {
     await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
   } catch (_) {}
@@ -339,10 +360,21 @@ export function planRank(plan) {
  * @returns {number} Numeric rank (0 for unknown)
  */
 export function statusRank(status) {
+  // Entitled statuses only; everything else (canceled, incomplete, …) is 0.
+  // Ordering is by recoverability, and pickBestSubscription applies status
+  // BEFORE plan: when duplicates exist, the survivor is the subscription most
+  // likely to collect (active > trialing > past_due > unpaid), and the upgrade
+  // flow then moves that survivor to the plan the user actually requested.
+  // Ranking 'unpaid' at/above past_due would make a higher-plan unpaid sub
+  // "current", so an upgrade request would hit ALREADY_ON_PLAN or the
+  // downgrade path and the duplicates would never be consolidated.
+  // 'unpaid' still ranks above every ended status so it is never cancelled in
+  // favour of a canceled/incomplete one. Locked in by billing-endpoint-guards.
   const ranks = {
-    active: 3,
-    trialing: 2,
-    past_due: 1
+    active: 4,
+    trialing: 3,
+    past_due: 2,
+    unpaid: 1
   };
   return ranks[status] ?? 0;
 }

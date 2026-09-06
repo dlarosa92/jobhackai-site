@@ -14,6 +14,9 @@ import {
   kvCusKey,
   invalidateBillingCaches
 } from '../_lib/billing-utils.js';
+import { assertStripeKeyMatchesEnvironment, redactId } from '../_lib/stripe-environment.js';
+import { assertNoCrossUserStripeIds, readSubscriptionPeriod } from '../_lib/stripe-identity.js';
+import { buildUpgradeCheckoutSessionBody, resolveCustomerByEmailOwnership, selectSubscriptionsToCancel, ENTITLED_SUBSCRIPTION_STATUSES } from '../_lib/billing-ownership.js';
 
 /**
  * POST /api/upgrade-plan
@@ -48,6 +51,13 @@ export async function onRequest(context) {
     if (!env.FIREBASE_PROJECT_ID || !env.STRIPE_SECRET_KEY) {
       return json({ ok: false, code: 'SERVER_CONFIG' }, 500, origin, env);
     }
+    // Production is live-mode only, QA/dev test-mode only — refuse mismatches
+    // before any Stripe mutation or D1 write can occur.
+    const keyCheck = assertStripeKeyMatchesEnvironment(env);
+    if (!keyCheck.ok) {
+      console.error(`[BILLING-UPGRADE] stripe key/environment mismatch: ${keyCheck.reason}`);
+      return json({ ok: false, code: 'SERVER_CONFIG' }, 503, origin, env);
+    }
 
     const token = getBearer(request);
     if (!token) {
@@ -71,20 +81,23 @@ export async function onRequest(context) {
     const returnUrl = safeReturnUrl(requestedReturnUrl, env);
 
     console.log('[BILLING-UPGRADE] Request', {
-      uid,
+      uid: redactId(uid),
       targetPlan,
       source,
       returnUrl
     });
 
-    const customerId = await resolveCustomerId(env, uid, email);
+    const { customerId, block } = await resolveCustomerId(env, uid, email);
+    if (block) {
+      return json({ ok: false, code: block.code, error: block.error }, block.status, origin, env);
+    }
     if (!customerId) {
       return json({ ok: false, code: 'CUSTOMER_NOT_FOUND' }, 500, origin, env);
     }
 
     const subs = await listSubscriptions(env, customerId);
     const activeSubs = subs.filter((sub) =>
-      sub && ['active', 'trialing', 'past_due'].includes(sub.status)
+      sub && ENTITLED_SUBSCRIPTION_STATUSES.includes(sub.status)
     );
 
     if (activeSubs.length === 0) {
@@ -93,19 +106,7 @@ export async function onRequest(context) {
         return json({ ok: false, code: 'INVALID_PLAN' }, 400, origin, env);
       }
 
-      const sessionBody = {
-        mode: 'subscription',
-        customer: customerId,
-        'line_items[0][price]': priceId,
-        'line_items[0][quantity]': 1,
-        success_url: returnUrl,
-        cancel_url: returnUrl,
-        allow_promotion_codes: 'true',
-        payment_method_collection: 'always',
-        'metadata[firebaseUid]': uid,
-        'metadata[plan]': targetPlan,
-        'metadata[upgrade_source]': source
-      };
+      const sessionBody = buildUpgradeCheckoutSessionBody(env, { uid, customerId, priceId, targetPlan, returnUrl, source });
 
       const sessionSeed = `checkout-${targetPlan}:${(crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`)}`;
       const idem = await makeUpgradeIdemKey(uid, sessionSeed);
@@ -216,8 +217,8 @@ export async function onRequest(context) {
       const stripeMessage = errData?.error?.message || errText || 'stripe_update_error';
       const responseStatus = updateRes.status >= 400 && updateRes.status < 500 ? 400 : 500;
       console.log('[BILLING-UPGRADE] Subscription update failed', {
-        uid,
-        subId: bestSub.id,
+        uid: redactId(uid),
+        subId: redactId(bestSub.id),
         status: updateRes.status,
         error: stripeMessage
       });
@@ -229,20 +230,34 @@ export async function onRequest(context) {
 
     // Update D1 immediately for upgrades (webhook will still confirm later)
     try {
-      await updateUserPlan(env, uid, {
-        plan: targetPlan,
-        stripeCustomerId: customerId,
-        stripeSubscriptionId: updatedSub?.id || bestSub.id,
-        subscriptionStatus: updatedSub?.status || bestSub.status,
-        trialEndsAt: updatedSub?.trial_end ? new Date(updatedSub.trial_end * 1000).toISOString() : null,
-        currentPeriodEnd: updatedSub?.current_period_end ? new Date(updatedSub.current_period_end * 1000).toISOString() : null,
-        cancelAt: (updatedSub?.cancel_at_period_end && updatedSub?.cancel_at)
-          ? new Date(updatedSub.cancel_at * 1000).toISOString()
-          : null,
-        scheduledPlan: null,
-        scheduledAt: null,
-        hasEverPaid: 1
-      });
+      const guard = await assertNoCrossUserStripeIds(env, { uid, stripeCustomerId: customerId, stripeSubscriptionId: updatedSub?.id || bestSub.id });
+      if (!guard.ok) {
+        console.error(`[BILLING-UPGRADE] cross-user Stripe id conflict; skipping D1 write for uid=${redactId(uid)}`);
+      } else {
+        const subForPeriod = updatedSub?.id ? updatedSub : bestSub;
+        const period = readSubscriptionPeriod(subForPeriod, { priceToPlan: (pid) => priceIdToPlan(env, pid) });
+        if (period.error) {
+          // Never write a guessed period. The webhook is the durable write
+          // path and will surface the same ambiguity in the event ledger.
+          console.error(`[BILLING-UPGRADE] subscription period unresolved (${period.error}); skipping immediate D1 write for uid=${redactId(uid)}`);
+          throw new Error(`period_${period.error}`);
+        }
+        await updateUserPlan(env, uid, {
+          plan: targetPlan,
+          stripeCustomerId: customerId,
+          stripeSubscriptionId: updatedSub?.id || bestSub.id,
+          subscriptionStatus: updatedSub?.status || bestSub.status,
+          trialEndsAt: updatedSub?.trial_end ? new Date(updatedSub.trial_end * 1000).toISOString() : null,
+          currentPeriodStart: period.currentPeriodStart,
+          currentPeriodEnd: period.currentPeriodEnd,
+          cancelAt: (updatedSub?.cancel_at_period_end && updatedSub?.cancel_at)
+            ? new Date(updatedSub.cancel_at * 1000).toISOString()
+            : null,
+          scheduledPlan: null,
+          scheduledAt: null,
+          hasEverPaid: 1
+        });
+      }
     } catch (e) {
       console.warn('[BILLING-UPGRADE] D1 update failed (non-blocking):', e?.message || e);
     }
@@ -257,7 +272,7 @@ export async function onRequest(context) {
     // checks the subscription status which is the reliable source of truth
     if (isTrialing && ['essential', 'pro', 'premium'].includes(targetPlan)) {
       console.log('[BILLING-UPGRADE] Resetting usage for trial upgrade', {
-        uid,
+        uid: redactId(uid),
         fromPlan: currentPlan,
         toPlan: targetPlan,
         subscriptionStatus: bestSub.status
@@ -275,10 +290,10 @@ export async function onRequest(context) {
     }
 
     console.log('[BILLING-UPGRADE] Subscription updated', {
-      uid,
+      uid: redactId(uid),
       targetPlan,
-      subId: bestSub.id,
-      customerId
+      subId: redactId(bestSub.id),
+      customerId: redactId(customerId)
     });
 
     return json({
@@ -334,50 +349,20 @@ async function resolveCustomerId(env, uid, email) {
   }
 
   if (!customerId && email) {
-    try {
-      const searchRes = await stripe(env, `/customers?email=${encodeURIComponent(email)}&limit=100`);
-      const searchData = await searchRes.json();
-      const customers = searchRes.ok
-        ? (searchData?.data || []).filter((c) => c && c.deleted !== true)
-        : [];
-      if (customers.length > 0) {
-        const uidMatches = customers.filter((c) => c?.metadata?.firebaseUid === uid);
-        const candidates = uidMatches.length > 0 ? uidMatches : customers;
-        if (uidMatches.length > 0) {
-          console.log('[BILLING-UPGRADE] Found customers matching firebaseUid', { count: uidMatches.length });
-        }
-
-        if (candidates.length > 1) {
-          for (const candidate of candidates) {
-            const subsRes = await stripe(env, `/subscriptions?customer=${candidate.id}&status=all&limit=10`);
-            if (subsRes.ok) {
-              const subsData = await subsRes.json();
-              const hasActive = (subsData?.data || []).some((sub) =>
-                sub && ['active', 'trialing', 'past_due'].includes(sub.status)
-              );
-              if (hasActive) {
-                matchedCustomer = candidate;
-                break;
-              }
-            }
-          }
-          if (!matchedCustomer) {
-            matchedCustomer = candidates.sort((a, b) => b.created - a.created)[0];
-          }
-        } else {
-          matchedCustomer = candidates[0];
-        }
-
-        if (matchedCustomer?.id) {
-          customerId = matchedCustomer.id;
-          console.log('[BILLING-UPGRADE] Found Stripe customer by email fallback', {
-            customerId,
-            matchedUid: matchedCustomer?.metadata?.firebaseUid || null
-          });
-        }
-      }
-    } catch (e) {
-      console.log('[BILLING-UPGRADE] Stripe email search failed', e?.message || e);
+    // Same ownership rules as checkout (_lib/billing-ownership.js): email
+    // matching alone never selects a customer, un-stamped matches are never
+    // adopted, and an un-stamped customer with an entitled subscription
+    // blocks the request — otherwise we would create a second billable
+    // customer for someone who is already paying.
+    const resolution = await resolveCustomerByEmailOwnership(env, uid, email);
+    if (resolution.block) return { customerId: null, block: resolution.block };
+    matchedCustomer = resolution.matchedCustomer;
+    if (matchedCustomer?.id) {
+      customerId = matchedCustomer.id;
+      console.log('[BILLING-UPGRADE] Found Stripe customer by email fallback', {
+        customerId: redactId(customerId),
+        matchedUidPresent: !!matchedCustomer?.metadata?.firebaseUid
+      });
     }
   }
 
@@ -389,7 +374,7 @@ async function resolveCustomerId(env, uid, email) {
     });
     if (!res.ok) {
       console.log('[BILLING-UPGRADE] Stripe customer create failed', res.status);
-      return null;
+      return { customerId: null, block: null };
     }
     const customer = await res.json();
     customerId = customer?.id || null;
@@ -398,21 +383,11 @@ async function resolveCustomerId(env, uid, email) {
 
   if (customerId) {
     await cacheCustomerId(env, uid, customerId);
-
-    if (matchedCustomer && !matchedCustomer?.metadata?.firebaseUid) {
-      try {
-        await stripe(env, `/customers/${customerId}`, {
-          method: 'POST',
-          headers: stripeFormHeaders(env),
-          body: form({ 'metadata[firebaseUid]': uid })
-        });
-      } catch (e) {
-        console.log('[BILLING-UPGRADE] Failed to backfill customer metadata', e?.message || e);
-      }
-    }
+    // No metadata backfill: every customer reaching this point is either
+    // uid-owned already or was created above with metadata[firebaseUid].
   }
 
-  return customerId;
+  return { customerId, block: null };
 }
 
 async function makeUpgradeIdemKey(uid, seed) {
@@ -480,9 +455,7 @@ function json(body, status, origin, env) {
 }
 
 async function cancelOtherSubscriptions(env, subs, keepSubId) {
-  const toCancel = (subs || []).filter((sub) =>
-    sub && sub.id && sub.id !== keepSubId && ['active', 'trialing', 'past_due'].includes(sub.status)
-  );
+  const toCancel = selectSubscriptionsToCancel(subs, keepSubId);
   for (const sub of toCancel) {
     try {
       const res = await stripe(env, `/subscriptions/${sub.id}`, { method: 'DELETE' });
@@ -504,8 +477,20 @@ async function scheduleDowngrade(env, sub, targetPlan, source) {
   const item = sub?.items?.data?.[0];
   const currentPriceId = item?.price?.id || null;
   const quantity = item?.quantity || 1;
-  const periodStart = sub?.current_period_start || Math.floor(Date.now() / 1000);
-  const periodEnd = sub?.current_period_end || null;
+  // Period fields may live on the subscription root or on subscription items
+  // depending on the (unpinned) Stripe API version — Stripe wants epoch seconds here.
+  const period = readSubscriptionPeriod(sub, { priceToPlan: (pid) => priceIdToPlan(env, pid) });
+  if (period.error) {
+    // Scheduling a downgrade against a guessed period would set the phase
+    // boundary wrong; fail clearly instead.
+    return { ok: false, code: 'SUBSCRIPTION_PERIOD_UNRESOLVED' };
+  }
+  const periodStart = period.currentPeriodStart
+    ? Math.floor(Date.parse(period.currentPeriodStart) / 1000)
+    : Math.floor(Date.now() / 1000);
+  const periodEnd = period.currentPeriodEnd
+    ? Math.floor(Date.parse(period.currentPeriodEnd) / 1000)
+    : null;
   if (!currentPriceId || !periodEnd) {
     return { ok: false, code: 'SUBSCRIPTION_ITEM_MISSING' };
   }

@@ -1,4 +1,5 @@
 const PRODUCTION_ENVIRONMENTS = new Set(['prod', 'production']);
+const NON_PRODUCTION_ENVIRONMENTS = new Set(['qa', 'dev', 'development']);
 export const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "base-uri 'self'",
@@ -22,6 +23,17 @@ function normalizeEnvironmentName(environment) {
 
 export function isProductionEnvironment(env) {
   return PRODUCTION_ENVIRONMENTS.has(normalizeEnvironmentName(env?.ENVIRONMENT));
+}
+
+/**
+ * Fail-closed gate for debug/diagnostic endpoints: they are reachable ONLY
+ * when ENVIRONMENT is explicitly a known non-production value. A missing,
+ * unknown, or misspelled ENVIRONMENT blocks them — the old
+ * !isProductionEnvironment() gate silently EXPOSED debug endpoints whenever
+ * the variable was unset.
+ */
+export function isExplicitNonProductionEnvironment(env) {
+  return NON_PRODUCTION_ENVIRONMENTS.has(normalizeEnvironmentName(env?.ENVIRONMENT));
 }
 
 /** Same values as middleware — keep in sync so prod 404 early-returns are not weaker. */

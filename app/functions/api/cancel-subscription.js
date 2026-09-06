@@ -1,6 +1,9 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { getUserPlanData } from '../_lib/db.js';
 import { stripe, listSubscriptions, getPlanFromSubscription, invalidateBillingCaches } from '../_lib/billing-utils.js';
+import { assertStripeKeyMatchesEnvironment } from '../_lib/stripe-environment.js';
+import { readSubscriptionPeriod } from '../_lib/stripe-identity.js';
+import { ENTITLED_SUBSCRIPTION_STATUSES } from '../_lib/billing-ownership.js';
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -13,7 +16,15 @@ export async function onRequest(context) {
   }
   const token = getBearer(request);
   if (!token) return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401, headers: corsHeaders(origin, env) });
-  
+
+  // This endpoint cancels subscriptions — refuse to run when the configured
+  // Stripe key's mode contradicts the environment (prod=live, qa/dev=test).
+  const keyCheck = assertStripeKeyMatchesEnvironment(env);
+  if (!keyCheck.ok) {
+    console.error(`[CANCEL] stripe key/environment mismatch: ${keyCheck.reason}`);
+    return new Response(JSON.stringify({ ok: false, error: 'configuration error' }), { status: 503, headers: corsHeaders(origin, env) });
+  }
+
   const { uid, payload } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
   const email = payload?.email || '';
 
@@ -30,7 +41,7 @@ export async function onRequest(context) {
     return new Response(JSON.stringify({ ok: false, error: 'Failed to retrieve subscriptions from Stripe' }), { status: 502, headers: corsHeaders(origin, env) });
   }
   const activeSubs = subs.filter((sub) =>
-    sub && ['active', 'trialing', 'past_due'].includes(sub.status)
+    sub && ENTITLED_SUBSCRIPTION_STATUSES.includes(sub.status)
   );
 
   if (activeSubs.length === 0) {
@@ -73,8 +84,14 @@ export async function onRequest(context) {
         headers: stripeFormHeaders(env),
         body: form({ cancel_at_period_end: 'true' })
       });
-      if (res.ok && sub.current_period_end) {
-        cancelAt = Math.max(cancelAt || 0, sub.current_period_end);
+      if (res.ok) {
+        // Period end may live on the subscription root or on subscription
+        // items depending on the (unpinned) Stripe API version. Display-only
+        // read: an unresolved period is recorded by the reader and reported
+        // as "no date" — never guessed. (The D1 write happens via webhook.)
+        const endIso = readSubscriptionPeriod(sub).currentPeriodEnd;
+        const endEpoch = endIso ? Math.floor(Date.parse(endIso) / 1000) : null;
+        if (endEpoch) cancelAt = Math.max(cancelAt || 0, endEpoch);
       }
     } catch (_) {}
   }
@@ -109,12 +126,12 @@ async function resolveCustomerId(env, uid, email) {
     try {
       const searchRes = await stripe(env, `/customers?email=${encodeURIComponent(email)}&limit=100`);
       const searchData = await searchRes.json();
-      const customers = searchRes.ok ? (searchData?.data || []) : [];
-      if (customers.length > 0) {
-        const uidMatches = customers.filter((c) => c?.metadata?.firebaseUid === uid);
-        const candidates = uidMatches.length > 0 ? uidMatches : customers;
-        customerId = candidates.sort((a, b) => b.created - a.created)[0]?.id || null;
-      }
+      const customers = searchRes.ok ? (searchData?.data || []).filter((c) => c && c.deleted !== true) : [];
+      // Destructive endpoint: only act on a customer explicitly stamped with
+      // THIS user's firebaseUid. An email-only "newest wins" match could
+      // cancel another user's subscription (emails are not unique in Stripe).
+      const uidMatches = customers.filter((c) => c?.metadata?.firebaseUid === uid);
+      customerId = uidMatches.sort((a, b) => b.created - a.created)[0]?.id || null;
     } catch (_) {}
   }
 

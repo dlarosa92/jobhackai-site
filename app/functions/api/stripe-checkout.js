@@ -12,6 +12,8 @@ import {
   cacheCustomerId,
   kvCusKey
 } from '../_lib/billing-utils.js';
+import { assertStripeKeyMatchesEnvironment, redactId, environmentStampFields } from '../_lib/stripe-environment.js';
+import { resolveCustomerByEmailOwnership, ENTITLED_SUBSCRIPTION_STATUSES } from '../_lib/billing-ownership.js';
 export async function onRequest(context) {
   const { request, env } = context;
   const origin = request.headers.get('Origin') || '';
@@ -50,6 +52,14 @@ export async function onRequest(context) {
       console.log('🔴 [CHECKOUT] Missing STRIPE_SECRET_KEY');
       return json({ ok: false, error: 'Server configuration error' }, 500, origin, env);
     }
+    // Production must run with a live-mode key, QA/dev with a test-mode key.
+    // Refusing here keeps a mis-keyed environment from ever creating Stripe
+    // objects or caching their ids into this environment's database.
+    const keyCheck = assertStripeKeyMatchesEnvironment(env);
+    if (!keyCheck.ok) {
+      console.error(`[CHECKOUT] stripe key/environment mismatch: ${keyCheck.reason}`);
+      return json({ ok: false, error: 'configuration error' }, 503, origin, env);
+    }
 
     const token = getBearer(request);
     if (!token) {
@@ -81,7 +91,7 @@ export async function onRequest(context) {
       try {
         const eligible = await isTrialEligible(env, uid, email);
         if (!eligible) {
-          console.log('🔴 [CHECKOUT] Trial not eligible for user', uid);
+          console.log('🔴 [CHECKOUT] Trial not eligible for user', redactId(uid));
           return json({
             ok: false,
             error: 'Trial already used. Please select a paid plan.',
@@ -118,13 +128,13 @@ export async function onRequest(context) {
     
     // Step 2: If KV miss, try D1 (authoritative)
     if (!customerId) {
-      console.log('🟡 [CHECKOUT] No customer in KV for uid', uid);
+      console.log('🟡 [CHECKOUT] No customer in KV for uid', redactId(uid));
       try {
         const userPlan = await getUserPlanData(env, uid);
         if (userPlan?.stripeCustomerId) {
           customerId = userPlan.stripeCustomerId;
           customerIdSource = 'd1';
-          console.log('✅ [CHECKOUT] Found customer ID in D1:', customerId);
+          console.log('✅ [CHECKOUT] Found customer ID in D1:', redactId(customerId));
           // Cache it in KV for next time
           try {
             await env.JOBHACKAI_KV?.put(kvCusKey(uid), customerId);
@@ -147,55 +157,26 @@ export async function onRequest(context) {
       if (!customerId) matchedCustomer = null;
     }
 
-    // Step 3: Only if both KV and D1 miss (or stale IDs are cleared), fallback to Stripe email search.
+    // Step 3: Only if both KV and D1 miss (or stale IDs are cleared), search
+    // Stripe by email. Resolution rules live in _lib/billing-ownership.js
+    // (unit-tested): uid-proven selection only, and un-stamped customers
+    // with an active subscription block checkout even when an owned
+    // customer also exists.
     if (!customerId && email) {
-      try {
-        const searchRes = await stripe(env, `/customers?email=${encodeURIComponent(email)}&limit=100`);
-        const searchData = await searchRes.json();
-        const customers = searchRes.ok
-          ? (searchData?.data || []).filter((c) => c && c.deleted !== true)
-          : [];
-        if (customers.length > 0) {
-          const uidMatches = customers.filter((c) => c?.metadata?.firebaseUid === uid);
-          const candidates = uidMatches.length > 0 ? uidMatches : customers;
-          if (uidMatches.length > 0) {
-            console.log('🟡 [CHECKOUT] Found customers matching firebaseUid', { count: uidMatches.length });
-          }
-
-          if (candidates.length > 1) {
-            for (const candidate of candidates) {
-              const subsCheckRes = await stripe(env, `/subscriptions?customer=${candidate.id}&status=all&limit=10`);
-              if (subsCheckRes.ok) {
-                const subsCheckData = await subsCheckRes.json();
-                const hasActive = (subsCheckData?.data || []).some((s) =>
-                  s && ['active', 'trialing', 'past_due'].includes(s.status)
-                );
-                if (hasActive) {
-                  matchedCustomer = candidate;
-                  break;
-                }
-              }
-            }
-            if (!matchedCustomer) {
-              matchedCustomer = candidates.sort((a, b) => b.created - a.created)[0];
-            }
-          } else {
-            matchedCustomer = candidates[0];
-          }
-
-          if (matchedCustomer?.id) {
-            customerId = matchedCustomer.id;
-            console.log('✅ [CHECKOUT] Found customer by email fallback', customerId);
-          }
-        }
-      } catch (searchError) {
-        console.log('🟡 [CHECKOUT] Email fallback failed (non-fatal)', searchError?.message || searchError);
+      const resolution = await resolveCustomerByEmailOwnership(env, uid, email);
+      if (resolution.block) {
+        return json({ ok: false, error: resolution.block.error, code: resolution.block.code }, resolution.block.status, origin, env);
+      }
+      if (resolution.matchedCustomer?.id) {
+        matchedCustomer = resolution.matchedCustomer;
+        customerId = matchedCustomer.id;
+        console.log('✅ [CHECKOUT] Selected uid-owned customer', redactId(customerId));
       }
     }
 
     // Step 4: Only create new Stripe customer if all lookups are missing
     if (!customerId) {
-      console.log('🔵 [CHECKOUT] Creating new Stripe customer for uid', uid);
+      console.log('🔵 [CHECKOUT] Creating new Stripe customer for uid', redactId(uid));
       try {
         const res = await stripe(env, '/customers', {
           method: 'POST',
@@ -274,18 +255,10 @@ export async function onRequest(context) {
 
     if (customerId) {
       await cacheCustomerId(env, uid, customerId);
-
-      if (matchedCustomer && !matchedCustomer?.metadata?.firebaseUid) {
-        try {
-          await stripe(env, `/customers/${customerId}`, {
-            method: 'POST',
-            headers: stripeFormHeaders(env),
-            body: form({ 'metadata[firebaseUid]': uid })
-          });
-        } catch (e) {
-          console.log('🟡 [CHECKOUT] Failed to backfill customer metadata', e?.message || e);
-        }
-      }
+      // No metadata backfill: every customer reaching this point is either
+      // uid-owned already or was created above with metadata[firebaseUid].
+      // Stamping ownership onto a guessed customer is how subscriptions got
+      // attached to the wrong user during the incident.
     }
 
     // Interview Pack is a one-time payment, not a subscription: it can never
@@ -307,13 +280,13 @@ export async function onRequest(context) {
       }, 503, origin, env);
     }
     const activeSubs = subs.filter((sub) =>
-      sub && ['active', 'trialing', 'past_due'].includes(sub.status)
+      sub && ENTITLED_SUBSCRIPTION_STATUSES.includes(sub.status)
     );
     if (activeSubs.length > 0) {
       const currentPlan = getPlanFromSubscription(activeSubs[0], env);
       console.log('🟡 [CHECKOUT] Active subscription exists, blocking checkout', {
-        uid,
-        customerId,
+        uid: redactId(uid),
+        customerId: redactId(customerId),
         currentPlan
       });
       return json({
@@ -347,6 +320,18 @@ export async function onRequest(context) {
       sessionBody['subscription_data[trial_period_days]'] = '3';
       sessionBody['subscription_data[metadata][original_plan]'] = plan;
     }
+
+    // Stamp ownership onto the subscription itself so webhooks can resolve
+    // the user from the strongest source without a customer lookup.
+    // (subscription_data is only valid for subscription-mode sessions.)
+    if (sessionBody.mode === 'subscription') {
+      sessionBody['subscription_data[metadata][firebaseUid]'] = uid;
+    }
+
+    // Environment stamp (dev/QA share one Stripe test-mode account): the
+    // session — and the subscription it creates — record which environment
+    // made them, so the other environment's webhook can ignore their events.
+    Object.assign(sessionBody, environmentStampFields(env, { subscription: sessionBody.mode === 'subscription' }));
     
     // Generate idempotency key (forceNew for fresh session if requested from frontend)
     const forceNew = !!body.forceNew;

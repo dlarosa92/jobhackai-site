@@ -1198,6 +1198,10 @@
                   }, 500);
                   return;
                 }
+              } else if (planResponse.status === 401) {
+                // The cached ID token can be stale right after the Checkout redirect;
+                // force a refresh so the next poll carries a fresh token.
+                try { await window.FirebaseAuthManager?.getCurrentUser?.()?.getIdToken(true); } catch (_) {}
               }
             } catch (error) {
               console.warn('⚠️ Plan poll error:', error);
