@@ -1,0 +1,336 @@
+// Reconciliation core (app/scripts/lib/billing-reconcile-core.mjs):
+// classification, duplicate detection, allowlist drift aborts, apply-SQL
+// generation (audit-first, no DELETEs, strict value validation), rollback
+// SQL, and zero-write preflight semantics.
+import assert from 'node:assert';
+import {
+  classifyRow,
+  classifyAll,
+  duplicateGroups,
+  compareToAllowlist,
+  buildApplySql,
+  buildRollbackSql,
+  assertSafeStripeId,
+  assertSafeRunId,
+  sqlValue,
+  kvKeysForUid
+} from '../../../scripts/lib/billing-reconcile-core.mjs';
+
+const row = (over = {}) => ({
+  id: 1, auth_id: 'uid_A', plan: 'essential', subscription_status: 'active',
+  stripe_customer_id: 'cus_A1234', stripe_subscription_id: 'sub_A1234',
+  current_period_start: null, current_period_end: null, trial_ends_at: null,
+  cancel_at: null, scheduled_plan: null, scheduled_at: null,
+  has_ever_paid: 1, plan_updated_at: '2026-01-01T00:00:00.000Z', ...over
+});
+
+// ── classifyRow matrix ──
+assert.strictEqual(classifyRow(row({ plan: 'free', stripe_customer_id: null, stripe_subscription_id: null, subscription_status: null, has_ever_paid: 0 }), {}).class, 'FREE_CLEAN');
+
+// LEGIT: live active sub + owned customer + matching linkage.
+assert.strictEqual(classifyRow(row(), {
+  subscription: { found: true, status: 'active', customerId: 'cus_A1234' },
+  customer: { found: true, deleted: false, firebaseUid: 'uid_A' }
+}).class, 'LEGIT');
+
+// (PR #852 review) 'unpaid' is an entitled dunning status: a linked unpaid
+// subscription on an owned customer is LEGIT, never MIXED/repaired.
+for (const status of ['trialing', 'past_due', 'unpaid']) {
+  assert.strictEqual(classifyRow(row(), {
+    subscription: { found: true, status, customerId: 'cus_A1234' },
+    customer: { found: true, deleted: false, firebaseUid: 'uid_A' }
+  }).class, 'LEGIT', `${status} must classify LEGIT`);
+}
+// An ENDED subscription on an owned customer is still MIXED.
+assert.strictEqual(classifyRow(row(), {
+  subscription: { found: true, status: 'canceled', customerId: 'cus_A1234' },
+  customer: { found: true, deleted: false, firebaseUid: 'uid_A' }
+}).class, 'MIXED');
+
+// INVALID_TEST: live 404 with the test-mode hint, unowned customer.
+assert.strictEqual(classifyRow(row(), {
+  subscription: { found: false, testModeHint: true },
+  customer: { found: false, testModeHint: true }
+}).class, 'INVALID_TEST');
+
+// NOT_FOUND_LIVE: live 404 without the hint.
+assert.strictEqual(classifyRow(row(), {
+  subscription: { found: false, testModeHint: false },
+  customer: { found: false, testModeHint: false }
+}).class, 'NOT_FOUND_LIVE');
+
+// MIXED: owned live customer, invalid subscription.
+assert.strictEqual(classifyRow(row(), {
+  subscription: { found: false, testModeHint: true },
+  customer: { found: true, deleted: false, firebaseUid: 'uid_A' }
+}).class, 'MIXED');
+
+// AMBIGUOUS: subscription's customer differs from the row's, or foreign uid.
+assert.strictEqual(classifyRow(row(), {
+  subscription: { found: true, status: 'active', customerId: 'cus_OTHER' },
+  customer: { found: true, deleted: false, firebaseUid: 'uid_A' }
+}).class, 'AMBIGUOUS');
+assert.strictEqual(classifyRow(row(), {
+  subscription: { found: true, status: 'active', customerId: 'cus_A1234' },
+  customer: { found: true, deleted: false, firebaseUid: 'uid_OTHER' }
+}).class, 'AMBIGUOUS');
+
+// CUSTOMER_ONLY split.
+// (PR #851 F2) An owned customer justifies keeping the CUSTOMER ID, never a
+// paid plan no subscription backs: a paid-claiming row is a repair case —
+// but ONLY when the customer's live subscription list was checked and is
+// verified empty (Bugbot round 2). The pre-fix suite wrongly asserted KEEP
+// here (the fixture defaults to plan 'essential'), which is how the gap
+// shipped.
+const ownedCustomer = { found: true, deleted: false, firebaseUid: 'uid_A' };
+assert.strictEqual(classifyRow(row({ stripe_subscription_id: null }), {
+  customer: ownedCustomer,
+  customerSubscriptions: { statuses: [] }
+}).class, 'CUSTOMER_ONLY_PAID_CLAIM');
+// Active-ish status alone (even with plan free) is also a paid claim.
+assert.strictEqual(classifyRow(row({ stripe_subscription_id: null, plan: 'free', subscription_status: 'active' }), {
+  customer: ownedCustomer,
+  customerSubscriptions: { statuses: [] }
+}).class, 'CUSTOMER_ONLY_PAID_CLAIM');
+// Ended subscriptions on the customer do not block the repair.
+assert.strictEqual(classifyRow(row({ stripe_subscription_id: null }), {
+  customer: ownedCustomer,
+  customerSubscriptions: { statuses: ['canceled', 'incomplete_expired'] }
+}).class, 'CUSTOMER_ONLY_PAID_CLAIM');
+// A genuinely free row with an owned customer is the true KEEP case.
+assert.strictEqual(classifyRow(row({ stripe_subscription_id: null, plan: 'free', subscription_status: null, has_ever_paid: 0 }), {
+  customer: ownedCustomer
+}).class, 'CUSTOMER_ONLY_KEEP');
+
+// (Bugbot round 2) A LIVE entitled-status subscription that was never linked
+// in D1 means a likely paying customer: NEVER auto-freed.
+for (const liveStatus of ['active', 'trialing', 'past_due', 'unpaid']) {
+  const r = classifyRow(row({ stripe_subscription_id: null }), {
+    customer: ownedCustomer,
+    customerSubscriptions: { statuses: ['canceled', liveStatus] }
+  });
+  assert.strictEqual(r.class, 'CUSTOMER_ONLY_UNLINKED_SUB', `${liveStatus} must hold the row for relinking`);
+  assert.strictEqual(r.reason, 'live_subscription_not_linked');
+}
+// An UNVERIFIED subscription list is treated the same way — freeing requires
+// verified absence, never assumption.
+{
+  const r = classifyRow(row({ stripe_subscription_id: null }), { customer: ownedCustomer });
+  assert.strictEqual(r.class, 'CUSTOMER_ONLY_UNLINKED_SUB');
+  assert.strictEqual(r.reason, 'subscriptions_unverified');
+}
+assert.strictEqual(classifyRow(row({ stripe_subscription_id: null }), {
+  customer: { found: false, testModeHint: true }
+}).class, 'CUSTOMER_ONLY_CLEAR');
+assert.strictEqual(classifyRow(row({ stripe_subscription_id: null }), {
+  customer: { found: true, deleted: false, firebaseUid: 'uid_OTHER' }
+}).class, 'CUSTOMER_ONLY_CLEAR');
+assert.strictEqual(classifyRow(row({ stripe_subscription_id: null }), {
+  customer: { found: true, deleted: true, firebaseUid: null }
+}).class, 'AMBIGUOUS');
+
+// Paid claim without any Stripe ids.
+assert.strictEqual(classifyRow(row({ stripe_subscription_id: null, stripe_customer_id: null }), {}).class, 'AMBIGUOUS');
+
+// ── duplicates + classifyAll ──
+{
+  const rows = [
+    row(),
+    row({ id: 2, auth_id: 'uid_B', stripe_customer_id: 'cus_A1234', stripe_subscription_id: 'sub_B999' }),
+    row({ id: 3, auth_id: 'uid_C', stripe_customer_id: 'cus_C1', stripe_subscription_id: 'sub_B999' })
+  ];
+  const dups = duplicateGroups(rows);
+  assert.strictEqual(dups.length, 2, 'one customer-id group + one subscription-id group');
+  assert.ok(dups.every((d) => d.rowIds.length === 2));
+  assert.ok(!JSON.stringify(dups).includes('cus_A1234'), 'duplicate report carries last-4 only');
+
+  const classification = classifyAll(rows, {
+    1: { subscription: { found: true, status: 'active', customerId: 'cus_A1234' }, customer: { found: true, deleted: false, firebaseUid: 'uid_A' } },
+    2: { subscription: { found: false, testModeHint: true }, customer: { found: false, testModeHint: true } },
+    3: { subscription: { found: false, testModeHint: true }, customer: { found: false, testModeHint: true } }
+  });
+  assert.strictEqual(classification.counts.LEGIT, 1);
+  assert.strictEqual(classification.counts.INVALID_TEST, 2);
+  assert.deepStrictEqual(classification.repairRowIds, [2, 3]);
+  assert.strictEqual(classification.readyForUniqueIndex, false);
+}
+
+// ── (PR #851 F2) paid customer-only rows enter the repair set and the apply
+// batch frees them while RETAINING the owned customer id ──
+{
+  const paidClaimRow = row({ id: 10, auth_id: 'uid_K', plan: 'pro', stripe_customer_id: 'cus_K1234', stripe_subscription_id: null, subscription_status: 'active', trial_ends_at: null });
+  const freeKeepRow = row({ id: 11, auth_id: 'uid_F', plan: 'free', stripe_customer_id: 'cus_F1234', stripe_subscription_id: null, subscription_status: null, has_ever_paid: 0 });
+  const ownedState = (uid, statuses = []) => ({
+    customer: { found: true, deleted: false, firebaseUid: uid },
+    customerSubscriptions: { statuses }
+  });
+  const classification = classifyAll([paidClaimRow, freeKeepRow], { 10: ownedState('uid_K'), 11: ownedState('uid_F') });
+
+  assert.strictEqual(classification.counts.CUSTOMER_ONLY_PAID_CLAIM, 1);
+  assert.strictEqual(classification.counts.CUSTOMER_ONLY_KEEP, 1);
+  assert.deepStrictEqual(classification.repairRowIds, [10], 'paid claim repairs; genuine keep does not');
+
+  // (Bugbot round 2) An unlinked-live-sub row joins NEITHER set: it never
+  // enters repairRowIds, and hand-adding it to the allowlist is rejected as
+  // drift — apply can never free it.
+  const unlinkedRow = row({ id: 12, auth_id: 'uid_U', plan: 'pro', stripe_customer_id: 'cus_U1234', stripe_subscription_id: null, subscription_status: 'active' });
+  const withUnlinked = classifyAll([paidClaimRow, freeKeepRow, unlinkedRow], {
+    10: ownedState('uid_K'), 11: ownedState('uid_F'), 12: ownedState('uid_U', ['active'])
+  });
+  assert.strictEqual(withUnlinked.counts.CUSTOMER_ONLY_UNLINKED_SUB, 1);
+  assert.deepStrictEqual(withUnlinked.repairRowIds, [10], 'unlinked-sub row excluded from the repair set');
+  const forced = compareToAllowlist(withUnlinked, {
+    legit: [], repair: [{ id: 10, auth_id: 'uid_K' }, { id: 12, auth_id: 'uid_U' }], expected: {}
+  });
+  assert.strictEqual(forced.ok, false, 'allowlist cannot force an unlinked-sub row into repair');
+
+  const allowlist = { legit: [], repair: [{ id: 10, auth_id: 'uid_K' }], expected: { legit: 0, repair: 1 } };
+  const sql = buildApplySql('run_pc_1', [paidClaimRow, freeKeepRow], classification, allowlist, {}, '2026-08-17T00:00:00.000Z');
+  const stmts = sql.split('\n');
+  assert.strictEqual(stmts.length, 2);
+  assert.ok(stmts[1].includes("plan = 'free'"), 'false paid entitlement cleared');
+  assert.ok(stmts[1].includes('subscription_status = NULL'));
+  assert.ok(stmts[1].includes("stripe_customer_id = 'cus_K1234'"), 'owned customer id RETAINED');
+  assert.ok(!/\bDELETE\b/i.test(sql));
+}
+
+// ── allowlist drift ──
+{
+  const rows = [
+    row(),
+    row({ id: 2, auth_id: 'uid_B', stripe_customer_id: 'cus_B1', stripe_subscription_id: 'sub_B1' })
+  ];
+  const classification = classifyAll(rows, {
+    1: { subscription: { found: true, status: 'active', customerId: 'cus_A1234' }, customer: { found: true, deleted: false, firebaseUid: 'uid_A' } },
+    2: { subscription: { found: false, testModeHint: true }, customer: { found: false, testModeHint: true } }
+  });
+  const goodAllowlist = {
+    legit: [{ id: 1, auth_id: 'uid_A', sub_last4: '1234' }],
+    repair: [{ id: 2, auth_id: 'uid_B' }],
+    expected: { legit: 1, repair: 1 }
+  };
+  assert.strictEqual(compareToAllowlist(classification, goodAllowlist).ok, true);
+
+  // Count drift.
+  assert.strictEqual(compareToAllowlist(classification, { ...goodAllowlist, expected: { legit: 2, repair: 1 } }).ok, false);
+  // Membership drift (different row id).
+  assert.strictEqual(compareToAllowlist(classification, { ...goodAllowlist, repair: [{ id: 99, auth_id: 'uid_X' }] }).ok, false);
+  // Identity drift (same id, different auth_id).
+  assert.strictEqual(compareToAllowlist(classification, { ...goodAllowlist, legit: [{ id: 1, auth_id: 'uid_HACK', sub_last4: '1234' }] }).ok, false);
+  // Repair-listed row that now classifies LEGIT → refuse.
+  const flipped = compareToAllowlist(classification, {
+    legit: [{ id: 1, auth_id: 'uid_A', sub_last4: '1234' }],
+    repair: [{ id: 1, auth_id: 'uid_A' }, { id: 2, auth_id: 'uid_B' }],
+    expected: {}
+  });
+  assert.strictEqual(flipped.ok, false);
+  assert.ok(flipped.mismatches.some((m) => m.includes('refusing to downgrade')));
+}
+
+// ── buildApplySql ──
+{
+  const rows = [
+    row({ trial_ends_at: '2026-05-01T00:00:00.000Z' }),
+    row({ id: 2, auth_id: 'uid_B', plan: 'pro', stripe_customer_id: 'cus_B1', stripe_subscription_id: 'sub_B1', has_ever_paid: 1, trial_ends_at: '2026-04-01T00:00:00.000Z' })
+  ];
+  const classification = classifyAll(rows, {
+    1: { subscription: { found: true, status: 'active', customerId: 'cus_A1234' }, customer: { found: true, deleted: false, firebaseUid: 'uid_A' } },
+    2: { subscription: { found: false, testModeHint: true }, customer: { found: false, testModeHint: true } }
+  });
+  const allowlist = {
+    legit: [{ id: 1, auth_id: 'uid_A', sub_last4: '1234' }],
+    repair: [{ id: 2, auth_id: 'uid_B', reset_has_ever_paid: true }],
+    expected: { legit: 1, repair: 1 }
+  };
+  const backfill = { 1: {
+    plan: 'essential', subscription_status: 'active',
+    stripe_customer_id: 'cus_A1234', stripe_subscription_id: 'sub_A1234',
+    current_period_start: '2026-08-01T00:00:00.000Z', current_period_end: '2026-09-01T00:00:00.000Z',
+    trial_ends_at: null, cancel_at: null
+  } };
+  const sql = buildApplySql('run_test_1', rows, classification, allowlist, backfill, '2026-08-17T00:00:00.000Z');
+
+  assert.ok(!/\bDELETE\b/i.test(sql), 'apply SQL contains no DELETE statements, by construction');
+  const stmts = sql.split('\n');
+  assert.strictEqual(stmts.length, 4, 'audit INSERT + UPDATE per touched row');
+  assert.ok(stmts[0].startsWith('INSERT INTO billing_repair_audit'), 'audit precedes its update');
+  assert.ok(stmts[1].startsWith('UPDATE users SET'), 'update follows audit');
+  // (PR #855 review) the FIRST audit insert reserves the run id atomically with
+  // the batch: its NOT NULL new_values_json is nulled if rows already exist.
+  const guard = "CASE WHEN EXISTS (SELECT 1 FROM billing_repair_audit WHERE run_id = 'run_test_1') THEN NULL ELSE";
+  assert.ok(stmts[0].includes(guard), 'first audit insert carries the run-id reservation guard');
+  assert.ok(stmts.slice(1).every((s) => !s.includes('CASE WHEN EXISTS')), 'only the first statement carries the guard');
+  assert.ok(stmts[1].includes("current_period_start = '2026-08-01T00:00:00.000Z'"), 'legit backfill writes periods');
+  assert.ok(stmts[3].includes("plan = 'free'"), 'repair row goes free');
+  assert.ok(stmts[3].includes('has_ever_paid = 0'), 'reset_has_ever_paid honored');
+  assert.ok(stmts[3].includes("trial_ends_at = '2026-04-01T00:00:00.000Z'"), 'trial date preserved by default');
+  assert.ok(stmts[0].includes('old_values_json'), 'before-image recorded');
+
+  // clear_trial flag clears it.
+  const sqlClear = buildApplySql('run_test_2', rows, classification,
+    { ...allowlist, repair: [{ id: 2, auth_id: 'uid_B', clear_trial: true }] }, backfill, '2026-08-17T00:00:00.000Z');
+  assert.ok(sqlClear.split('\n')[3].includes('trial_ends_at = NULL'));
+
+  // A legit row that would end non-paid aborts.
+  assert.throws(() => buildApplySql('run_test_3', rows, classification, allowlist,
+    { 1: { ...backfill[1], plan: 'free' } }, '2026-08-17T00:00:00.000Z'),
+  /non-paid/);
+
+  // Drift aborts before any SQL is produced.
+  assert.throws(() => buildApplySql('run_test_4', rows, classification,
+    { ...allowlist, expected: { legit: 2, repair: 1 } }, backfill, '2026-08-17T00:00:00.000Z'),
+  /allowlist drift/);
+
+  // Malformed Stripe ids are refused at generation time.
+  assert.throws(() => buildApplySql('run_test_5', rows, classification, allowlist,
+    { 1: { ...backfill[1], stripe_customer_id: "cus_x'; DROP TABLE users;--" } }, '2026-08-17T00:00:00.000Z'),
+  /unsafe or malformed/);
+}
+
+// ── buildRollbackSql restores before-images ──
+{
+  const auditRows = [{
+    id: 10, run_id: 'run_test_1', mode: 'apply', user_row_id: 2, auth_id: 'uid_B',
+    stripe_customer_id: 'cus_B1', stripe_subscription_id: 'sub_B1',
+    old_values_json: JSON.stringify({
+      plan: 'pro', subscription_status: 'active', stripe_customer_id: 'cus_B1',
+      stripe_subscription_id: 'sub_B1', current_period_start: null, current_period_end: null,
+      trial_ends_at: '2026-04-01T00:00:00.000Z', cancel_at: null, scheduled_plan: null,
+      scheduled_at: null, has_ever_paid: 1, plan_updated_at: '2026-01-01T00:00:00.000Z'
+    }),
+    new_values_json: JSON.stringify({ plan: 'free', stripe_customer_id: null })
+  }];
+  const sql = buildRollbackSql('run_test_1', auditRows, '2026-08-18T00:00:00.000Z');
+  assert.ok(!/\bDELETE\b/i.test(sql));
+  const stmts = sql.split('\n');
+  assert.ok(stmts[0].includes("'rollback'"), 'mirror audit row recorded');
+  assert.ok(stmts[1].includes("plan = 'pro'"), 'before-image restored');
+  assert.ok(stmts[1].includes("stripe_subscription_id = 'sub_B1'"));
+  assert.ok(stmts[1].includes("plan_updated_at = '2026-08-18T00:00:00.000Z'"), 'rollback stamps plan_updated_at so stale webhooks skip');
+  assert.throws(() => buildRollbackSql('run_none', [], 'x'), /no apply audit rows/);
+}
+
+// ── zero-write preflight semantics: classification emits no SQL at all ──
+{
+  const rows = [row()];
+  const classification = classifyAll(rows, { 1: { subscription: { found: true, status: 'active', customerId: 'cus_A1234' }, customer: { found: true, deleted: false, firebaseUid: 'uid_A' } } });
+  const asJson = JSON.stringify(classification);
+  assert.ok(!asJson.includes('UPDATE'), 'preflight output contains no write statements');
+  assert.ok(!asJson.includes('INSERT'));
+  // An empty allowlist can never sneak through apply.
+  assert.throws(() => buildApplySql('run_empty', rows, classification, { legit: [], repair: [], expected: {} }, {}, 'x'),
+  /drift|zero statements/);
+}
+
+// ── validators & helpers ──
+assert.throws(() => assertSafeStripeId('cus_ok; DROP', 'customer'));
+assert.throws(() => assertSafeStripeId('sub_', 'subscription'));
+assert.strictEqual(assertSafeStripeId('cus_Abc123', 'customer'), 'cus_Abc123');
+assert.throws(() => assertSafeRunId('x'));
+assert.throws(() => assertSafeRunId('bad run id!'));
+assert.strictEqual(sqlValue("O'Brien"), "'O''Brien'");
+assert.strictEqual(sqlValue(null), 'NULL');
+assert.strictEqual(sqlValue(5), '5');
+assert.deepStrictEqual(kvKeysForUid('u1'), ['cusByUid:u1', 'planByUid:u1', 'billingStatus:u1', 'trialUsedByUid:u1', 'trialEndByUid:u1']);
+
+console.log('billing-reconcile.test.mjs: all assertions passed');

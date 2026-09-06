@@ -33,6 +33,7 @@ worker/
 .env.test.local
 .env.production.local
 .env.qa
+.env.dev-sandbox.local
 
 # Local wrangler config
 wrangler.local.toml
@@ -60,3 +61,6 @@ test-results/
 playwright-report/
 app/tests/.auth/
 *.bak
+
+# Local D1 backups and reconciliation evidence (contain user data) — never commit
+backups/

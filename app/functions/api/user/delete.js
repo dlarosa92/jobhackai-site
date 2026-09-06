@@ -1,6 +1,7 @@
 import { getBearer, verifyFirebaseIdToken, deleteFirebaseAuthUserAdmin } from '../../_lib/firebase-auth.js';
 import { getDb, writeDeletedTombstone } from '../../_lib/db.js';
 import { stripe, listSubscriptions, invalidateBillingCaches, kvCusKey } from '../../_lib/billing-utils.js';
+import { ENTITLED_SUBSCRIPTION_STATUSES } from '../../_lib/billing-ownership.js';
 import { sendEmail } from '../../_lib/email.js';
 import { accountDeletedEmail } from '../../_lib/email-templates.js';
 
@@ -81,7 +82,7 @@ export async function onRequest(context) {
             if (subsRes.ok) {
               const subsData = await subsRes.json();
               const hasActive = (subsData?.data || []).some(s =>
-                s && ['active', 'trialing', 'past_due'].includes(s.status)
+                s && ENTITLED_SUBSCRIPTION_STATUSES.includes(s.status)
               );
               if (hasActive) {
                 customerId = candidate.id;
@@ -171,7 +172,7 @@ export async function onRequest(context) {
       try {
         const subs = await listSubscriptions(env, customerId);
         const activeSubs = subs.filter(s =>
-          s && ['active', 'trialing', 'past_due'].includes(s.status)
+          s && ENTITLED_SUBSCRIPTION_STATUSES.includes(s.status)
         );
         for (const sub of activeSubs) {
           try {

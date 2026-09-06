@@ -277,10 +277,73 @@ export async function createVoiceSessionRow(env, { sessionId, userRowId, role, s
   return { inserted: true, reason: null };
 }
 
+// Pack-grant SQL shared by grantPackCredits (standalone, legacy path) and
+// buildPackGrantStatements (webhook batch) so the two can never drift.
+// A new purchase refreshes the expiry for the whole balance; subscriptions
+// keep their plan value (pack credits then sit unused until it lapses).
+const PACK_GRANT_UPDATE_SQL = `UPDATE users SET
+        voice_sessions_remaining = voice_sessions_remaining + ?,
+        pack_expires_at = ?,
+        has_ever_paid = 1,
+        plan = CASE WHEN plan IS NULL OR plan IN ('', 'free') THEN 'pack' ELSE plan END,
+        updated_at = datetime('now')
+     WHERE auth_id = ?`;
+
+export function packExpiryIso(nowMs = Date.now()) {
+  return new Date(nowMs + PACK_EXPIRY_DAYS * 24 * 60 * 60 * 1000).toISOString();
+}
+
+// stripe_event_log row types written by the webhook's pack path. The table's
+// primary key is event_id (TEXT): Stripe event ids (evt_…) record WHICH
+// events granted, and the Checkout Session id (cs_…) records THAT the session
+// was fulfilled — one purchase can be announced by several distinct events
+// (a late checkout.session.completed retried after the payment settled AND a
+// checkout.session.async_payment_succeeded), so per-event idempotency alone
+// would credit the same purchase twice.
+export const PACK_GRANT_TYPE = 'pack_grant';
+export const PACK_FULFILMENT_TYPE = 'pack_fulfilment';
+export const PACK_LOG_INSERT_SQL = 'INSERT INTO stripe_event_log (event_id, type) VALUES (?, ?)';
+
+/**
+ * Batch-safe pack grant for the hardened Stripe webhook (billing hotfix):
+ * returns prepared statements WITHOUT executing them, so the grant rides in
+ * ONE atomic db.batch() together with the event ledger's processed-mark
+ * (stripe_event_ledger, migration 022). Either everything commits or nothing
+ * does: no duplicate credits, and no event consumed without its grant.
+ *
+ * Three idempotency records, all plain INSERTs (never OR IGNORE) so that any
+ * duplicate fails the WHOLE batch atomically:
+ *   1. stripe_event_log(event_id = <evt_…>, 'pack_grant') — the legacy
+ *      per-event record (voice migration 020); an event the pre-ledger
+ *      webhook already granted collides here.
+ *   2. stripe_event_log(event_id = <cs_…>, 'pack_fulfilment') — the
+ *      per-SESSION fulfilment marker; a second distinct event for the same
+ *      Checkout Session collides here, whichever event arrives first and
+ *      even when two arrive concurrently.
+ *   3. stripe_event_ledger processed-mark (added by the caller).
+ * The webhook consults stripe_event_log for both ids before staging so the
+ * ordinary duplicate is a recorded no-op; the INSERTs are the race-proof
+ * guard behind that read.
+ *
+ * @returns {Array} prepared D1 statements (empty when inputs are unusable)
+ */
+export function buildPackGrantStatements(db, { uid, eventId, sessionId, expiresAtIso } = {}) {
+  if (!db || !uid || !eventId) return [];
+  const expires = expiresAtIso || packExpiryIso();
+  const statements = [db.prepare(PACK_LOG_INSERT_SQL).bind(eventId, PACK_GRANT_TYPE)];
+  if (sessionId) statements.push(db.prepare(PACK_LOG_INSERT_SQL).bind(sessionId, PACK_FULFILMENT_TYPE));
+  statements.push(db.prepare(PACK_GRANT_UPDATE_SQL).bind(PACK_SESSION_COUNT, expires, uid));
+  return statements;
+}
+
 /**
  * Grant Interview Pack credits from a Stripe checkout.session.completed event.
  * Idempotent at the D1 level: the event id is recorded in stripe_event_log
  * first, and a replayed event becomes a no-op even if KV dedup misses.
+ *
+ * Standalone (non-batched) form kept for callers outside the hardened
+ * webhook; the webhook itself uses buildPackGrantStatements so the grant is
+ * atomic with the event ledger.
  *
  * @returns {Promise<{granted: boolean, duplicate: boolean}>}
  */
@@ -296,18 +359,8 @@ export async function grantPackCredits(env, uid, eventId) {
     return { granted: false, duplicate: true };
   }
 
-  const expires = new Date(Date.now() + PACK_EXPIRY_DAYS * 24 * 60 * 60 * 1000).toISOString();
-  // A new purchase refreshes the expiry for the whole balance; subscriptions
-  // keep their plan value (pack credits then sit unused until it lapses).
-  const res = await db.prepare(
-    `UPDATE users SET
-        voice_sessions_remaining = voice_sessions_remaining + ?,
-        pack_expires_at = ?,
-        has_ever_paid = 1,
-        plan = CASE WHEN plan IS NULL OR plan IN ('', 'free') THEN 'pack' ELSE plan END,
-        updated_at = datetime('now')
-     WHERE auth_id = ?`
-  ).bind(PACK_SESSION_COUNT, expires, uid).run();
+  const expires = packExpiryIso();
+  const res = await db.prepare(PACK_GRANT_UPDATE_SQL).bind(PACK_SESSION_COUNT, expires, uid).run();
 
   const granted = (res?.meta?.changes ?? 0) === 1;
   if (!granted) {

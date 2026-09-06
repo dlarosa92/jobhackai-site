@@ -3,9 +3,11 @@
 // Runs daily at 03:00 UTC via cron trigger.
 
 const RETENTION_DAYS = 90;
+import { isDevCutoverPaused } from '../../../app/functions/_lib/dev-cutover.js';
 
 export default {
   async scheduled(event, env, ctx) {
+    if (isDevCutoverPaused(env)) return;
     ctx.waitUntil(runCleanup(env));
   }
 };

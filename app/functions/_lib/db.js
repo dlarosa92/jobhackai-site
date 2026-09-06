@@ -24,6 +24,13 @@ import { sanitizeRoleSpecificFeedback } from './feedback-validator.js';
  */
 const DB_BINDING_NAMES = ['DB', 'JOBHACKAI_DB', 'INTERVIEW_QUESTIONS_DB', 'IQ_D1'];
 
+// Subscription plans that mark has_ever_paid when written: legacy tiers plus
+// the dev0 voice subscriptions. Shared by updateUserPlan and the batch-safe
+// buildUserPlanUpdateStatement so the two write paths cannot drift. The
+// Interview Pack is a one-time purchase: its grant sets has_ever_paid itself
+// (voice-entitlements.js) and never flows through a plan update.
+export const PAID_SUBSCRIPTION_PLANS = new Set(['weekly', 'monthly', 'essential', 'pro', 'premium']);
+
 export function getDb(env) {
   if (!env) return null;
   const direct = env.DB;
@@ -254,6 +261,7 @@ export async function updateUserPlan(env, authId, {
   stripeSubscriptionId = undefined,
   subscriptionStatus = undefined,
   trialEndsAt = undefined,
+  currentPeriodStart = undefined,
   currentPeriodEnd = undefined,
   cancelAt = undefined,
   scheduledPlan = undefined,
@@ -308,6 +316,25 @@ export async function updateUserPlan(env, authId, {
       updates.push('current_period_end = ?');
       binds.push(currentPeriodEnd);
     }
+    if (currentPeriodStart !== undefined) {
+      // Databases that have not run migration 022 lack this column; skip it
+      // gracefully so this code can deploy before the migration is applied.
+      let hasPeriodStartColumn = true;
+      try {
+        await db.prepare('SELECT current_period_start FROM users LIMIT 1').first();
+      } catch (colErr) {
+        const msg = String(colErr?.message || '').toLowerCase();
+        if (msg.includes('no such column') || msg.includes('unknown column') || msg.includes('no such')) {
+          hasPeriodStartColumn = false;
+        } else {
+          throw colErr;
+        }
+      }
+      if (hasPeriodStartColumn) {
+        updates.push('current_period_start = ?');
+        binds.push(currentPeriodStart);
+      }
+    }
     if (cancelAt !== undefined) {
       updates.push('cancel_at = ?');
       binds.push(cancelAt);
@@ -321,7 +348,7 @@ export async function updateUserPlan(env, authId, {
       binds.push(scheduledAt);
     }
 
-    const paidPlans = new Set(['weekly', 'monthly', 'essential', 'pro', 'premium']);
+    const paidPlans = PAID_SUBSCRIPTION_PLANS;
     const normalizedHasEverPaid = hasEverPaid !== undefined ? hasEverPaid : has_ever_paid;
     const shouldMarkEverPaid = (plan !== undefined && paidPlans.has(plan))
       || (normalizedHasEverPaid !== undefined && Number(normalizedHasEverPaid) === 1);
@@ -368,9 +395,99 @@ export async function updateUserPlan(env, authId, {
     console.log('[DB] Updated user plan:', { authId, plan });
     return true;
   } catch (error) {
-    console.error('[DB] Error in updateUserPlan:', error);
+    const errMsg = String(error?.message || '');
+    if (errMsg.includes('UNIQUE constraint failed')) {
+      // Migration 023's partial unique indexes refused a write that would
+      // have attached this Stripe customer/subscription id to a second user.
+      // Distinct marker so operators can tell this apart from generic errors.
+      const column = errMsg.includes('stripe_customer_id') ? 'stripe_customer_id'
+        : errMsg.includes('stripe_subscription_id') ? 'stripe_subscription_id'
+        : 'unknown';
+      console.error(`[DB] updateUserPlan unique-conflict: write refused by index on ${column}`);
+    } else {
+      console.error('[DB] Error in updateUserPlan:', error);
+    }
     return false;
   }
+}
+
+/**
+ * Build (without executing) the users-row UPDATE for a plan change, for use
+ * inside a single atomic db.batch() alongside the webhook event ledger's
+ * processed-mark. Mirrors updateUserPlan's column semantics (undefined =
+ * skip, null = write NULL) but performs no reads and no column probes:
+ * migration 022 is a hard pre-deploy dependency of the code that calls this,
+ * so current_period_start and has_ever_paid are guaranteed present.
+ *
+ * Returns null when there is nothing beyond timestamps to write.
+ */
+export function buildUserPlanUpdateStatement(db, authId, {
+  plan,
+  stripeCustomerId = undefined,
+  stripeSubscriptionId = undefined,
+  subscriptionStatus = undefined,
+  trialEndsAt = undefined,
+  currentPeriodStart = undefined,
+  currentPeriodEnd = undefined,
+  cancelAt = undefined,
+  scheduledPlan = undefined,
+  scheduledAt = undefined,
+  planEventTimestamp = undefined,
+  hasEverPaid = undefined
+} = {}) {
+  if (!db || !authId) return null;
+
+  const updates = [];
+  const binds = [];
+  const push = (column, value) => { updates.push(`${column} = ?`); binds.push(value); };
+
+  if (plan !== undefined) push('plan', plan);
+  if (stripeCustomerId !== undefined) push('stripe_customer_id', stripeCustomerId);
+  if (stripeSubscriptionId !== undefined) push('stripe_subscription_id', stripeSubscriptionId);
+  if (subscriptionStatus !== undefined) push('subscription_status', subscriptionStatus);
+  if (trialEndsAt !== undefined) push('trial_ends_at', trialEndsAt);
+  if (currentPeriodStart !== undefined) push('current_period_start', currentPeriodStart);
+  if (currentPeriodEnd !== undefined) push('current_period_end', currentPeriodEnd);
+  if (cancelAt !== undefined) push('cancel_at', cancelAt);
+  if (scheduledPlan !== undefined) push('scheduled_plan', scheduledPlan);
+  if (scheduledAt !== undefined) push('scheduled_at', scheduledAt);
+
+  const paidPlans = PAID_SUBSCRIPTION_PLANS;
+  if ((plan !== undefined && paidPlans.has(plan)) || (hasEverPaid !== undefined && Number(hasEverPaid) === 1)) {
+    push('has_ever_paid', 1);
+  }
+
+  if (updates.length === 0) return null;
+
+  if (planEventTimestamp !== undefined) {
+    push('plan_updated_at', planEventTimestamp);
+  } else {
+    updates.push("plan_updated_at = datetime('now')");
+  }
+  updates.push("updated_at = datetime('now')");
+
+  binds.push(authId);
+  return db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE auth_id = ?`).bind(...binds);
+}
+
+/**
+ * Batch-safe variants of resetFeatureDailyUsage / resetUsageEvents: the user
+ * lookup is folded into a subquery so the DELETE can ride inside the same
+ * atomic db.batch() as the plan write it belongs to (trial conversion).
+ * A missing user row makes the subquery NULL, deleting nothing.
+ */
+export function buildResetFeatureDailyUsageStatement(db, authId, feature) {
+  if (!db || !authId) return null;
+  return db.prepare(
+    'DELETE FROM feature_daily_usage WHERE user_id = (SELECT id FROM users WHERE auth_id = ?1) AND feature = ?2'
+  ).bind(authId, feature);
+}
+
+export function buildResetUsageEventsStatement(db, authId, feature) {
+  if (!db || !authId) return null;
+  return db.prepare(
+    'DELETE FROM usage_events WHERE user_id = (SELECT id FROM users WHERE auth_id = ?1) AND feature = ?2'
+  ).bind(authId, feature);
 }
 
 /**
