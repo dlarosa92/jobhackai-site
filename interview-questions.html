@@ -1311,162 +1311,15 @@
   </style>
 </head>
 <body>
-  <!-- Upsell Overlay (direct child of body for reliable viewport centering) -->
-  <div id="iq-upsell" hidden style="position:fixed; inset:0; min-height:100vh; background:rgba(17,24,39,.55); z-index:1100;">
-    <div role="dialog" aria-modal="true" aria-labelledby="upsell-title" class="card" style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); max-width:560px; width:92%; box-shadow:0 14px 40px rgba(0,0,0,.25);">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:.75rem;">
-          <h3 id="upsell-title" style="margin:0;">Unlock Mock Interviews</h3>
-          <button id="upsell-cancel" class="icon-btn" aria-label="Close" style="padding:.35rem;">
-            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-        </div>
-        <p style="color:#4B5563; margin:.25rem 0 1rem 0;">Your questions are saved — upgrade to Pro to run live mock interviews with these questions.</p>
-        <ul style="margin:0 0 1rem 1.25rem; color:#374151;">
-          <li>Unlimited mock interview sessions</li>
-          <li>Answer guidance and coaching tips</li>
-          <li>Works with your starred questions</li>
-        </ul>
-        <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
-          <a id="upsell-upgrade" href="#" class="btn-primary" style="text-decoration:none; display:flex; align-items:center; justify-content:center;" onclick="startCheckout('pro'); return false;">Upgrade to Pro</a>
-          <script>
-            // Inline helper b/c this page doesn't include the global checkout helper by default.
-            // Starts server-side Stripe Checkout using /api/stripe-checkout so sessions are created dynamically.
-            (function() {
-              async function startCheckoutLocal(plan) {
-                try {
-                  if (typeof window.upgradePlan === 'function') {
-                    await window.upgradePlan(plan, {
-                      source: 'interview-questions',
-                      returnUrl: window.location.href
-                    });
-                    return;
-                  }
-                  const confirmed = typeof window.requestUpgradeConfirmation === 'function'
-                    ? await window.requestUpgradeConfirmation(plan, { mode: 'checkout', currentPlan: localStorage.getItem('user-plan') || 'free' })
-                    : true;
-                  if (!confirmed) return;
-                  if (window.showLoadingOverlay) {
-                    window._currentLoadingOverlay = window.showLoadingOverlay('Redirecting to checkout...');
-                  }
-                  const user = window.FirebaseAuthManager?.getCurrentUser?.();
-                  if (!user) {
-                    window.location.href = 'login.html';
-                    return;
-                  }
-                  const idToken = await user.getIdToken();
-                  // Trial plans must use stripe-checkout to create a subscription with trial period.
-                  if (plan === 'trial') {
-                    const res = await fetch('/api/stripe-checkout', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
-                      body: JSON.stringify({ plan: 'trial' })
-                    });
-                    const data = await res.json();
-                    if (data?.ok && data?.url) {
-                      window.location.href = data.url;
-                      return;
-                    }
-                    throw new Error(data?.error || data?.code || 'Checkout failed');
-                  }
-
-                  // Paid plans use upgrade-plan endpoint to handle existing subscriptions.
-                  const res = await fetch('/api/upgrade-plan', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
-                    body: JSON.stringify({
-                      targetPlan: plan,
-                      source: 'interview-questions',
-                      returnUrl: window.location.href
-                    })
-                  });
-                  const data = await res.json();
-                  if (!res.ok) {
-                    throw new Error(data?.error || data?.code || 'Upgrade failed');
-                  }
-                  if (data?.action === 'redirect' && data.url) {
-                    window.location.href = data.url;
-                    return;
-                  }
-                  if (data?.action === 'updated') {
-                    // Plan updated successfully, reload to refresh UI
-                    window.location.reload();
-                    return;
-                  }
-                  throw new Error('Unexpected response from upgrade endpoint');
-                } catch (err) {
-                  console.error('Checkout start error:', err);
-                  if (window._currentLoadingOverlay) { window._currentLoadingOverlay(); window._currentLoadingOverlay = null; }
-                  window.location.href = `pricing.html?plan=${encodeURIComponent(plan)}`;
-                }
-              }
-              // Expose a global name expected by the inline onclick handler
-              window.startCheckout = startCheckoutLocal;
-              
-              // CRITICAL FIX: Define refreshPlanData for upgradePlan callback
-              // This ensures the UI updates immediately after a successful plan upgrade
-              window.refreshPlanData = async function() {
-                console.log('🔄 [INTERVIEW-QUESTIONS] Refreshing plan data after upgrade...');
-                
-                try {
-                  // Get updated plan from API
-                  const user = window.FirebaseAuthManager?.getCurrentUser?.();
-                  if (!user) {
-                    console.warn('⚠️ [INTERVIEW-QUESTIONS] No user found, reloading page...');
-                    window.location.reload();
-                    return;
-                  }
-                  
-                  const idToken = await user.getIdToken();
-                  const planResponse = await fetch('/api/plan/me', {
-                    headers: { 'Authorization': `Bearer ${idToken}` }
-                  });
-                  
-                  if (planResponse.ok) {
-                    const planData = await planResponse.json();
-                    const newPlan = planData.plan || 'free';
-                    
-                    // Update localStorage
-                    localStorage.setItem('user-plan', newPlan);
-                    localStorage.setItem('dev-plan', newPlan);
-                    
-                    // Update navigation system with new plan
-                    if (window.JobHackAINavigation) {
-                      if (typeof window.JobHackAINavigation.setAuthState === 'function') {
-                        window.JobHackAINavigation.setAuthState(true, newPlan);
-                      }
-                      if (typeof window.JobHackAINavigation.scheduleUpdateNavigation === 'function') {
-                        window.JobHackAINavigation.scheduleUpdateNavigation(true);
-                      } else if (typeof window.JobHackAINavigation.updateNavigation === 'function') {
-                        window.JobHackAINavigation.updateNavigation();
-                      }
-                    }
-                    
-                    // Dispatch planChanged event for other components
-                    window.dispatchEvent(new CustomEvent('planChanged', { 
-                      detail: { newPlan } 
-                    }));
-                    
-                    console.log('✅ [INTERVIEW-QUESTIONS] Plan data refreshed successfully:', newPlan);
-                    
-                    // Reload page to show unlocked features
-                    window.location.reload();
-                  } else {
-                    console.warn('⚠️ [INTERVIEW-QUESTIONS] Failed to fetch plan data, reloading page...');
-                    window.location.reload();
-                  }
-                } catch (error) {
-                  console.error('❌ [INTERVIEW-QUESTIONS] Failed to refresh plan data:', error);
-                  // Fallback: reload the page if refresh fails
-                  console.log('🔄 [INTERVIEW-QUESTIONS] Falling back to page reload...');
-                  window.location.reload();
-                }
-              };
-            })();
-          </script>
-          <button id="upsell-cancel-2" class="btn-outline">Maybe later</button>
-        </div>
-      </div>
+  <!-- Sign-in fallback; signed-in users can practice in writing on every plan. -->
+  <div id="iq-upsell" hidden style="position:fixed; inset:0; background:rgba(17,24,39,.55); z-index:1100;">
+    <div role="dialog" aria-modal="true" aria-labelledby="upsell-title" class="card" style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); max-width:560px; width:92%;">
+      <h3 id="upsell-title">Sign in to practice</h3>
+      <p>Save your questions and practice answering them with a free JobHackAI account.</p>
+      <a href="login.html" class="btn-primary">Sign in</a>
+      <button id="upsell-cancel" class="btn-outline">Maybe later</button>
     </div>
+  </div>
   <!-- Header -->
   <header class="site-header">
     <div class="container">
@@ -2309,7 +2162,7 @@
             
             if (!response.ok) {
               if (response.status === 403) {
-                iqToast('Accessing question sets requires a valid plan (Trial, Essential, Pro, or Premium).');
+                iqToast('Sign in to access your saved question sets.');
               } else {
                 iqToast('Question set not found.');
               }
@@ -4066,7 +3919,7 @@
         return;
       }
       
-      if(['pro','premium'].includes(plan)){
+      if (IQ_ALLOWED_PLANS.includes(plan) && await getFirebaseToken()) {
         const mode = useSaved ? 'saved' : 'current';
         const seniority = iqState.set?.seniority || '';
         const type = iqSanitizeType(iqState.set?.type, iqState.prefs.type || 'mixed');
@@ -4148,7 +4001,7 @@
         }
         
       } else {
-        // Non-Pro/Premium: show upsell modal
+        // Authentication is required before saving or opening a practice session.
         const m=$IQ('#iq-upsell'); 
         if(m){ 
           m.hidden=false; 
@@ -4458,27 +4311,15 @@ function initIQPage(){
       const mockBtn = document.getElementById('btn-mock');
       const mockLock = document.getElementById('mock-lock-icon');
       
-      // Show/hide upgrade and lock based on plan
-      if (['trial', 'essential', 'pro', 'premium'].includes(userPlan)) {
-        // Show input and enable question generation
-        roleInput.disabled = false;
-        upgradeBtn.style.display = 'none';
-        lockDiv.style.display = 'none';
-        // For eligible plans, hide lock icon on Start Mock
-        if (['pro','premium'].includes(userPlan)) {
-          if (mockLock) mockLock.style.display = 'none';
-          mockBtn?.removeAttribute('data-locked');
-        } else {
-          if (mockLock) mockLock.style.display = 'inline-flex';
-          mockBtn?.setAttribute('data-locked','true');
-        }
-      } else {
-        // Page guard already redirects unauthorized users; never show upgrade banner.
-        roleInput.disabled = true;
-        if (mockLock) mockLock.style.display = 'inline-flex';
-        mockBtn?.setAttribute('data-locked','true');
-      }
-      
+      // Prep tools are available on every signed-in plan. The page preview
+      // overlay and token checks continue to gate signed-out interactions.
+      const canUsePrepTools = IQ_ALLOWED_PLANS.includes(userPlan);
+      roleInput.disabled = !canUsePrepTools;
+      upgradeBtn.style.display = 'none';
+      lockDiv.style.display = 'none';
+      if (mockLock) mockLock.style.display = 'none';
+      mockBtn?.removeAttribute('data-locked');
+
       // Update plan UI
       updatePlanUI(userPlan);
     }
@@ -4504,7 +4345,10 @@ function initIQPage(){
         'essential': 'Essential Plan',
         'pro': 'Pro Plan',
         'premium': 'Premium Plan',
-        'free': 'Free Plan'
+        'free': 'Free Plan',
+        'weekly': 'Weekly Plan',
+        'monthly': 'Monthly Plan',
+        'pack': 'Interview Pack'
       };
       const planColors = {
         trial: '#FF9100',

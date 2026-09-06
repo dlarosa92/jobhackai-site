@@ -54,7 +54,9 @@
     "test:billing:fulfilment": "node functions/_lib/__tests__/stripe-webhook-fulfilment.test.mjs",
     "test:billing:migrations": "bash ../scripts/verify-billing-migrations.sh",
     "test:billing:cutover": "node functions/_lib/__tests__/dev-cutover.test.mjs",
-    "test:billing:drift": "node functions/_lib/__tests__/billing-reconcile-drift.test.mjs"
+    "test:billing:drift": "node functions/_lib/__tests__/billing-reconcile-drift.test.mjs",
+    "test:ui:free-tools": "node tests/ui/free-tools.test.cjs",
+    "test:ui:serve": "node tests/ui/fixture-server.cjs"
   },
   "dependencies": {
     "firebase": "^10.7.0",
