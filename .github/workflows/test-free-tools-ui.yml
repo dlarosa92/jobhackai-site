@@ -1,0 +1,29 @@
+name: Free Tools UI
+on:
+  pull_request:
+    branches: [dev0, develop, main]
+    paths:
+      - 'interview-questions.html'
+      - 'resume-feedback-pro.html'
+      - 'app/tests/ui/**'
+      - 'app/package*.json'
+      - '.github/workflows/test-free-tools-ui.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  candidate-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci --no-audit --no-fund
+        working-directory: app
+      - run: npm run test:ui:free-tools
+        working-directory: app
+      - run: npm run build
+        working-directory: app
