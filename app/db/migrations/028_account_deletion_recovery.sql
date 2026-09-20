@@ -55,6 +55,8 @@ CREATE TABLE IF NOT EXISTS account_inactivity_warnings (
   state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending','sending','sent','needs_review','canceled')),
   provider_id TEXT,
   operation_id TEXT,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  last_error_code TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   sent_at TEXT
 );

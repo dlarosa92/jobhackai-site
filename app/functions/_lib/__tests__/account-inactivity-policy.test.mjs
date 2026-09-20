@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { inactiveAccountEligibility } from '../account-inactivity-policy.js';
+import { inactiveAccountEligibility,inactivityWarningEligibility } from '../account-inactivity-policy.js';
 const now=Date.parse('2026-09-20T12:00:00Z');
 const user={auth_id:'owner',email:'owner@example.test',plan:'free',subscription_status:null,scheduled_plan:null,
   voice_sessions_remaining:0,pack_expires_at:null,last_login_at:'2023-09-20 12:00:00',last_activity_at:null,
@@ -41,5 +41,11 @@ test('subscription states, scheduled plans and valid paid pack credits prevent i
   assert.equal(eligibility({plan:'pack',voice_sessions_remaining:3,pack_expires_at:'2025-12-20T12:00:00Z'}).eligible,true);
 });
 test('a login after an old warning requires a new notice even years later',()=>{
-  assert.equal(eligibility({deletion_warning_sent_at:'2022-01-01T00:00:00Z'},{sent_at:'2022-01-01T00:00:00Z'}).reason,'notice_invalidated');
+  assert.equal(eligibility({deletion_warning_sent_at:'2022-01-01T00:00:00Z'},{sent_at:'2022-01-01T00:00:00Z'}).eligible,false);
+});
+test('the 23-month warning boundary precedes the 24-month deletion boundary',()=>{
+  const u={...user,last_login_at:'2024-10-20T12:00:00Z'},a={...activity,lastLoginAt:Date.parse('2024-10-20T12:00:00Z')};
+  assert.equal(inactivityWarningEligibility(u,a,now).eligible,true);
+  assert.equal(inactiveAccountEligibility(u,warning,a,now).eligible,false);
+  assert.equal(inactivityWarningEligibility({...u,last_login_at:'2024-10-20T12:00:01Z'},a,now).eligible,false);
 });
