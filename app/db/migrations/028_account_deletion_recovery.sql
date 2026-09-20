@@ -21,17 +21,27 @@ CREATE TABLE IF NOT EXISTS account_deletion_jobs (
 CREATE INDEX IF NOT EXISTS idx_account_deletion_pending
   ON account_deletion_jobs(phase, updated_at);
 
--- Completion notification is independent of erased content. A sender must
--- enforce bounded retry/retention and provider idempotency before deployment.
+-- Completion notification is independent of erased content. Successful sends
+-- clear the address immediately; remaining addresses expire after seven days.
 CREATE TABLE IF NOT EXISTS account_deletion_notifications (
-  job_id TEXT PRIMARY KEY REFERENCES account_deletion_jobs(id),
-  email TEXT NOT NULL,
-  state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending','sent','needs_review')),
+  job_id TEXT PRIMARY KEY NOT NULL REFERENCES account_deletion_jobs(id),
+  email TEXT,
+  state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending','sending','sent','needs_review','expired')),
+  template_version TEXT NOT NULL DEFAULT 'account-deletion-v1',
+  provider_id TEXT,
+  execution_token TEXT,
+  execution_started_at TEXT,
   attempts INTEGER NOT NULL DEFAULT 0,
   last_error_code TEXT,
+  next_attempt_at TEXT DEFAULT (datetime('now')),
+  expires_at TEXT NOT NULL DEFAULT (datetime('now','+7 days')),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  sent_at TEXT
+  sent_at TEXT,
+  CHECK ((state IN ('sent','expired') AND email IS NULL)
+    OR (state IN ('pending','sending','needs_review') AND email IS NOT NULL))
 );
+CREATE INDEX IF NOT EXISTS idx_deletion_notifications_queue
+  ON account_deletion_notifications(state,next_attempt_at);
 
 -- A deletion intent stops NEW operations immediately. Existing operations must
 -- finish or be explicitly reconciled before billing/identity deletion begins.

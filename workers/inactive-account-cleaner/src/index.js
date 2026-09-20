@@ -1,5 +1,6 @@
 import { isDevCutoverPaused } from '../../../app/functions/_lib/dev-cutover.js';
-import { canonicalEnvironmentName } from '../../../app/functions/_lib/stripe-environment.js';
+import { deletionWorkerSettings } from '../../../app/functions/_lib/deletion-worker-settings.js';
+import { deliverDeletionNotifications } from '../../../app/functions/_lib/account-deletion-notifications.js';
 import { admitAccountOperation, settleAccountOperation, beginDeletionAdmission } from '../../../app/functions/_lib/account-deletion-admission.js';
 import { assertInactiveBillingClear } from '../../../app/functions/_lib/account-deletion-billing.js';
 import { inactiveAccountEligibility, inactivityWarningEligibility, hasCurrentInactivityWarning } from '../../../app/functions/_lib/account-inactivity-policy.js';
@@ -19,12 +20,7 @@ export default {
 };
 
 export async function runInactiveAccountCleanup(env,{afterUserId}={}) {
-  const mode=env.INACTIVITY_MODE ?? 'audit';
-  const environment=canonicalEnvironmentName(env);
-  const scope=env.INACTIVITY_TEST_UID==null || env.INACTIVITY_TEST_UID===''?null:env.INACTIVITY_TEST_UID;
-  if(!['audit','execute'].includes(mode) || !['dev','qa','prod'].includes(environment) ||
-      (scope!==null && (typeof scope!=='string'||!scope||scope.length>128||/\s/.test(scope))) ||
-      (mode==='execute' && environment!=='prod' && !scope))throw new Error('inactivity_configuration_invalid');
+  const {mode,scope}=deletionWorkerSettings(env);
   if(afterUserId!==undefined && (mode!=='audit'||!Number.isSafeInteger(afterUserId)||afterUserId<0))throw new Error('inactivity_audit_cursor_invalid');
   const db=env.JOBHACKAI_DB;
   if(!db || typeof db.batch!=='function')throw new Error('inactivity_database_unavailable');
@@ -32,6 +28,13 @@ export async function runInactiveAccountCleanup(env,{afterUserId}={}) {
   const after=afterUserId ?? (scope?0:cursor?.last_user_id??0);
   const results={mode,database_candidates:0,after_user_id:after,next_user_id:0,resumed:0,completed:0,pending:0,
     withdrawn:0,warnings_accepted:0,warnings_rejected:0,uncertain:0,skipped:0,billing_unverified:0,failed:0};
+  // Notices already queued by completed erasure run independently. New erasure
+  // below stages its notice for a later invocation; sending cannot roll it back.
+  results.notifications=await deliverDeletionNotifications(env);
+  if(mode==='execute') {
+    results.failed+=results.notifications.failed+(results.notifications.expired_addresses_remaining>0?1:0);
+    results.uncertain+=results.notifications.uncertain;
+  }
   if(mode==='execute') {
     // Resume only saved intent. Unfinished operations and crashed execution
     // tokens require explicit reconciliation; this worker never expires them.

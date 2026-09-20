@@ -103,6 +103,26 @@ test('an eligible warned account creates durable intent and uses the real deleti
   assert.equal(await f.count('account_deletion_notifications'),1);assert.equal(await f.count('account_inactivity_warnings'),0);
   assert.equal(f.sent().length,0);assert.ok(f.kvDeletes.length>0);
 });
+test('scheduled completion notification sends once after erasure and clears its address',async t=>{
+  const f=setup(t);acceptedWarning(f);await f.run();
+  assert.equal(f.sent().length,0);
+  const waits=[];await worker.scheduled({},f.env,{waitUntil:promise=>waits.push(promise)});await Promise.all(waits);
+  const notice=await f.db.prepare('SELECT * FROM account_deletion_notifications').first();
+  assert.equal(notice.state,'sent');assert.equal(notice.email,null);assert.equal(notice.provider_id,'mail_fixture');
+  assert.equal(await f.count('users'),0);assert.equal(await f.count('account_operation_claims'),0);
+  assert.equal(f.sent().length,1);assert.match(f.sent()[0].headers['Idempotency-Key'],/^account-deletion\//);
+  assert.match(JSON.parse(f.sent()[0].body).subject,/deletion is complete/);
+  await f.run();assert.equal(f.sent().length,1);
+});
+test('scheduled completion uncertainty requires review without reopening or repeating erasure',async t=>{
+  const f=setup(t);acceptedWarning(f);await f.run();const deletions=f.kvDeletes.length;
+  f.state.outcome='timeout';const waits=[];await worker.scheduled({},f.env,{waitUntil:promise=>waits.push(promise)});
+  await assert.rejects(Promise.all(waits),/inactivity_batch_requires_review/);
+  assert.equal(await f.db.prepare('SELECT phase FROM account_deletion_jobs').first('phase'),'complete');
+  assert.equal(await f.db.prepare('SELECT state FROM account_deletion_notifications').first('state'),'needs_review');
+  assert.equal(await f.count('users'),0);assert.equal(f.kvDeletes.length,deletions);
+  await f.run();assert.equal(f.sent().length,1);assert.equal(f.kvDeletes.length,deletions);
+});
 test('a missing address cannot be silently marked warned or deleted',async t=>{
   const f=setup(t);f.db.exec('UPDATE users SET email=NULL');await f.run();
   assert.equal(f.sent().length,0);assert.equal(await f.count('account_inactivity_warnings'),0);

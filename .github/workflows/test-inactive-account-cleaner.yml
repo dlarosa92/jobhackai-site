@@ -27,12 +27,12 @@ jobs:
         with:
           node-version: '22'
       - run: npm ci --prefix app --ignore-scripts
-      - run: node --test workers/inactive-account-cleaner/tests/cleanup.test.mjs
+      - run: node --test workers/inactive-account-cleaner/tests/cleanup.test.mjs app/functions/_lib/__tests__/account-deletion-notifications.test.mjs
       - name: Compile the actual scheduled worker without deployment
         run: |
           npx --yes wrangler@4.135.0 deploy --dry-run --env qa --config workers/inactive-account-cleaner/wrangler.toml --outdir /tmp/jobhackai-inactive-worker
           cp /tmp/jobhackai-inactive-worker/index.js /tmp/jobhackai-inactive-worker/index.mjs
-      - name: Verify compiled warning delivery and durable deletion with intercepted providers
+      - name: Verify compiled warning, completion delivery and durable deletion with intercepted providers
         env:
           JOBHACKAI_INACTIVE_BUNDLE: /tmp/jobhackai-inactive-worker/index.mjs
-        run: node --test --test-name-pattern='scheduled handler|eligible warned account|scheduled ambiguous' workers/inactive-account-cleaner/tests/cleanup.test.mjs
+        run: node --test --test-name-pattern='scheduled handler|eligible warned account|scheduled ambiguous|scheduled completion' workers/inactive-account-cleaner/tests/cleanup.test.mjs
