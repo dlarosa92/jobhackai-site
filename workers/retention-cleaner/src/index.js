@@ -12,18 +12,24 @@ export default {
   }
 };
 
-async function runCleanup(env) {
-  const db = env.JOBHACKAI_DB;
-  if (!db || typeof db.prepare !== 'function') {
-    console.warn('[retention-cleaner] JOBHACKAI_DB not bound');
-    return;
-  }
+export async function runCleanup(env) {
+  const sourceDb = env.JOBHACKAI_DB;
+  if (!sourceDb || typeof sourceDb.prepare !== 'function') throw new Error('Retention database binding missing');
+  if (!env.JOBHACKAI_KV || typeof env.JOBHACKAI_KV.delete !== 'function') throw new Error('Retention KV binding missing');
+  // An explicit operator choice is required before a new deployment deletes
+  // anything. Audit uses the identical predicates, but only executes SELECTs.
+  const audit = env.RETENTION_MODE !== 'delete';
+  const db = audit ? auditDatabase(sourceDb) : sourceDb;
+  let kvKeys = 0;
+  const kv = audit ? { delete: async () => { kvKeys++; } } : env.JOBHACKAI_KV;
+  const hasVoiceSessions = await checkColumnExists(db, 'voice_sessions', 'id');
+  if (!hasVoiceSessions) throw new Error('Voice retention schema missing');
 
   // Use SQLite datetime format (YYYY-MM-DD HH:MM:SS) to match datetime('now') columns
   const cutoffDate = new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000);
   const cutoff = cutoffDate.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '');
   const cutoffMs = cutoffDate.getTime();
-  const results = {};
+  const results = { mode: audit ? 'audit' : 'delete' };
 
   // 1. LinkedIn runs (existing logic — uses epoch ms and is_pinned)
   results.linkedin_runs = await deleteRows(
@@ -50,9 +56,7 @@ async function runCleanup(env) {
        )`;
   const resumeBinds = hasUpdatedAt ? [cutoff, cutoff, cutoff] : [cutoff, cutoff];
 
-  if (!env.JOBHACKAI_KV) {
-    console.warn('[retention-cleaner] JOBHACKAI_KV not bound — skipping KV cleanup for resume sessions');
-  } else {
+  {
     try {
       const sessions = await db.prepare(
         `SELECT id, raw_text_location FROM resume_sessions WHERE ${resumeCleanupCondition}`
@@ -60,17 +64,15 @@ async function runCleanup(env) {
       const rows = sessions.results || [];
       for (const session of rows) {
         if (session.raw_text_location) {
-          try {
-            await env.JOBHACKAI_KV.delete(session.raw_text_location);
-          } catch (_) {}
+          await kv.delete(session.raw_text_location);
         }
-        try {
-          await env.JOBHACKAI_KV.delete(`resume:${session.id}`);
-        } catch (_) {}
+        await kv.delete(`resume:${session.id}`);
       }
-      console.log(`[retention-cleaner] Cleaned up KV for ${rows.length} resume sessions`);
-    } catch (kvErr) {
-      console.warn('[retention-cleaner] KV cleanup error:', kvErr?.message || kvErr);
+      results.resume_kv_sessions = rows.length;
+      if (audit) results.kv_keys_would_delete = kvKeys;
+    } catch (_) {
+      // Keep the D1 rows that locate the KV payload so a later run can retry.
+      throw new Error('Resume payload cleanup failed; database references retained');
     }
   }
 
@@ -125,7 +127,6 @@ async function runCleanup(env) {
   // row as metadata so it stays visible in history, but its transcript and
   // scorecard are stripped (the report is locked once past retention).
   // Entitled users' aged sessions are deleted exactly like typed sessions.
-  const hasVoiceSessions = await checkColumnExists(db, 'voice_sessions', 'id');
   if (hasVoiceSessions) {
     // Mirrors getVoiceEntitlement (app/functions/_lib/voice-entitlements.js):
     // active subscription = unlimited plan label + live Stripe status + period
@@ -165,6 +166,34 @@ async function runCleanup(env) {
   }
 
   console.log('[retention-cleaner] cleanup complete', results);
+  return results;
+}
+
+// This adapter exposes no mutation path. Known cleanup statements are turned
+// into counts; unknown statements fail closed instead of reaching D1.run().
+function auditDatabase(source) {
+  return { prepare(sql) {
+    let binds = [];
+    const statement = {
+      bind(...values) { binds = values; return statement; },
+      async all() {
+        if (!/^\s*(SELECT\b|PRAGMA table_info\()/i.test(sql)) throw new Error('Unexpected retention audit read');
+        const query = source.prepare(sql);
+        return binds.length ? query.bind(...binds).all() : query.all();
+      },
+      async run() {
+        let query;
+        const deletion = sql.match(/^\s*DELETE FROM (\w+) WHERE ([\s\S]+)$/i);
+        const stripping = sql.match(/^\s*UPDATE voice_sessions SET transcript_json = NULL, scorecard_json = NULL, updated_at = datetime\('now'\)\s+WHERE ([\s\S]+)$/i);
+        if (deletion) query = `SELECT COUNT(*) AS count FROM ${deletion[1]} WHERE ${deletion[2]}`;
+        else if (stripping) query = `SELECT COUNT(*) AS count FROM voice_sessions WHERE ${stripping[1]}`;
+        else throw new Error('Unexpected retention audit operation');
+        const result = await source.prepare(query).bind(...binds).first();
+        return { meta: { changes: Number(result?.count || 0) } };
+      }
+    };
+    return statement;
+  } };
 }
 
 async function checkColumnExists(db, table, column) {
@@ -173,7 +202,7 @@ async function checkColumnExists(db, table, column) {
     const columns = new Set((info.results || []).map(r => r.name));
     return columns.has(column);
   } catch (_) {
-    return false;
+    throw new Error('Retention schema check failed');
   }
 }
 
@@ -187,8 +216,7 @@ async function deleteRows(db, sql, ...binds) {
           ? res.changes
           : null;
     return changes;
-  } catch (e) {
-    console.error(`[retention-cleaner] delete failed: ${sql}`, e?.message || e);
-    return null;
+  } catch (_) {
+    throw new Error('Retention database operation failed');
   }
 }

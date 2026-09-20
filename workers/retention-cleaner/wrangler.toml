@@ -1,6 +1,8 @@
 name = "jobhackai-retention-cleaner"
 main = "src/index.js"
 compatibility_date = "2024-12-11"
+workers_dev = false
+preview_urls = false
 
 [triggers]
 crons = ["0 3 * * *"] # daily at 03:00 UTC
@@ -17,6 +19,7 @@ kv_namespaces = [
 [env.dev.vars]
 ENVIRONMENT = "dev"
 DEV_CUTOVER_PAUSED = "false"
+RETENTION_MODE = "audit"
 
 [env.qa]
 name = "jobhackai-retention-cleaner-qa"
@@ -27,6 +30,10 @@ kv_namespaces = [
   { binding = "JOBHACKAI_KV", id = "5237372648c34aa6880f91e1a0c9708a" }
 ]
 
+[env.qa.vars]
+ENVIRONMENT = "qa"
+RETENTION_MODE = "audit"
+
 [env.production]
 name = "jobhackai-retention-cleaner-prod"
 d1_databases = [
@@ -35,3 +42,7 @@ d1_databases = [
 kv_namespaces = [
   { binding = "JOBHACKAI_KV", id = "339c38b128ce4ddc9a3c0f4d407e0e2d" }
 ]
+
+[env.production.vars]
+ENVIRONMENT = "production"
+RETENTION_MODE = "audit"
