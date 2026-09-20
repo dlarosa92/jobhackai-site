@@ -135,7 +135,7 @@ jobs:
         run: node --test app/functions/_lib/__tests__/voice-followup-deletion.test.mjs
 
       - name: Managed voice call ownership and deletion coordination
-        run: node --test app/functions/_lib/__tests__/voice-provider-calls.test.mjs
+        run: node --test app/functions/_lib/__tests__/voice-provider-calls.test.mjs app/functions/_lib/__tests__/voice-managed-interview.test.mjs
 
   admission-bundle:
     runs-on: ubuntu-latest

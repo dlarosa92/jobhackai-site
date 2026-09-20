@@ -156,11 +156,13 @@ export async function finishDeletionRecovery(env, id) {
         AND NOT EXISTS(SELECT 1 FROM users WHERE auth_id = ? AND id IS NOT ?)
         AND NOT EXISTS(SELECT 1 FROM users WHERE id = ? AND auth_id <> ?)
         AND NOT EXISTS(SELECT 1 FROM voice_provider_calls WHERE auth_id=? AND state<>'closed')
+        AND NOT EXISTS(SELECT 1 FROM voice_interview_controls WHERE auth_id=? AND legacy_unverified=1)
       THEN phase ELSE NULL END WHERE id = ?`)
-      .bind(job.auth_id, job.user_id, job.user_id, job.auth_id, job.auth_id, id));
+      .bind(job.auth_id, job.user_id, job.user_id, job.auth_id, job.auth_id, job.auth_id, id));
     for (const table of uidTables) statements.push(db.prepare(`DELETE FROM ${table} WHERE user_id = ?`).bind(job.auth_id));
     statements.push(db.prepare('DELETE FROM account_inactivity_warnings WHERE auth_id = ?').bind(job.auth_id));
     statements.push(db.prepare("DELETE FROM voice_provider_calls WHERE auth_id = ? AND state='closed'").bind(job.auth_id));
+    statements.push(db.prepare('DELETE FROM voice_interview_controls WHERE auth_id = ?').bind(job.auth_id));
     if (job.user_id != null) {
       statements.push(db.prepare('DELETE FROM feedback_sessions WHERE resume_session_id IN (SELECT id FROM resume_sessions WHERE user_id = ?)').bind(job.user_id));
       for (const table of userTables) statements.push(db.prepare(`DELETE FROM ${table} WHERE user_id = ?`).bind(job.user_id));

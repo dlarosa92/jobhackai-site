@@ -179,6 +179,22 @@ CREATE TABLE IF NOT EXISTS account_maintenance_cursors (
 
 -- Provider call control outlives browser connections and erased history rows.
 -- No keys, SDP offers/answers, audio or transcripts belong in this ledger.
+-- A close request can arrive before provider creation or credit reservation.
+-- Keep it independently so a late start cannot reopen the interview.
+CREATE TABLE IF NOT EXISTS voice_interview_controls (
+  session_id TEXT PRIMARY KEY NOT NULL,
+  auth_id TEXT NOT NULL,
+  current_attempt_id TEXT,
+  deadline_at TEXT NOT NULL,
+  reserved_at TEXT,
+  legacy_unverified INTEGER NOT NULL DEFAULT 0 CHECK (legacy_unverified IN (0,1)),
+  closed_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_voice_interview_control_owner
+  ON voice_interview_controls(auth_id);
+
 CREATE TABLE IF NOT EXISTS voice_provider_calls (
   id TEXT PRIMARY KEY NOT NULL,
   auth_id TEXT NOT NULL,
@@ -197,3 +213,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_voice_provider_call_in_flight
   ON voice_provider_calls(session_id) WHERE state<>'closed';
 CREATE INDEX IF NOT EXISTS idx_voice_provider_call_owner
   ON voice_provider_calls(auth_id,state);
+CREATE TRIGGER IF NOT EXISTS advance_managed_voice_attempt
+AFTER INSERT ON voice_provider_calls BEGIN
+  UPDATE voice_interview_controls SET current_attempt_id=NEW.id,updated_at=datetime('now')
+    WHERE session_id=NEW.session_id AND auth_id=NEW.auth_id;
+END;

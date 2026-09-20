@@ -94,7 +94,8 @@ export async function assertDeletionOperationsFinished(env, uid) {
 export async function assertDeletionQuiescent(env, uid) {
   const id=await assertDeletionOperationsFinished(env,uid);
   const db=database(env);
-  const call=await db.prepare("SELECT 1 FROM voice_provider_calls WHERE auth_id=? AND state<>'closed' LIMIT 1").bind(uid).first();
+  const call=await db.prepare(`SELECT 1 FROM voice_provider_calls WHERE auth_id=? AND state<>'closed'
+    UNION ALL SELECT 1 FROM voice_interview_controls WHERE auth_id=? AND legacy_unverified=1 LIMIT 1`).bind(uid,uid).first();
   if (call) throw new Error('deletion_voice_pending');
   return id;
 }

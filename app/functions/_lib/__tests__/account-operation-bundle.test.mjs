@@ -96,3 +96,42 @@ test('compiled deletion route verifies JWT and runs durable cleanup without admi
   assert.equal(await db.prepare('SELECT state FROM account_deletion_notifications').first('state'),'pending');
   assert.equal(calls.filter(url=>url.endsWith('accounts:delete')).length,1);
 });
+
+test('compiled managed voice route keeps its cutover gate, verifies JWT ownership and closes the recorded provider call',async t=>{
+  const db=sqliteD1();t.after(()=>db.close());
+  for(const name of ['schema.sql','migrations/028_account_deletion_recovery.sql']) db.exec(readFileSync(new URL('../../../db/'+name,import.meta.url),'utf8'));
+  db.exec("INSERT INTO users(id,auth_id,email) VALUES(1,'owner','owner@example.test')");
+  const env={DB:db,FIREBASE_PROJECT_ID:'fixture',ENVIRONMENT:'qa',VOICE_INTERVIEW_ENABLED:'true',OPENAI_API_KEY:'sk_fixture_only',
+    FRONTEND_URL:'https://qa.jobhackai.io',ASSETS:{fetch:async()=>new Response('fixture asset')}};
+  const waits=[],calls=[],originalFetch=globalThis.fetch;
+  t.after(()=>{globalThis.fetch=originalFetch;});
+  const context={waitUntil(p){waits.push(p);void p.catch(()=>{});},passThroughOnException(){throw Error('fail open forbidden');}};
+  const flush=async()=>{let offset=0;while(offset<waits.length){const pending=waits.slice(offset);offset=waits.length;await Promise.all(pending);}};
+  globalThis.fetch=async(input,init={})=>{
+    const url=String(input instanceof Request?input.url:input);
+    if(url==='https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com')return Response.json({keys:[jwk]});
+    calls.push(url);assert.ok(waits.length>0,'provider work registered before dispatch');
+    if(url==='https://api.openai.com/v1/realtime/calls') {
+      assert.equal((await db.prepare("SELECT free_session_used FROM users WHERE auth_id='owner'").first()).free_session_used,0);
+      assert.equal(init.body.get('sdp'),'v=0 offer');
+      return new Response('v=0 answer',{status:201,headers:{Location:'/v1/realtime/calls/rtc_compiled'}});
+    }
+    assert.equal(url,'https://api.openai.com/v1/realtime/calls/rtc_compiled/hangup');return new Response(null,{status:200});
+  };
+  const sessionId='11111111-1111-4111-8111-111111111111';
+  const run=body=>worker.fetch(new Request('https://qa.jobhackai.io/api/voice/connection',{
+    method:'POST',headers:{Authorization:'Bearer '+token,Origin:'https://qa.jobhackai.io','Content-Type':'application/json'},body:JSON.stringify({sessionId,...body})
+  }),env,context);
+  assert.equal((await run({action:'open',sdp:'v=0 offer',role:'Engineer'})).status,404);await flush();assert.equal(calls.length,0);
+  env.VOICE_MANAGED_CALLS_ENABLED='true';
+  const opened=await run({action:'open',sdp:'v=0 offer',role:'Engineer',uid:'other'});
+  assert.equal(opened.status,200,await opened.clone().text());const payload=await opened.json();await flush();
+  assert.equal(payload.sdp,'v=0 answer');assert.equal(payload.clientSecret,undefined);assert.equal(payload.providerCallId,undefined);
+  assert.equal(opened.headers.get('x-qa-mw'),'hit');assert.match(opened.headers.get('cache-control'),/no-store/);
+  assert.equal(await db.prepare('SELECT auth_id FROM voice_provider_calls').first('auth_id'),'owner');
+  assert.equal(await db.prepare("SELECT COUNT(*) AS n FROM account_operation_claims WHERE state<>'finished'").first('n'),0);
+  const closed=await run({action:'close'});assert.equal(closed.status,200,await closed.clone().text());assert.equal((await closed.json()).connectionClosed,true);await flush();
+  assert.equal(await db.prepare('SELECT state FROM voice_provider_calls').first('state'),'closed');
+  assert.equal(await db.prepare('SELECT free_session_used FROM users').first('free_session_used'),1);
+  assert.equal(calls.length,2);
+});

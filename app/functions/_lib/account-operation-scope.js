@@ -85,4 +85,5 @@ export function queueAccountWork(context, task) {
     void promise.catch(() => { scope.uncertain = true; });
   }
   context.waitUntil(promise);
+  return promise;
 }

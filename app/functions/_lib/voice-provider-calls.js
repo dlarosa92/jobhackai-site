@@ -42,7 +42,7 @@ function providerCallId(location) {
  * and reserves its interview before releasing the returned SDP to the client.
  * No API credential, SDP, instructions or transcript is stored in this ledger.
  * This helper never trusts a provider call ID supplied by the browser. */
-export async function createManagedVoiceCall(env, { uid, sessionId, sdp, instructions }) {
+export async function createManagedVoiceCall(env, { uid, sessionId, sdp, instructions, guarded = false, expectedAttemptId = null }) {
   owner(uid,sessionId);
   if (!validSdp(sdp) || typeof instructions !== 'string' || !instructions.trim()) throw Error('voice_call_request_invalid');
   const db = database(env), keySha = await keyIdentity(env);
@@ -57,8 +57,14 @@ export async function createManagedVoiceCall(env, { uid, sessionId, sdp, instruc
       AND NOT EXISTS(SELECT 1 FROM voice_provider_calls WHERE session_id=? AND auth_id<>?)
       AND NOT EXISTS(SELECT 1 FROM account_operation_claims WHERE auth_id=? AND kind='maintenance' AND state<>'finished')
       AND NOT EXISTS(SELECT 1 FROM voice_sessions s JOIN users u ON u.id=s.user_id
-        WHERE s.id=? AND u.auth_id<>?) RETURNING *`)
-    .bind(id,uid,sessionId,keySha,execution,uid,uid,sessionId,sessionId,uid,uid,sessionId,uid).first();
+        WHERE s.id=? AND u.auth_id<>?)
+      ${guarded ? `AND EXISTS(SELECT 1 FROM voice_interview_controls c
+        WHERE c.session_id=? AND c.auth_id=? AND c.closed_at IS NULL
+          AND julianday(c.deadline_at)>julianday('now') AND c.current_attempt_id IS ?)
+        AND NOT EXISTS(SELECT 1 FROM voice_sessions WHERE id=? AND status NOT IN ('created','active'))` : ''}
+      RETURNING *`)
+    .bind(id,uid,sessionId,keySha,execution,uid,uid,sessionId,sessionId,uid,uid,sessionId,uid,
+      ...(guarded ? [sessionId,uid,expectedAttemptId,sessionId] : [])).first();
   if (!row) throw Error('voice_call_not_admitted');
   console.log('[voice-call] creating',{attempt:id,execution});
   let active = false;
@@ -157,6 +163,7 @@ export async function closeOneVoiceCallForDeletion(env,uid) {
   if (pending) throw Error('deletion_operations_pending');
   const call=await db.prepare("SELECT id FROM voice_provider_calls WHERE auth_id=? AND state='active' ORDER BY created_at,id LIMIT 1").bind(uid).first();
   if (call) await closeManagedVoiceCall(env,{uid,attemptId:call.id});
-  const remaining=await db.prepare("SELECT 1 FROM voice_provider_calls WHERE auth_id=? AND state<>'closed' LIMIT 1").bind(uid).first();
+  const remaining=await db.prepare(`SELECT 1 FROM voice_provider_calls WHERE auth_id=? AND state<>'closed'
+    UNION ALL SELECT 1 FROM voice_interview_controls WHERE auth_id=? AND legacy_unverified=1 LIMIT 1`).bind(uid,uid).first();
   return {closed:!remaining};
 }
