@@ -31,10 +31,15 @@
     // an inline footer can send a test visitor into production analytics.
     var hostname = (window.location.hostname || '').toLowerCase();
     if (hostname === 'qa-marketing.jobhackai.io' || hostname === 'develop.jobhackai-app-marketing-seo.pages.dev') {
-      var marketingLinks = scope.querySelectorAll('a[href^="https://jobhackai.io/"], a[href^="https://www.jobhackai.io/"]');
+      var marketingLinks = scope.querySelectorAll('a[href]');
       for (var j = 0; j < marketingLinks.length; j += 1) {
-        var marketingDestination = new URL(marketingLinks[j].getAttribute('href'));
-        marketingLinks[j].href = marketingDestination.pathname + marketingDestination.search + marketingDestination.hash;
+        try {
+          var marketingDestination = new URL(marketingLinks[j].getAttribute('href'), window.location.href);
+          if ((marketingDestination.protocol === 'https:' || marketingDestination.protocol === 'http:') &&
+              ['jobhackai.io', 'www.jobhackai.io'].includes(marketingDestination.hostname)) {
+            marketingLinks[j].href = marketingDestination.pathname + marketingDestination.search + marketingDestination.hash;
+          }
+        } catch (_) { /* Leave malformed links unchanged without interrupting other links. */ }
       }
     }
   }
