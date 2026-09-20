@@ -63,7 +63,7 @@ export async function onRequest(context) {
       console.error('[DELETE-USER] Billing preflight failed:', billingError.message);
       return new Response(JSON.stringify({
         ok: false,
-        error: 'We could not verify that all subscriptions were canceled. Your account remains available. Some subscriptions may already be canceled; check billing before retrying, or contact privacy@jobhackai.io.'
+        error: 'We could not verify that billing is settled. Your account remains available. Some subscriptions may already be canceled and open checkouts may have expired; check billing before retrying, or contact privacy@jobhackai.io.'
       }), { status: 503, headers: corsHeaders(origin, env) });
     }
 

@@ -7,7 +7,9 @@ const source = name => readFileSync(new URL(name, import.meta.url), 'utf8');
 const strip = code => code.replace(/^import .*;\n/gm, '').replaceAll('export async function', 'async function').replaceAll('export function', 'function');
 const customer = (id, owner='owner') => ({id, metadata:owner ? {firebaseUid:owner}: {}});
 const sub = (id, customer='cus_1', status='active') => ({id, customer, status, metadata:{environment:'qa'}});
-function setup({ customers=[customer('cus_1')], subscriptions=[sub('sub_1')], mapped='cus_1', override, conflict=false, kvFailure=false }={}) {
+const checkout = (id='cs_1', customer='cus_1') => ({id,customer,status:'open',payment_status:'unpaid',mode:'payment',metadata:{firebaseUid:'owner',environment:'qa'}});
+const payment = (id='pi_1', status='succeeded', customer='cus_1') => ({id,status,customer,metadata:{}});
+function setup({ customers=[customer('cus_1')], subscriptions=[sub('sub_1')], sessions=[], payments=[], mapped='cus_1', override, conflict=false, kvFailure=false }={}) {
   const calls=[];
   const ctx={URL, Set, Map, encodeURIComponent, assertStripeKeyMatchesEnvironment, isForeignEnvironmentStamp, canonicalEnvironmentName, canonicalizeEnvironmentStamp,
     kvCusKey:uid=>'cusByUid:'+uid,
@@ -17,9 +19,18 @@ function setup({ customers=[customer('cus_1')], subscriptions=[sub('sub_1')], ma
       const custom=await override?.(path,init,calls);
       if(custom) return custom;
       const url=new URL('https://stripe.test'+path);
-      if(init.method==='DELETE') return Response.json({...subscriptions.find(s=>path.endsWith('/'+s.id)),status:'canceled'});
+      if(init.method==='DELETE') {
+        const s=subscriptions.find(s=>path.endsWith('/'+s.id));s.status='canceled';return Response.json(s);
+      }
+      if(init.method==='POST'&&url.pathname.endsWith('/expire')) {
+        const s=sessions.find(s=>url.pathname===`/checkout/sessions/${s.id}/expire`);s.status='expired';
+        const p=payments.find(p=>p.id===s.payment_intent);if(p)p.status='canceled';
+        return Response.json(s);
+      }
       if(url.pathname==='/customers') return Response.json({data:customers,has_more:false});
       if(url.pathname==='/subscriptions') return Response.json({data:subscriptions.filter(s=>s.customer===url.searchParams.get('customer')),has_more:false});
+      if(url.pathname==='/checkout/sessions') return Response.json({data:sessions.filter(s=>s.customer===url.searchParams.get('customer')),has_more:false});
+      if(url.pathname==='/payment_intents') return Response.json({data:payments.filter(p=>p.customer===url.searchParams.get('customer')),has_more:false});
       return Response.json(customers.find(c=>path.endsWith('/'+c.id))||{}, {status:customers.some(c=>path.endsWith('/'+c.id))?200:404});
     }
   };
@@ -146,4 +157,86 @@ test('successful Firebase fallback clears recovered auth failure from cleanup st
   assert.equal(response.status,200);assert.equal(body.warnings,undefined);
   assert.equal(h.emailOptions.cleanupPending,false);assert.ok(h.events.includes('firebase-client'));
   assert.equal(body.message,'Account sign-in access removed');
+});
+
+test('owned open checkout expires and its payment settles before subscription cancellation',async()=>{
+  const h=setup({sessions:[{...checkout(),payment_intent:'pi_1'}],payments:[payment('pi_1','requires_payment_method')]});
+  const result=await h.run();assert.equal(result.expiredCheckouts,1);assert.equal(result.canceledSubscriptions,1);
+  const expire=h.calls.findIndex(c=>c.method==='POST'),cancel=h.calls.findIndex(c=>c.method==='DELETE');
+  assert.ok(expire<cancel);assert.ok(h.calls.slice(expire+1,cancel).some(c=>c.path.startsWith('/payment_intents?')));
+});
+for(const [name,session] of [
+  ['foreign environment',{...checkout(),metadata:{firebaseUid:'owner',environment:'dev'}}],
+  ['missing environment',{...checkout(),metadata:{firebaseUid:'owner'}}],
+  ['foreign UID',{...checkout(),metadata:{firebaseUid:'other',environment:'qa'}}],
+  ['missing UID',{...checkout(),metadata:{environment:'qa'}}],
+  ['foreign client reference',{...checkout(),client_reference_id:'other'}],
+  ['setup mode',{...checkout(),mode:'setup'}],
+  ['unknown status',{...checkout(),status:'unknown'}],
+  ['unknown payment status',{...checkout(),payment_status:'unknown'}],
+  ['completed unpaid',{...checkout(),status:'complete'}],
+])test(`${name} checkout stops every billing mutation`,async()=>{
+  const h=setup({sessions:[session]});await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method!=='GET').length,0);
+});
+test('email-only customer with open checkout cannot be silently skipped',async()=>{
+  const h=setup({customers:[customer('cus_1',null)],mapped:null,subscriptions:[],sessions:[checkout()]});
+  await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method!=='GET').length,0);
+});
+for(const status of ['requires_payment_method','requires_confirmation','requires_action','processing','requires_capture','unknown']) {
+  test(`${status} unattached payment blocks identity eligibility without canceling a charge`,async()=>{
+    const h=setup({payments:[payment('pi_1',status)]});await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method!=='GET').length,0);
+  });
+}
+test('historical paid and expired checkout sessions and settled payments do not block deletion',async()=>{
+  const h=setup({sessions:[{...checkout('cs_old'),status:'complete',payment_status:'paid',metadata:{}},{...checkout('cs_expired'),status:'expired',metadata:{}}],payments:[payment(),payment('pi_canceled','canceled')]});
+  assert.equal((await h.run()).expiredCheckouts,0);
+});
+test('later customer ambiguity is discovered before expiring an earlier checkout',async()=>{
+  const h=setup({customers:[customer('cus_1'),customer('cus_2')],sessions:[checkout(),{...checkout('cs_2','cus_2'),metadata:{firebaseUid:'owner',environment:'dev'}}]});
+  await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method!=='GET').length,0);
+});
+test('an expiration HTTP error, timeout or mismatched success never reaches cancellation',async()=>{
+  for(const outcome of ['http','timeout','mismatch','open']) {
+    const h=setup({sessions:[checkout()],override:(_path,init)=>{
+      if(init.method!=='POST')return;
+      if(outcome==='timeout')throw Error('timeout');
+      if(outcome==='http')return new Response('',{status:409});
+      return Response.json({...checkout(outcome==='mismatch'?'cs_other':'cs_1'),status:outcome==='open'?'open':'expired'});
+    }});
+    await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method==='DELETE').length,0);
+  }
+});
+test('expiration response alone cannot hide a still-open session or unsettled payment',async()=>{
+  for(const lingering of ['session','payment']) {
+    const sessions=[{...checkout(),payment_intent:'pi_1'}],payments=[payment('pi_1','requires_payment_method')];
+    const h=setup({sessions,payments,override:(_path,init)=>{
+      if(init.method==='POST') {
+        if(lingering==='payment')sessions[0].status='expired';
+        return Response.json({...sessions[0],status:'expired'});
+      }
+    }});
+    await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method==='DELETE').length,0);
+  }
+});
+test('subscription appearing during checkout expiration is rescanned and canceled',async()=>{
+  const subscriptions=[],sessions=[checkout()];
+  const h=setup({subscriptions,sessions,override:(_path,init)=>{
+    if(init.method==='POST')subscriptions.push(sub('sub_raced'));
+  }});
+  assert.equal((await h.run()).canceledSubscriptions,1);assert.equal(subscriptions[0].status,'canceled');
+});
+test('final billing rescan rejects a new pending payment after subscription cancellation',async()=>{
+  const payments=[];
+  const h=setup({payments,override:(_path,init)=>{if(init.method==='DELETE')payments.push(payment('pi_late','processing'));}});
+  await assert.rejects(h.run(),/Payment remains unsettled/);assert.equal(h.calls.filter(c=>c.method==='DELETE').length,1);
+});
+test('checkout and payment pagination inspect later-page pending resources',async()=>{
+  for(const endpoint of ['/checkout/sessions','/payment_intents']) {
+    const h=setup({override:path=>{
+      const u=new URL('https://x.test'+path);if(u.pathname!==endpoint)return;
+      const later=u.searchParams.has('starting_after');
+      return Response.json({data:endpoint==='/checkout/sessions'?[{...checkout(later?'cs_pending':'cs_paid'),status:'complete',payment_status:later?'unpaid':'paid'}]:[payment(later?'pi_pending':'pi_paid',later?'processing':'succeeded')],has_more:!later});
+    }});
+    await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method!=='GET').length,0);assert.ok(h.calls.some(c=>c.path.includes('starting_after=')));
+  }
 });

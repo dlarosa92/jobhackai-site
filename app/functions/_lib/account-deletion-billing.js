@@ -24,6 +24,76 @@ async function listAll(env, path) {
 
 const terminal = new Set(['canceled', 'incomplete_expired']);
 const knownStatuses = new Set(['active', 'trialing', 'past_due', 'unpaid', 'paused', 'incomplete', ...terminal]);
+const objectId = value => typeof value === 'string' ? value : value?.id;
+const paymentStates = new Set(['requires_payment_method', 'requires_confirmation', 'requires_action', 'processing', 'requires_capture', 'canceled', 'succeeded']);
+
+// Checkout expiration can race with payment completion. A successful POST alone
+// is not a settlement proof: rescan sessions, payments and subscriptions before
+// allowing the caller to remove identity. This still needs admission coordination
+// at every writer; scans cannot prevent a new request after the final read.
+async function inspectCheckouts(env, customer, uid, { allowOpen }) {
+  const open = [];
+  const expirablePayments = new Set();
+  const sessions = await listAll(env, `/checkout/sessions?customer=${encodeURIComponent(customer.id)}`);
+  for (const session of sessions) {
+    if (!session?.id || objectId(session.customer) !== customer.id ||
+        !['open', 'complete', 'expired'].includes(session.status) ||
+        !['paid', 'unpaid', 'no_payment_required'].includes(session.payment_status)) {
+      throw new Error('Invalid billing checkout');
+    }
+    if (session.status === 'complete' && session.payment_status === 'unpaid') {
+      throw new Error('Checkout payment remains unsettled');
+    }
+    if (session.status !== 'open') continue;
+    if (!allowOpen) throw new Error('Checkout remains open');
+    if (customer.metadata?.firebaseUid !== uid || session.metadata?.firebaseUid !== uid ||
+        (session.client_reference_id && session.client_reference_id !== uid) ||
+        !['payment', 'subscription'].includes(session.mode) || session.payment_status !== 'unpaid' ||
+        isForeignEnvironmentStamp(env, session.metadata?.environment) ||
+        (canonicalEnvironmentName(env) !== 'prod' && !canonicalizeEnvironmentStamp(session.metadata?.environment))) {
+      throw new Error('Checkout ownership or state unverified');
+    }
+    open.push(session);
+    if (objectId(session.payment_intent)) expirablePayments.add(objectId(session.payment_intent));
+  }
+  for (const payment of await listAll(env, `/payment_intents?customer=${encodeURIComponent(customer.id)}`)) {
+    if (!payment?.id || objectId(payment.customer) !== customer.id || !paymentStates.has(payment.status)) {
+      throw new Error('Invalid billing payment');
+    }
+    if (['succeeded', 'canceled'].includes(payment.status)) continue;
+    // Do not cancel a pending charge. Only a not-yet-started payment attached to
+    // an explicitly owned open Checkout may resolve through session expiration.
+    if (!allowOpen || payment.status !== 'requires_payment_method' || !expirablePayments.has(payment.id) ||
+        (payment.metadata?.firebaseUid && payment.metadata.firebaseUid !== uid) ||
+        isForeignEnvironmentStamp(env, payment.metadata?.environment)) {
+      throw new Error('Payment remains unsettled');
+    }
+  }
+  return open;
+}
+
+async function inspectSubscriptions(env, customer, uid) {
+  const subscriptions = await listAll(env, `/subscriptions?customer=${encodeURIComponent(customer.id)}&status=all`);
+  for (const sub of subscriptions) {
+    if (!sub?.id || !knownStatuses.has(sub.status) || objectId(sub.customer) !== customer.id) {
+      throw new Error('Invalid billing subscription');
+    }
+  }
+  const live = subscriptions.filter(sub => !terminal.has(sub.status));
+  for (const sub of live) {
+    const stamp = sub.metadata?.environment;
+    if (isForeignEnvironmentStamp(env, stamp) ||
+        (canonicalEnvironmentName(env) !== 'prod' && !canonicalizeEnvironmentStamp(stamp))) {
+      throw new Error('Subscription environment ownership unverified');
+    }
+    if (customer.metadata?.firebaseUid !== uid ||
+        (sub.metadata?.firebaseUid && sub.metadata.firebaseUid !== uid) ||
+        !(await assertNoCrossUserStripeIds(env, { uid, stripeSubscriptionId: sub.id })).ok) {
+      throw new Error('Subscription ownership conflict');
+    }
+  }
+  return live;
+}
 
 /** Verify every candidate before canceling anything, then confirm cancellation
  * before the caller removes Firebase access. Email alone is never ownership. */
@@ -49,41 +119,37 @@ export async function cancelBillingBeforeDeletion(env, { uid, user, email }) {
       if (customer.deleted !== true) customers.set(customer.id, customer);
     }
   }
-  const pending = new Map();
+  const ownedCustomers = [];
+  const openCheckouts = new Map();
   for (const customer of customers.values()) {
     const owner = customer.metadata?.firebaseUid;
     if (owner && owner !== uid) {
       if (mapped.has(customer.id)) throw new Error('Billing ownership conflict');
       continue; // Another explicitly owned account sharing an email.
     }
-    const subscriptions = await listAll(env, `/subscriptions?customer=${encodeURIComponent(customer.id)}&status=all`);
-    for (const sub of subscriptions) {
-      if (!sub?.id || !knownStatuses.has(sub.status) || (typeof sub.customer === 'string' ? sub.customer : sub.customer?.id) !== customer.id) {
-        throw new Error('Invalid billing subscription');
-      }
-    }
-    const live = subscriptions.filter(sub => !terminal.has(sub.status));
-    // Dev/QA may share a Stripe account and Firebase identity. Do not delete
-    // that identity or cancel billing when another environment owns access.
-    for (const sub of live) {
-      const stamp = sub.metadata?.environment;
-      if (isForeignEnvironmentStamp(env, stamp) ||
-          (canonicalEnvironmentName(env) !== 'prod' && !canonicalizeEnvironmentStamp(stamp))) {
-        throw new Error('Subscription environment ownership unverified');
-      }
-    }
+    const live = await inspectSubscriptions(env, customer, uid);
+    const sessions = await inspectCheckouts(env, customer, uid, { allowOpen: true });
     if (owner !== uid) {
       if (mapped.has(customer.id) || live.length) throw new Error('Billing ownership unverified');
       continue;
     }
     if (!(await assertNoCrossUserStripeIds(env, { uid, stripeCustomerId: customer.id })).ok) throw new Error('Billing ownership conflict');
-    for (const sub of live) {
-      if ((sub.metadata?.firebaseUid && sub.metadata.firebaseUid !== uid) ||
-          !(await assertNoCrossUserStripeIds(env, { uid, stripeSubscriptionId: sub.id })).ok) {
-        throw new Error('Subscription ownership conflict');
-      }
-      pending.set(sub.id, sub);
+    ownedCustomers.push(customer);
+    for (const session of sessions) openCheckouts.set(session.id, session);
+  }
+  // Every candidate is validated before the first external mutation.
+  for (const session of openCheckouts.values()) {
+    const res = await stripe(env, `/checkout/sessions/${encodeURIComponent(session.id)}/expire`, { method: 'POST' });
+    if (!res.ok) throw new Error('Checkout expiration unconfirmed');
+    const expired = await res.json();
+    if (expired.id !== session.id || expired.status !== 'expired' || objectId(expired.customer) !== objectId(session.customer)) {
+      throw new Error('Checkout expiration unconfirmed');
     }
+  }
+  const pending = new Map();
+  for (const customer of ownedCustomers) {
+    await inspectCheckouts(env, customer, uid, { allowOpen: false });
+    for (const sub of await inspectSubscriptions(env, customer, uid)) pending.set(sub.id, sub);
   }
   for (const sub of pending.values()) {
     const res = await stripe(env, `/subscriptions/${encodeURIComponent(sub.id)}`, { method: 'DELETE' });
@@ -94,5 +160,11 @@ export async function cancelBillingBeforeDeletion(env, { uid, user, email }) {
       throw new Error('Subscription cancellation unconfirmed');
     }
   }
-  return { canceledSubscriptions: pending.size };
+  // A timeout or an outstanding payment after cancellation is still a failure;
+  // the caller must preserve sign-in and report possible partial cancellation.
+  for (const customer of ownedCustomers) {
+    await inspectCheckouts(env, customer, uid, { allowOpen: false });
+    if ((await inspectSubscriptions(env, customer, uid)).length) throw new Error('Billing cancellation remains unsettled');
+  }
+  return { canceledSubscriptions: pending.size, expiredCheckouts: openCheckouts.size };
 }
