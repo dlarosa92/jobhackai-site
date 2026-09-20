@@ -70,6 +70,7 @@ export async function onRequest(context) {
     // Billing is settled before attempting Firebase identity removal.
     // Existing post-identity cleanup remains best effort (see review notes).
     let firebaseAuthDeleted = false;
+    const authErrors = [];
 
     // Approach A: Firebase Admin API via service account (preferred)
     const saJson = (env.FIREBASE_SERVICE_ACCOUNT_JSON || '').trim();
@@ -79,7 +80,7 @@ export async function onRequest(context) {
         firebaseAuthDeleted = true;
         console.log(`[DELETE-USER] Firebase Auth user ${fbResult.alreadyDeleted ? 'already deleted' : 'deleted'} (admin API):`, uid);
       } else {
-        errors.push(`Firebase Admin API deletion failed: ${fbResult.error}`);
+        authErrors.push(`Firebase Admin API deletion failed: ${fbResult.error}`);
         console.error('[DELETE-USER] Firebase Admin API deletion failed:', fbResult.error);
       }
     }
@@ -102,15 +103,15 @@ export async function onRequest(context) {
             console.log('[DELETE-USER] Firebase Auth user deleted (client API):', uid);
           } else {
             const fbErr = await fbRes.text().catch(() => '');
-            errors.push(`Firebase client API deletion failed (${fbRes.status}): ${fbErr}`);
+            authErrors.push(`Firebase client API deletion failed (${fbRes.status}): ${fbErr}`);
             console.error('[DELETE-USER] Firebase client API deletion failed:', fbRes.status, fbErr);
           }
         } catch (fbDelErr) {
-          errors.push(`Firebase client API deletion error: ${fbDelErr.message}`);
+          authErrors.push(`Firebase client API deletion error: ${fbDelErr.message}`);
           console.error('[DELETE-USER] Firebase client API deletion error:', fbDelErr.message);
         }
       } else if (!saJson) {
-        errors.push('Firebase Auth deletion skipped: neither FIREBASE_SERVICE_ACCOUNT_JSON nor FIREBASE_WEB_API_KEY configured');
+        authErrors.push('Firebase Auth deletion skipped: neither FIREBASE_SERVICE_ACCOUNT_JSON nor FIREBASE_WEB_API_KEY configured');
         console.warn('[DELETE-USER] No Firebase credentials configured, skipping Firebase Auth deletion');
       }
     }
@@ -119,7 +120,7 @@ export async function onRequest(context) {
       return new Response(JSON.stringify({
         ok: false,
         error: 'Your sign-in account could not be deleted. Subscription cancellation has completed; your stored account data remains available. You can retry deletion or contact privacy@jobhackai.io.',
-        partialErrors: errors
+        partialErrors: authErrors
       }), { status: 500, headers: corsHeaders(origin, env) });
     }
 
