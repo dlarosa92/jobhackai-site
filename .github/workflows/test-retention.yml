@@ -1,0 +1,27 @@
+name: Retention safety
+on:
+  pull_request:
+    branches: [dev0, develop, main]
+    paths:
+      - 'workers/retention-cleaner/**'
+      - 'app/functions/_lib/dev-cutover.js'
+      - 'app/functions/_lib/__tests__/sqlite-d1-helper.mjs'
+      - '.github/workflows/test-retention.yml'
+  push:
+    branches: [dev0, develop, main]
+    paths:
+      - 'workers/retention-cleaner/**'
+      - 'app/functions/_lib/dev-cutover.js'
+      - '.github/workflows/test-retention.yml'
+permissions:
+  contents: read
+jobs:
+  retention-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test workers/retention-cleaner/tests/cleanup.test.mjs
+      - run: npx --yes wrangler@4.135.0 deploy --dry-run --env qa --config workers/retention-cleaner/wrangler.toml

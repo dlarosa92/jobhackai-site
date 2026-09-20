@@ -72,9 +72,10 @@ require_match "js/logo-link-env.js" \
   "return[[:space:]]+isDevOrQaHost[[:space:]]*\\?[[:space:]]*'/'[[:space:]]*:[[:space:]]*'https://jobhackai\\.io/'" \
   "js/logo-link-env.js must keep dev/QA logo links self-contained"
 
+# Marketing articles are nested under /blog; relative index.html breaks previews.
 require_match "marketing/js/navigation.js" \
-  "VISITOR_HOME_HREF[[:space:]]*=[[:space:]]*IS_DEV_OR_QA_HOST[[:space:]]*\\?[[:space:]]*'index\\.html'[[:space:]]*:[[:space:]]*'https://jobhackai\\.io/'" \
-  "marketing/js/navigation.js must keep dev/QA Home links self-contained"
+  "VISITOR_HOME_HREF[[:space:]]*=[[:space:]]*IS_DEV_OR_QA_HOST[[:space:]]*\\?[[:space:]]*'/index\\.html'[[:space:]]*:[[:space:]]*'https://jobhackai\\.io/'" \
+  "marketing/js/navigation.js must keep dev/QA Home links rooted at the marketing site"
 require_match "marketing/js/navigation.js" \
   "VISITOR_LOGO_HREF[[:space:]]*=[[:space:]]*IS_DEV_OR_QA_HOST[[:space:]]*\\?[[:space:]]*'/'[[:space:]]*:[[:space:]]*'https://jobhackai\\.io/'" \
   "marketing/js/navigation.js must keep dev/QA logo links self-contained"
