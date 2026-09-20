@@ -46,7 +46,7 @@
   };
 
   function currentPage() {
-    var path = (window.location.pathname || '').split('/').pop() || '';
+    var path = (window.location.pathname || '').replace(/\/+$/, '').split('/').pop() || '';
     return path.replace('.html', '');
   }
 

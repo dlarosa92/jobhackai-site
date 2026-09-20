@@ -71,3 +71,12 @@ test('pricing includes its offer controller and an actual plan anchor', () => {
   assert.ok(pricing.includes('id="plans"'));
   assert.ok(!pricing.includes('>Try your first voice interview free</a>'));
 });
+
+test('all served pricing paths show the exhausted-account offer', async () => {
+  const fixture = cases.find(value => value.name === 'free session exhausted');
+  for (const path of ['pricing', 'pricing/', 'pricing.html']) {
+    const page = await render(fixture, path);
+    assert.equal(page.button.textContent, fixture.label, path);
+    assert.equal(page.button.href, '#plans', path);
+  }
+});
