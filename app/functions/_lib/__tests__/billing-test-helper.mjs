@@ -298,6 +298,12 @@ export function createFakeD1(seed = {}) {
       return { first: null, results: [], changes: before - state.tables[table].length };
     }
 
+    // Legacy billing fixtures have no consent-owned checkout contexts. The
+    // actual SQL and nonempty joins are covered with real SQLite separately.
+    if (s.startsWith('UPDATE checkout_attributions SET stripe_subscription_id=') ||
+        s.startsWith('INSERT INTO stripe_payment_attributions(')) {
+      return { first: null, results: [], changes: 0 };
+    }
     throw new Error(`FakeD1: unsupported SQL: ${s}`);
   }
 

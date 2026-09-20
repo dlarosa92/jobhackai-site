@@ -8,7 +8,15 @@ export async function onRequest(context) {
   const { request, next } = context;
   const url = new URL(request.url);
 
-  if (url.pathname === '/pricing' || url.pathname === '/pricing/') {
+  // Relative scripts, styles and navigation in pricing.html assume a root-level
+  // document. Serving the HTML under /pricing/ resolves them under /pricing/js,
+  // /pricing/css, etc. Canonicalize before rendering; retain campaign parameters.
+  if (url.pathname === '/pricing/') {
+    url.pathname = '/pricing';
+    return Response.redirect(url.toString(), 308);
+  }
+
+  if (url.pathname === '/pricing') {
     try {
       const targetUrl = new URL('/pricing.html' + url.search + url.hash, url.origin);
       const assetRequest = new Request(targetUrl.toString(), {

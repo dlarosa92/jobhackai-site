@@ -13,7 +13,7 @@
 //      queue side effects; they perform no billing writes themselves.
 //   5. One atomic db.batch() commits every critical write PLUS the ledger
 //      processed-mark, so billing state and idempotency can never diverge
-//      across a crash. Non-D1 effects (KV caches, GA4, email) run only
+//      across a crash. Non-D1 effects (KV caches, email) run only
 //      after the batch commits: at-most-once, never duplicated.
 //   6. Critical failures (unresolved owner, ownership conflict, ambiguous
 //      period, write failure) mark the ledger row 'failed' and return 5xx
@@ -71,60 +71,15 @@ import {
 } from '../_lib/stripe-environment.js';
 import { resolveOwnerUid, assertNoCrossUserStripeIds, readSubscriptionPeriod, TransientStripeError } from '../_lib/stripe-identity.js';
 import { claimEvent, buildMarkProcessedStatement, markEventFailed, RECIPIENT_GUARD_ERROR } from '../_lib/stripe-event-ledger.js';
+import { REVENUE_EVENTS, stageCollectedRevenue } from '../_lib/collected-revenue.js';
+import { stageCheckoutAttribution } from '../_lib/payment-attribution.js';
 import { sendEmail } from '../_lib/email.js';
 import { subscriptionCancelledEmail, paymentFailedEmail } from '../_lib/email-templates.js';
 
-// GA4 Measurement Protocol: post a server-side conversion event so that
-// trial starts and paid subscriptions show up in GA4 alongside client-side
-// events. Requires GA4_MEASUREMENT_ID + GA4_API_SECRET to be configured in
-// the worker environment; silently no-ops otherwise so checkout never
-// fails when analytics is unconfigured (e.g. preview environments).
-async function sendGa4Event(env, { clientId, userId, name, params }) {
-  try {
-    const measurementId = env.GA4_MEASUREMENT_ID || env.NEXT_PUBLIC_GA_ID;
-    const apiSecret = env.GA4_API_SECRET;
-    if (!measurementId || !apiSecret || !clientId) return;
-    const url = `https://www.google-analytics.com/mp/collect?measurement_id=${encodeURIComponent(measurementId)}&api_secret=${encodeURIComponent(apiSecret)}`;
-    const body = {
-      client_id: clientId,
-      ...(userId ? { user_id: String(userId) } : {}),
-      events: [{ name, params }],
-      non_personalized_ads: false
-    };
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-    if (!res.ok) {
-      console.warn(`[WEBHOOK] GA4 MP returned ${res.status} for event ${name}`);
-    }
-  } catch (mpErr) {
-    console.warn('[WEBHOOK] GA4 MP error (non-blocking):', mpErr?.message || mpErr);
-  }
-}
-
-/** Subscription list price in dollars (Stripe `unit_amount` is cents); null if missing. */
-function subscriptionPriceAmountDollars(subscription) {
-  const cents = subscription?.items?.data?.[0]?.price?.unit_amount;
-  if (cents == null) return null;
-  const n = Number(cents);
-  if (!Number.isFinite(n)) return null;
-  return n / 100;
-}
-
-// Returns null for unrecognized plans so callers can detect a missing price
-// (e.g. a new paid plan added to isPaidPlan but not mapped here) instead of
-// silently sending value: 0 to GA4 and distorting revenue reports.
-function hardcodedPlanAmountDollars(plan) {
-  if (plan === 'weekly') return 17;
-  if (plan === 'monthly') return 34;
-  if (plan === 'pack') return 39;
-  if (plan === 'essential') return 29;
-  if (plan === 'pro') return 59;
-  if (plan === 'premium') return 99;
-  return null;
-}
+// Collected revenue is recorded from fresh Stripe charge/refund objects in
+// collected-revenue.js. Entitlement changes are not proof of payment. GA4
+// delivery must use a consented browser attribution context and durable outbox;
+// do not restore synthetic server.<uid> IDs or list-price purchase events.
 
 // Handler outcomes:
 //   { kind: 'ok' }                 — critical writes staged in ctx; commit them.
@@ -240,7 +195,7 @@ export async function onRequest(context) {
     statements: [],          // critical D1 writes — committed with the processed-mark
     requiredUserRows: new Set(), // auth_ids whose row must exist at commit (recipient guard)
     postCommit: [],          // awaited after commit (KV cache invalidation)
-    fireAndForget: []        // context.waitUntil after commit (GA4, email)
+    fireAndForget: []        // context.waitUntil after commit (email)
   };
 
   let outcome;
@@ -300,7 +255,7 @@ export async function onRequest(context) {
   // Post-commit effects: at-most-once by construction (a retry after commit
   // returns 200 at the ledger before reaching any handler). A crash here can
   // lose one of these, never duplicate it — KV repopulates on read; a lost
-  // GA4/email event is the accepted, logged trade-off.
+  // email event is the accepted, logged trade-off.
   for (const run of ctx.postCommit) {
     try { await run(); } catch (e) { console.warn('[WEBHOOK] post-commit cache step failed (non-blocking):', e?.message || e); }
   }
@@ -314,6 +269,7 @@ export async function onRequest(context) {
 }
 
 async function routeEvent(context, env, event, ctx) {
+  if (REVENUE_EVENTS.has(event.type)) return stageCollectedRevenue(env, event, ctx);
   switch (event.type) {
     case 'checkout.session.completed': return handleCheckoutCompleted(env, event, ctx);
     // Delayed payment methods: the session completed earlier with
@@ -336,7 +292,7 @@ async function routeEvent(context, env, event, ctx) {
 // Stage the users-row plan write with the same timestamp-ordering protection
 // updateUserPlan callers rely on: an event older than the row's
 // plan_updated_at is skipped (planApplied=false) so out-of-order webhooks
-// never overwrite newer state, and callers gate side effects (GA4, resets)
+// never overwrite newer state, and callers gate side effects (resets)
 // on planApplied so stale replays can't double-count.
 //
 // `preloadedPlanData` lets callers that already read the row (trial
@@ -470,27 +426,12 @@ async function stagePackGrant(env, event, ctx, { uid, customerEmail, sessionId, 
   const statements = buildPackGrantStatements(db, { uid, eventId: event.id, sessionId });
   if (statements.length === 0) return transient('pack_grant_unstageable');
   ctx.statements.push(...statements);
+  stageCheckoutAttribution(env, ctx, { session: sess, uid });
   ctx.requiredUserRows.add(uid); // no recipient row at commit → whole batch rolls back, retryable
   console.log(`✍️ STAGING PACK GRANT: +${PACK_SESSION_COUNT} sessions for uid=${redactId(uid)}`);
 
-  // Cache invalidation and telemetry run only after the commit.
+  // Cache invalidation runs only after the commit.
   ctx.postCommit.push(() => invalidateBillingCaches(env, uid));
-  let packAmount = hardcodedPlanAmountDollars('pack');
-  if (sess?.amount_total != null && Number.isFinite(Number(sess.amount_total))) {
-    packAmount = Number(sess.amount_total) / 100;
-  }
-  ctx.fireAndForget.push(() => sendGa4Event(env, {
-    clientId: `server.${uid}`,
-    userId: uid,
-    name: 'purchase',
-    params: {
-      transaction_id: sessionId,
-      currency: (sess?.currency || 'usd').toUpperCase(),
-      value: packAmount,
-      plan: 'pack',
-      items: [{ item_id: priceId || 'pack', item_name: 'pack', price: packAmount, quantity: 1 }]
-    }
-  }));
   return ok();
 }
 
@@ -677,54 +618,8 @@ async function handleCheckoutCompleted(env, event, ctx) {
   }, event.created);
   console.log(`✅ D1 WRITE ${planApplied ? 'STAGED' : 'SKIPPED (out-of-order)'}: ${redactId(uid)} → ${effectivePlan}`);
 
-  // GA4 conversion: trial_start for $0 trials, purchase for paid plans.
-  // Runs post-commit and only when the plan write actually applied, so a
-  // stale or replayed webhook never inflates GA4 counts.
-  if (planApplied) {
-    let sessionAmount = null;
-    if (sess?.amount_total != null) {
-      const total = Number(sess.amount_total);
-      if (Number.isFinite(total)) sessionAmount = total / 100;
-    }
-    const planAmount =
-      sessionAmount ??
-      subscriptionPriceAmountDollars(subscription) ??
-      hardcodedPlanAmountDollars(effectivePlan);
-    if (effectivePlan === 'trial') {
-      ctx.fireAndForget.push(() => sendGa4Event(env, {
-        clientId: `server.${uid}`,
-        userId: uid,
-        name: 'trial_start',
-        params: {
-          plan: 'trial',
-          source: 'stripe_checkout',
-          session_id: sessionId
-        }
-      }));
-    } else if (isPaidPlan(effectivePlan)) {
-      if (planAmount == null) {
-        console.warn(`[WEBHOOK] purchase event skipped: could not determine planAmount for plan=${effectivePlan} session=${redactId(sessionId)}`);
-      } else {
-        ctx.fireAndForget.push(() => sendGa4Event(env, {
-          clientId: `server.${uid}`,
-          userId: uid,
-          name: 'purchase',
-          params: {
-            transaction_id: sessionId,
-            currency: (sess?.currency || 'usd').toUpperCase(),
-            value: planAmount,
-            plan: effectivePlan,
-            items: [{
-              item_id: priceId || effectivePlan,
-              item_name: effectivePlan,
-              price: planAmount,
-              quantity: 1
-            }]
-          }
-        }));
-      }
-    }
-  }
+  stageCheckoutAttribution(env, ctx, { session: sess, uid });
+
   return ok();
 }
 
@@ -937,34 +832,7 @@ async function handleSubscriptionUpdated(env, event, ctx) {
       if (resetFeedback) ctx.statements.push(resetFeedback);
     }
 
-    // GA4 conversion: trial → paid is a real `purchase`. Post-commit and
-    // gated on planApplied, so stale/replayed webhooks never double-count.
-    if (isPaidPlan(effectivePlan)) {
-      const convertedPlanAmount =
-        subscriptionPriceAmountDollars(sub) ?? hardcodedPlanAmountDollars(effectivePlan);
-      if (convertedPlanAmount == null) {
-        console.warn(`[WEBHOOK] trial-conversion purchase event skipped: could not determine planAmount for plan=${effectivePlan} subId=${redactId(sub?.id)}`);
-      } else {
-        ctx.fireAndForget.push(() => sendGa4Event(env, {
-          clientId: `server.${uid}`,
-          userId: uid,
-          name: 'purchase',
-          params: {
-            transaction_id: `${sub.id}.trial_converted`,
-            currency: (sub?.currency || 'usd').toUpperCase(),
-            value: convertedPlanAmount,
-            plan: effectivePlan,
-            converted_from: 'trial',
-            items: [{
-              item_id: pId || effectivePlan,
-              item_name: effectivePlan,
-              price: convertedPlanAmount,
-              quantity: 1
-            }]
-          }
-        }));
-      }
-    }
+
   }
   return ok();
 }

@@ -2445,9 +2445,7 @@ export async function upsertCookieConsent(env, { userId, authId, clientId, conse
  */
 export async function getCookieConsent(env, userId, clientId) {
   const db = getDb(env);
-  if (!db) {
-    return null;
-  }
+  if (!db) throw new Error('consent_read_unavailable');
 
   try {
     let row = null;
@@ -2471,13 +2469,17 @@ export async function getCookieConsent(env, userId, clientId) {
       ).bind(clientId).first();
     }
 
-    if (!row || !row.consent_json) {
-      return null;
+    if (!row) return null;
+    // Distinguish an invalid stored decision from an absent record. The API
+    // uses this non-grant to clear stale client grants without clearing a
+    // valid local decision during anonymous-to-account initialization.
+    try {
+      return JSON.parse(row.consent_json) ?? { version: 0, analytics: false };
+    } catch (_) {
+      return { version: 0, analytics: false };
     }
-
-    return JSON.parse(row.consent_json);
   } catch (error) {
-    console.error('[DB] Error in getCookieConsent:', error);
-    return null;
+    console.error('[DB] Consent lookup failed');
+    throw new Error('consent_read_unavailable');
   }
 }

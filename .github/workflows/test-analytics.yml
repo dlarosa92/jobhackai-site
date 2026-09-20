@@ -3,7 +3,24 @@ on:
   push:
     branches: [main, develop, dev0]
     paths:
+      - 'workers/analytics-delivery/**'
+      - 'app/db/migrations/027_analytics_delivery.sql'
+      - 'app/functions/_lib/analytics-money.js'
+      - 'app/functions/_lib/collected-revenue.js'
       - 'js/cookie-consent.js'
+      - 'js/login-page.js'
+      - 'js/auth-action.js'
+      - 'js/verify-email.js'
+      - 'js/stripe-integration.js'
+      - 'app/functions/api/stripe-checkout.js'
+      - 'app/functions/_lib/checkout-attribution.js'
+      - 'app/db/migrations/025_checkout_attribution.sql'
+      - 'app/functions/_lib/__tests__/checkout-attribution.test.mjs'
+      - 'app/functions/api/cookie-consent.js'
+      - 'app/functions/_lib/db.js'
+      - 'functions/_lib/db.js'
+      - 'functions/api/cookie-consent.js'
+      - 'app/functions/_lib/__tests__/consent-api.test.mjs'
       - 'app/functions/analytics-check.js'
       - 'app/functions/_lib/__tests__/analytics-diagnostic.test.mjs'
       - 'js/firebase-config.js'
@@ -13,7 +30,24 @@ on:
   pull_request:
     branches: [main, develop, dev0]
     paths:
+      - 'workers/analytics-delivery/**'
+      - 'app/db/migrations/027_analytics_delivery.sql'
+      - 'app/functions/_lib/analytics-money.js'
+      - 'app/functions/_lib/collected-revenue.js'
       - 'js/cookie-consent.js'
+      - 'js/login-page.js'
+      - 'js/auth-action.js'
+      - 'js/verify-email.js'
+      - 'js/stripe-integration.js'
+      - 'app/functions/api/stripe-checkout.js'
+      - 'app/functions/_lib/checkout-attribution.js'
+      - 'app/db/migrations/025_checkout_attribution.sql'
+      - 'app/functions/_lib/__tests__/checkout-attribution.test.mjs'
+      - 'app/functions/api/cookie-consent.js'
+      - 'app/functions/_lib/db.js'
+      - 'functions/_lib/db.js'
+      - 'functions/api/cookie-consent.js'
+      - 'app/functions/_lib/__tests__/consent-api.test.mjs'
       - 'app/functions/analytics-check.js'
       - 'app/functions/_lib/__tests__/analytics-diagnostic.test.mjs'
       - 'js/firebase-config.js'
@@ -28,4 +62,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - run: node --test app/functions/_lib/__tests__/analytics-consent.test.mjs app/functions/_lib/__tests__/analytics-diagnostic.test.mjs
+      - run: node --test app/functions/_lib/__tests__/checkout-attribution.test.mjs app/functions/_lib/__tests__/analytics-consent.test.mjs app/functions/_lib/__tests__/analytics-diagnostic.test.mjs app/functions/_lib/__tests__/consent-api.test.mjs
+
+  revenue-delivery:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci
+        working-directory: workers/analytics-delivery
+      - run: npm run types -- --check && npm run typecheck && npm test
+        working-directory: workers/analytics-delivery
+      - run: npx wrangler deploy --dry-run --env qa
+        working-directory: workers/analytics-delivery
