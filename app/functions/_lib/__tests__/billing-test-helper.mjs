@@ -25,6 +25,7 @@ export function createFakeD1(seed = {}) {
   const tables = {
     users: (seed.users || []).map((u, i) => ({ id: u.id ?? i + 1, ...u })),
     deleted_auth_ids: seed.deleted_auth_ids || [],
+    account_deletion_admissions: seed.account_deletion_admissions || [],
     feature_daily_usage: seed.feature_daily_usage || [],
     usage_events: seed.usage_events || [],
     stripe_event_ledger: seed.stripe_event_ledger || [],
@@ -250,6 +251,10 @@ export function createFakeD1(seed = {}) {
 
     // ── users insert (getOrCreateUserByAuthId) ──
     if (s.startsWith('INSERT INTO users (auth_id, email')) {
+      if (s.includes('account_deletion_admissions') && (
+        state.tables.account_deletion_admissions.some(row => row.auth_id === binds[2]) ||
+        state.tables.deleted_auth_ids.some(row => row.auth_id === binds[3])
+      )) return { first: null, results: [], changes: 0 };
       state.writes++;
       const row = {
         id: state.tables.users.reduce((m, u) => Math.max(m, u.id), 0) + 1,
