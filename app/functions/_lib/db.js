@@ -2445,9 +2445,7 @@ export async function upsertCookieConsent(env, { userId, authId, clientId, conse
  */
 export async function getCookieConsent(env, userId, clientId) {
   const db = getDb(env);
-  if (!db) {
-    return null;
-  }
+  if (!db) throw new Error('consent_read_unavailable');
 
   try {
     let row = null;
@@ -2481,7 +2479,7 @@ export async function getCookieConsent(env, userId, clientId) {
       return { version: 0, analytics: false };
     }
   } catch (error) {
-    console.error('[DB] Error in getCookieConsent:', error);
-    return null;
+    console.error('[DB] Consent lookup failed');
+    throw new Error('consent_read_unavailable');
   }
 }

@@ -37,11 +37,16 @@ async function chargeContext(env, charge) {
   if (checkout) {
     const session = sessions.data[0];
     if (!['payment', 'subscription'].includes(session.mode) || session.status !== 'complete' || session.payment_status !== 'paid') fail('checkout_not_settled');
-    if (id(session.customer) !== id(charge.customer) || id(session.payment_intent) !== paymentIntentId) fail('checkout_mismatch');
+    if (id(session.customer) !== id(charge.customer)) fail('checkout_mismatch');
     if (session.mode === 'payment') {
+      if (id(session.payment_intent) !== paymentIntentId) fail('checkout_mismatch');
       return { stamp: session.metadata?.environment, customerId: objectId(session.customer, 'cus'),
         sessionId: objectId(session.id, 'cs'), invoiceId: null, subscriptionId: null };
     }
+    // Subscription Checkout Sessions have no payment_intent. Verify their
+    // captured payment through invoice payments and the subscription below.
+    // https://docs.stripe.com/api/checkout/sessions/object#checkout_session_object-payment_intent
+    if (session.payment_intent != null && id(session.payment_intent) !== paymentIntentId) fail('checkout_mismatch');
   }
   const payments = await readStripe(env, `/invoice_payments?payment[type]=payment_intent&payment[payment_intent]=${paymentIntentId}&limit=100`);
   if (!Array.isArray(payments.data) || payments.has_more) fail('ambiguous_invoice_payments');

@@ -4,13 +4,13 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 const root = new URL('../../../../',import.meta.url);
 const clientId = '7bbba230-b755-4d31-b475-e20cf6d00ed9';
-function harness(path, {authFailure=false, userMissing=false, saveFailure=false, cleanupFailure=false, stored=null}={}) {
+function harness(path, {authFailure=false, userMissing=false, saveFailure=false, cleanupFailure=false, readFailure=false, stored=null}={}) {
   const writes=[],reads=[],revocations=[];
   const ctx={Request,Response,Date,console:{error(){}},
     getBearer:r=>r.headers.get('Authorization')?.match(/^Bearer (.+)$/)?.[1],
     verifyFirebaseIdToken:async()=>{if(authFailure)throw Error('private token details');return {uid:'verified-user'};},
     getOrCreateUserByAuthId:async()=>userMissing?null:{id:42},
-    getCookieConsent:async(...args)=>{reads.push(args);return stored;},
+    getCookieConsent:async(...args)=>{reads.push(args);if(readFailure)throw Error('consent_read_unavailable');return stored;},
     upsertCookieConsent:async(_env,row)=>{writes.push(row);return !saveFailure;},
     revokeCheckoutAttribution:async(_env,row)=>{revocations.push(row);return !cleanupFailure;}
   };
@@ -38,6 +38,24 @@ for(const path of ['app/functions/api/cookie-consent.js','functions/api/cookie-c
     const success=harness(path,{stored:{version:1,analytics:false}});
     assert.equal((await success.request({clientId,consent:{version:1,analytics:true}})).status,200);
     assert.equal(success.revocations.length,1);assert.equal(success.writes[0].consent.analytics,true);
+  });
+  test(path+': saving a grant after the anonymous record was migrated preserves attribution',async()=>{
+    // Authenticated consent migration removes the browser-only row. A later
+    // signed-out save must not mistake that absence for a withdrawal.
+    const h=harness(path,{stored:null,cleanupFailure:true});
+    assert.equal((await h.request({clientId,consent:{version:1,analytics:true}})).status,200);
+    assert.equal(h.revocations.length,0);assert.equal(h.writes.length,1);
+    const malformed=harness(path,{stored:{version:0,analytics:false},cleanupFailure:true});
+    assert.equal((await malformed.request({clientId,consent:{version:1,analytics:true}})).status,503);
+    assert.equal(malformed.writes.length,0);assert.equal(malformed.revocations.length,1);
+  });
+  test(path+': failed prior-consent lookup cannot overwrite a rejection or report an absent decision',async()=>{
+    const h=harness(path,{readFailure:true});
+    for(const method of ['GET','POST']){
+      const response=await h.request({clientId,consent:{version:1,analytics:true}},{Cookie:'jha_client_id='+clientId},method);
+      assert.equal(response.status,503);
+    }
+    assert.equal(h.writes.length,0);assert.equal(h.revocations.length,0);
   });
   test(path+': invalid signed-in token never reads or writes anonymous consent',async()=>{
     const h=harness(path,{authFailure:true});
@@ -90,5 +108,8 @@ for (const path of ['app/functions/_lib/db.js','functions/_lib/db.js']) {
       const value=await ctx.readConsent(env,null,clientId);
       if(row===null)assert.equal(value,null);else {assert.equal(value.analytics,false);assert.equal(value.version,0);}
     }
+    const failed={DB:{prepare:()=>({bind:()=>({first:async()=>{throw Error('D1 unavailable');}})})}};
+    await assert.rejects(()=>ctx.readConsent(failed,null,clientId),/consent_read_unavailable/);
+    await assert.rejects(()=>ctx.readConsent({},null,clientId),/consent_read_unavailable/);
   });
 }
