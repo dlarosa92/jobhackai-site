@@ -508,6 +508,59 @@ test('a stop transcription arriving during the completion flush is excluded', as
   } finally { h.dispose(); }
 });
 
+test('spoken stop silences playback immediately while a late answer still flushes and saves', async () => {
+  const h = await liveInterviewWithOneAnswer();
+  try {
+    const audio = h.el('vi-remote-audio');
+    const remoteStream = { id: 'remote-audio' };
+    let pauses = 0;
+    audio.pause = () => { pauses++; };
+    h.peerConnection().ontrack({ streams: [remoteStream] });
+    h.event({ type: 'output_audio_buffer.started', response_id: 'playing-question' });
+    h.event({ type: 'conversation.item.created', item: { id: 'pending-real-answer' } });
+    h.event({ type: 'input_audio_buffer.committed', item_id: 'pending-real-answer' });
+    h.event({ type: 'conversation.item.created', item: { id: 'spoken-stop' } });
+    h.event({ type: 'input_audio_buffer.committed', item_id: 'spoken-stop' });
+    h.event({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'spoken-stop', transcript: "I'll end the interview." });
+    assert.ok(pauses > 0, 'playback stops before the transcript flush finishes');
+    assert.equal(audio.srcObject, null);
+    assert.notEqual(h.peerConnection().connectionState, 'closed', 'keep the data channel for the pending answer');
+    assert.equal(h.completeBodies().length, 0, 'do not save before the pending transcript arrives');
+    const sends = h.sends.length;
+    h.event({ type: 'response.created', response: { id: 'racing-question' } });
+    assert.ok(h.sends.slice(sends).some(event => event.type === 'response.cancel'));
+    h.peerConnection().ontrack({ streams: [remoteStream] });
+    assert.equal(audio.srcObject, null, 'a late media track must not restart playback');
+    h.event({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'pending-real-answer', transcript: 'The final outcome was a reduction in support tickets.' });
+    await h.settle();
+    assert.equal(h.completeBodies().length, 1);
+    assert.ok(h.completeBodies()[0].transcript.some(turn => turn.text.includes('reduction in support tickets')));
+    assert.ok(!h.completeBodies()[0].transcript.some(turn => turn.text.includes("I'll end")));
+  } finally { h.dispose(); }
+});
+
+test('a natural wrap-up keeps its audio until playback finishes, then releases it', async () => {
+  const h = await liveInterviewWithOneAnswer();
+  try {
+    const audio = h.el('vi-remote-audio');
+    const stream = { id: 'closing-audio' };
+    audio.pause = () => {};
+    h.peerConnection().ontrack({ streams: [stream] });
+    h.event({ type: 'response.created', response: { id: 'closing-response' } });
+    h.event({ type: 'conversation.item.created', item: { id: 'closing-item' } });
+    h.event({ type: 'output_audio_buffer.started', response_id: 'closing-response' });
+    h.event({ type: 'response.output_audio_transcript.done', item_id: 'closing-item', response_id: 'closing-response', transcript: 'Thank you for your time. Your written feedback report is being prepared and will appear on this page.' });
+    h.event({ type: 'response.done', response: { id: 'closing-response' } });
+    assert.equal(audio.srcObject, stream, 'do not cut off the natural closing line');
+    assert.equal(h.completeBodies().length, 0);
+    h.event({ type: 'output_audio_buffer.stopped', response_id: 'closing-response' });
+    await h.settle();
+    assert.equal(h.completeBodies().length, 1);
+    assert.equal(h.completeBodies()[0].reason, 'completed');
+    assert.equal(audio.srcObject, null);
+  } finally { h.dispose(); }
+});
+
 for (const t of pending) await t();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
