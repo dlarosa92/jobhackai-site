@@ -124,6 +124,11 @@ test('compiled managed voice route keeps its cutover gate, verifies JWT ownershi
   }),env,context);
   assert.equal((await run({action:'open',sdp:'v=0 offer',role:'Engineer'})).status,404);await flush();assert.equal(calls.length,0);
   env.VOICE_MANAGED_CALLS_ENABLED='true';
+  const oldIssuer=await worker.fetch(new Request('https://qa.jobhackai.io/api/voice/session',{
+    method:'POST',headers:{Authorization:'Bearer '+token},body:JSON.stringify({role:'Engineer',startRequestId:sessionId})
+  }),env,context);
+  assert.equal(oldIssuer.status,409);assert.equal((await oldIssuer.json()).reason,'voice_transport_updated');await flush();
+  assert.equal(calls.length,0,'cutover must stop the old reusable-credential issuer');
   const opened=await run({action:'open',sdp:'v=0 offer',role:'Engineer',uid:'other'});
   assert.equal(opened.status,200,await opened.clone().text());const payload=await opened.json();await flush();
   assert.equal(payload.sdp,'v=0 answer');assert.equal(payload.clientSecret,undefined);assert.equal(payload.providerCallId,undefined);
@@ -134,4 +139,15 @@ test('compiled managed voice route keeps its cutover gate, verifies JWT ownershi
   assert.equal(await db.prepare('SELECT state FROM voice_provider_calls').first('state'),'closed');
   assert.equal(await db.prepare('SELECT free_session_used FROM users').first('free_session_used'),1);
   assert.equal(calls.length,2);
+  const completed=await worker.fetch(new Request('https://qa.jobhackai.io/api/voice/session/'+sessionId+'/complete',{
+    method:'POST',headers:{Authorization:'Bearer '+token},body:JSON.stringify({reason:'ended_for_safety',transcript:[{speaker:'user',text:'Fixture answer'}]})
+  }),env,context);
+  assert.equal(completed.status,200,await completed.clone().text());const saved=await completed.json();await flush();
+  assert.equal(saved.saved,true);assert.equal(saved.connectionClosed,true);assert.equal(calls.length,2,'completed closure does not dispatch another hangup');
+  assert.equal(await db.prepare('SELECT status FROM voice_sessions').first('status'),'completed');
+  const plan=await worker.fetch(new Request('https://qa.jobhackai.io/api/plan/me',{
+    headers:{Authorization:'Bearer '+token}
+  }),env,context);
+  assert.equal(plan.status,200,await plan.clone().text());const planData=await plan.json();await flush();
+  assert.equal(planData.voice.transport,'managed');assert.equal(planData.voice.freeSessionUsed,true);
 });

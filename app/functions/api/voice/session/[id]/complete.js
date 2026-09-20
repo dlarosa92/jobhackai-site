@@ -16,10 +16,11 @@ import { generateAndStoreScorecard } from '../../../../_lib/voice-scorecard.js';
 import { errorResponse, successResponse, generateRequestId } from '../../../../_lib/error-handler.js';
 
 import { normalizeVoiceUsage, responseTokenTotals } from '../../../../_lib/voice-usage.js';
+import { closeManagedInterview } from '../../../../_lib/voice-managed-interview.js';
 
 const MAX_TRANSCRIPT_BYTES = 300 * 1024;
 
-export async function onRequest(context) {
+async function completeRequest(context) {
   const { request, env, params } = context;
   const origin = request.headers.get('Origin') || '';
   const requestId = generateRequestId();
@@ -49,20 +50,41 @@ export async function onRequest(context) {
   try {
     const d1User = await getOrCreateUserByAuthId(env, uid, null, { updateActivity: false });
     const sessionId = String(params.id || '');
-    const session = await db.prepare(
+    let session = await db.prepare(
       `SELECT id, user_id, status, transcript_json, end_reason FROM voice_sessions WHERE id = ?`
     ).bind(sessionId).first();
 
-    if (!session || !d1User || session.user_id !== d1User.id) {
+    if (!d1User || (session && session.user_id !== d1User.id)) {
       return errorResponse('Session not found', 404, origin, env, requestId);
     }
+    const managed = env.VOICE_MANAGED_CALLS_ENABLED === 'true';
+    let connectionClosed = true;
+    if (managed) {
+      // End may arrive before startup has inserted its history/reservation.
+      // Persist intent first, then re-read after closing: reservation can have
+      // committed between the initial SELECT and that intent.
+      ({ closed: connectionClosed } = await closeManagedInterview(env,{uid,sessionId}));
+      session = await db.prepare(`SELECT id,user_id,status,transcript_json,end_reason FROM voice_sessions WHERE id=?`)
+        .bind(sessionId).first();
+      if (!session) {
+        const control = await db.prepare('SELECT reserved_at FROM voice_interview_controls WHERE session_id=? AND auth_id=?')
+          .bind(sessionId,uid).first();
+        if (control?.reserved_at) return errorResponse('The saved interview is no longer available.',409,origin,env,requestId,{reason:'voice_connection_history_removed'});
+        return successResponse({sessionId,status:connectionClosed?'cancelled':'ending',saved:false,connectionClosed},
+          connectionClosed?200:202,origin,env,requestId);
+      }
+      if (session.user_id !== d1User.id) return errorResponse('Session not found',404,origin,env,requestId);
+    }
+    if (!session) return errorResponse('Session not found',404,origin,env,requestId);
+    const completedResponse = data => successResponse({ ...data, ...(managed ? {saved:true,connectionClosed} : {}) },
+      managed && !connectionClosed ? 202 : 200,origin,env,requestId);
     if (session.status === 'completed') {
       // Idempotent: keep the original completion, still ensure a scorecard
       // exists — except for a safety-ended session, which is never scored.
       if (shouldGenerateScorecard(session.end_reason)) {
         queueAccountWork(context, () => generateAndStoreScorecard(env, sessionId));
       }
-      return successResponse({ sessionId, status: 'completed', alreadyCompleted: true, endReason: session.end_reason || null }, 200, origin, env, requestId);
+      return completedResponse({ sessionId, status: 'completed', alreadyCompleted: true, endReason: session.end_reason || null });
     }
 
     // Transcript: [{ speaker: 'user'|'assistant', text: '...' }, ...]
@@ -120,7 +142,7 @@ export async function onRequest(context) {
       if (shouldGenerateScorecard(saved.end_reason)) {
         queueAccountWork(context, () => generateAndStoreScorecard(env, sessionId));
       }
-      return successResponse({ sessionId, status: 'completed', alreadyCompleted: true, endReason: saved.end_reason || null }, 200, origin, env, requestId);
+      return completedResponse({ sessionId, status: 'completed', alreadyCompleted: true, endReason: saved.end_reason || null });
     }
 
     // Observed client usage only; provider reconciliation remains required.
@@ -137,9 +159,20 @@ export async function onRequest(context) {
       console.log(`[VOICE-SAFETY] session=${sessionId} scorecard suppressed (ended_for_safety)`);
     }
 
-    return successResponse({ sessionId, status: 'completed', costUsd, endReason }, 200, origin, env, requestId);
+    return completedResponse({ sessionId, status: 'completed', costUsd, endReason });
   } catch (err) {
+    if (err?.message==='voice_connection_request_invalid') return errorResponse('Invalid interview reference',400,origin,env,requestId);
+    if (err?.message==='voice_connection_not_found') return errorResponse('Session not found',404,origin,env,requestId);
     console.error('[VOICE-COMPLETE] Error:', err?.message || err);
     return errorResponse('Internal error', 500, origin, env, requestId);
   }
+}
+
+export async function onRequest(context) {
+  // Persist closure and transcript work even when the caller aborts its HTTP
+  // request. Nested scorecard work remains inside the same account scope.
+  if (context.env.VOICE_MANAGED_CALLS_ENABLED === 'true' && context.request.method === 'POST') {
+    return queueAccountWork(context,() => completeRequest(context));
+  }
+  return completeRequest(context);
 }

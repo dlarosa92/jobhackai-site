@@ -96,6 +96,10 @@ jobs:
         working-directory: app/functions/_lib/__tests__
         run: node voice-client.test.mjs
 
+      - name: Run managed voice browser connection and completion tests
+        working-directory: app/functions/_lib/__tests__
+        run: node --test voice-managed-client.test.mjs
+
       - name: Run voice usage evidence tests
         working-directory: app/functions/_lib/__tests__
         run: node --test voice-usage.test.mjs

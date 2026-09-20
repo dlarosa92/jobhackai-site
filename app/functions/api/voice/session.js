@@ -101,6 +101,10 @@ export async function onRequest(context) {
   if (!voiceFeatureEnabled(env)) {
     return errorResponse('Not found', 404, origin, env, requestId);
   }
+  if (env.VOICE_MANAGED_CALLS_ENABLED === 'true') {
+    return errorResponse('Refresh the interview page to use the current connection.',409,origin,env,requestId,
+      {reason:'voice_transport_updated'});
+  }
   if (!env.OPENAI_API_KEY) {
     return errorResponse('Voice interviews are temporarily unavailable.', 503, origin, env, requestId);
   }

@@ -100,7 +100,7 @@ export async function onRequest(context) {
     // credits remaining), or the user has ever paid. Upgrading retroactively
     // unlocks the free-taste session, and that unlock persists after a pack
     // lapses or a subscription is cancelled (hasEverPaid).
-    const ent = await getVoiceEntitlement(env, uid);
+    const ent = await getVoiceEntitlement(env, uid, {managed:env.VOICE_MANAGED_CALLS_ENABLED === 'true'});
     const fullAccess = session.entitlement_mode !== 'free'
       || ent.unlimited
       || ent.sessionsRemaining > 0

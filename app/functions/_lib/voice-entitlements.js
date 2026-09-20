@@ -100,6 +100,10 @@ export async function getVoiceEntitlement(env, uid, {managed=false}={}) {
 
   let row;
   try {
+    if (managed) {
+      await db.prepare(`SELECT c.session_id,c.current_attempt_id,c.reserved_at,c.legacy_unverified,p.id
+        FROM voice_interview_controls c LEFT JOIN voice_provider_calls p ON p.id=c.current_attempt_id LIMIT 0`).all();
+    }
     row = await db.prepare(
       `SELECT id, plan, subscription_status, current_period_end,
               voice_sessions_remaining, free_session_used, pack_expires_at, has_ever_paid

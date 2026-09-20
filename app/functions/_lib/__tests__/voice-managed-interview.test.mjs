@@ -6,6 +6,7 @@ import { sqliteD1 } from './sqlite-d1-helper.mjs';
 import { openManagedInterview, closeManagedInterview } from '../voice-managed-interview.js';
 import { beginDeletionAdmission, assertDeletionQuiescent } from '../account-deletion-admission.js';
 import { withAccountOperation } from '../account-operation-scope.js';
+import { getVoiceEntitlement } from '../voice-entitlements.js';
 if (!globalThis.crypto) globalThis.crypto=webcrypto;
 const SDP='v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n';
 const FIRST='11111111-1111-4111-8111-111111111111';
@@ -288,4 +289,77 @@ test('a recorded definite provider rejection does not leave an uncertain account
   assert.equal(result.status,409);assert.equal((await f.user()).free_session_used,0);
   assert.equal(await f.db.prepare("SELECT state FROM account_operation_claims WHERE auth_id='owner'").first('state'),'finished');
   assert.equal(await f.db.prepare('SELECT state FROM voice_provider_calls').first('state'),'closed');
+});
+
+const completeUrl=new URL('../../api/voice/session/[id]/complete.js',import.meta.url);
+const completeSource=readFileSync(completeUrl,'utf8').replace(/from '([^']+)'/g,(_,path)=>{
+  if(path.endsWith('/firebase-auth.js'))return "from 'data:text/javascript;base64,"+Buffer.from(`export const getBearer=r=>r.headers.get('Authorization'); export const verifyFirebaseIdToken=async t=>{if(t!=='valid')throw Error();return {uid:'owner'};};`).toString('base64')+"'";
+  if(path.endsWith('/voice-scorecard.js'))return "from 'data:text/javascript;base64,"+Buffer.from('export async function generateAndStoreScorecard(){return true;}').toString('base64')+"'";
+  return `from '${new URL(path,completeUrl).href}'`;
+});
+const completeRoute=(await import('data:text/javascript;base64,'+Buffer.from(completeSource).toString('base64'))).onRequest;
+function completion(f,payload={},sessionId=FIRST) {
+  const run=requestContext(f,{reason:'user_ended',transcript:[{speaker:'user',text:'I improved checkout conversion by eighteen percent.'}],durationSeconds:42,...payload});
+  run.context.params={id:sessionId};return {...run,execute:()=>completeRoute(run.context)};
+}
+
+test('managed completion closes the provider, persists the first transcript and is idempotent',async t=>{
+  const f=fixture(t);await f.open();const first=completion(f);const response=await first.execute();await first.flush();
+  assert.equal(response.status,200);const body=await response.json();assert.equal(body.saved,true);assert.equal(body.connectionClosed,true);
+  const original=(await f.sessions())[0];assert.equal(original.status,'completed');assert.match(original.transcript_json,/eighteen percent/);
+  const retry=completion(f,{transcript:[{speaker:'user',text:'Must not replace the first report.'}]});assert.equal((await retry.execute()).status,200);await retry.flush();
+  assert.equal((await f.sessions())[0].transcript_json,original.transcript_json);assert.equal(f.calls.length,2);
+});
+
+test('completion overtaking setup reports pending, then cancelled without consuming credit',async t=>{
+  const f=fixture(t),entered=deferred(),release=deferred();
+  f.setHandler(async({url})=>{if(url.endsWith('/hangup'))return new Response(null,{status:200});entered.resolve();await release.promise;return new Response(SDP,{status:201,headers:{Location:'/v1/realtime/calls/rtc_overtaken'}});});
+  const opening=f.open();await entered.promise;
+  const first=completion(f);const pending=await first.execute();await first.flush();
+  assert.equal(pending.status,202);assert.deepEqual(Object.fromEntries(Object.entries(await pending.json()).filter(([key])=>['status','saved','connectionClosed'].includes(key))),{status:'ending',saved:false,connectionClosed:false});
+  release.resolve();await assert.rejects(opening,/reservation_unavailable/);
+  const retry=completion(f);const cancelled=await retry.execute();await retry.flush();
+  assert.equal(cancelled.status,200);assert.equal((await cancelled.json()).status,'cancelled');assert.equal((await f.user()).free_session_used,0);
+});
+
+test('uncertain hangup does not lose the report or pretend closure succeeded',async t=>{
+  const f=fixture(t);await f.open();f.setHandler(async()=>new Response(null,{status:404}));
+  const first=completion(f);const response=await first.execute();await first.flush();const payload=await response.json();
+  assert.equal(response.status,202);assert.equal(payload.saved,true);assert.equal(payload.connectionClosed,false);assert.equal(payload.status,'completed');
+  const original=(await f.sessions())[0].transcript_json;
+  const retry=completion(f,{transcript:[]});const again=await retry.execute();await retry.flush();
+  assert.equal(again.status,202);assert.equal((await f.sessions())[0].transcript_json,original);assert.equal(f.calls.length,2);
+});
+
+test('completion of a legacy session saves its report while preserving unverified call closure',async t=>{
+  const f=fixture(t);await f.db.prepare("INSERT INTO voice_sessions(id,user_id,status,role) VALUES(?,1,'active','Engineer')").bind(FIRST).run();
+  const run=completion(f);const response=await run.execute();await run.flush();const payload=await response.json();
+  assert.equal(response.status,202);assert.equal(payload.saved,true);assert.equal(payload.connectionClosed,false);
+  assert.equal((await f.controls()).legacy_unverified,1);assert.equal(f.calls.length,0);
+});
+
+test('deleted history is never described as a cancelled uncharged interview',async t=>{
+  const f=fixture(t);await f.open();const first=completion(f);await first.execute();await first.flush();
+  f.db.exec('DELETE FROM voice_sessions');const retry=completion(f);const response=await retry.execute();await retry.flush();
+  assert.equal(response.status,409);assert.equal((await response.json()).reason,'voice_connection_history_removed');assert.equal((await f.user()).free_session_used,1);
+});
+
+test('managed completion retains account admission through delayed hangup and report persistence',async t=>{
+  const f=fixture(t);await f.open();const entered=deferred(),release=deferred();
+  f.setHandler(async()=>{entered.resolve();await release.promise;return new Response(null,{status:200});});
+  const run=completion(f);const pending=withAccountOperation(run.context,'owner',()=>run.execute());await entered.promise;
+  assert.ok(run.waits.length>0);assert.equal(await f.db.prepare("SELECT state FROM account_operation_claims WHERE auth_id='owner'").first('state'),'active');
+  release.resolve();assert.equal((await pending).status,200);await run.flush();
+  assert.equal((await f.sessions())[0].status,'completed');assert.equal(await f.db.prepare("SELECT state FROM account_operation_claims WHERE auth_id='owner'").first('state'),'finished');
+});
+
+test('another owner cannot use managed completion to close or save a foreign session',async t=>{
+  const f=fixture(t);await f.open({uid:'other'});const run=completion(f);const response=await run.execute();await run.flush();
+  assert.equal(response.status,404);assert.equal(f.calls.length,1);assert.equal((await f.sessions())[0].status,'created');
+});
+
+test('managed entitlement display fails closed when its control schema is missing',async t=>{
+  const f=fixture(t);f.db.exec('DROP TABLE voice_interview_controls');
+  assert.equal((await getVoiceEntitlement(f.env,'owner',{managed:true})).reason,'not_migrated');
+  assert.equal(f.calls.length,0);
 });
