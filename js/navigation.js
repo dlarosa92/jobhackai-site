@@ -1533,7 +1533,8 @@ let _voiceNavFetching = false;
 
 function voiceNavBadgeText(voice) {
   if (!voice || !voice.enabled) return null;
-  if (voice.unlimited) return 'Pro · Unlimited';
+  if (voice.unlimited) return Number.isFinite(voice.monthlyRemaining)
+    ? `${voice.monthlyRemaining} left this month` : 'Monthly session limit';
   if (voice.mode === 'pack') return `${voice.sessionsRemaining} left`;
   if (voice.canStart) return '1 free';
   return null; // free session used: no badge, the page itself paywalls

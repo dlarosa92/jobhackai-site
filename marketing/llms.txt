@@ -15,8 +15,8 @@ JobHackAI is built for active job seekers who have interviews coming up and want
 ## Pricing
 
 - Free: all prep tools plus 1 full voice mock interview (signup required).
-- Weekly Pass: 17 USD per week, unlimited voice interviews. Cancel anytime.
-- Monthly: 34 USD per month, unlimited voice interviews. Most popular.
+- Weekly Pass: 17 USD per week, up to 60 voice interviews per calendar month (UTC) while subscribed. Cancel anytime.
+- Monthly: 34 USD per month, up to 60 voice interviews per calendar month (UTC) while subscribed. Most popular.
 - Interview Pack: 39 USD one time, 5 voice interview sessions, valid 90 days.
 
 ## Key pages

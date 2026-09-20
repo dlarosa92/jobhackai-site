@@ -9,7 +9,7 @@
  *
  * Entitlement order of precedence:
  *   1. Active subscription (weekly/monthly, or grandfathered legacy plan)
- *      -> unlimited sessions, silently bounded by VOICE_FAIR_USE_CAP per month
+ *      -> sessions bounded by VOICE_FAIR_USE_CAP per UTC calendar month
  *   2. Interview Pack credits (voice_sessions_remaining > 0, not expired)
  *   3. Free taste: exactly 1 lifetime session per account
  */
@@ -23,11 +23,11 @@ export const DEFAULT_FAIR_USE_CAP = 60; // sessions per calendar month
 
 const ACTIVE_SUB_STATUSES = new Set(ENTITLED_SUBSCRIPTION_STATUSES);
 
-// Plans whose active subscription grants unlimited voice sessions.
+// Plans whose active subscription grants a monthly voice allowance.
 // Grandfathering rule: any user with an active Stripe subscription whose price
 // is not one of the three new prices keeps a legacy plan value here and is
-// treated exactly like plan=monthly (unlimited sessions).
-const UNLIMITED_VOICE_PLANS = new Set(['weekly', 'monthly', 'trial', 'essential', 'pro', 'premium']);
+// treated exactly like plan=monthly (same monthly allowance).
+const SUBSCRIPTION_VOICE_PLANS = new Set(['weekly', 'monthly', 'trial', 'essential', 'pro', 'premium']);
 
 // Renewal webhooks can lag the period boundary; give 3 days of grace before
 // treating a stale current_period_end as expired.
@@ -70,7 +70,9 @@ async function countSessionsThisMonth(db, userRowId) {
  *   canStart: boolean,
  *   mode: 'subscription'|'pack'|'free'|null,
  *   reason: string|null,           // when canStart=false: 'paywall' | 'limit_reached' | 'db_unavailable' | 'not_migrated'
- *   unlimited: boolean,
+ *   unlimited: boolean,          // legacy subscriber-access flag, not a promise of no cap
+ *   monthlyLimit?: number,
+ *   monthlyRemaining?: number,
  *   freeSessionUsed: boolean,
  *   sessionsRemaining: number,     // pack credits currently usable
  *   plan: string,
@@ -122,7 +124,7 @@ export async function getVoiceEntitlement(env, uid) {
   // a non-null period that has passed (beyond grace) revokes access.
   // NOTE: a manually granted plan (e.g. the white-glove customer) must also set
   // subscription_status to an active value for this to apply.
-  if (UNLIMITED_VOICE_PLANS.has(plan)) {
+  if (SUBSCRIPTION_VOICE_PLANS.has(plan)) {
     const statusOk = ACTIVE_SUB_STATUSES.has(row.subscription_status);
     const periodOk = !row.current_period_end ||
       (new Date(row.current_period_end).getTime() + PERIOD_END_GRACE_MS) > now;
@@ -133,17 +135,19 @@ export async function getVoiceEntitlement(env, uid) {
       } catch (err) {
         if (!isMissingColumnError(err)) throw err;
       }
-      if (used >= fairUseCap(env)) {
-        // Fair use cap, enforced silently server-side with a neutral message.
+      const monthlyLimit = fairUseCap(env);
+      const monthlyRemaining = Math.max(0, monthlyLimit - used);
+      if (used >= monthlyLimit) {
+        // Expose the same cap and balance that the start gate enforces.
         return {
           canStart: false, mode: 'subscription', reason: 'limit_reached',
-          unlimited: true, freeSessionUsed: !!row.free_session_used,
+          unlimited: true, monthlyLimit, monthlyRemaining, freeSessionUsed: !!row.free_session_used,
           sessionsRemaining: Number(row.voice_sessions_remaining || 0), plan, hasEverPaid
         };
       }
       return {
         canStart: true, mode: 'subscription', reason: null,
-        unlimited: true, freeSessionUsed: !!row.free_session_used,
+        unlimited: true, monthlyLimit, monthlyRemaining, freeSessionUsed: !!row.free_session_used,
         sessionsRemaining: Number(row.voice_sessions_remaining || 0), plan, hasEverPaid
       };
     }
