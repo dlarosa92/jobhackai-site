@@ -43,6 +43,6 @@ Do not claim visibility into a provider's sales from outbound clicks. Provider-c
 
 ## Research and launch gates
 
-Still required: compare local search intent and competition with at least one alternative category; record evidence without inventing search volume or demand. Confirm the most decision-relevant unknowns with public first-party information where possible. Do not contact providers or publish implied partnerships under the current hold.
+The [category comparison](local-directory-category-research.md) now records a first-party evidence check against junk removal and keeps mobile detailing as the bounded first experiment. Search volume, ranking difficulty, traffic and provider willingness to pay remain unmeasured. Confirm remaining provider-specific unknowns with public first-party information where possible. Do not contact providers or publish implied partnerships under the current hold.
 
 Before promoting: settle the first category, finish mobile/accessibility QA, connect and observe consent-aware event delivery, verify support intake and truthful lead reporting, and make the release and indexing changes reviewable. Traffic, leads, customers and revenue currently remain unavailable, not zero or forecast results.
