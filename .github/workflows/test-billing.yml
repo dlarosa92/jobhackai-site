@@ -15,6 +15,7 @@ on:
       - 'app/functions/_lib/**'
       - 'app/functions/_middleware.js'
       - 'shared/firebase-deletion-client.js'
+      - 'workers/voice-followup-email/**'
       - 'app/db/**'
       - 'app/scripts/**'
       - 'scripts/verify-billing-migrations.sh'
@@ -30,6 +31,7 @@ on:
       - 'app/functions/_lib/**'
       - 'app/functions/_middleware.js'
       - 'shared/firebase-deletion-client.js'
+      - 'workers/voice-followup-email/**'
       - 'app/db/**'
       - 'app/scripts/**'
       - 'scripts/verify-billing-migrations.sh'
@@ -129,6 +131,9 @@ jobs:
       - name: Recoverable deletion request, Firebase reconciliation and pending UI
         run: node --test app/functions/_lib/__tests__/account-deletion-process.test.mjs
 
+      - name: Voice follow-up deletion coordination and ambiguous delivery
+        run: node --test app/functions/_lib/__tests__/voice-followup-deletion.test.mjs
+
   admission-bundle:
     runs-on: ubuntu-latest
     steps:
@@ -146,3 +151,11 @@ jobs:
         env:
           JOBHACKAI_FUNCTIONS_BUNDLE: /tmp/jobhackai-admission-worker/index.mjs
         run: node --test app/functions/_lib/__tests__/account-operation-bundle.test.mjs
+      - name: Build the follow-up Worker without deploying or sending email
+        run: |
+          npx --yes wrangler@4.135.0 deploy --dry-run --config workers/voice-followup-email/wrangler.toml --env qa --outdir /tmp/jobhackai-followup-worker
+          cp /tmp/jobhackai-followup-worker/index.js /tmp/jobhackai-followup-worker/index.mjs
+      - name: Verify compiled follow-up Worker with SQLite and intercepted provider traffic
+        env:
+          JOBHACKAI_FOLLOWUP_BUNDLE: /tmp/jobhackai-followup-worker/index.mjs
+        run: node --test app/functions/_lib/__tests__/voice-followup-bundle.test.mjs
