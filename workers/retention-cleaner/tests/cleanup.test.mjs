@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { sqliteD1 } from '../../../app/functions/_lib/__tests__/sqlite-d1-helper.mjs';
 import { runCleanup } from '../src/index.js';
+import { getVoiceEntitlement } from '../../../app/functions/_lib/voice-entitlements.js';
+import { ENTITLED_SUBSCRIPTION_STATUSES } from '../../../app/functions/_lib/billing-ownership.js';
 function setup(t) {
   const db=sqliteD1();t.after(()=>db.close());
   db.exec(`
@@ -23,13 +25,13 @@ function setup(t) {
     INSERT INTO cover_letter_history VALUES('old',0),('recent',9999999999999);
     CREATE TABLE usage_events(id TEXT,created_at TEXT);
     INSERT INTO usage_events VALUES('old',datetime('now','-100 days'));
-    CREATE TABLE voice_sessions(id TEXT,user_id INTEGER,status TEXT,started_at TEXT,transcript_json TEXT,scorecard_json TEXT,updated_at TEXT);
+    CREATE TABLE voice_sessions(id TEXT,user_id INTEGER,status TEXT,started_at TEXT,transcript_json TEXT,scorecard_json TEXT,updated_at TEXT,role TEXT,seniority TEXT,jd_excerpt TEXT);
     INSERT INTO voice_sessions VALUES
-      ('free-old',1,'completed',datetime('now','-110 days'),'transcript','score',NULL),
-      ('free-last',1,'completed',datetime('now','-100 days'),'transcript','score',NULL),
-      ('free-incomplete',1,'active',datetime('now','-95 days'),'transcript',NULL,NULL),
-      ('paid-old',2,'completed',datetime('now','-100 days'),'transcript','score',NULL),
-      ('recent',3,'completed',datetime('now','-2 days'),'transcript','score',NULL);
+      ('free-old',1,'completed',datetime('now','-110 days'),'transcript','score',NULL,'Synthetic role','Senior','Synthetic confidential job context'),
+      ('free-last',1,'completed',datetime('now','-100 days'),'transcript','score',NULL,'Synthetic role','Senior','Synthetic confidential job context'),
+      ('free-incomplete',1,'active',datetime('now','-95 days'),'transcript',NULL,NULL,'Synthetic role','Senior','Synthetic confidential job context'),
+      ('paid-old',2,'completed',datetime('now','-100 days'),'transcript','score',NULL,'Synthetic role','Senior','Synthetic confidential job context'),
+      ('recent',3,'completed',datetime('now','-2 days'),'transcript','score',NULL,'Synthetic role','Senior','Synthetic confidential job context');
   `);
   const kv=[];const env={JOBHACKAI_DB:db,JOBHACKAI_KV:{delete:async key=>kv.push(key)}};
   const snapshot=async()=>{
@@ -57,7 +59,9 @@ test('explicit deletion removes expired content but preserves pinned, reused and
   assert.deepEqual(after.linkedin_runs.map(r=>r.id),['pinned','recent']);
   assert.deepEqual(after.voice_sessions.map(r=>r.id),['free-last','recent']);
   assert.equal(after.voice_sessions[0].transcript_json,null);assert.equal(after.voice_sessions[0].scorecard_json,null);
+  for(const key of ['role','seniority','jd_excerpt']) assert.equal(after.voice_sessions[0][key],null);
   assert.equal(after.voice_sessions[1].transcript_json,'transcript');
+  assert.equal(after.voice_sessions[1].jd_excerpt,'Synthetic confidential job context');
   const again=await runCleanup({...f.env,RETENTION_MODE:'delete'});assert.equal(again.voice_sessions,0);assert.equal(again.voice_sessions_stripped,0);
 });
 test('KV failure retains resume references for retry rather than orphaning payloads',async t=>{
@@ -77,4 +81,49 @@ test('missing bindings or voice schema fail before deleting anything',async t=>{
 test('database failure rejects the cleanup rather than logging a successful completion',async t=>{
   const f=setup(t);f.db.exec('DROP TABLE linkedin_runs');
   await assert.rejects(runCleanup(f.env),/database operation failed/);assert.deepEqual(f.kv,[]);
+});
+
+test('previously stripped reports still lose surviving role and job context in audit and deletion',async t=>{
+  const f=setup(t);
+  f.db.exec("UPDATE voice_sessions SET transcript_json=NULL,scorecard_json=NULL WHERE id='free-last'");
+  const before=await f.snapshot();
+  assert.equal((await runCleanup(f.env)).voice_sessions_stripped,1);
+  assert.deepEqual(await f.snapshot(),before);
+  await runCleanup({...f.env,RETENTION_MODE:'delete'});
+  const row=await f.db.prepare("SELECT * FROM voice_sessions WHERE id='free-last'").first();
+  for(const key of ['transcript_json','scorecard_json','role','seniority','jd_excerpt']) assert.equal(row[key],null);
+  assert.equal(row.status,'completed');
+});
+
+test('retention exception agrees with actual entitlement status, grace, null and pack rules',async t=>{
+  const f=setup(t);
+  f.db.exec("ALTER TABLE users ADD COLUMN auth_id TEXT; ALTER TABLE users ADD COLUMN free_session_used INTEGER DEFAULT 1; ALTER TABLE users ADD COLUMN has_ever_paid INTEGER DEFAULT 1;");
+  const future=new Date(Date.now()+86400000).toISOString();
+  const grace=new Date(Date.now()-86400000).toISOString();
+  const expired=new Date(Date.now()-5*86400000).toISOString();
+  const cases=[
+    ...ENTITLED_SUBSCRIPTION_STATUSES.map(status=>['monthly',status,grace,0,null]),
+    ['monthly','unpaid',expired,0,null],
+    ['monthly',null,future,0,null],
+    ['monthly','active','invalid',0,null],
+    ['monthly','active','',0,null],
+    ['free',null,null,1,future],
+    ['free',null,null,1,expired],
+    ['free',null,null,1,''],
+    ['free',null,null,null,null]
+  ];
+  const expected=[];
+  for(let i=0;i<cases.length;i++){
+    const id=10+i,auth='fixture-'+id;
+    await f.db.prepare('INSERT INTO users(id,auth_id,plan,subscription_status,current_period_end,voice_sessions_remaining,pack_expires_at) VALUES(?,?,?,?,?,?,?)').bind(id,auth,...cases[i]).run();
+    await f.db.prepare("INSERT INTO voice_sessions(id,user_id,status,started_at,transcript_json) VALUES(?,?,'completed',datetime('now','-100 days'),'private')").bind(auth,id).run();
+    const access=await getVoiceEntitlement(f.env,auth);
+    if(access.mode!=='subscription'&&access.mode!=='pack')expected.push(auth);
+  }
+  const audit=await runCleanup(f.env);
+  assert.equal(audit.voice_sessions_stripped,1+expected.length);
+  await runCleanup({...f.env,RETENTION_MODE:'delete'});
+  const remaining=(await f.db.prepare("SELECT id,transcript_json FROM voice_sessions WHERE user_id>=10 ORDER BY user_id").all()).results;
+  assert.deepEqual(remaining.map(row=>row.id),expected);
+  assert.ok(remaining.every(row=>row.transcript_json===null));
 });

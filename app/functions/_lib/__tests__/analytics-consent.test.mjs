@@ -5,12 +5,12 @@ import vm from 'node:vm';
 import test from 'node:test';
 const source = readFileSync(new URL('../../../../js/cookie-consent.js', import.meta.url), 'utf8');
 const GA = 'G-SQYSWPFM5X';
-function harness({host = 'app.jobhackai.io', consent = true, config, pendingServer = false, search = '', cookies = new Map(), store = new Map()} = {}) {
+function harness({host = 'app.jobhackai.io', consent = true, config, pendingServer = false, pendingPost = false, search = '', cookies = new Map(), store = new Map()} = {}) {
   const scripts = [], insertedScripts = [], appendedElements = [], elements = new Map(), timers = [], requests = [], listeners = {};
   if (consent !== null) store.set('jha_cookie_consent_v1', JSON.stringify({version:1,analytics: consent}));
   function element(tag = 'div') {
     return { tagName: tag, style: {}, innerHTML: '', classList: {add(){},remove(){},contains(){return false;}},
-      setAttribute(k,v){this[k]=v;}, getAttribute(k){return this[k];}, addEventListener(){}, focus(){},
+      setAttribute(k,v){this[k]=v;}, getAttribute(k){return this[k];}, events:{}, addEventListener(type,fn){this.events[type]=fn;}, focus(){},
       remove(){ const i = scripts.indexOf(this); if(i >= 0) scripts.splice(i,1); },
       querySelector(){return element();}, parentNode: {insertBefore(e){scripts.push(e);insertedScripts.push(e);}} };
   }
@@ -31,17 +31,19 @@ function harness({host = 'app.jobhackai.io', consent = true, config, pendingServ
   });
   let resolveServer;
   const server = new Promise(r => {resolveServer=r;});
+  let resolvePost;const post = new Promise(r => {resolvePost=r;});
   const ctx = { document, location: { hostname:host, protocol:'https:', href:'https://'+host+'/login'+search, pathname:'/login', search },
     JHA_CONFIG: config, URL, CustomEvent: class {constructor(type){this.type=type;}}, HTMLScriptElement: class {},
     localStorage:{getItem:k=>store.get(k)??null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)},
     setTimeout:fn=>{timers.push(fn);return timers.length;}, performance:{now:()=>0},
     dispatchEvent(){}, console:{log(){},warn(){}},
-    fetch:async(url,options)=>{requests.push({url,options}); if(options.method==='GET'&&pendingServer)return server; return {ok:true,json:async()=>({ok:true})};}
+    fetch:async(url,options)=>{requests.push({url,options}); if(options.method==='GET'&&pendingServer)return server; if(options.method==='POST'&&pendingPost)return post; return {ok:true,json:async()=>({ok:true})};}
   };
   ctx.window=ctx;
   vm.createContext(ctx); vm.runInContext(source,ctx);
   return {ctx, scripts, insertedScripts, appendedElements, requests, node, cookies, store,
     init:()=>listeners.DOMContentLoaded(),
+    finishPost:()=>resolvePost({ok:true,json:async()=>({ok:true})}),
     finishServer:analytics=>resolveServer({ok:true,json:async()=>({ok:true,consent:analytics===null?null:{version:1,analytics}, ...(analytics===null?{resetConsent:true}:{})})}),
     runTimers(){while(timers.length)timers.shift()();},
     events:name=>(ctx.dataLayer||[]).filter(a=>a[0]==='event'&&a[1]===name),
@@ -361,4 +363,27 @@ test('legacy cached consent without a server record is undecided so visitors can
     assert.equal(h.ctx.JHA.cookieConsent.hasAnalyticsConsent(),null);
     assert.equal(h.scripts.length,0);
   }
+});
+
+test('privacy button works before a stalled consent read and a late grant cannot undo rejection',async()=>{
+  const h=harness({pendingServer:true});const init=h.init();
+  assert.equal(typeof h.node('open-cookie-preferences').events.click,'function');
+  h.node('open-cookie-preferences').events.click();
+  assert.ok(h.appendedElements.some(e=>e.id==='jha-cookie-modal'));
+  h.node('jha-toggle-analytics').checked=false;h.node('jha-save-preferences').onclick();
+  assert.equal(h.ctx.JHA.cookieConsent.hasAnalyticsConsent(),false);
+  h.finishServer(true);await init;
+  assert.equal(h.ctx.JHA.cookieConsent.hasAnalyticsConsent(),false);
+  assert.equal(h.scripts.length,0);
+});
+test('privacy button works while an old pending grant is still being saved',async()=>{
+  const store=new Map([['jha_cookie_consent_pending_v1',JSON.stringify({version:1,analytics:true})]]);
+  const h=harness({store,pendingPost:true});const init=h.init();
+  h.node('open-cookie-preferences').events.click();
+  assert.ok(h.appendedElements.some(e=>e.id==='jha-cookie-modal'));
+  h.node('jha-toggle-analytics').checked=false;h.node('jha-save-preferences').onclick();
+  assert.equal(h.ctx.JHA.cookieConsent.hasAnalyticsConsent(),false);
+  h.finishPost();await init;
+  assert.equal(h.ctx.JHA.cookieConsent.hasAnalyticsConsent(),false);
+  assert.equal(h.scripts.length,0);
 });

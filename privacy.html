@@ -174,12 +174,26 @@
         <p class="effective-date"><strong>Effective Date:</strong> March 8, 2026</p>
       </div>
 
+      <!-- Release gate: update the effective date only with the approved production release. -->
+      <section class="privacy-section">
+        <h2>Information We Process</h2>
+        <p>We process your account details, the content you submit to our preparation tools, generated feedback, usage history, and billing status. For voice interviews, your microphone audio is sent to OpenAI to conduct the conversation. JobHackAI stores text transcripts, feedback, the role and job context you provide, and session details such as timing and completion status. JobHackAI does not save a raw audio recording of the interview.</p>
+        <p>We use Cloudflare to host the service and store application data, Firebase for account authentication, Stripe for payments, and OpenAI for AI processing. These providers may process information in the United States and other countries. We do not promise that all processing takes place in one country.</p>
+      </section>
+
       <!-- Data Retention & Deletion Section -->
       <section class="privacy-section">
         <h2>Data Retention & Deletion</h2>
         
-        <h3>Tool "Runs" and History (90 Days)</h3>
-        <p>When you use JobHackAI tools, we may store your recent <strong>runs</strong> (your inputs and the outputs generated for you) so you can view them in your in-app History. <strong>Runs and tool history are automatically deleted after 90 days.</strong> You can also delete runs sooner using the Clear History / Delete controls inside each tool.</p>
+        <h3>Tool Content and History</h3>
+        <p>Our standard retention period for tool content is <strong>90 days</strong>. Daily cleanup removes expired content, subject to the exceptions below. This is separate from the 90-day validity of purchased voice-session credits.</p>
+        <ul>
+          <li><strong>Voice interviews:</strong> transcripts, feedback and supplied role/job context are removed after 90 days. If you no longer have voice access, we may keep a limited record of your most recent completed interview, such as its date, duration and completion status, to show that the report has expired.</li>
+          <li><strong>Resume uploads:</strong> a resume that you recently reused, updated, or obtained new feedback for is retained until it has been inactive for 90 days. Feedback has its own 90-day retention period.</li>
+          <li><strong>Pinned LinkedIn results:</strong> results you pin are retained until you delete them or unpin them and they meet the normal age limit.</li>
+          <li><strong>Other tool history:</strong> question sets, typed interviews and cover letters are removed after 90 days.</li>
+        </ul>
+        <p>Use a tool's History controls to delete supported records sooner. For content without an individual delete control, or if deletion fails, contact <a href="mailto:privacy@jobhackai.io">privacy@jobhackai.io</a>.</p>
         
         <h3>Account Retention After Cancellation</h3>
         <p>If you cancel your subscription, your account will remain available so you can return later and renew without starting over. Your account may remain inactive until you log in again.</p>
@@ -203,8 +217,8 @@
       <section class="privacy-section">
         <h2>Your Privacy Rights & Choices</h2>
         
-        <h3>We Do Not Sell or Share Your Personal Information</h3>
-        <p>JobHackAI does not sell your personal information. We also do not share your personal information for cross-context behavioral advertising.</p>
+        <h3>Use of Personal Information</h3>
+        <p>JobHackAI does not sell your personal information. We use the service providers described in this policy to deliver the service and, with your analytics choice, understand its use and marketing performance.</p>
         
         <h3>Access, Export, and Deletion</h3>
         <p>Depending on where you live, you may have rights to request:</p>
@@ -222,7 +236,7 @@
         <h3>How to Exercise Your Rights</h3>
         <p>You can manage your data directly from your <strong>Account Settings &gt; Privacy &amp; Data</strong> section:</p>
         <ul>
-          <li><strong>Export:</strong> Use the <strong>Download My Data</strong> button to download a copy of your account data.</li>
+          <li><strong>Export:</strong> Use the <strong>Download My Data</strong> button for an export of available account and tool data, including retained voice content and campaign attribution. Content already deleted cannot be restored by an export. Contact us if information you need is missing.</li>
           <li><strong>Deletion:</strong> Use the <strong>Delete Account</strong> button to permanently delete your account and all associated personal data, subject to billing/tax and security/abuse-prevention exceptions.</li>
         </ul>
       </section>
@@ -242,16 +256,25 @@
       <!-- AI Processing Section -->
       <section class="privacy-section privacy-subsection">
         <h2>AI Processing (OpenAI)</h2>
-        <p>When you use AI-powered features, your inputs may be sent to an AI processing provider (such as <strong>OpenAI</strong>) to generate the output you request. We do <strong>not</strong> use your User Content to train our own AI models. We also do not permit our AI processing providers to use your API-submitted content to train their models for general improvement, unless you explicitly opt in through a provider-controlled setting.</p>
+        <p>We send the inputs needed for a feature to <strong>OpenAI</strong> to generate its response. We do not use your tool content to train our own AI models. OpenAI's published API policy says API content is not used for model training by default unless the customer opts in.</p>
+        <p>Provider processing and retention are separate from your JobHackAI history. OpenAI may retain API data for abuse monitoring and other purposes described in its <a href="https://developers.openai.com/api/docs/guides/your-data" target="_blank" rel="noopener noreferrer">data controls documentation</a>. We do not promise zero retention by our providers.</p>
+      </section>
+
+      <section class="privacy-section privacy-subsection">
+        <h2>Optional Analytics and Marketing Measurement</h2>
+        <p>If you accept analytics, we use Google Analytics and Microsoft Clarity to understand visits, tool interactions and the performance of our marketing. This data can include browser or account identifiers, page and event information, campaign tags, and purchase or refund amounts. It is not necessarily anonymous.</p>
+        <p>We can associate a consented visit from a blog, social post or other campaign with signup, checkout and collected payments. Missing campaign information remains unattributed. Campaign context is kept for up to 90 days; required billing records are retained separately. Withdrawing analytics consent stops future optional tracking and removes our stored campaign attribution when your choice is saved to your account. It does not reverse earlier events already sent to providers.</p>
+        <p>Clarity provides session replay and heatmaps of page interactions. Private tool and account content is masked in new recordings. We use these recordings to improve usability. For Microsoft's handling of information, see the <a href="https://privacy.microsoft.com/en-us/privacystatement" target="_blank" rel="noopener noreferrer">Microsoft Privacy Statement</a>. Google's processing is described in its <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.</p>
+        <p>You can change your choice on our <a href="cookies.html">Cookie Policy</a> page or in Account Settings. Optional analytics is not required to use the service.</p>
       </section>
 
       <!-- What You Can Manage Inside the App -->
       <section class="privacy-section privacy-subsection">
         <h2>What You Can Delete Inside the App</h2>
         <h3>Tool History ("Runs")</h3>
-        <p>You can delete runs from your History using the <strong>Clear History / Delete</strong> controls inside each tool.</p>
+        <p>Use the <strong>Clear History / Delete</strong> controls where available. You can also request deletion at <a href="mailto:privacy@jobhackai.io">privacy@jobhackai.io</a>.</p>
         <h3>Your Account and All Data</h3>
-        <p>You can download a copy of all your data or permanently delete your account from <strong>Account Settings &gt; Privacy &amp; Data</strong>. Deleting your account will cancel any active subscription and remove all personal data.</p>
+        <p>You can request an export or account deletion from <strong>Account Settings &gt; Privacy &amp; Data</strong>. Account deletion includes cancellation of active subscriptions and removal of associated personal content, subject to the billing, legal and security exceptions above. Contact <a href="mailto:privacy@jobhackai.io">privacy@jobhackai.io</a> if a deletion or cancellation has not completed.</p>
       </section>
 
     </div>
