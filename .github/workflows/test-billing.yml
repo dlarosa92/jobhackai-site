@@ -134,6 +134,9 @@ jobs:
       - name: Voice follow-up deletion coordination and ambiguous delivery
         run: node --test app/functions/_lib/__tests__/voice-followup-deletion.test.mjs
 
+      - name: Managed voice call ownership and deletion coordination
+        run: node --test app/functions/_lib/__tests__/voice-provider-calls.test.mjs
+
   admission-bundle:
     runs-on: ubuntu-latest
     steps:

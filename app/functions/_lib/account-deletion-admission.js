@@ -79,7 +79,9 @@ export async function beginDeletionAdmission(env, { uid, email = null, origin })
   if (!admission) throw new Error('deletion_admission_unavailable');
   return admission;
 }
-export async function assertDeletionQuiescent(env, uid) {
+// Preparing a recovery manifest is safe while a tracked call still exists.
+// Provider/identity/content phases require the stronger quiescence check below.
+export async function assertDeletionOperationsFinished(env, uid) {
   identity(uid);
   const db = database(env);
   const row=await db.prepare(`SELECT id, (
@@ -88,4 +90,11 @@ export async function assertDeletionQuiescent(env, uid) {
   if (!row) throw new Error('deletion_admission_required');
   if (row.pending !== 0) throw new Error('deletion_operations_pending');
   return row.id;
+}
+export async function assertDeletionQuiescent(env, uid) {
+  const id=await assertDeletionOperationsFinished(env,uid);
+  const db=database(env);
+  const call=await db.prepare("SELECT 1 FROM voice_provider_calls WHERE auth_id=? AND state<>'closed' LIMIT 1").bind(uid).first();
+  if (call) throw new Error('deletion_voice_pending');
+  return id;
 }

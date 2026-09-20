@@ -175,3 +175,25 @@ CREATE TABLE IF NOT EXISTS account_maintenance_cursors (
   revision INTEGER NOT NULL DEFAULT 0,
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+
+-- Provider call control outlives browser connections and erased history rows.
+-- No keys, SDP offers/answers, audio or transcripts belong in this ledger.
+CREATE TABLE IF NOT EXISTS voice_provider_calls (
+  id TEXT PRIMARY KEY NOT NULL,
+  auth_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  state TEXT NOT NULL CHECK (state IN ('creating','active','closing','closed','uncertain')),
+  provider_call_id TEXT UNIQUE,
+  provider_key_sha256 TEXT NOT NULL CHECK (length(provider_key_sha256)=64),
+  execution_token TEXT,
+  last_error_code TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  closed_at TEXT,
+  CHECK (state NOT IN ('active','closing') OR provider_call_id IS NOT NULL)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_voice_provider_call_in_flight
+  ON voice_provider_calls(session_id) WHERE state<>'closed';
+CREATE INDEX IF NOT EXISTS idx_voice_provider_call_owner
+  ON voice_provider_calls(auth_id,state);

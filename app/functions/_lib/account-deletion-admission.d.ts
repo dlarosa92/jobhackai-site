@@ -11,3 +11,4 @@ export function beginDeletionAdmission(env: unknown, identity: { uid: string; em
   id: string; auth_id: string; email: string | null; origin: 'user_request' | 'inactivity'; state: 'requested' | 'complete'; created_at: string; updated_at: string;
 }>;
 export function assertDeletionQuiescent(env: unknown, uid: string): Promise<string>;
+export function assertDeletionOperationsFinished(env: unknown, uid: string): Promise<string>;

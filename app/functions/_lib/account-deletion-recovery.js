@@ -1,5 +1,5 @@
 import { getDb } from './db.js';
-import { assertDeletionQuiescent } from './account-deletion-admission.js';
+import { assertDeletionOperationsFinished, assertDeletionQuiescent } from './account-deletion-admission.js';
 import { billingCacheKeysForUid } from './billing-utils.js';
 
 // Storage/recovery primitive only. Do not wire to production until the handler,
@@ -47,7 +47,7 @@ async function resumeKeys(db, userId) {
  * is idempotent, but this function does not itself block application writes. */
 export async function prepareDeletionRecovery(env, { uid, email = null }) {
   validateUid(uid);
-  const admissionId = await assertDeletionQuiescent(env, uid);
+  const admissionId = await assertDeletionOperationsFinished(env, uid);
   const db = database(env);
   const existing = await db.prepare('SELECT * FROM account_deletion_jobs WHERE auth_id = ?').bind(uid).first();
   if (existing) return existing;
@@ -155,10 +155,12 @@ export async function finishDeletionRecovery(env, id) {
       WHEN phase = 'identity_removed'
         AND NOT EXISTS(SELECT 1 FROM users WHERE auth_id = ? AND id IS NOT ?)
         AND NOT EXISTS(SELECT 1 FROM users WHERE id = ? AND auth_id <> ?)
+        AND NOT EXISTS(SELECT 1 FROM voice_provider_calls WHERE auth_id=? AND state<>'closed')
       THEN phase ELSE NULL END WHERE id = ?`)
-      .bind(job.auth_id, job.user_id, job.user_id, job.auth_id, id));
+      .bind(job.auth_id, job.user_id, job.user_id, job.auth_id, job.auth_id, id));
     for (const table of uidTables) statements.push(db.prepare(`DELETE FROM ${table} WHERE user_id = ?`).bind(job.auth_id));
     statements.push(db.prepare('DELETE FROM account_inactivity_warnings WHERE auth_id = ?').bind(job.auth_id));
+    statements.push(db.prepare("DELETE FROM voice_provider_calls WHERE auth_id = ? AND state='closed'").bind(job.auth_id));
     if (job.user_id != null) {
       statements.push(db.prepare('DELETE FROM feedback_sessions WHERE resume_session_id IN (SELECT id FROM resume_sessions WHERE user_id = ?)').bind(job.user_id));
       for (const table of userTables) statements.push(db.prepare(`DELETE FROM ${table} WHERE user_id = ?`).bind(job.user_id));

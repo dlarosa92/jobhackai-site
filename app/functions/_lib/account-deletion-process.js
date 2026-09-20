@@ -1,13 +1,15 @@
 import { getDb } from './db.js';
-import { beginDeletionAdmission, assertDeletionQuiescent } from './account-deletion-admission.js';
+import { beginDeletionAdmission, assertDeletionOperationsFinished, assertDeletionQuiescent } from './account-deletion-admission.js';
 import { prepareDeletionRecovery, advanceDeletionRecovery, finishDeletionRecovery, withdrawInactiveDeletion } from './account-deletion-recovery.js';
 import { cancelBillingBeforeDeletion, assertInactiveBillingClear } from './account-deletion-billing.js';
 import { inactiveAccountEligibility } from './account-inactivity-policy.js';
 import { assertStripeKeyMatchesEnvironment } from './stripe-environment.js';
 import { createFirebaseDeletionClient } from '../../../shared/firebase-deletion-client.js';
+import { closeOneVoiceCallForDeletion } from './voice-provider-calls.js';
 
 const messages = {
   waiting_for_operations: 'Your deletion request is saved and is waiting for earlier account activity to finish. Sign-in has not been removed.',
+  waiting_for_voice: 'Your deletion request is saved, but a voice connection has not yet been confirmed closed. Account erasure is waiting for that confirmation.',
   execution_in_progress: 'Your deletion request is saved. Another cleanup attempt needs to finish or be reviewed before it can continue.',
   billing_unconfirmed: 'Your deletion request is saved, but billing is not yet confirmed settled. Sign-in has not been removed. Some subscriptions may already be canceled and open checkouts may have expired.',
   identity_unconfirmed: 'Your deletion request is saved. Sign-in removal is not yet confirmed, and stored content has not been erased.',
@@ -43,7 +45,7 @@ export async function processAccountDeletion(env, {uid,email=null,requestedByUse
   if (requestedByUser) admission=await beginDeletionAdmission(env,{uid,email,origin:'user_request'});
   if (!['user_request','inactivity'].includes(admission?.origin)) throw new Error('deletion_origin_invalid');
   const inactivity=admission.origin==='inactivity';
-  try { await assertDeletionQuiescent(env,uid); }
+  try { await assertDeletionOperationsFinished(env,uid); }
   catch(error) {
     if(error.message==='deletion_operations_pending') return pending(admission.id,'waiting_for_operations',knownIdentityState(job));
     throw error;
@@ -63,6 +65,13 @@ export async function processAccountDeletion(env, {uid,email=null,requestedByUse
   // These are opaque operation references, not a UID, address or credential.
   console.log('[account-deletion] execution_started',{job:job.id,execution:execution,phase:job.phase});
   let stage='recovery_unavailable',identityRemoved=knownIdentityState(job),billingChecked=false;
+  async function closeVoice() {
+    stage='waiting_for_voice';
+    // The job and call each retain their own exclusive execution. One call
+    // per retry bounds provider work. Uncertain results never age into safety.
+    if (!(await closeOneVoiceCallForDeletion(env,uid)).closed) throw Error('deletion_voice_pending');
+    await assertDeletionQuiescent(env,uid);
+  }
   async function checkInactivity() {
     stage='inactivity_review_required';
     const activity=await identity.activity(uid);
@@ -100,6 +109,7 @@ export async function processAccountDeletion(env, {uid,email=null,requestedByUse
   try {
     if(job.phase==='prepared') {
       if(inactivity) { const withdrawn=await checkInactivity();if(withdrawn)return withdrawn; }
+      await closeVoice();
       { const withdrawn=await billing();if(withdrawn)return withdrawn; }
       job=await advanceDeletionRecovery(env,job.id,'billing_verified');
     }
@@ -109,6 +119,7 @@ export async function processAccountDeletion(env, {uid,email=null,requestedByUse
       if(exists) {
         identityRemoved=false;
         if(inactivity) { const withdrawn=await checkInactivity();if(withdrawn)return withdrawn; }
+        await closeVoice();
         // On retry, recheck billing if identity removal has not happened.
         // If a previous delete already succeeded, skip provider cancellation.
         if(!billingChecked) { const withdrawn=await billing();if(withdrawn)return withdrawn; }
@@ -122,10 +133,13 @@ export async function processAccountDeletion(env, {uid,email=null,requestedByUse
         }
       }
       identityRemoved=true;
+      await closeVoice();
       job=await advanceDeletionRecovery(env,job.id,'identity_removed');
     }
     if(job.phase==='identity_removed') {
-      identityRemoved=true;stage='cleanup_pending';
+      identityRemoved=true;
+      await closeVoice();
+      stage='cleanup_pending';
       await finishDeletionRecovery(env,job.id);
       return complete(job);
     }

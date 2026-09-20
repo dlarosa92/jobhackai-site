@@ -28,12 +28,18 @@ function setup(t) {
   db.exec("INSERT INTO users(id,auth_id,email,stripe_customer_id) VALUES(1,'owner','owner@example.test','cus_owner')");
   const kv=createFakeKV();
   const env={DB:db,JOBHACKAI_KV:kv,ENVIRONMENT:'qa',STRIPE_SECRET_KEY:'sk_test_fixture',
+    OPENAI_API_KEY:'sk-voice-fixture',
     FIREBASE_PROJECT_ID:'fixture-project',FIREBASE_SERVICE_ACCOUNT_JSON:credentials};
   const fixture={exists:true,billingFails:false,deleteFails:false,deleteTimeout:false,lookupFails:false,
     sub:{id:'sub_owner',customer:'cus_owner',status:'active',metadata:{firebaseUid:'owner',environment:'qa'}},
     billingWait:null,lookupReply:null,failLookupAfterDelete:false};
   const events=[];
   const stub=stubStripeFetch([
+    {match:'api.openai.com/v1/realtime/calls/',reply:()=>{
+      events.push('voice-hangup');
+      if(fixture.voiceOutcome==='timeout')throw Error('private voice diagnostic');
+      return {status:fixture.voiceOutcome==='missing'?404:200,json:{}};
+    }},
     {match:'oauth2.googleapis.com/token',reply:()=>({json:{access_token:'fixture-token'}})},
     {match:'accounts:lookup',reply:()=>{
       events.push('lookup');if(fixture.lookupFails)throw Error('private fixture diagnostic');
@@ -366,4 +372,56 @@ test('actual account UI preserves pending sign-in and never labels unfinished cl
     if(status==='pending') {assert.equal(alerts.length,1);assert.match(alerts[0],/fixture-reference/);}
     if(!signouts){assert.equal(button.textContent,'Check Deletion Status');assert.equal(sandbox.window.location.href,'unchanged');}
   }
+});
+
+async function seedTrackedVoiceCall(f,{id='call-attempt',sessionId='voice-interview',state='active'}={}) {
+  const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(f.env.OPENAI_API_KEY))),v=>v.toString(16).padStart(2,'0')).join('');
+  await f.db.prepare(`INSERT INTO voice_provider_calls(id,auth_id,session_id,state,provider_call_id,provider_key_sha256,execution_token)
+    VALUES(?,'owner',?,?,?,?,?)`).bind(id,sessionId,state,state==='creating'?null:'rtc_'+id,hash,state==='creating'?'interrupted':null).run();
+}
+
+test('deletion confirms tracked voice hangup before billing, identity removal or content erasure',async t=>{
+  const f=setup(t);await seedTrackedVoiceCall(f);
+  const result=await f.run();assert.equal(result.status,'complete');
+  assert.ok(f.events.indexOf('voice-hangup')<f.events.findIndex(e=>e.startsWith('stripe:')));
+  assert.ok(f.events.indexOf('voice-hangup')<f.events.indexOf('identity-delete'));
+  assert.equal(await f.count('voice_provider_calls'),0);assert.equal(await f.count('users'),0);
+});
+
+for(const outcome of ['missing','timeout']) {
+  test('an unconfirmed voice hangup keeps account access and content pending: '+outcome,async t=>{
+    const f=setup(t);await seedTrackedVoiceCall(f);f.fixture.voiceOutcome=outcome;
+    const result=await f.run();assert.equal(result.status,'pending');assert.equal(result.code,'waiting_for_voice');assert.equal(result.identityRemoved,false);
+    assert.equal(f.fixture.exists,true);assert.equal(await f.count('users'),1);assert.equal(await f.count('account_deletion_jobs'),1);
+    assert.deepEqual(f.events,['voice-hangup']);
+    assert.equal((await f.run()).code,'waiting_for_voice');assert.deepEqual(f.events,['voice-hangup'],'uncertain hangup is not retried');
+  });
+}
+
+test('interrupted voice creation cannot age into completed account deletion',async t=>{
+  const f=setup(t);await seedTrackedVoiceCall(f,{state:'creating'});
+  f.db.exec("UPDATE voice_provider_calls SET created_at='2000-01-01',updated_at='2000-01-01'");
+  assert.equal((await f.run()).code,'waiting_for_voice');assert.equal(f.events.length,0);assert.equal(await f.count('users'),1);
+});
+
+test('earlier account operations keep deletion from dispatching a voice hangup',async t=>{
+  const f=setup(t);await seedTrackedVoiceCall(f);await admitAccountOperation(f.env,'owner');
+  assert.equal((await f.run()).code,'waiting_for_operations');assert.equal(f.events.length,0);assert.equal(await f.count('users'),1);
+});
+
+test('one deletion attempt closes at most one tracked call before retrying remaining work',async t=>{
+  const f=setup(t);await seedTrackedVoiceCall(f,{id:'first',sessionId:'first'});await seedTrackedVoiceCall(f,{id:'second',sessionId:'second'});
+  assert.equal((await f.run()).code,'waiting_for_voice');assert.deepEqual(f.events,['voice-hangup']);assert.equal(await f.count('users'),1);
+  assert.equal((await f.run()).status,'complete');assert.equal(f.events.filter(e=>e==='voice-hangup').length,2);
+  assert.equal(await f.count('voice_provider_calls'),0);
+});
+
+
+test('inactivity rechecks returning-user activity before closing a tracked voice call',async t=>{
+  const f=setup(t);await seedTrackedVoiceCall(f);await seedInactive(f);
+  f.fixture.activity.lastRefreshAt=new Date().toISOString();
+  assert.equal((await f.resume()).status,'withdrawn');assert.equal(f.fixture.exists,true);
+  assert.equal(f.events.includes('voice-hangup'),false);
+  assert.equal(await f.db.prepare("SELECT state FROM voice_provider_calls").first('state'),'active');
+  assert.equal(await f.count('account_deletion_admissions'),0);
 });
