@@ -8,6 +8,10 @@ The owner wants to operate without customer calls, meetings or personal sales co
 
 The pilot directs consumers to providers for service booking, quotes and fulfillment. JobHackAI is not scheduling appointments or guaranteeing a provider's work. Any later paid placement offer should describe the actual placement and reporting clearly; do not promise a quantity or quality of leads until it has evidence and an explicit delivery definition. No mandatory phone field or book-a-call onboarding step is required. Inbox receipt and resolution need verification before claiming the support workflow is automated.
 
+The owner further requires proactive approval delivery: a concise notification with the exact prepared action, recommendation, reason and consequence, plus Approve / Change / Decline or a direct reply. Routine authorized work must not become an approval queue. Do not require the owner to browse multiple dashboards, repeat context or find a hidden request. Silence is never approval; suppress duplicate alerts for unchanged pending decisions.
+
+On September 20 an hourly Codex thread heartbeat, `jobhackai-decisions`, was created as an interim route for new actionable decisions. It stays quiet when nothing changes and preserves existing release holds. Marblism's observed account notification page offered only receptionist call-summary and call-limit alerts, not general agent approval notifications. Customer-inbox ingestion, event-driven alerts, operating-system popup receipt and action acknowledgment still need end-to-end verification; an active schedule alone does not prove those capabilities.
+
 ## Current prototype
 
 Mobile detailing is the working category for the prototype, not a validated commercial conclusion. Six providers publish useful comparison information. The directory emphasizes differences in package scope and water/power requirements rather than unsupported rankings or a cheapest-first list. Each listing links to its first-party source and records the check date in `marketing/data/directory/mobile-detailing.json`. Published starting prices are not quotes or like-for-like comparisons.
