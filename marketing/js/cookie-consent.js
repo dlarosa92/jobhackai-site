@@ -48,7 +48,7 @@
   window.JHA.apiBase = API_BASE;
   // Cookie domain: use .jobhackai.io so the client_id cookie is shared across subdomains
   const COOKIE_DOMAIN = (productionHost || qaHost) ? '; Domain=.jobhackai.io' : '';
-  const CAMPAIGN_COOKIE = 'jha_campaign_' + (productionHost ? 'prod' : qaHost ? 'qa' : 'dev');
+  const CAMPAIGN_COOKIE = 'jha_campaign_' + (productionHost ? 'prod' : qaHost ? 'qa_v2' : 'dev');
   const CAMPAIGN_MAX_AGE = 90 * 24 * 60 * 60;
   let consentSyncQueue = Promise.resolve(false);
 
@@ -268,7 +268,16 @@
     return consentSyncQueue;
   }
 
+  function retireLegacyQACampaign() {
+    if (!qaHost) return;
+    // The previous QA cookie was host-only. Start a fresh QA namespace and
+    // remove both old scopes so opt-out/re-consent cannot resurrect it.
+    document.cookie = 'jha_campaign_qa=; Max-Age=0; Path=/; SameSite=Lax';
+    document.cookie = 'jha_campaign_qa=; Max-Age=0; Path=/; SameSite=Lax; Domain=.jobhackai.io';
+  }
+
   function clearCampaign() {
+    retireLegacyQACampaign();
     document.cookie = `${CAMPAIGN_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax${COOKIE_DOMAIN}`;
   }
 
@@ -287,8 +296,9 @@
   function readCampaign() {
     if (!hasAnalyticsConsent()) return null;
     try {
-      const raw = document.cookie.split(';').map(c => c.trim()).find(c => c.startsWith(CAMPAIGN_COOKIE + '='));
-      if (!raw) return null;
+      const matches = document.cookie.split(';').map(c => c.trim()).filter(c => c.startsWith(CAMPAIGN_COOKIE + '='));
+      if (new Set(matches).size !== 1) return null;
+      const raw = matches[0];
       const value = JSON.parse(decodeURIComponent(raw.slice(CAMPAIGN_COOKIE.length + 1)));
       const first = campaignTouch(value.first), last = campaignTouch(value.last);
       return first || last ? { first, last } : null;
@@ -956,6 +966,7 @@
 
   // Initialize
   async function init() {
+    retireLegacyQACampaign();
     // Privacy controls must work even while account reconciliation is slow
     // or unavailable. Opening/saving the modal applies the local choice now.
     setupAccountSettingsButton();

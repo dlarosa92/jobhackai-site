@@ -2,12 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
-import { analyticsClientId } from '../analytics-client-id.js';
+import { analyticsClientIdentity } from '../analytics-client-id.js';
 const root = new URL('../../../../',import.meta.url);
 const clientId = '7bbba230-b755-4d31-b475-e20cf6d00ed9';
 function harness(path, {authFailure=false, userMissing=false, saveFailure=false, cleanupFailure=false, readFailure=false, stored=null}={}) {
   const writes=[],reads=[],revocations=[];
-  const ctx={Request,Response,Date,analyticsClientId,console:{error(){}},
+  const ctx={Request,Response,Date,analyticsClientIdentity,console:{error(){}},
     getBearer:r=>r.headers.get('Authorization')?.match(/^Bearer (.+)$/)?.[1],
     verifyFirebaseIdToken:async()=>{if(authFailure)throw Error('private token details');return {uid:'verified-user'};},
     getOrCreateUserByAuthId:async()=>userMissing?null:{id:42},
@@ -114,3 +114,10 @@ for (const path of ['app/functions/_lib/db.js','functions/_lib/db.js']) {
     await assert.rejects(()=>ctx.readConsent({},null,clientId),/consent_read_unavailable/);
   });
 }
+
+for(const path of ['app/functions/api/cookie-consent.js','functions/api/cookie-consent.js'])test(path+': a body identifier cannot override conflicting browser cookies',async()=>{
+  const h=harness(path);
+  const headers={Cookie:'jha_client_id_qa='+clientId+'; jha_client_id_qa=6bbba230-b755-4d31-b475-e20cf6d00ed9'};
+  for(const method of ['GET','POST'])assert.equal((await h.request({clientId,consent:{version:1,analytics:true}},headers,method)).status,400);
+  assert.equal(h.writes.length,0);assert.equal(h.reads.length,0);assert.equal(h.revocations.length,0);
+});

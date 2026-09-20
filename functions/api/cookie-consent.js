@@ -1,4 +1,4 @@
-import { analyticsClientId } from '../../app/functions/_lib/analytics-client-id.js';
+import { analyticsClientIdentity } from '../../app/functions/_lib/analytics-client-id.js';
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { getOrCreateUserByAuthId } from '../_lib/db.js';
 import { upsertCookieConsent, getCookieConsent } from '../_lib/db.js';
@@ -52,6 +52,8 @@ export async function onRequest({ request, env }) {
   if (request.method === 'OPTIONS') return new Response(null, { headers: corsHeaders(origin, env) });
   if (!['GET', 'POST'].includes(request.method)) return json({ok:false,error:'Method not allowed'},405,origin,env);
 
+  const browserIdentity = analyticsClientIdentity(request, env);
+  if (browserIdentity.error) return json({ok:false,error:'Browser identity unavailable'},browserIdentity.error === 'environment_unavailable' ? 503 : 400,origin,env);
   try {
     const token = getBearer(request);
     let authId = null;
@@ -71,7 +73,7 @@ export async function onRequest({ request, env }) {
       userId = user?.id;
       if (!userId) return json({ok:false,error:'Consent storage unavailable'},503,origin,env);
     }
-    const cookieClient = analyticsClientId(request, env);
+    const cookieClient = browserIdentity.clientId;
     if (request.method === 'GET') {
       const consent = await getCookieConsent(env, userId, cookieClient);
       // Old or malformed stored data is not an analytics grant.
