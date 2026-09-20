@@ -9,6 +9,7 @@ import { prepareDeletionRecovery, advanceDeletionRecovery, withdrawInactiveDelet
 import { createFirebaseDeletionClient } from '../../../../shared/firebase-deletion-client.js';
 import { sqliteD1 } from './sqlite-d1-helper.mjs';
 import { createFakeKV, stubStripeFetch } from './billing-test-helper.mjs';
+import { inspectionSql, inspectReport, planReconciliation } from '../../../scripts/lib/deletion-execution-reconcile-core.mjs';
 if(!globalThis.crypto) globalThis.crypto=webcrypto;
 const privateKey=generateKeyPairSync('rsa',{modulusLength:2048}).privateKey.export({type:'pkcs8',format:'pem'});
 const credentials=JSON.stringify({project_id:'fixture-project',client_email:'fixture@fixture-project.iam.gserviceaccount.com',private_key:privateKey});
@@ -207,6 +208,24 @@ test('a crashed execution token never expires into permission to delete',async t
   f.db.exec("UPDATE account_deletion_jobs SET execution_token='interrupted',execution_started_at='2000-01-01'");
   const result=await f.run();assert.equal(result.code,'execution_in_progress');assert.equal(result.reference,job.id);
   assert.equal(f.stub.calls.length,0);assert.equal((await f.row()).execution_token,'interrupted');
+});
+
+test('a reconciled stopped execution resumes the real processor without repeating confirmed remote deletion',async t=>{
+  const f=setup(t);await beginDeletionAdmission(f.env,{origin:'user_request',uid:'owner'});
+  const job=await prepareDeletionRecovery(f.env,{uid:'owner'});
+  await advanceDeletionRecovery(f.env,job.id,'billing_verified');
+  f.fixture.exists=false;
+  f.db.exec("UPDATE account_deletion_jobs SET execution_token='interrupted',execution_started_at=datetime('now','-1 hour')");
+  const current=await f.db.prepare(inspectionSql(job.id)).first(),now=Date.now();
+  const report=inspectReport('qa',current,now);
+  report.evidence={operatorRef:'fixture-operator',
+    invocation:{status:'terminated',executionToken:'interrupted',observedAt:new Date(now-2000).toISOString(),reference:'fixture/invocation'},
+    providers:{status:'settled',pendingRequests:false,observedAt:new Date(now-1000).toISOString(),reference:'fixture/identity-absent'}};
+  await f.db.prepare(planReconciliation(report,current,'qa',now).sql).run();
+  assert.equal((await f.resume()).status,'complete');
+  assert.equal(f.events.filter(event=>event==='identity-delete'||event.startsWith('stripe:')).length,0);
+  assert.equal(await f.count('deletion_execution_reconciliations'),1);assert.equal(await f.count('users'),0);
+  assert.equal(await f.count('account_deletion_notifications'),1);
 });
 
 test('identity failure leaves the confirmed billing phase and resumes with a fresh billing check',async t=>{

@@ -95,6 +95,36 @@ CREATE INDEX IF NOT EXISTS idx_account_operations_pending
 CREATE INDEX IF NOT EXISTS idx_account_operations_analytics
   ON account_operation_claims(analytics_event_key,state);
 
+-- Operator-only recovery of a verified stopped deletion execution. The single
+-- INSERT and its trigger form one atomic operation, including the audit receipt.
+-- No job FK: a subsequently withdrawn inactivity job may be removed.
+CREATE TABLE IF NOT EXISTS deletion_execution_reconciliations (
+  id TEXT PRIMARY KEY NOT NULL,
+  job_id TEXT NOT NULL,
+  execution_token TEXT NOT NULL,
+  phase TEXT NOT NULL CHECK (phase IN ('prepared','billing_verified','identity_removed')),
+  job_updated_at TEXT NOT NULL,
+  admission_origin TEXT NOT NULL CHECK (admission_origin IN ('user_request','inactivity')),
+  evidence_sha256 TEXT NOT NULL CHECK (length(evidence_sha256)=64),
+  operator_ref TEXT NOT NULL,
+  invocation_ref TEXT NOT NULL,
+  provider_ref TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TRIGGER IF NOT EXISTS reconcile_stopped_deletion_execution
+AFTER INSERT ON deletion_execution_reconciliations BEGIN
+  UPDATE account_deletion_jobs SET execution_token=NULL,execution_started_at=NULL,
+    last_error_code='operator_reconciled',updated_at=datetime('now')
+  WHERE id=NEW.job_id AND execution_token=NEW.execution_token
+    AND phase=NEW.phase AND updated_at=NEW.job_updated_at
+    AND EXISTS (SELECT 1 FROM account_deletion_admissions a
+      WHERE a.id=account_deletion_jobs.id AND a.auth_id=account_deletion_jobs.auth_id
+        AND a.origin=NEW.admission_origin AND a.state='requested')
+    AND NOT EXISTS (SELECT 1 FROM account_operation_claims c
+      WHERE c.auth_id=account_deletion_jobs.auth_id AND c.state<>'finished');
+  SELECT CASE WHEN changes()<>1 THEN RAISE(ABORT,'deletion_reconciliation_conflict') END;
+END;
+
 -- Bounded retention passes advance only after their selected accounts finish.
 CREATE TABLE IF NOT EXISTS account_maintenance_cursors (
   name TEXT PRIMARY KEY,

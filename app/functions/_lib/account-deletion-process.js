@@ -59,6 +59,9 @@ export async function processAccountDeletion(env, {uid,email=null,requestedByUse
     return current?.phase==='complete'?complete(current):pending(job.id,'execution_in_progress',knownIdentityState(current));
   }
   job=acquired;
+  // Correlate a crashed execution with its authoritative Worker invocation.
+  // These are opaque operation references, not a UID, address or credential.
+  console.log('[account-deletion] execution_started',{job:job.id,execution:execution,phase:job.phase});
   let stage='recovery_unavailable',identityRemoved=knownIdentityState(job),billingChecked=false;
   async function checkInactivity() {
     stage='inactivity_review_required';
