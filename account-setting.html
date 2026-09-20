@@ -983,15 +983,15 @@
             html += `<div style="color:#6B7280;font-size:0.98rem;margin-top:0.2rem;">${planPrices[plan] || ''}</div>`;
             
             // A scheduled cancellation ends access; it is not an upcoming renewal.
-            if (data.currentPeriodEnd && data.status === 'active' && !planMeta?.cancelAt) {
+            if (data.currentPeriodEnd && data.status === 'active' && !data.cancelAt) {
               const renewDate = new Date(data.currentPeriodEnd).toLocaleDateString('en-US', { 
                 year: 'numeric', month: 'long', day: 'numeric' 
               });
               html += `<div style="color:#6B7280;font-size:0.92rem;margin-top:0.4rem;">Renews on ${renewDate}</div>`;
             }
 
-            if (planMeta?.cancelAt) {
-              const cancelDateStr = new Date(planMeta.cancelAt).toLocaleDateString('en-US', {
+            if (data.cancelAt) {
+              const cancelDateStr = new Date(data.cancelAt).toLocaleDateString('en-US', {
                 year: 'numeric', month: 'long', day: 'numeric'
               });
               html += `<div style="background:#FEF3C7;border-left:4px solid #F59E0B;color:#92400E;padding:0.6rem 0.8rem;border-radius:6px;margin-top:0.8rem;font-size:0.95rem;">
