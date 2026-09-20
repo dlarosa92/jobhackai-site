@@ -1,6 +1,7 @@
 // Financial evidence only. No GA requests, generated browser IDs, list prices,
 // inferred purchases from plan changes, or consent/campaign assumptions.
 import { getDb } from './db.js';
+import { analyticsMoney, analyticsMoneyStatement } from './analytics-money.js';
 import { paymentAttributionStatement } from './payment-attribution.js';
 import { canonicalEnvironmentName, canonicalizeEnvironmentStamp, resolveExpectedLivemode } from './stripe-environment.js';
 
@@ -41,7 +42,7 @@ async function chargeContext(env, charge) {
     if (session.mode === 'payment') {
       if (id(session.payment_intent) !== paymentIntentId) fail('checkout_mismatch');
       return { stamp: session.metadata?.environment, customerId: objectId(session.customer, 'cus'),
-        sessionId: objectId(session.id, 'cs'), invoiceId: null, subscriptionId: null };
+        sessionId: objectId(session.id, 'cs'), invoiceId: null, subscriptionId: null, analytics: analyticsMoney(charge,{checkout:session}) };
     }
     // Subscription Checkout Sessions have no payment_intent. Verify their
     // captured payment through invoice payments and the subscription below.
@@ -66,7 +67,7 @@ async function chargeContext(env, charge) {
     .map(canonicalizeEnvironmentStamp).filter(Boolean);
   if (new Set(stamps).size > 1) fail('invoice_environment_conflict');
   return { stamp: stamps[0], customerId: objectId(charge.customer, 'cus'),
-    sessionId: null, invoiceId: invoiceIds[0], subscriptionId };
+    sessionId: null, invoiceId: invoiceIds[0], subscriptionId, analytics: analyticsMoney(charge,{invoice}) };
 }
 
 export function paymentStatement(db, charge, context, event, environment) {
@@ -146,6 +147,7 @@ export async function stageCollectedRevenue(env, event, ctx) {
     if (stamp !== environment) return { kind: 'noop', note: 'revenue_other_environment' };
     const db = getDb(env);
     const statements = [paymentStatement(db, charge, context, event, environment)];
+    if (context.analytics) statements.push(analyticsMoneyStatement(db,chargeId,context.analytics));
     // Fetch existing refunds even on a delayed purchase event. This also
     // handles a refund arriving before its charge webhook without losing it.
     const refunds = await allRefunds(env, chargeId);

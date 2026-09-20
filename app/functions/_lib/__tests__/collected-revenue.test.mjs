@@ -13,7 +13,7 @@ async function test(name, run) {
   db.exec(oldMigration);
   db.exec(migration);
   db.exec('CREATE TABLE cookie_consents(user_id INTEGER,client_id TEXT,consent_json TEXT);');
-  for (const file of ['025_checkout_attribution.sql','026_payment_campaign_links.sql']) {
+  for (const file of ['025_checkout_attribution.sql','026_payment_campaign_links.sql','027_analytics_delivery.sql']) {
     db.exec(readFileSync(new URL('../../../db/migrations/'+file, import.meta.url),'utf8'));
   }
   const env = makeEnv({ ENVIRONMENT: 'qa', STRIPE_SECRET_KEY: 'sk_test_fixture', DB: db,
@@ -61,6 +61,22 @@ await test('discounted pack records captured cash, duplicate events do not infla
   assert.equal((await send('charge.captured')).response.status, 200);
   assert.equal((await totals()).gross_captured, 1950);
   assert.equal(await db.prepare('SELECT COUNT(*) FROM stripe_collected_payments').first('COUNT(*)'), 1);
+});
+
+await test('verified tax breakdown persists atomically with a payment and is stable on replay', async ({fixture,send,db}) => {
+  fixture.session={...fixture.session,amount_total:1950,currency:'usd',total_details:{amount_shipping:0,amount_tax:150}};
+  assert.equal((await send()).response.status,200);
+  assert.deepEqual(await db.prepare('SELECT * FROM stripe_payment_analytics_values').first(),
+    {charge_id:'ch_paid',captured_minor:1950,value_minor:1800,tax_minor:150,currency:'usd',item_id:'jobhackai_one_time'});
+  await send('charge.captured');
+  assert.equal(await db.prepare('SELECT COUNT(*) n FROM stripe_payment_analytics_values').first('n'),1);
+});
+
+await test('missing analytics schema retries the webhook without marking partial financial success', async ({fixture,send,db,totals}) => {
+  fixture.session={...fixture.session,amount_total:1950,currency:'usd',total_details:{amount_shipping:0,amount_tax:0}};
+  db.exec('DROP TABLE stripe_payment_analytics_values');
+  assert.equal((await send()).response.status,503);
+  assert.equal(await totals(),null);
 });
 
 await test('initial subscription and renewal are distinct captured charges', async ({ fixture, send, totals }) => {
@@ -184,7 +200,7 @@ await test('invalid refund rolls back payment and event completion together', as
 });
 
 await test('missing migration cannot consume a money event', async ({ db, send }) => {
-  db.exec('DROP VIEW stripe_collected_payment_totals; DROP TABLE stripe_payment_refunds; DROP TABLE stripe_collected_payments;');
+  db.exec('DROP TABLE analytics_delivery; DROP TABLE stripe_payment_analytics_values; DROP TABLE stripe_payment_attributions; DROP VIEW stripe_campaign_revenue; DROP VIEW stripe_collected_payment_totals; DROP TABLE stripe_payment_refunds; DROP TABLE stripe_collected_payments;');
   const attempt = await send(); assert.equal(attempt.response.status, 503);
   assert.equal((await db.prepare('SELECT status FROM stripe_event_ledger WHERE event_id=?').bind(attempt.event.id).first()).status, 'failed');
 });
