@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { onRequest } from '../../api/stripe-webhook.js';
 import { withWebhookAccountScope } from '../account-webhook-scope.js';
-import { beginDeletionAdmission, assertDeletionQuiescent } from '../account-deletion-admission.js';
+import { beginDeletionAdmission, assertDeletionQuiescent, admitAccountOperation, settleAccountOperation } from '../account-deletion-admission.js';
 import { prepareDeletionRecovery, advanceDeletionRecovery, finishDeletionRecovery } from '../account-deletion-recovery.js';
 import { sqliteD1 } from './sqlite-d1-helper.mjs';
 import { createFakeKV, makeEnv, makeEvent, makeSubscription, makeContext, signStripeEvent, stubStripeFetch } from './billing-test-helper.mjs';
@@ -158,6 +158,20 @@ test('missing admission schema fails closed before any entitlement mutation', as
   assert.equal((await f.send('customer.subscription.updated')).response.status,503);
   assert.equal(await f.count('account_operation_claims'),0);
   assert.equal(await f.db.prepare('SELECT plan FROM users').first('plan'),'monthly');
+});
+
+test('maintenance causes a retryable signed webhook failure rather than acknowledging a skipped purchase',async t=>{
+  const f=setup(t),claim=await admitAccountOperation(f.env,'owner','maintenance');
+  const first=await f.send('checkout.session.completed',{id:'evt_maintenance_checkout'});
+  assert.equal(first.response.status,503);
+  assert.notEqual(await f.db.prepare('SELECT status FROM stripe_event_ledger WHERE event_id=?').bind(first.event.id).first('status'),'processed');
+  assert.equal(await f.db.prepare('SELECT voice_sessions_remaining FROM users').first('voice_sessions_remaining'),0);
+  await settleAccountOperation(f.env,claim,'finished');
+  const retry=await f.send('checkout.session.completed',{id:first.event.id});
+  assert.equal(retry.response.status,200);
+  assert.equal(await f.db.prepare('SELECT voice_sessions_remaining FROM users').first('voice_sessions_remaining'),5);
+  await f.send('checkout.session.completed',{id:first.event.id});
+  assert.equal(await f.db.prepare('SELECT voice_sessions_remaining FROM users').first('voice_sessions_remaining'),5);
 });
 
 test('unreadable legacy tombstones fail closed even for an existing account', async t => {

@@ -164,7 +164,7 @@ export async function sendFollowups(env, db = env.JOBHACKAI_DB) {
         try { await settleAccountOperation(env, operation, 'uncertain'); } catch (_) { /* Retain active claim for reconciliation. */ }
       }
       // Neither recipient details nor provider responses belong in logs.
-      console.warn(`[VOICE-FOLLOWUP] ${err?.message === 'account_deletion_pending' ? 'deletion_pending' : 'reconciliation_required'}`);
+      console.warn(`[VOICE-FOLLOWUP] ${err?.message === 'account_deletion_pending' ? 'deletion_pending' : err?.message === 'account_operation_busy' ? 'account_busy' : 'reconciliation_required'}`);
     }
   }
 }

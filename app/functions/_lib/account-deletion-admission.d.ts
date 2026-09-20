@@ -1,6 +1,6 @@
 // Public types for the shared JavaScript helper. Its implementation validates
 // the database binding and identity at runtime; no Worker Env is redefined here.
-export type AccountOperationClaim = { id: string; uid: string; kind: 'billing' | 'account' };
+export type AccountOperationClaim = { id: string; uid: string; kind: 'billing' | 'account' | 'maintenance' };
 export function admitAccountOperation(
   env: unknown, uid: string, kind?: AccountOperationClaim['kind'],
   options?: { webhookEventId?: string | null; analyticsEventKey?: string | null }

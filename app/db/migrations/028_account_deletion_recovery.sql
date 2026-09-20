@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS account_deletion_admissions (
 CREATE TABLE IF NOT EXISTS account_operation_claims (
   id TEXT PRIMARY KEY,
   auth_id TEXT NOT NULL,
-  kind TEXT NOT NULL CHECK (kind IN ('billing','account')),
+  kind TEXT NOT NULL CHECK (kind IN ('billing','account','maintenance')),
   -- A crashed webhook can be matched to its durable event ledger without
   -- retaining event payloads, email, credentials or interview content.
   webhook_event_id TEXT,
@@ -62,3 +62,11 @@ CREATE INDEX IF NOT EXISTS idx_account_operations_pending
   ON account_operation_claims(auth_id,state);
 CREATE INDEX IF NOT EXISTS idx_account_operations_analytics
   ON account_operation_claims(analytics_event_key,state);
+
+-- Bounded retention passes advance only after their selected accounts finish.
+CREATE TABLE IF NOT EXISTS account_maintenance_cursors (
+  name TEXT PRIMARY KEY,
+  last_user_id INTEGER NOT NULL DEFAULT 0 CHECK (last_user_id>=0),
+  revision INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);

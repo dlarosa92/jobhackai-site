@@ -265,3 +265,11 @@ test('validation failures finish their claim for safe retry; missing deletion sc
   const missing=setup(t);missing.db.exec('DROP TABLE account_deletion_admissions');
   await assert.rejects(missing.run(),/no such table/);assert.equal(missing.calls.length,0);
 });
+
+test('maintenance postpones Analytics without dropping or collecting the event, then allows normal delivery',async t=>{
+  const f=setup(t),claim=await admitAccountOperation(f.env,'owner','maintenance');
+  await f.run();assert.equal(f.calls.length,0);
+  assert.equal((await f.rows())[0].state,'pending');assert.equal((await f.rows())[0].last_reason,'account_operation_busy');
+  await settleAccountOperation(f.env,claim,'finished');
+  await f.run({now:()=>NOW+300000});assert.equal((await f.rows())[0].state,'accepted_unverified');
+});

@@ -78,3 +78,28 @@ test('finished Analytics validation allows a fresh attempt and metadata is stric
   await assert.rejects(admitAccountOperation(env,'owner','account',{analyticsEventKey}),/analytics_event_invalid/);
  await assert.rejects(admitAccountOperation(env,'owner','billing',options),/analytics_event_invalid/);
 });
+
+test('exclusive maintenance cannot overlap account, billing, Analytics or another maintenance operation',async t=>{
+ const {env}=setup(t);
+ const ordinary=await admitAccountOperation(env,'owner');
+ await assert.rejects(admitAccountOperation(env,'owner','maintenance'),/account_operation_busy/);
+ await settleAccountOperation(env,ordinary,'finished');
+ const maintenance=await admitAccountOperation(env,'owner','maintenance');
+ for(const kind of ['account','billing','maintenance'])
+  await assert.rejects(admitAccountOperation(env,'owner',kind),/account_operation_busy/);
+ await assert.rejects(admitAccountOperation(env,'owner','account',{analyticsEventKey:'purchase:ch_test'}),/account_operation_busy/);
+ assert.ok(await admitAccountOperation(env,'other'));
+ await beginDeletionAdmission(env,{uid:'owner'});
+ await assert.rejects(assertDeletionQuiescent(env,'owner'),/operations_pending/);
+ await settleAccountOperation(env,maintenance,'finished');
+ await assertDeletionQuiescent(env,'owner');
+});
+
+test('an uncertain maintenance claim never expires into permission for account writes or deletion',async t=>{
+ const {env,db}=setup(t),claim=await admitAccountOperation(env,'owner','maintenance');
+ await settleAccountOperation(env,claim,'uncertain');
+ db.exec("UPDATE account_operation_claims SET created_at='2000-01-01',updated_at='2000-01-01'");
+ await assert.rejects(admitAccountOperation(env,'owner'),/account_operation_busy/);
+ await beginDeletionAdmission(env,{uid:'owner'});
+ await assert.rejects(assertDeletionQuiescent(env,'owner'),/operations_pending/);
+});

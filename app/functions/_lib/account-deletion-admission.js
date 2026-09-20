@@ -13,7 +13,7 @@ function identity(uid) {
 }
 export async function admitAccountOperation(env, uid, kind = 'account', { webhookEventId = null, analyticsEventKey = null } = {}) {
   identity(uid);
-  if (!['billing', 'account'].includes(kind)) throw new Error('deletion_operation_invalid');
+  if (!['billing', 'account', 'maintenance'].includes(kind)) throw new Error('deletion_operation_invalid');
   if (webhookEventId !== null && (kind !== 'billing' || typeof webhookEventId !== 'string' ||
       !/^evt_[a-zA-Z0-9_]{1,196}$/.test(webhookEventId))) throw new Error('deletion_webhook_event_invalid');
   if (analyticsEventKey !== null && (kind !== 'account' || typeof analyticsEventKey !== 'string' ||
@@ -26,12 +26,17 @@ export async function admitAccountOperation(env, uid, kind = 'account', { webhoo
       SELECT 1 FROM account_deletion_admissions WHERE auth_id = ?
     ) AND (? IS NULL OR NOT EXISTS (
       SELECT 1 FROM account_operation_claims WHERE analytics_event_key=? AND state!='finished'
-    ))`).bind(id,uid,kind,webhookEventId,analyticsEventKey,uid,analyticsEventKey,analyticsEventKey).run();
+    )) AND NOT EXISTS (
+      SELECT 1 FROM account_operation_claims WHERE auth_id=? AND state!='finished'
+        AND (kind='maintenance' OR ?='maintenance')
+    )`).bind(id,uid,kind,webhookEventId,analyticsEventKey,uid,analyticsEventKey,analyticsEventKey,uid,kind).run();
   if (result.meta?.changes !== 1) {
     // Diagnostic only: this read grants no permission. The atomic INSERT is
     // the admission decision; neither a stale lease nor another UID bypasses it.
     const deleting = await db.prepare('SELECT 1 FROM account_deletion_admissions WHERE auth_id=?').bind(uid).first();
-    throw new Error(deleting ? 'account_deletion_pending' : 'analytics_delivery_unresolved');
+    if (deleting) throw new Error('account_deletion_pending');
+    const unresolved = analyticsEventKey && await db.prepare("SELECT 1 FROM account_operation_claims WHERE analytics_event_key=? AND state!='finished'").bind(analyticsEventKey).first();
+    throw new Error(unresolved ? 'analytics_delivery_unresolved' : 'account_operation_busy');
   }
   return { id, uid, kind };
 }
