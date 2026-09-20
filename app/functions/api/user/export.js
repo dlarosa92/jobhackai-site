@@ -62,6 +62,8 @@ export async function onRequest(context) {
     }
 
     const userId = user.id;
+    const unavailableSections = [];
+    const read = (sql, bind) => queryAll(db, sql, bind, unavailableSections);
 
     // Aggregate all user data (run queries in parallel where possible)
     const [
@@ -76,20 +78,28 @@ export async function onRequest(context) {
       firstResumeSnapshotRows,
       roleUsageLogRows,
       featureDailyUsageRows,
-      mockInterviewUsageRows
+      mockInterviewUsageRows,
+      voiceSessions,
+      checkoutAttributions,
+      analyticsDelivery
     ] = await Promise.all([
-      queryAll(db, 'SELECT id, title, role, ats_score, ats_ready, created_at FROM resume_sessions WHERE user_id = ?', userId),
-      queryAll(db, 'SELECT fs.id, fs.resume_session_id, fs.feedback_json, fs.created_at FROM feedback_sessions fs INNER JOIN resume_sessions rs ON fs.resume_session_id = rs.id WHERE rs.user_id = ?', userId),
-      queryAll(db, 'SELECT id, role, status, overall_score, input_json, output_json, created_at FROM linkedin_runs WHERE user_id = ?', uid),
-      queryAll(db, 'SELECT id, role, seniority, types_json, questions_json, selected_ids_json, jd, created_at FROM interview_question_sets WHERE user_id = ?', userId),
-      queryAll(db, 'SELECT id, role, seniority, interview_style, overall_score, relevance_score, structure_score, clarity_score, insight_score, grammar_score, situation_pct, action_pct, outcome_pct, qa_pairs_json, feedback_json, created_at FROM mock_interview_sessions WHERE user_id = ?', userId),
-      queryAll(db, 'SELECT id, title, role, company, seniority, tone, job_description, resume_text, cover_letter_text, created_at FROM cover_letter_history WHERE user_id = ?', uid),
-      queryAll(db, 'SELECT id, feature, tokens_used, created_at FROM usage_events WHERE user_id = ?', userId),
-      queryAll(db, 'SELECT consent_json, updated_at FROM cookie_consents WHERE user_id = ?', userId),
-      queryAll(db, 'SELECT resume_session_id, snapshot_json, created_at FROM first_resume_snapshots WHERE user_id = ?', userId),
-      queryAll(db, 'SELECT id, role_label, role_family, keyword_score, created_at FROM role_usage_log WHERE user_id = ?', uid),
-      queryAll(db, 'SELECT id, feature, usage_date, count, created_at FROM feature_daily_usage WHERE user_id = ?', userId),
-      queryAll(db, 'SELECT id, month, sessions_used, last_reset_at FROM mock_interview_usage WHERE user_id = ?', userId)
+      read('SELECT id, title, role, ats_score, ats_ready, created_at FROM resume_sessions WHERE user_id = ?', userId),
+      read('SELECT fs.id, fs.resume_session_id, fs.feedback_json, fs.created_at FROM feedback_sessions fs INNER JOIN resume_sessions rs ON fs.resume_session_id = rs.id WHERE rs.user_id = ?', userId),
+      read('SELECT id, role, status, overall_score, input_json, output_json, created_at FROM linkedin_runs WHERE user_id = ?', uid),
+      read('SELECT id, role, seniority, types_json, questions_json, selected_ids_json, jd, created_at FROM interview_question_sets WHERE user_id = ?', userId),
+      read('SELECT id, role, seniority, interview_style, overall_score, relevance_score, structure_score, clarity_score, insight_score, grammar_score, situation_pct, action_pct, outcome_pct, qa_pairs_json, feedback_json, created_at FROM mock_interview_sessions WHERE user_id = ?', userId),
+      read('SELECT id, title, role, company, seniority, tone, job_description, resume_text, cover_letter_text, created_at FROM cover_letter_history WHERE user_id = ?', uid),
+      read('SELECT id, feature, tokens_used, created_at FROM usage_events WHERE user_id = ?', userId),
+      read('SELECT consent_json, updated_at FROM cookie_consents WHERE user_id = ?', userId),
+      read('SELECT resume_session_id, snapshot_json, created_at FROM first_resume_snapshots WHERE user_id = ?', userId),
+      read('SELECT id, role_label, role_family, keyword_score, created_at FROM role_usage_log WHERE user_id = ?', uid),
+      read('SELECT id, feature, usage_date, count, created_at FROM feature_daily_usage WHERE user_id = ?', userId),
+      read('SELECT id, month, sessions_used, last_reset_at FROM mock_interview_usage WHERE user_id = ?', userId),
+      // Privacy access is independent of the commercial report paywall. Export
+      // content still held for this verified account, including expired rows.
+      read('SELECT id, role, seniority, jd_excerpt, status, entitlement_mode, started_at, ended_at, duration_seconds, transcript_json, scorecard_json, end_reason, created_at, updated_at FROM voice_sessions WHERE user_id = ? ORDER BY started_at, id', userId),
+      read('SELECT checkout_session_id, client_id, ga_client_id, ga_session_id, first_touch_json, last_touch_json, captured_at, expires_at FROM checkout_attributions WHERE user_id = ? ORDER BY captured_at, checkout_session_id', userId),
+      read('SELECT d.event_name, d.event_at, d.state, d.accepted_at, d.verified_at, d.created_at, d.updated_at FROM analytics_delivery d INNER JOIN checkout_attributions a ON a.checkout_session_id = d.checkout_session_id WHERE a.user_id = ? ORDER BY d.event_at, d.event_key', userId)
     ]);
 
     const cookieConsent = cookieConsentRows.length > 0 ? cookieConsentRows[0] : null;
@@ -98,6 +108,7 @@ export async function onRequest(context) {
     // Build export object (exclude internal IDs)
     const exportData = {
       exportDate: new Date().toISOString(),
+      unavailableSections,
       user: {
         email: user.email,
         ...(user.plan !== undefined && { plan: user.plan }),
@@ -117,7 +128,10 @@ export async function onRequest(context) {
       firstResumeSnapshot,
       roleUsageLog: roleUsageLogRows,
       featureDailyUsage: featureDailyUsageRows,
-      mockInterviewUsage: mockInterviewUsageRows
+      mockInterviewUsage: mockInterviewUsageRows,
+      voiceSessions,
+      checkoutAttributions,
+      analyticsDelivery
     };
 
     const headers = {
@@ -133,13 +147,13 @@ export async function onRequest(context) {
 
   } catch (error) {
     console.error('[EXPORT] Error:', error);
-    return new Response(JSON.stringify({ error: 'Export failed', details: error.message }), {
+    return new Response(JSON.stringify({ error: 'Export failed. Please retry or contact support.' }), {
       status: 500, headers: corsHeaders(origin, env)
     });
   }
 }
 
-async function queryAll(db, sql, bind) {
+async function queryAll(db, sql, bind, unavailableSections) {
   try {
     const result = await db.prepare(sql).bind(bind).all();
     return result.results || [];
@@ -149,6 +163,8 @@ async function queryAll(db, sql, bind) {
     // export returns 500 rather than silently omitting data.
     const msg = e?.message || '';
     if (msg.includes('no such table') || msg.includes('no such column')) {
+      // An absent schema is not evidence the account has no records.
+      unavailableSections.push({ section: sql.match(/\bFROM\s+(\w+)/i)?.[1] || 'unknown', reason: 'schema_unavailable' });
       console.warn('[EXPORT] Query skipped (missing table/column):', msg);
       return [];
     }
