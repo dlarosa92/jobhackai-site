@@ -34,12 +34,12 @@ const terminal = new Set(['canceled', 'incomplete_expired']);
 const statuses = new Set(['active', 'trialing', 'past_due', 'unpaid', 'paused', 'incomplete', ...terminal]);
 
 // Return the checked snapshot so status display does not re-fetch unchecked data.
-export async function resolveBillingAccount(env, { uid, email }) {
+export async function resolveBillingAccount(env, { uid, email }, { allowMappedLegacySubscription = false } = {}) {
   const db = getDb(env);
   if (!db) throw new Error('Billing database unavailable');
   // D1 is authoritative. A stale KV customer cannot override this mapping.
   // This path deliberately does not adopt, stamp, cache, or repair identities.
-  const user = await db.prepare('SELECT stripe_customer_id, email FROM users WHERE auth_id = ?').bind(uid).first();
+  const user = await db.prepare('SELECT stripe_customer_id, stripe_subscription_id, email FROM users WHERE auth_id = ?').bind(uid).first();
   if (!user) return null;
   let customer;
   if (user.stripe_customer_id) {
@@ -83,8 +83,12 @@ export async function resolveBillingAccount(env, { uid, email }) {
         !(await assertNoCrossUserStripeIds(env, { uid, stripeSubscriptionId: sub.id })).ok) {
       throw new PortalOwnershipError();
     }
+    // Display-only legacy exception: this environment's D1 mapping and the
+    // subscription UID must independently identify the same subscription.
+    // Explicit foreign stamps are never overridden; portal calls stay strict.
+    const mappedLegacyRead = allowMappedLegacySubscription && sub.id === user.stripe_subscription_id && sub.metadata?.firebaseUid === uid;
     if (!terminal.has(sub.status) && (isForeignEnvironmentStamp(env, sub.metadata?.environment) ||
-        (canonicalEnvironmentName(env) !== 'prod' && !canonicalizeEnvironmentStamp(sub.metadata?.environment)))) {
+        (canonicalEnvironmentName(env) !== 'prod' && !canonicalizeEnvironmentStamp(sub.metadata?.environment) && !mappedLegacyRead))) {
       throw new PortalOwnershipError();
     }
   }
