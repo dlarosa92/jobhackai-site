@@ -65,6 +65,7 @@ await test('discounted pack records captured cash, duplicate events do not infla
 
 await test('initial subscription and renewal are distinct captured charges', async ({ fixture, send, totals }) => {
   fixture.session.mode = 'subscription'; fixture.session.subscription = 'sub_month';
+  fixture.session.payment_intent = null; // Stripe exposes this field only in payment mode.
   fixture.charge.amount_captured = 3400;
   assert.equal((await send()).response.status, 200);
   fixture.invoiceMode = true; // A renewal has no new Checkout Session.
@@ -73,6 +74,21 @@ await test('initial subscription and renewal are distinct captured charges', asy
   fixture.invoice.id = 'in_renewal';
   assert.equal((await send()).response.status, 200);
   assert.equal((await totals()).gross_captured, 5100, 'renewal discount uses captured amount, not the $34 list price');
+});
+
+await test('subscription checkout without a PaymentIntent still requires the exact invoice subscription', async ({ fixture, send, totals }) => {
+  fixture.session.mode = 'subscription'; fixture.session.subscription = 'sub_other';
+  fixture.session.payment_intent = null;
+  assert.equal((await send()).response.status,503);
+  assert.equal(await totals(),null);
+});
+
+await test('one-time checkout cannot omit or mismatch its PaymentIntent', async ({ fixture, send, totals }) => {
+  for (const value of [null,'pi_other']) {
+    fixture.session.payment_intent=value;
+    assert.equal((await send()).response.status,503);
+    assert.equal(await totals(),null);
+  }
 });
 
 await test('currencies remain separate integer minor-unit totals', async ({ fixture, send, db }) => {
