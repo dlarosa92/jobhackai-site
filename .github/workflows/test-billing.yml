@@ -122,4 +122,4 @@ jobs:
         run: node --test app/functions/_lib/__tests__/account-deletion-billing.test.mjs
 
       - name: Durable deletion recovery (real SQLite)
-        run: node --test app/functions/_lib/__tests__/account-deletion-recovery.test.mjs
+        run: node --test app/functions/_lib/__tests__/account-deletion-recovery.test.mjs app/functions/_lib/__tests__/account-deletion-admission.test.mjs

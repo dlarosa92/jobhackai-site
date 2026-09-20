@@ -1,4 +1,5 @@
 import { getDb } from './db.js';
+import { assertDeletionQuiescent } from './account-deletion-admission.js';
 import { billingCacheKeysForUid } from './billing-utils.js';
 
 // Storage/recovery primitive only. Do not wire to production until the handler,
@@ -46,6 +47,7 @@ async function resumeKeys(db, userId) {
  * is idempotent, but this function does not itself block application writes. */
 export async function prepareDeletionRecovery(env, { uid, email = null }) {
   validateUid(uid);
+  await assertDeletionQuiescent(env, uid);
   const db = database(env);
   const existing = await db.prepare('SELECT * FROM account_deletion_jobs WHERE auth_id = ?').bind(uid).first();
   if (existing) return existing;
@@ -70,6 +72,9 @@ export async function advanceDeletionRecovery(env, id, phase) {
   const previous = transitions.get(phase);
   if (!previous) throw new Error('deletion_transition_invalid');
   const db = database(env);
+  const existing = await db.prepare('SELECT auth_id FROM account_deletion_jobs WHERE id = ?').bind(id).first();
+  if (!existing) throw new Error('deletion_job_missing');
+  await assertDeletionQuiescent(env, existing.auth_id);
   await db.prepare(`UPDATE account_deletion_jobs SET phase = ?, last_error_code = NULL,
     updated_at = datetime('now') WHERE id = ? AND phase = ?`).bind(phase, id, previous).run();
   const job = await db.prepare('SELECT * FROM account_deletion_jobs WHERE id = ?').bind(id).first();
@@ -87,6 +92,7 @@ export async function finishDeletionRecovery(env, id) {
   if (job.phase === 'complete') return { complete: true, alreadyComplete: true };
   if (job.phase !== 'identity_removed') throw new Error('deletion_identity_unconfirmed');
   validateUid(job.auth_id);
+  await assertDeletionQuiescent(env, job.auth_id);
   if (typeof env.JOBHACKAI_KV?.delete !== 'function') throw new Error('deletion_cache_unavailable');
 
   let stage = 'manifest';
@@ -137,6 +143,8 @@ export async function finishDeletionRecovery(env, id) {
       email = NULL, kv_keys_json = '[]', last_error_code = NULL,
       completed_at = datetime('now'), updated_at = datetime('now')
       WHERE id = ? AND phase = 'identity_removed'`).bind(id));
+    statements.push(db.prepare("DELETE FROM account_operation_claims WHERE auth_id = ? AND state = 'finished'").bind(job.auth_id));
+    statements.push(db.prepare("UPDATE account_deletion_admissions SET state = 'complete', email = NULL, updated_at = datetime('now') WHERE auth_id = ?").bind(job.auth_id));
     await db.batch(statements);
     return { complete: true, alreadyComplete: false };
   } catch (error) {

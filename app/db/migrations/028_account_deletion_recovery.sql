@@ -16,3 +16,25 @@ CREATE TABLE IF NOT EXISTS account_deletion_jobs (
 );
 CREATE INDEX IF NOT EXISTS idx_account_deletion_pending
   ON account_deletion_jobs(phase, updated_at);
+
+-- A deletion intent stops NEW operations immediately. Existing operations must
+-- finish or be explicitly reconciled before billing/identity deletion begins.
+-- No lease timeout silently assumes an external billing call did not happen.
+CREATE TABLE IF NOT EXISTS account_deletion_admissions (
+  id TEXT PRIMARY KEY,
+  auth_id TEXT NOT NULL UNIQUE,
+  email TEXT,
+  state TEXT NOT NULL DEFAULT 'requested' CHECK (state IN ('requested','complete')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS account_operation_claims (
+  id TEXT PRIMARY KEY,
+  auth_id TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('billing','account')),
+  state TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('active','finished','uncertain')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_account_operations_pending
+  ON account_operation_claims(auth_id,state);

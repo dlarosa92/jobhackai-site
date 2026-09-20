@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { beginDeletionAdmission, admitAccountOperation, settleAccountOperation } from '../account-deletion-admission.js';
 import { sqliteD1 } from './sqlite-d1-helper.mjs';
 import { prepareDeletionRecovery, advanceDeletionRecovery, finishDeletionRecovery } from '../account-deletion-recovery.js';
 
@@ -39,7 +40,7 @@ function setup(t) {
   return {db,env,deleted,
     row:id=>db.prepare('SELECT * FROM account_deletion_jobs WHERE id = ?').bind(id).first(),
     count:table=>db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first('n'),
-    prepare:()=>prepareDeletionRecovery(env,{uid:'owner',email:'token@example.test'})};
+    prepare:async()=>{await beginDeletionAdmission(env,{uid:'owner',email:'token@example.test'});return prepareDeletionRecovery(env,{uid:'owner',email:'token@example.test'});}};
 }
 async function ready(f) {
   const job=await f.prepare();
@@ -126,6 +127,7 @@ test('owner reassignment is refused before cleanup, including a race at the fina
 });
 test('Firebase-only jobs clean UID data without deleting a different database account',async t=>{
   const f=setup(t);
+  await beginDeletionAdmission(f.env,{uid:'firebase-only',email:'only@example.test'});
   const job=await prepareDeletionRecovery(f.env,{uid:'firebase-only',email:'only@example.test'});
   assert.equal(job.user_id,null);await advanceDeletionRecovery(f.env,job.id,'billing_verified');await advanceDeletionRecovery(f.env,job.id,'identity_removed');
   await finishDeletionRecovery(f.env,job.id);assert.equal(await f.count('users'),2);assert.equal(await f.count('voice_sessions'),2);
@@ -155,6 +157,7 @@ test('repository schema and migrations support the erasure transaction and attri
       VALUES('purchase:ch_one','ch_one','cs_one','purchase',1,1,1);
   `);
   const env={JOBHACKAI_DB:db,JOBHACKAI_KV:{delete:async()=>{}}};
+  await beginDeletionAdmission(env,{uid:'owner'});
   const job=await prepareDeletionRecovery(env,{uid:'owner'});
   await advanceDeletionRecovery(env,job.id,'billing_verified');await advanceDeletionRecovery(env,job.id,'identity_removed');
   await finishDeletionRecovery(env,job.id);
@@ -163,4 +166,18 @@ test('repository schema and migrations support the erasure transaction and attri
   assert.equal(await db.prepare('SELECT COUNT(*) AS n FROM stripe_collected_payments').first('n'),1);
   assert.equal(await db.prepare('SELECT COUNT(*) AS n FROM stripe_payment_refunds').first('n'),1);
   assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
+});
+
+test('recovery cannot prepare until the intent exists and earlier operations finish',async t=>{
+ const f=setup(t);
+ await assert.rejects(prepareDeletionRecovery(f.env,{uid:'owner'}),/admission_required/);
+ const claim=await admitAccountOperation(f.env,'owner','billing');
+ await assert.rejects(f.prepare(),/operations_pending/);
+ assert.equal(await f.count('account_deletion_jobs'),0);
+ await settleAccountOperation(f.env,claim,'finished');
+ const job=await ready(f);await finishDeletionRecovery(f.env,job.id);
+ const admission=await f.db.prepare("SELECT * FROM account_deletion_admissions WHERE auth_id='owner'").first();
+ assert.equal(admission.state,'complete');assert.equal(admission.email,null);
+ assert.equal(await f.count('account_operation_claims'),0);
+ await assert.rejects(admitAccountOperation(f.env,'owner'),/deletion_pending/);
 });
