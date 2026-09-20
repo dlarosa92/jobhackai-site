@@ -641,10 +641,10 @@ function patchNav(plan) {
     // If CTA anchor exists, update it in place
     if (cta) {
       if (plan === 'visitor') {
-        try { cta.textContent = 'Start Free Trial'; } catch(_) {}
+        try { cta.textContent = 'Start Free'; } catch(_) {}
         if (cta.tagName === 'A') {
           try {
-            cta.href = NAVIGATION_CONFIG.visitor?.cta?.href || `${APP_BASE_URL}/login?plan=trial`;
+            cta.href = NAVIGATION_CONFIG.visitor?.cta?.href || `${APP_BASE_URL}/login?plan=free`;
           } catch (_) {}
         }
         cta.classList.remove('plan-premium');
@@ -1469,7 +1469,7 @@ const NAVIGATION_CONFIG = {
       { text: 'Pricing', href: `${APP_BASE_URL}/pricing` },
       { text: 'Login', href: `${APP_BASE_URL}/login` }
     ],
-    cta: { text: 'Start Free Trial', href: `${APP_BASE_URL}/login?plan=trial`, isCTA: true, planId: 'trial' }
+    cta: { text: 'Start Free', href: `${APP_BASE_URL}/login?plan=free`, isCTA: true, planId: 'free' }
   },
   // Free Account (no plan)
   free: {

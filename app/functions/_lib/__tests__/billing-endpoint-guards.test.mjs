@@ -269,3 +269,16 @@ const guardUser = () => ({ id: 1, auth_id: 'uid_A', email: 'a@example.com', plan
 }
 
 console.log('billing-endpoint-guards.test.mjs: all assertions passed');
+
+// Repeated pack purchases need distinct checkouts, while retries of one
+// attempt keep the same key and parameter changes remain isolated.
+{
+  const { packCheckoutAttemptKey } = await import('../checkout-attempt.js');
+  const a = '11111111-1111-4111-8111-111111111111';
+  const b = '22222222-2222-4222-8222-222222222222';
+  assert.equal(packCheckoutAttemptKey('uid:priceA', a), packCheckoutAttemptKey('uid:priceA', a));
+  assert.notEqual(packCheckoutAttemptKey('uid:priceA', a), packCheckoutAttemptKey('uid:priceA', b));
+  assert.notEqual(packCheckoutAttemptKey('uid:priceA', a), packCheckoutAttemptKey('uid:priceB', a));
+  assert.notEqual(packCheckoutAttemptKey('uid:priceA'), packCheckoutAttemptKey('uid:priceA'));
+  console.log('Pack checkout attempt/retry isolation passed');
+}
