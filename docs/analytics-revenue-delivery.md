@@ -30,7 +30,7 @@ Context and its joins/outbox expire after 90 days. Campaign touches expire by th
 ## QA rollout and receipt check
 
 1. Run billing/consent/worker tests, generated-type validation and Wrangler dry run. Apply migration 027 to development and QA, then deploy the exact reviewed webhook revision.
-2. Deploy the worker with delivery disabled. Have the owner enter the test stream's Measurement Protocol API secret using `wrangler secret put GA4_API_SECRET --env qa` or the Cloudflare secret form. Never paste it into chat or commit it.
+2. For the initial disabled deployment only, bootstrap an otherwise identical config without `secrets.required`; the strict normal config correctly refuses a first deploy without its secret. Keep `DELIVERY_ENABLED=false`, the exact QA binding, and no production environment. Have the owner enter the test stream's Measurement Protocol API secret using `wrangler secret put GA4_API_SECRET --env qa` or the Cloudflare secret form. Never paste it into chat or commit it.
 3. Verify the stream and binding, then set QA delivery enabled. Keep development delivery disabled. Its schedule may still prune expired development context.
 4. Complete a new tagged Sandbox checkout with explicit Analytics consent and real browser IDs. Earlier successful webhook events are idempotent and are not automatically reprocessed to enrich their old tax breakdown. Use a new test transaction for delivery verification rather than forging a Stripe event.
 5. Observe the exact purchase transaction in the test property's DebugView, then verify a partial refund and net revenue in the appropriate report. Record the observed transaction/event and evidence before setting `verified_at`. Do not treat the worker's 204 as receipt.
@@ -50,3 +50,7 @@ Do not reset `uncertain` or `accepted_unverified` rows merely because a report i
 - [Google event requirements](https://developers.google.com/analytics/devguides/collection/protocol/ga4/reference/events)
 - [Measurement Protocol validation](https://developers.google.com/analytics/devguides/collection/protocol/ga4/validating-events)
 - [Stripe invoice fields](https://docs.stripe.com/api/invoices/object)
+
+## QA configuration evidence (2026-09-20)
+
+The test stream's unwanted-referral list was empty. Exact-match exclusions for `checkout.stripe.com` and `billing.stripe.com` were saved and reopened to verify. This prevents payment-provider return traffic from becoming a new referral source; it does not rewrite historical attribution. The test property had already reported Stripe referral sessions before this change. Production settings remain unchanged pending its held release. [Google referral guidance](https://support.google.com/analytics/answer/10327750).
