@@ -6,20 +6,20 @@ import test from 'node:test';
 const source = readFileSync(new URL('../../../../js/cookie-consent.js', import.meta.url), 'utf8');
 const GA = 'G-SQYSWPFM5X';
 function harness({host = 'app.jobhackai.io', consent = true, config, pendingServer = false, search = ''} = {}) {
-  const scripts = [], elements = new Map(), timers = [], requests = [], listeners = {};
+  const scripts = [], insertedScripts = [], elements = new Map(), timers = [], requests = [], listeners = {};
   const store = new Map();
   if (consent !== null) store.set('jha_cookie_consent_v1', JSON.stringify({analytics: consent}));
   function element(tag = 'div') {
     return { tagName: tag, style: {}, innerHTML: '', classList: {add(){},remove(){},contains(){return false;}},
       setAttribute(k,v){this[k]=v;}, getAttribute(k){return this[k];}, addEventListener(){}, focus(){},
       remove(){ const i = scripts.indexOf(this); if(i >= 0) scripts.splice(i,1); },
-      querySelector(){return element();}, parentNode: {insertBefore(e){scripts.push(e);}} };
+      querySelector(){return element();}, parentNode: {insertBefore(e){scripts.push(e);insertedScripts.push(e);}} };
   }
   const node = id => { if(!elements.has(id)) elements.set(id, element()); return elements.get(id); };
   const document = {
     readyState: 'loading', title: 'JobHackAI', referrer: 'https://example.com/?email=private@example.com', cookie: '',
     createElement: element, getElementById: node,
-    head: {appendChild(e){scripts.push(e);}}, body: {style:{},appendChild(){}},
+    head: {appendChild(e){scripts.push(e);insertedScripts.push(e);}}, body: {style:{},appendChild(){}},
     addEventListener(type,fn){listeners[type]=fn;},
     querySelector(selector){ return this.querySelectorAll(selector)[0] || null; },
     querySelectorAll(selector){const needle=selector.match(/src\*="([^"]+)"/)?.[1]; return needle ? scripts.filter(s => (s.src||'').includes(needle)) : [];},
@@ -36,7 +36,7 @@ function harness({host = 'app.jobhackai.io', consent = true, config, pendingServ
   };
   ctx.window=ctx;
   vm.createContext(ctx); vm.runInContext(source,ctx);
-  return {ctx, scripts, requests, node,
+  return {ctx, scripts, insertedScripts, requests, node,
     init:()=>listeners.DOMContentLoaded(),
     finishServer:analytics=>resolveServer({ok:true,json:async()=>({ok:true,consent:{analytics}})}),
     runTimers(){while(timers.length)timers.shift()();},
@@ -110,4 +110,20 @@ test('authentication/checkout parameters never enter page URLs sent to GA',async
   assert.equal(config.page_referrer,'https://example.com/');
   assert.equal('debug_mode' in config,false,'production must omit the debug parameter entirely');
   assert.ok(!JSON.stringify(h.ctx.dataLayer).includes('secret'));
+});
+
+test('revoking and regranting reuse the same GA runtime and configuration',async()=>{
+  const h=harness({config:{CLARITY_ID:''}});await h.init();h.runTimers();
+  const script=h.scripts[0], gtag=h.ctx.gtag;
+  for(let i=0;i<3;i++) {
+    h.setConsent(false);
+    assert.equal(h.ctx['ga-disable-'+GA],true);
+    h.setConsent(true);h.runTimers();
+    assert.equal(h.ctx['ga-disable-'+GA],false);
+    assert.equal(h.scripts[0],script);
+    assert.equal(h.ctx.gtag,gtag);
+  }
+  assert.equal(h.insertedScripts.length,1,'removing a tag does not unload its runtime');
+  assert.equal(h.ctx.dataLayer.filter(a=>a[0]==='config').length,1);
+  assert.equal(h.events('page_view').length,1);
 });

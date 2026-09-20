@@ -223,13 +223,9 @@
     // Removing a script does not stop listeners that already ran. Google's
     // disable flag also blocks collection by the previously loaded tag.
     if (GA_MEASUREMENT_ID) window['ga-disable-' + GA_MEASUREMENT_ID] = true;
-    // Always remove tracker scripts if they exist (needed when revoking after
-    // they've already loaded). Clarity is torn down explicitly so any
-    // already-loaded queue stops processing for the rest of the session.
-    const existingScript = document.querySelector(`script[src*="googletagmanager.com/gtag/js"]`);
-    if (existingScript) {
-      existingScript.remove();
-    }
+    // Keep the loaded GA tag: removing it does not unload its runtime, and
+    // reinserting it after re-grant would leave two collectors in memory.
+    // The disable flag and consent-gated gtag wrapper pause this instance.
     teardownClarity();
 
     // Guard: Only wrap createElement once to avoid nested wrappers,
