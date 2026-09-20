@@ -29,7 +29,7 @@ function harness({host = 'app.jobhackai.io', consent = true, config, pendingServ
   const server = new Promise(r => {resolveServer=r;});
   const ctx = { document, location: { hostname:host, protocol:'https:', href:'https://'+host+'/login'+search, pathname:'/login', search },
     JHA_CONFIG: config, URL, CustomEvent: class {constructor(type){this.type=type;}}, HTMLScriptElement: class {},
-    localStorage:{getItem:k=>store.get(k)??null,setItem:(k,v)=>store.set(k,v)},
+    localStorage:{getItem:k=>store.get(k)??null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)},
     setTimeout:fn=>{timers.push(fn);return timers.length;}, performance:{now:()=>0},
     dispatchEvent(){}, console:{log(){},warn(){}},
     fetch:async(url,options)=>{requests.push({url,options}); if(options.method==='GET'&&pendingServer)return server; return {ok:true,json:async()=>({ok:true})};}
@@ -38,7 +38,7 @@ function harness({host = 'app.jobhackai.io', consent = true, config, pendingServ
   vm.createContext(ctx); vm.runInContext(source,ctx);
   return {ctx, scripts, insertedScripts, requests, node,
     init:()=>listeners.DOMContentLoaded(),
-    finishServer:analytics=>resolveServer({ok:true,json:async()=>({ok:true,consent:{analytics}})}),
+    finishServer:analytics=>resolveServer({ok:true,json:async()=>({ok:true,consent:analytics===null?null:{analytics}})}),
     runTimers(){while(timers.length)timers.shift()();},
     events:name=>(ctx.dataLayer||[]).filter(a=>a[0]==='event'&&a[1]===name),
     setConsent(analytics){ctx.JHA.cookieConsent.openPreferences();node('jha-toggle-analytics').checked=analytics;node('jha-save-preferences').onclick();}
@@ -140,3 +140,15 @@ for (const tokenResult of ['reject', 'empty']) {
     assert.equal(h.ctx['ga-disable-'+GA],true);
   });
 }
+
+test('an explicit missing or invalid server decision clears a stale browser grant',async()=>{
+  const h=harness({pendingServer:true,consent:true});const pending=h.init();h.finishServer(null);await pending;h.runTimers();
+  assert.equal(h.ctx.JHA.cookieConsent.hasAnalyticsConsent(),null);assert.equal(h.scripts.length,0);assert.equal(h.ctx.JHA.cookieConsent.hasConsent(),false);
+});
+test('a legacy or corrupt anonymous cookie is rotated before consent sync',async()=>{
+  const h=harness();h.ctx.document.cookie='jha_client_id=legacy-corrupted-value';await h.init();h.setConsent(false);
+  await new Promise(resolve=>setImmediate(resolve));
+  const post=h.requests.find(r=>r.options.method==='POST');const body=JSON.parse(post.options.body);
+  assert.match(body.clientId,/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  assert.ok(h.ctx.document.cookie.includes(body.clientId));
+});
