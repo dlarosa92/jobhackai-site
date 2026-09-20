@@ -2,7 +2,8 @@
 
 **Staging update, September 20:** migration028 is applied and verified in dev
 and QA, but not production. No live recovery has been applied. The draft app
-and deadline worker remain undeployed. See the
+remains undeployed; deadline workers are installed disabled, with saved Pages
+bindings awaiting redeployment. See the
 [cutover record](voice-managed-cutover-2026-09-20.md).
 
 Draft, not deployed. Migration028 contains the receipt tables and atomic

@@ -5,8 +5,10 @@ deadline scheduling remain disabled remotely; production release is held.
 
 Staging update, September 20: migration028 is now applied and verified in dev
 and QA, after private backups and tests against both database copies. It remains
-unapplied in production. The worker itself is still undeployed and unbound;
-matching private OpenAI keys and the old-issuer cutover remain pending. See the
+unapplied in production. Both staging workers are now installed with the owner-provided
+development key and scheduling disabled. Matching Pages namespace bindings and the
+required RPC flag are saved, but await Pages redeployment and live verification.
+The old-issuer cutover remains pending. See the
 [cutover record](../../docs/voice-managed-cutover-2026-09-20.md). Earlier statements
 below about an unapplied migration describe the implementation increment.
 

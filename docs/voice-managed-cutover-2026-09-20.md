@@ -41,19 +41,48 @@ Fresh Cloudflare project reads confirmed:
 | QA | `c672536477446e732158a8a1b84ddd25a4de7679` | `360dafed-7d6a-4257-a875-0cab805f1432` |
 | Production | `ed00ca62d1bed102747085d736dad931e0a651c3` | `f40d2415-4946-414f-8e00-099e67b80a85` |
 
-Dev/QA each have an encrypted `OPENAI_API_KEY`, voice enabled and no managed
-transport flag or Durable Object binding. No local OpenAI key was found in the
-environment files of the main checkout or the two active release worktrees.
-Cloudflare cannot reveal an encrypted value for copying. The owner has been
-asked whether existing dev/QA keys are privately available or replacements
-are needed. Do not ask for keys in chat or silently reuse a production key.
+At22:12-22:17UTC, both deadline workers were installed from reviewed source
+`70e51b3f42b1aecc75d887e92bad88206b5e5140`. The owner supplied the existing
+DEVELOPMENT OpenAI key through hidden local input and explicitly confirmed
+that dev and QA use this same key. It was uploaded as an encrypted secret to
+both workers. No production key was requested, displayed, copied or changed.
 
-The deadline worker config now pins the known Cloudflare account. New workers
-with required secrets need an owner-provided private secrets file on first
-deployment; Wrangler4.135 rejects a missing required secret before creating
-the worker. Keep scheduling disabled during installation. Matching keys,
-separate environment bindings and actual RPC/provider verification are still
-required before managed voice is enabled.
+| Worker | Version | Durable Object namespace |
+| --- | --- | --- |
+| `jobhackai-voice-deadlines-dev` | `d3e5bec1-5bb8-47b5-9036-1b45b4e2bf09` | `d53b296ce05a49c3a8cabf705ebae94d` |
+| `jobhackai-voice-deadlines-qa` | `55ec3c31-5cfc-4817-a4ec-93b7e58f4251` | `0af6247a41cb45deaab5337d813d93e7` |
+
+Both keyed dry runs and deployments succeeded. Independent Workers settings
+and deployment reads confirmed the encrypted secret name, each environment's
+D1 UUID, class `VoiceDeadline`, separate namespaces, and
+`VOICE_DEADLINES_ENABLED=false`. There are no public worker targets. Secret
+presence and an owner-confirmed key mapping do not prove provider permissions
+or the app/worker runtime key-identity check.
+
+Both Pages projects now have the matching `VOICE_DEADLINES` namespace saved
+in their canonical deployment configuration. A configuration review found
+that both use compatibility date2024-01-01, which predates RPC support by
+default. A local test with the actual compiled deadline worker reproduced
+`arm is not a function` without a flag and reached the worker's expected
+`voice_deadline_disabled` response with `rpc`. Only the `rpc` compatibility
+flag was added; the existing date was preserved. Before/after comparisons
+verified every other deployment setting and both canonical deployments
+unchanged. The app build/postbuild also passed. This fixture used no real
+key, database or provider request.
+
+**Pages has not yet been redeployed.** The saved namespace and compatibility
+flag therefore are not proof of a working live app binding. Managed transport
+is not enabled and scheduler flags remain false. Controlled dev, then QA,
+application deployment and actual RPC/provider verification remain required.
+The private evidence directory contains `worker-*-installed-verified.json`,
+`pages-*-binding-verified.json`, `pages-*-rpc-verified.json`, keyed deployment
+receipts and `check-pages-rpc.mjs`. Never attach the private key file.
+
+A separate fresh settings read also confirmed `GA4_API_SECRET` is present as
+`secret_text` on `jobhackai-analytics-delivery-qa`; `DELIVERY_ENABLED=false`.
+The prior missing-key/secret asks are resolved. Google setup acknowledgment,
+secret validity and actual server purchase/refund/renewal receipt remain
+unverified; secret presence does not establish Analytics delivery.
 
 ## Old issuer inventory and remaining cutover
 
@@ -119,18 +148,20 @@ policy if it has acquired another application attachment.
 Switching only the custom-domain deployment does not establish that earlier
 immutable URLs or already-issued credentials are drained. Finish the old-issuer
 authenticated restriction check and canonical-host disable/drain procedure,
-then install the worker and app in development before QA. Do not revoke an old
+then deploy the app in development before QA using the installed disabled workers. Do not revoke an old
 key without establishing its environment/production dependencies. Actual invocation/provider
 evidence, abandoned-browser expiry, recovery, one-time entitlement use, report
 quality, human ending acceptance and measured cost remain required.
 
-The two earlier human voice/Google setup requests remain pending; the private
-worker-key availability question is an additional credential prerequisite.
+The earlier human voice/Google acceptance requirements remain open. The owner
+provided the private worker key and QA Analytics secret; do not repeat those asks.
 Server Analytics delivery remains disabled. Accepted pricing and
 `gpt-realtime-mini`/`marin` remain unchanged. Production and public marketing
 release still require the final concrete approval.
 
 References checked September20:
+[RPC compatibility flag](https://developers.cloudflare.com/workers/configuration/compatibility-flags/#durable-object-stubs-and-service-bindings-support-rpc),
+[Pages project update API](https://developers.cloudflare.com/api/resources/pages/subresources/projects/methods/edit/),
 [Cloudflare deployed secrets](https://developers.cloudflare.com/workers/configuration/secrets/),
 [Pages deployment inventory](https://developers.cloudflare.com/api/resources/pages/subresources/projects/subresources/deployments/methods/list/),
 [immutable preview URLs and access controls](https://developers.cloudflare.com/pages/configuration/preview-deployments/),

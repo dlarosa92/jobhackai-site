@@ -1,8 +1,9 @@
 # Durable deletion recovery — integration in progress
 
 **Staging update, September 20:** migration028 is now applied and verified in
-dev and QA; production remains unchanged. The application and workers in this
-draft are still undeployed. This supersedes the historical unapplied-migration
+dev and QA; production remains unchanged. Deadline workers are installed disabled,
+with saved Pages bindings awaiting redeployment. The application and other
+workers in this draft remain undeployed. This supersedes the historical unapplied-migration
 statements below. See the [cutover record](voice-managed-cutover-2026-09-20.md)
 for database verification, private-key prerequisites and outstanding live QA.
 
