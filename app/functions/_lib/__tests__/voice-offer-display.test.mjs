@@ -18,30 +18,43 @@ const cases = [
   { name: 'signed out', signedOut: true, voice: { enabled: true, canStart: true, mode: 'free' }, label: null }
 ];
 
-async function render(fixture, page) {
+async function render(fixture, page, delayedAuth = false) {
   const inserted = [];
   const button = { textContent: 'Start practicing', href: 'voice-interview.html' };
   const detail = { textContent: 'One lifetime free interview with a feedback preview.' };
   const anchor = { children: [{}], parentNode: { insertBefore: box => inserted.push(box) } };
   const intervals = [];
+  const listeners = new Map();
   const document = {
-    readyState: 'complete', addEventListener() {},
+    readyState: 'complete', addEventListener(name, fn) {
+      if (!listeners.has(name)) listeners.set(name, []);
+      listeners.get(name).push(fn);
+    },
     querySelector: selector => selector === '.vp-hero-cta' ? button : selector === '.vp-hero-sub' ? detail :
       selector === '.jha-voice-cta' ? inserted[0] : anchor,
     createElement: () => ({ setAttribute() {}, innerHTML: '' })
   };
   const user = fixture.signedOut ? null : { getIdToken: async () => 'fixture-token' };
+  const manager = { getCurrentUser: () => user, waitForAuthReady: async () => user };
   const context = {
     document, console,
     window: { location: { pathname: '/' + page },
-      FirebaseAuthManager: { getCurrentUser: () => user, waitForAuthReady: async () => user },
+      FirebaseAuthManager: delayedAuth ? undefined : manager,
       PlanCache: { getPlan: async () => ({ voice: fixture.voice }) } },
     fetch: async () => ({ ok: false }),
     setInterval: fn => { intervals.push(fn); return 1; }, clearInterval() {}
   };
   vm.runInNewContext(script, context);
   // Two overlapping ticks must still insert a single CTA.
-  await Promise.all(intervals.flatMap(fn => [fn(), fn()]));
+  const ticks = Promise.all(intervals.flatMap(fn => [fn(), fn()]));
+  if (delayedAuth) {
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(button.textContent, 'Start practicing');
+    assert.equal(inserted.length, 0);
+    context.window.FirebaseAuthManager = manager;
+    for (const fn of listeners.get('firebase-auth-ready') || []) fn();
+  }
+  await ticks;
   await new Promise(resolve => setImmediate(resolve));
   return { inserted, button, detail };
 }
@@ -70,6 +83,26 @@ test('pricing includes its offer controller and an actual plan anchor', () => {
   assert.ok(pricing.includes('src="js/voice-cta.js"'));
   assert.ok(pricing.includes('id="plans"'));
   assert.ok(!pricing.includes('>Try your first voice interview free</a>'));
+});
+
+test('cold loads personalize tool and pricing offers after the auth module arrives', async () => {
+  for (const name of ['subscriber', 'monthly cap reached', 'free session exhausted']) {
+    const fixture = cases.find(value => value.name === name);
+    const page = await render(fixture, 'pricing', true);
+    const tool = await render(fixture, 'interview-questions.html', true);
+    assert.equal(page.button.textContent, fixture.label);
+    assert.equal(page.button.href, fixture.href === 'pricing.html' ? '#plans' : fixture.href);
+    assert.equal(tool.inserted.length, 1);
+    assert.ok(tool.inserted[0].innerHTML.includes(fixture.label));
+  }
+});
+
+test('cold signed-out load retains a neutral offer after auth resolves', async () => {
+  const fixture = cases.find(value => value.name === 'signed out');
+  const page = await render(fixture, 'pricing', true);
+  const tool = await render(fixture, 'interview-questions.html', true);
+  assert.equal(page.button.textContent, 'Start practicing');
+  assert.equal(tool.inserted.length, 0);
 });
 
 test('all served pricing paths show the exhausted-account offer', async () => {

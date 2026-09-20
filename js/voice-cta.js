@@ -67,6 +67,13 @@
 
   async function getVoiceOffer() {
     try {
+      // This classic script can run before firebase-auth.js finishes its remote
+      // module imports. Keep the neutral offer until its public ready signal.
+      if (!window.FirebaseAuthManager) {
+        await new Promise(function (resolve) {
+          document.addEventListener('firebase-auth-ready', resolve, { once: true });
+        });
+      }
       var user = null;
       if (window.FirebaseAuthManager) {
         if (typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
