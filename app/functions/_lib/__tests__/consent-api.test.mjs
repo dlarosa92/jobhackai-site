@@ -39,6 +39,16 @@ for(const path of ['app/functions/api/cookie-consent.js','functions/api/cookie-c
     assert.equal((await success.request({clientId,consent:{version:1,analytics:true}})).status,200);
     assert.equal(success.revocations.length,1);assert.equal(success.writes[0].consent.analytics,true);
   });
+  test(path+': saving a grant after the anonymous record was migrated preserves attribution',async()=>{
+    // Authenticated consent migration removes the browser-only row. A later
+    // signed-out save must not mistake that absence for a withdrawal.
+    const h=harness(path,{stored:null,cleanupFailure:true});
+    assert.equal((await h.request({clientId,consent:{version:1,analytics:true}})).status,200);
+    assert.equal(h.revocations.length,0);assert.equal(h.writes.length,1);
+    const malformed=harness(path,{stored:{version:0,analytics:false},cleanupFailure:true});
+    assert.equal((await malformed.request({clientId,consent:{version:1,analytics:true}})).status,503);
+    assert.equal(malformed.writes.length,0);assert.equal(malformed.revocations.length,1);
+  });
   test(path+': invalid signed-in token never reads or writes anonymous consent',async()=>{
     const h=harness(path,{authFailure:true});
     for(const method of ['GET','POST'])assert.equal((await h.request({clientId,consent:{version:1,analytics:false}},{Authorization:'Bearer stale',Cookie:'jha_client_id='+clientId},method)).status,401);
