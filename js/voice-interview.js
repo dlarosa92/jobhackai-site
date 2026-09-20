@@ -40,6 +40,7 @@
     pc: null,
     dc: null,
     micStream: null,
+    connectionAttempt: null,   // cancellable setup; late async results never reopen an ended interview
     audioEl: null,
     startedAtMs: null,
     timerInterval: null,
@@ -1114,89 +1115,142 @@
 
   // ---------- connection ----------
 
+  function cancelConnectionAttempt() {
+    var attempt = state.connectionAttempt;
+    if (!attempt) return;
+    attempt.cancelled = true;
+    attempt.controller.abort();
+    state.connectionAttempt = null;
+  }
+
   async function connectRealtime(clientSecret, model) {
-    state.micStream = await navigator.mediaDevices.getUserMedia({ audio: MIC_CONSTRAINTS });
+    if (state.ending) return false;
+    cancelConnectionAttempt();
+    var attempt = { cancelled: false, controller: new AbortController() };
+    state.connectionAttempt = attempt;
+    var stream = null, pc = null, dc = null, completed = false;
+    function current() {
+      return !attempt.cancelled && state.connectionAttempt === attempt && !state.ending;
+    }
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: MIC_CONSTRAINTS });
+      // Permission can resolve after End or teardown; release that stream in
+      // finally without ever attaching it to a peer connection.
+      if (!current()) return false;
+      state.micStream = stream;
 
-    var pc = new RTCPeerConnection();
-    state.pc = pc;
+      pc = new RTCPeerConnection();
+      state.pc = pc;
 
-    state.audioEl = $('vi-remote-audio') || document.createElement('audio');
-    state.audioEl.autoplay = true;
-    pc.ontrack = function (e) {
-      if (!state.ending && state.pc === pc && state.audioEl) state.audioEl.srcObject = e.streams[0];
-    };
+      state.audioEl = $('vi-remote-audio') || document.createElement('audio');
+      state.audioEl.autoplay = true;
+      pc.ontrack = function (e) {
+        if (!state.ending && state.pc === pc && state.audioEl) state.audioEl.srcObject = e.streams[0];
+      };
 
-    state.micStream.getTracks().forEach(function (t) { pc.addTrack(t, state.micStream); });
+      state.micStream.getTracks().forEach(function (t) { pc.addTrack(t, state.micStream); });
 
-    var dc = pc.createDataChannel('oai-events');
-    state.dc = dc;
-    dc.onmessage = function (e) {
-      try { handleRealtimeEvent(JSON.parse(e.data)); } catch (_) {}
-    };
-    dc.onopen = function () {
-      // Realtime is ready. Before the official interview there is an audio
-      // check: the interviewer speaks first, and with semantic VAD the model
-      // only ever replies to candidate speech, so her opening line has to be
-      // requested explicitly. The wording lives in the session instructions;
-      // the app owns only the state.
-      if (state.ending || state.conductEnd) return;
-      var lc = lifecycle();
-      var windowOpen = typeof lc.isAwaitingOpening === 'function' && lc.isAwaitingOpening();
-      if (lc.is(PHASES.CONNECTING)) {
-        lc.to(PHASES.AUDIO_CHECK);
-      } else if (lc.is(PHASES.AUDIO_CHECK)) {
-        lc.noteReconnect();   // a drop during the check: the fresh session re-greets
-      } else if (lc.is(PHASES.ACTIVE_INTERVIEW) && windowOpen) {
-        // A drop with the settling window open: the resume was minted
-        // without interviewStarted, so the model's first turn is either the
-        // re-check (the window demotes on it) or, with a transcript tail,
-        // the resumed conversation (the window confirms). Either way the
-        // interviewer speaks first.
-        lc.noteReconnect();
-      } else {
-        return;               // reconnect mid-interview: the conversation resumes as before
-      }
-      if (!lc.is(PHASES.ACTIVE_INTERVIEW)) {
-        setStatus('Connected. Quick audio check...', 'vi-connecting');
-      }
-      sendRealtime({ type: 'response.create' });
-    };
-
-    pc.onconnectionstatechange = function () {
-      if (!state.pc) return;
-      var s = state.pc.connectionState;
-      if (s === 'connected') {
-        state.connected = true;
-        // Truthful per phase: nothing is being scored yet during the audio
-        // check, so the status must not claim the interview is running.
-        if (lifecycle().is(PHASES.ACTIVE_INTERVIEW)) {
-          setStatus('Live. The interviewer can hear you.', 'vi-live');
-        } else if (!state.ending && !state.conductEnd) {
+      dc = pc.createDataChannel('oai-events');
+      state.dc = dc;
+      dc.onmessage = function (e) {
+        // Keep the current channel's final transcripts during the bounded flush,
+        // but never let a replaced channel act on the new interview.
+        if (state.pc !== pc) return;
+        try { handleRealtimeEvent(JSON.parse(e.data)); } catch (_) {}
+      };
+      dc.onopen = function () {
+        // Realtime is ready. Before the official interview there is an audio
+        // check: the interviewer speaks first, and with semantic VAD the model
+        // only ever replies to candidate speech, so her opening line has to be
+        // requested explicitly. The wording lives in the session instructions;
+        // the app owns only the state.
+        if (state.pc !== pc || state.ending || state.conductEnd) return;
+        var lc = lifecycle();
+        var windowOpen = typeof lc.isAwaitingOpening === 'function' && lc.isAwaitingOpening();
+        if (lc.is(PHASES.CONNECTING)) {
+          lc.to(PHASES.AUDIO_CHECK);
+        } else if (lc.is(PHASES.AUDIO_CHECK)) {
+          lc.noteReconnect();   // a drop during the check: the fresh session re-greets
+        } else if (lc.is(PHASES.ACTIVE_INTERVIEW) && windowOpen) {
+          // A drop with the settling window open: the resume was minted
+          // without interviewStarted, so the model's first turn is either the
+          // re-check (the window demotes on it) or, with a transcript tail,
+          // the resumed conversation (the window confirms). Either way the
+          // interviewer speaks first.
+          lc.noteReconnect();
+        } else {
+          return;               // reconnect mid-interview: the conversation resumes as before
+        }
+        if (!lc.is(PHASES.ACTIVE_INTERVIEW)) {
           setStatus('Connected. Quick audio check...', 'vi-connecting');
         }
-      } else if ((s === 'disconnected' || s === 'failed') && !state.ending) {
-        state.connected = false;
-        // A pending "interviewer is thinking" cue would be a lie now.
-        clearTurnWait();
-        setStatus('Connection lost.', 'vi-error');
-        offerReconnect();
+        sendRealtime({ type: 'response.create' });
+      };
+
+      pc.onconnectionstatechange = function () {
+        if (state.pc !== pc) return;
+        var s = pc.connectionState;
+        if (s === 'connected') {
+          state.connected = true;
+          // Truthful per phase: nothing is being scored yet during the audio
+          // check, so the status must not claim the interview is running.
+          if (lifecycle().is(PHASES.ACTIVE_INTERVIEW)) {
+            setStatus('Live. The interviewer can hear you.', 'vi-live');
+          } else if (!state.ending && !state.conductEnd) {
+            setStatus('Connected. Quick audio check...', 'vi-connecting');
+          }
+        } else if ((s === 'disconnected' || s === 'failed') && !state.ending) {
+          state.connected = false;
+          // A pending "interviewer is thinking" cue would be a lie now.
+          clearTurnWait();
+          setStatus('Connection lost.', 'vi-error');
+          offerReconnect();
+        }
+      };
+
+      var offer = await pc.createOffer();
+      if (!current()) return false;
+      await pc.setLocalDescription(offer);
+      if (!current()) return false;
+
+      var sdpRes = await fetch(REALTIME_CALLS_URL + '?model=' + encodeURIComponent(model), {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + clientSecret, 'Content-Type': 'application/sdp' },
+        body: offer.sdp,
+        signal: attempt.controller.signal
+      });
+      if (!current()) return false;
+      if (!sdpRes.ok) {
+        var errText = await sdpRes.text().catch(function () { return ''; });
+        throw new Error('realtime_connect_failed: ' + sdpRes.status + ' ' + errText.slice(0, 200));
       }
-    };
-
-    var offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-
-    var sdpRes = await fetch(REALTIME_CALLS_URL + '?model=' + encodeURIComponent(model), {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + clientSecret, 'Content-Type': 'application/sdp' },
-      body: offer.sdp
-    });
-    if (!sdpRes.ok) {
-      var errText = await sdpRes.text().catch(function () { return ''; });
-      throw new Error('realtime_connect_failed: ' + sdpRes.status + ' ' + errText.slice(0, 200));
+      var answerSdp = await sdpRes.text();
+      if (!current()) return false;
+      await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
+      if (!current()) return false;
+      completed = true;
+      return true;
+    } catch (error) {
+      if (!current()) return false;
+      throw error;
+    } finally {
+      if (state.connectionAttempt === attempt) state.connectionAttempt = null;
+      if (!completed) {
+        // Clean up only resources owned by this attempt. An old response must
+        // not tear down a replacement connection that has already taken over.
+        // If End owns the current channel, let its bounded transcript flush
+        // finish before teardown closes that channel. The microphone stops now.
+        var flushing = pc && state.pc === pc && state.ending;
+        if (pc && state.pc === pc && !flushing) {
+          state.pc = null; state.dc = null; state.connected = false;
+          stopRemotePlayback();
+        }
+        try { if (dc && !flushing) dc.close(); } catch (_) {}
+        try { if (pc && !flushing) pc.close(); } catch (_) {}
+        try { if (stream) stream.getTracks().forEach(function (t) { t.stop(); }); } catch (_) {}
+        if (state.micStream === stream) state.micStream = null;
+      }
     }
-    var answerSdp = await sdpRes.text();
-    await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
   }
 
   // The mic is released on its own so the interview can stop listening the
@@ -1211,6 +1265,7 @@
   }
 
   function teardownConnection() {
+    cancelConnectionAttempt();
     stopRemotePlayback();
     try { if (state.dc) state.dc.close(); } catch (_) {}
     try { if (state.pc) state.pc.close(); } catch (_) {}
@@ -1334,10 +1389,11 @@
       track('voice_session_start', { mode: res.data.mode });
       historyLiveStart(role, seniority);
 
-      await connectRealtime(res.data.clientSecret, state.model);
+      if (!await connectRealtime(res.data.clientSecret, state.model) || state.ending) return;
       state.startRequestId = null;
       startTimer(state.maxMinutes);
     } catch (err) {
+      if (state.ending) return;
       console.error('[VOICE] start failed:', err);
       alert('Could not connect the voice session. Check your connection and try again.');
       teardownConnection();
@@ -1356,6 +1412,7 @@
   }
 
   async function reconnect() {
+    if (state.ending) return;
     // A pending conduct or safety close survives the connection dropping. Its
     // gate is waiting on events from a link that no longer exists, so letting it
     // run on into a fresh session would kill that session with a stale reason.
@@ -1396,11 +1453,13 @@
           interviewStarted: lifecycle().is(PHASES.ACTIVE_INTERVIEW) && !windowOpen
         })
       });
+      if (state.ending) return;
       if (!res.ok) throw new Error((res.data && res.data.error) || 'resume_failed');
       setStatus('Reconnecting...', 'vi-connecting');
-      await connectRealtime(res.data.clientSecret, res.data.model || state.model);
+      if (!await connectRealtime(res.data.clientSecret, res.data.model || state.model) || state.ending) return;
       if (btn) { btn.style.display = 'none'; btn.disabled = false; btn.textContent = 'Reconnect'; }
     } catch (err) {
+      if (state.ending) return;
       console.error('[VOICE] reconnect failed:', err);
       setStatus('Could not reconnect. Ending the session.', 'vi-error');
       endInterview('connection_lost');
@@ -1431,6 +1490,7 @@
       return;
     }
     state.ending = true;
+    cancelConnectionAttempt();
     // Mark unsaved before the asynchronous transcript flush so closing the
     // tab during that interval receives the same warning as a failed save.
     state.pendingCompletion = { sessionId: state.sessionId };

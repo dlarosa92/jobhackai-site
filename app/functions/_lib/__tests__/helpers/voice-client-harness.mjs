@@ -135,16 +135,16 @@ export function createVoiceClientHarness(options = {}) {
     removeEventListener: () => {}
   };
 
-  function respond(url, opts) {
+  async function respond(url, opts) {
     const key = Object.keys(routes).find((k) => String(url).includes(k));
     // The SDP exchange posts a raw offer body, everything else posts JSON.
     let body = null;
     if (opts && opts.body) {
       try { body = JSON.parse(opts.body); } catch (_) { body = String(opts.body); }
     }
-    requests.push({ url: String(url), method: (opts && opts.method) || 'GET', body });
+    requests.push({ url: String(url), method: (opts && opts.method) || 'GET', body, signal: opts?.signal });
     if (!key) return Promise.resolve({ ok: false, status: 404, json: async () => ({ error: 'no route' }), text: async () => '' });
-    const out = routes[key](String(url), opts || {});
+    const out = await routes[key](String(url), opts || {});
     if (out && out.__text !== undefined) {
       return Promise.resolve({ ok: out.__status ? out.__status < 400 : true, status: out.__status || 200, text: async () => out.__text, json: async () => ({}) });
     }
@@ -167,18 +167,19 @@ export function createVoiceClientHarness(options = {}) {
     }
     addTrack(track) { this.tracks.push(track); }
     createDataChannel() {
-      dataChannel = {
+      const channel = {
         readyState: 'open',
         onmessage: null,
         onopen: null,
         send: (payload) => { dataChannelSends.push(JSON.parse(payload)); },
-        close: () => { dataChannel.readyState = 'closed'; }
+        close: () => { channel.readyState = 'closed'; }
       };
-      return dataChannel;
+      dataChannel = channel;
+      return channel;
     }
     async createOffer() { return { type: 'offer', sdp: 'v=0 offer' }; }
     async setLocalDescription() {}
-    async setRemoteDescription() {}
+    async setRemoteDescription(description) { this.remoteDescription = description; }
     close() { this.connectionState = 'closed'; }
   }
 
@@ -192,7 +193,7 @@ export function createVoiceClientHarness(options = {}) {
   const win = {
     crypto: webcrypto,
     location: { search, href: 'https://app.jobhackai.io/voice-interview.html' + search, pathname: '/voice-interview.html' },
-    navigator: { mediaDevices: { getUserMedia: async () => micStream() } },
+    navigator: { mediaDevices: { getUserMedia: options.getUserMedia || (async () => micStream()) } },
     FirebaseAuthManager: {
       waitForAuthReady: async () => ({ getIdToken: async () => 'test-id-token' }),
       getCurrentUser: () => ({ getIdToken: async () => 'test-id-token' })
@@ -221,6 +222,7 @@ export function createVoiceClientHarness(options = {}) {
   win.navigator = win.navigator;
   win.RTCPeerConnection = StubPeerConnection;
   win.URLSearchParams = URLSearchParams;
+  win.AbortController = AbortController;
   win.fetch = (url, opts) => respond(url, opts);
   win.setTimeout = (fn, ms) => trackTimer(setTimeout(fn, ms));
   win.clearTimeout = (h) => { timers.delete(h); clearTimeout(h); };
@@ -284,6 +286,7 @@ export function createVoiceClientHarness(options = {}) {
       dataChannel.onmessage({ data: JSON.stringify(evt) });
     },
     peerConnection: () => peerConnection,
+    dataChannel: () => dataChannel,
     /** POST bodies sent to /complete, in order. */
     completeBodies() {
       return requests.filter((r) => r.url.includes('/complete') && r.method === 'POST').map((r) => r.body);
