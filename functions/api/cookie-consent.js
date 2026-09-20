@@ -97,7 +97,7 @@ export async function onRequest({ request, env }) {
       const granted = value => validConsent(value) && value.analytics === true;
       // A failed earlier cleanup must not resurrect old attribution when the
       // user later opts in again. Purge before replacing the stored rejection.
-      if ((!granted(previous) || (browserPrevious != null && !granted(browserPrevious))) &&
+      if (((previous != null && !granted(previous)) || (browserPrevious != null && !granted(browserPrevious))) &&
           !await revokeCheckoutAttribution(env, {userId,clientId})) {
         return json({ok:false,error:'Consent cleanup unavailable'},503,origin,env);
       }
