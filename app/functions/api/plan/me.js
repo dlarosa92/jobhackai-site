@@ -48,6 +48,9 @@ export async function onRequest(context) {
           enabled: backendReady,
           canStart: ent.canStart,
           mode: ent.mode,
+          reason: ent.reason,
+          monthlyLimit: ent.monthlyLimit ?? null,
+          monthlyRemaining: ent.monthlyRemaining ?? null,
           unlimited: ent.unlimited,
           freeSessionUsed: ent.freeSessionUsed,
           sessionsRemaining: ent.sessionsRemaining

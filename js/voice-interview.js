@@ -127,13 +127,19 @@
       if (voice.canStart) {
         startBtn.disabled = false;
         if (voice.unlimited) {
-          banner.textContent = 'Your plan includes unlimited voice interviews.';
+          banner.textContent = Number.isFinite(voice.monthlyRemaining) && Number.isFinite(voice.monthlyLimit)
+            ? 'You have ' + voice.monthlyRemaining + ' of ' + voice.monthlyLimit + ' voice interviews left this calendar month (UTC), while your subscription is active.'
+            : 'Your subscription includes voice interviews with a calendar-month session limit.';
         } else if (voice.mode === 'pack') {
           banner.textContent = 'You have ' + voice.sessionsRemaining + ' session' + (voice.sessionsRemaining === 1 ? '' : 's') + ' left in your Interview Pack.';
         } else {
           banner.textContent = 'Your first voice interview is free. Make it count.';
         }
         banner.className = 'vi-banner vi-banner-ok';
+      } else if (voice.reason === 'limit_reached' || voice.mode === 'subscription' || voice.unlimited) {
+        startBtn.disabled = true;
+        banner.textContent = 'You have reached your voice interview limit for this calendar month. Your allowance resets on the first day of next month at 00:00 UTC, with an active subscription.';
+        banner.className = 'vi-banner';
       } else {
         startBtn.disabled = true;
         banner.innerHTML = 'Your free voice interview is used. <a href="/pricing">See plans</a> to keep practicing.';
