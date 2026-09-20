@@ -39,7 +39,7 @@ Do not claim visibility into a provider's sales from outbound clicks. Provider-c
 - Combining that filter with Boat returns the explicit empty state. Reset restores all six.
 - Provider link opens the intended detail page with source, check date, separate package scopes and outbound provider link.
 - Get listed opens the intended instructions page with the correct prefilled `mailto:` destination; no email was sent.
-- Desktop layout visually inspected. Narrow-screen browser verification and keyboard/assistive-technology checks remain pending.
+- Desktop layout and the hub/Get listed at 375px iframe viewports visually inspected in Chrome. At that width, Provider brings both returns Pearl's, adding Boat shows the explicit empty state, and Reset restores six listings. These checks cover responsive layout and filter interactions; native mobile-device and keyboard/assistive-technology checks remain pending.
 
 ## Research and launch gates
 
