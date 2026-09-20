@@ -224,7 +224,7 @@ export function createVoiceClientHarness(options = {}) {
   win.URLSearchParams = URLSearchParams;
   win.AbortController = AbortController;
   win.fetch = (url, opts) => respond(url, opts);
-  win.setTimeout = (fn, ms) => trackTimer(setTimeout(fn, ms));
+  win.setTimeout = (fn, ms) => trackTimer(setTimeout(fn, options.timerDelay ? options.timerDelay(ms) : ms));
   win.clearTimeout = (h) => { timers.delete(h); clearTimeout(h); };
   win.setInterval = (fn, ms) => trackTimer(setInterval(fn, ms));
   win.clearInterval = (h) => { timers.delete(h); clearInterval(h); };
@@ -273,7 +273,7 @@ export function createVoiceClientHarness(options = {}) {
       // A failed connect still leaves a (closed) data channel behind, and every
       // realtime event would then flow through a torn-down client — tests would
       // pass for the wrong reason. Fail loudly instead.
-      if (!requests.some((r) => r.url.includes('/realtime/calls'))) {
+      if (!requests.some((r) => r.url.includes('/realtime/calls') || (r.url === '/api/voice/connection' && r.body?.action === 'open'))) {
         throw new Error('the SDP exchange never happened; connectRealtime failed: ' + JSON.stringify(logs));
       }
       if (dataChannel.readyState !== 'open') throw new Error('the data channel is not open; connectRealtime failed');

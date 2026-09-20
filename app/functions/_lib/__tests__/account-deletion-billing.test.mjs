@@ -7,7 +7,9 @@ const source = name => readFileSync(new URL(name, import.meta.url), 'utf8');
 const strip = code => code.replace(/^import .*;\n/gm, '').replaceAll('export async function', 'async function').replaceAll('export function', 'function');
 const customer = (id, owner='owner') => ({id, metadata:owner ? {firebaseUid:owner}: {}});
 const sub = (id, customer='cus_1', status='active') => ({id, customer, status, metadata:{environment:'qa'}});
-function setup({ customers=[customer('cus_1')], subscriptions=[sub('sub_1')], mapped='cus_1', override, conflict=false, kvFailure=false }={}) {
+const checkout = (id='cs_1', customer='cus_1') => ({id,customer,status:'open',payment_status:'unpaid',mode:'payment',metadata:{firebaseUid:'owner',environment:'qa'}});
+const payment = (id='pi_1', status='succeeded', customer='cus_1') => ({id,status,customer,metadata:{}});
+function setup({ customers=[customer('cus_1')], subscriptions=[sub('sub_1')], sessions=[], payments=[], invoices=[], schedules=[], mapped='cus_1', override, conflict=false, kvFailure=false }={}) {
   const calls=[];
   const ctx={URL, Set, Map, encodeURIComponent, assertStripeKeyMatchesEnvironment, isForeignEnvironmentStamp, canonicalEnvironmentName, canonicalizeEnvironmentStamp,
     kvCusKey:uid=>'cusByUid:'+uid,
@@ -17,17 +19,90 @@ function setup({ customers=[customer('cus_1')], subscriptions=[sub('sub_1')], ma
       const custom=await override?.(path,init,calls);
       if(custom) return custom;
       const url=new URL('https://stripe.test'+path);
-      if(init.method==='DELETE') return Response.json({...subscriptions.find(s=>path.endsWith('/'+s.id)),status:'canceled'});
+      if(init.method==='DELETE') {
+        const s=subscriptions.find(s=>path.endsWith('/'+s.id));s.status='canceled';return Response.json(s);
+      }
+      if(init.method==='POST'&&url.pathname.endsWith('/expire')) {
+        const s=sessions.find(s=>url.pathname===`/checkout/sessions/${s.id}/expire`);s.status='expired';
+        const p=payments.find(p=>p.id===s.payment_intent);if(p)p.status='canceled';
+        return Response.json(s);
+      }
       if(url.pathname==='/customers') return Response.json({data:customers,has_more:false});
       if(url.pathname==='/subscriptions') return Response.json({data:subscriptions.filter(s=>s.customer===url.searchParams.get('customer')),has_more:false});
+      if(url.pathname==='/checkout/sessions') return Response.json({data:sessions.filter(s=>s.customer===url.searchParams.get('customer')),has_more:false});
+      if(url.pathname==='/payment_intents') return Response.json({data:payments.filter(p=>p.customer===url.searchParams.get('customer')),has_more:false});
+      if(url.pathname==='/invoices') return Response.json({data:invoices.filter(p=>p.customer===url.searchParams.get('customer')),has_more:false});
+      if(url.pathname==='/subscription_schedules') return Response.json({data:schedules.filter(p=>p.customer===url.searchParams.get('customer')),has_more:false});
       return Response.json(customers.find(c=>path.endsWith('/'+c.id))||{}, {status:customers.some(c=>path.endsWith('/'+c.id))?200:404});
     }
   };
-  vm.createContext(ctx);vm.runInContext(strip(source('../account-deletion-billing.js'))+'\nglobalThis.guard=cancelBillingBeforeDeletion;',ctx);
+  vm.createContext(ctx);vm.runInContext(strip(source('../account-deletion-billing.js'))+'\nglobalThis.guard=cancelBillingBeforeDeletion;globalThis.inactiveGuard=assertInactiveBillingClear;',ctx);
   const env={STRIPE_SECRET_KEY:'sk_test_fixture_only',ENVIRONMENT:'qa',JOBHACKAI_KV:{get:async()=>{if(kvFailure)throw Error('cache unavailable');return null;}}};
   const input={uid:'owner',email:'owner@example.test',user:{stripe_customer_id:mapped,email:'owner@example.test'}};
-  return {calls,ctx,env,input,run:()=>ctx.guard(env,input)};
+  return {calls,ctx,env,input,run:()=>ctx.guard(env,input),runInactive:()=>ctx.inactiveGuard(env,input)};
 }
+
+for (const status of ['active','trialing','past_due','unpaid','paused','incomplete']) {
+  test(`inactivity cannot cancel a ${status} subscription`,async()=>{
+    const subscriptions=[sub('sub_1','cus_1',status)];
+    const h=setup({subscriptions});
+    await assert.rejects(h.runInactive(),/Subscription prevents inactivity deletion/);
+    assert.equal(subscriptions[0].status,status);
+    assert.ok(h.calls.every(call=>call.method==='GET'));
+  });
+}
+test('inactivity leaves an open checkout and its pending payment untouched',async()=>{
+  const sessions=[{...checkout(),payment_intent:'pi_1'}];
+  const payments=[payment('pi_1','requires_payment_method')];
+  const h=setup({subscriptions:[],sessions,payments});
+  await assert.rejects(h.runInactive(),/Checkout remains open/);
+  assert.equal(sessions[0].status,'open');
+  assert.equal(payments[0].status,'requires_payment_method');
+  assert.ok(h.calls.every(call=>call.method==='GET'));
+});
+test('inactivity permits settled history without changing provider records',async()=>{
+  const h=setup({subscriptions:[sub('sub_old','cus_1','canceled'),sub('sub_expired','cus_1','incomplete_expired')],
+    sessions:[{...checkout(),status:'complete',payment_status:'paid'}],payments:[payment()],
+    invoices:[{id:'in_paid',customer:'cus_1',status:'paid'}],
+    schedules:[{id:'sched_old',customer:'cus_1',status:'completed'}]});
+  assert.equal((await h.runInactive()).checkedCustomers,1);
+  assert.ok(h.calls.every(call=>call.method==='GET'));
+});
+test('inactivity checks later customer pages and cannot miss another paid subscription',async()=>{
+  const h=setup({subscriptions:[sub('sub_paid','cus_2')],override:path=>{
+    const u=new URL('https://x.test'+path);
+    if(u.pathname==='/customers') return Response.json({data:[customer(u.searchParams.has('starting_after')?'cus_2':'cus_1')],has_more:!u.searchParams.has('starting_after')});
+  }});
+  await assert.rejects(h.runInactive(),/Subscription prevents inactivity deletion/);
+  assert.ok(h.calls.some(call=>call.path.includes('starting_after=cus_1')));
+  assert.ok(h.calls.every(call=>call.method==='GET'));
+});
+test('inactivity fails closed on obligations, configuration, ownership, or unavailable evidence',async()=>{
+  const scenarios=[
+    {payments:[payment('pi_pending','processing')]},
+    {invoices:[{id:'in_open',customer:'cus_1',status:'open'}]},
+    {schedules:[{id:'sched_future',customer:'cus_1',status:'not_started'}]},
+    {customers:[customer('cus_1','other')]},
+    {conflict:true},
+    {kvFailure:true},
+    {override:path=>path.startsWith('/subscriptions?')?new Response('',{status:503}):null},
+  ];
+  for (const options of scenarios) {
+    const h=setup({subscriptions:[],...options});
+    await assert.rejects(h.runInactive());
+    assert.ok(h.calls.every(call=>call.method==='GET'));
+  }
+  for (const key of [undefined,'sk_live_fixture']) {
+    const h=setup({subscriptions:[]});h.env.STRIPE_SECRET_KEY=key;
+    await assert.rejects(h.runInactive());assert.equal(h.calls.length,0);
+  }
+});
+test('inactivity can clear an account with no customer only after a successful lookup',async()=>{
+  const h=setup({customers:[],subscriptions:[],mapped:null});
+  assert.equal((await h.runInactive()).checkedCustomers,0);
+  assert.ok(h.calls.some(call=>call.path.startsWith('/customers?')));
+  assert.ok(h.calls.every(call=>call.method==='GET'));
+});
 test('all owned duplicate customers and nonterminal statuses are canceled', async()=>{
   const statuses=['active','trialing','past_due','unpaid','paused','incomplete','canceled','incomplete_expired'];
   const subscriptions=statuses.map((status,i)=>sub('sub_'+i,i%2?'cus_2':'cus_1',status));
@@ -79,33 +154,8 @@ test('missing or unusable cache cannot be treated as an empty billing history',a
   }
 });
 
-function routeHarness({billingFails=false,firebaseFails=false,clientFallback=false,kvFails=false}={}) {
-  const events=[];let emailOptions;
-  const ctx={Request,Response,Date,console:{log(){},warn(){},error(){}},
-    getBearer:()=> 'token',verifyFirebaseIdToken:async()=>({uid:'owner',payload:{email:'owner@example.test'}}),
-    getDb:()=>({prepare:sql=>({bind:()=>({first:async()=>({id:1,email:'owner@example.test'}),all:async()=>({results:[]}),run:async()=>{events.push('db-cleanup');return {meta:{changes:1}};}})})}),
-    cancelBillingBeforeDeletion:async()=>{events.push('billing');if(billingFails)throw Error('unavailable');},
-    deleteFirebaseAuthUserAdmin:async()=>{events.push('firebase');return {ok:!firebaseFails,error:firebaseFails?'fixture admin failure':undefined};},
-    fetch:async()=>{events.push('firebase-client');return new Response('',{status:200});},
-    invalidateBillingCaches:async()=>{},writeDeletedTombstone:async()=>{events.push('tombstone');return true;},
-    accountDeletedEmail:(_email,options)=>{emailOptions=options;return {subject:'fixture',html:'fixture'};},
-    sendEmail:async()=>{events.push('email');return {ok:true};}
-  };
-  vm.createContext(ctx);vm.runInContext(strip(source('../../api/user/delete.js'))+'\nglobalThis.handler=onRequest;',ctx);
-  return {events,get emailOptions(){return emailOptions;},run:()=>ctx.handler({request:new Request('https://qa.jobhackai.io/api/user/delete',{method:'POST'}),env:{FIREBASE_SERVICE_ACCOUNT_JSON:'fixture',...(clientFallback?{FIREBASE_WEB_API_KEY:'fixture'}:{}),JOBHACKAI_KV:{delete:async()=>{events.push('kv');if(kvFails)throw Error('unavailable');},put:async()=>events.push('kv-tombstone')}}})};
-}
-test('route preserves Firebase and data when billing fails',async()=>{
-  const h=routeHarness({billingFails:true});const r=await h.run();assert.equal(r.status,503);assert.deepEqual(h.events,['billing']);assert.match((await r.json()).error,/Some subscriptions may already be canceled/);
-});
-test('Firebase failure reports already completed billing cancellation accurately',async()=>{
-  const h=routeHarness({firebaseFails:true});const r=await h.run();assert.equal(r.status,500);assert.deepEqual(h.events,['billing','firebase']);assert.match((await r.json()).error,/Subscription cancellation has completed/);
-});
-test('email waits for cleanup and discloses a KV cleanup failure',async()=>{
-  const h=routeHarness({kvFails:true});const r=await h.run();assert.equal(r.status,200);assert.equal(h.emailOptions.cleanupPending,true);assert.equal(h.events.at(-1),'email');assert.ok(h.events.indexOf('billing')<h.events.indexOf('firebase'));assert.match((await r.json()).message,/follow-up/);
-});
-test('completed cleanup email is also sent after tombstones',async()=>{
-  const h=routeHarness();assert.equal((await h.run()).status,200);assert.equal(h.emailOptions.cleanupPending,false);assert.equal(h.events.at(-1),'email');assert.ok(h.events.indexOf('kv-tombstone')<h.events.indexOf('email'));
-});
+// Request/recovery behavior now runs against the actual processor and SQLite
+// in account-deletion-process.test.mjs, replacing the legacy best-effort route mocks.
 
 test('partial cancellation failure stops before further cancellation and can be retried',async()=>{
   let failedOnce=false;
@@ -140,10 +190,137 @@ test('production retains legacy unstamped support with a matching live key',asyn
   assert.equal((await h.run()).canceledSubscriptions,1);
 });
 
-test('successful Firebase fallback clears recovered auth failure from cleanup status',async()=>{
-  const h=routeHarness({firebaseFails:true,clientFallback:true});
-  const response=await h.run(),body=await response.json();
-  assert.equal(response.status,200);assert.equal(body.warnings,undefined);
-  assert.equal(h.emailOptions.cleanupPending,false);assert.ok(h.events.includes('firebase-client'));
-  assert.equal(body.message,'Account sign-in access removed');
+test('owned open checkout expires and its payment settles before subscription cancellation',async()=>{
+  const h=setup({sessions:[{...checkout(),payment_intent:'pi_1'}],payments:[payment('pi_1','requires_payment_method')]});
+  const result=await h.run();assert.equal(result.expiredCheckouts,1);assert.equal(result.canceledSubscriptions,1);
+  const expire=h.calls.findIndex(c=>c.method==='POST'),cancel=h.calls.findIndex(c=>c.method==='DELETE');
+  assert.ok(expire<cancel);assert.ok(h.calls.slice(expire+1,cancel).some(c=>c.path.startsWith('/payment_intents?')));
+});
+for(const [name,session] of [
+  ['foreign environment',{...checkout(),metadata:{firebaseUid:'owner',environment:'dev'}}],
+  ['missing environment',{...checkout(),metadata:{firebaseUid:'owner'}}],
+  ['foreign UID',{...checkout(),metadata:{firebaseUid:'other',environment:'qa'}}],
+  ['missing UID',{...checkout(),metadata:{environment:'qa'}}],
+  ['foreign client reference',{...checkout(),client_reference_id:'other'}],
+  ['setup mode',{...checkout(),mode:'setup'}],
+  ['unknown status',{...checkout(),status:'unknown'}],
+  ['unknown payment status',{...checkout(),payment_status:'unknown'}],
+  ['completed unpaid',{...checkout(),status:'complete'}],
+])test(`${name} checkout stops every billing mutation`,async()=>{
+  const h=setup({sessions:[session]});await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method!=='GET').length,0);
+});
+test('email-only customer with open checkout cannot be silently skipped',async()=>{
+  const h=setup({customers:[customer('cus_1',null)],mapped:null,subscriptions:[],sessions:[checkout()]});
+  await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method!=='GET').length,0);
+});
+for(const status of ['requires_payment_method','requires_confirmation','requires_action','processing','requires_capture','unknown']) {
+  test(`${status} unattached payment blocks identity eligibility without canceling a charge`,async()=>{
+    const h=setup({payments:[payment('pi_1',status)]});await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method!=='GET').length,0);
+  });
+}
+test('historical paid and expired checkout sessions and settled payments do not block deletion',async()=>{
+  const h=setup({sessions:[{...checkout('cs_old'),status:'complete',payment_status:'paid',metadata:{}},{...checkout('cs_expired'),status:'expired',metadata:{}}],payments:[payment(),payment('pi_canceled','canceled')]});
+  assert.equal((await h.run()).expiredCheckouts,0);
+});
+test('later customer ambiguity is discovered before expiring an earlier checkout',async()=>{
+  const h=setup({customers:[customer('cus_1'),customer('cus_2')],sessions:[checkout(),{...checkout('cs_2','cus_2'),metadata:{firebaseUid:'owner',environment:'dev'}}]});
+  await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method!=='GET').length,0);
+});
+test('an expiration HTTP error, timeout or mismatched success never reaches cancellation',async()=>{
+  for(const outcome of ['http','timeout','mismatch','open']) {
+    const h=setup({sessions:[checkout()],override:(_path,init)=>{
+      if(init.method!=='POST')return;
+      if(outcome==='timeout')throw Error('timeout');
+      if(outcome==='http')return new Response('',{status:409});
+      return Response.json({...checkout(outcome==='mismatch'?'cs_other':'cs_1'),status:outcome==='open'?'open':'expired'});
+    }});
+    await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method==='DELETE').length,0);
+  }
+});
+test('expiration response alone cannot hide a still-open session or unsettled payment',async()=>{
+  for(const lingering of ['session','payment']) {
+    const sessions=[{...checkout(),payment_intent:'pi_1'}],payments=[payment('pi_1','requires_payment_method')];
+    const h=setup({sessions,payments,override:(_path,init)=>{
+      if(init.method==='POST') {
+        if(lingering==='payment')sessions[0].status='expired';
+        return Response.json({...sessions[0],status:'expired'});
+      }
+    }});
+    await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method==='DELETE').length,0);
+  }
+});
+test('subscription appearing during checkout expiration is rescanned and canceled',async()=>{
+  const subscriptions=[],sessions=[checkout()];
+  const h=setup({subscriptions,sessions,override:(_path,init)=>{
+    if(init.method==='POST')subscriptions.push(sub('sub_raced'));
+  }});
+  assert.equal((await h.run()).canceledSubscriptions,1);assert.equal(subscriptions[0].status,'canceled');
+});
+test('final billing rescan rejects a new pending payment after subscription cancellation',async()=>{
+  const payments=[];
+  const h=setup({payments,override:(_path,init)=>{if(init.method==='DELETE')payments.push(payment('pi_late','processing'));}});
+  await assert.rejects(h.run(),/Payment remains unsettled/);assert.equal(h.calls.filter(c=>c.method==='DELETE').length,1);
+});
+test('checkout and payment pagination inspect later-page pending resources',async()=>{
+  for(const endpoint of ['/checkout/sessions','/payment_intents']) {
+    const h=setup({override:path=>{
+      const u=new URL('https://x.test'+path);if(u.pathname!==endpoint)return;
+      const later=u.searchParams.has('starting_after');
+      return Response.json({data:endpoint==='/checkout/sessions'?[{...checkout(later?'cs_pending':'cs_paid'),status:'complete',payment_status:later?'unpaid':'paid'}]:[payment(later?'pi_pending':'pi_paid',later?'processing':'succeeded')],has_more:!later});
+    }});
+    await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method!=='GET').length,0);assert.ok(h.calls.some(c=>c.path.includes('starting_after=')));
+  }
+});
+
+test('draft/open/uncollectible invoices block deletion before every mutation',async()=>{
+  for(const status of ['draft','open','uncollectible','unknown']) {
+    const h=setup({sessions:[checkout()],invoices:[{id:'in_1',customer:'cus_1',status}]});
+    await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method!=='GET').length,0);
+  }
+});
+test('future or active schedules block deletion even without a live subscription',async()=>{
+  for(const status of ['not_started','active','unknown']) {
+    const h=setup({subscriptions:[],schedules:[{id:'sub_sched_1',customer:'cus_1',status}]});
+    await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method!=='GET').length,0);
+  }
+});
+test('settled invoice/schedule history permits cancellation without financial-history mutation',async()=>{
+  const h=setup({invoices:['paid','void'].map((status,i)=>({id:'in_'+i,customer:'cus_1',status})),schedules:['completed','released','canceled'].map((status,i)=>({id:'sub_sched_'+i,customer:'cus_1',status}))});
+  assert.equal((await h.run()).canceledSubscriptions,1);
+  assert.deepEqual(h.calls.filter(c=>c.method!=='GET').map(c=>c.path),['/subscriptions/sub_1']);
+});
+test('later-page invoices and schedules are not skipped',async()=>{
+  for(const endpoint of ['/invoices','/subscription_schedules']) {
+    const h=setup({override:path=>{
+      const u=new URL('https://x.test'+path);if(u.pathname!==endpoint)return;
+      const later=u.searchParams.has('starting_after');
+      return Response.json({data:[{id:later?'later':'first',customer:'cus_1',status:endpoint==='/invoices'?(later?'open':'paid'):(later?'not_started':'canceled')}],has_more:!later});
+    }});
+    await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method!=='GET').length,0);
+    assert.ok(h.calls.some(c=>c.path.includes('starting_after=first')));
+  }
+});
+test('invoice or schedule API failure and foreign customer responses fail closed',async()=>{
+  for(const endpoint of ['/invoices','/subscription_schedules']) {
+    for(const mode of ['unavailable','wrong_customer','malformed']) {
+      const h=setup({override:path=>{
+        if(!path.startsWith(endpoint+'?'))return;
+        if(mode==='unavailable')return new Response('',{status:503});
+        if(mode==='malformed')return Response.json({data:[]});
+        return Response.json({data:[{id:'wrong',customer:'other',status:endpoint==='/invoices'?'paid':'canceled'}],has_more:false});
+      }});
+      await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method!=='GET').length,0);
+    }
+  }
+});
+test('late invoice or schedule after cancellation still prevents identity eligibility',async()=>{
+  for(const kind of ['invoice','schedule']) {
+    const invoices=[],schedules=[];
+    const h=setup({invoices,schedules,override:(_path,init)=>{
+      if(init.method!=='DELETE')return;
+      if(kind==='invoice')invoices.push({id:'in_late',customer:'cus_1',status:'draft'});
+      else schedules.push({id:'sub_sched_late',customer:'cus_1',status:'not_started'});
+    }});
+    await assert.rejects(h.run(),/requires reconciliation/);assert.equal(h.calls.filter(c=>c.method==='DELETE').length,1);
+  }
 });

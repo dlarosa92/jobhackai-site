@@ -164,25 +164,36 @@ export async function getOrCreateUserByAuthId(env, authId, email = null, { updat
       return existing;
     }
 
-    // Create new user
+    // Refuse recreation atomically with the insert. A separate tombstone
+    // read (including the webhook's early check) can race deletion intent.
+    // Both tables are required: missing schema must fail closed. Existing-row
+    // mutations still require full request/webhook operation admission.
+    const creationFence = `WHERE NOT EXISTS (
+      SELECT 1 FROM account_deletion_admissions WHERE auth_id = ?
+    ) AND NOT EXISTS (
+      SELECT 1 FROM deleted_auth_ids WHERE auth_id = ?
+    )`;
     let result;
     try {
       result = await db.prepare(
-        'INSERT INTO users (auth_id, email, last_login_at) VALUES (?, ?, datetime(\'now\')) RETURNING id, auth_id, email, created_at, updated_at'
-      ).bind(authId, email).first();
+        `INSERT INTO users (auth_id, email, last_login_at)
+         SELECT ?, ?, datetime('now') ${creationFence}
+         RETURNING id, auth_id, email, created_at, updated_at`
+      ).bind(authId, email, authId, authId).first();
     } catch (insertErr) {
-      if (insertErr.message && insertErr.message.includes('no such column')) {
+      if (/(?:no such column:|no column named) last_login_at\b/.test(insertErr.message || '')) {
         console.warn('[DB] last_login_at column not yet migrated, inserting without it');
         result = await db.prepare(
-          'INSERT INTO users (auth_id, email) VALUES (?, ?) RETURNING id, auth_id, email, created_at, updated_at'
-        ).bind(authId, email).first();
+          `INSERT INTO users (auth_id, email) SELECT ?, ? ${creationFence}
+           RETURNING id, auth_id, email, created_at, updated_at`
+        ).bind(authId, email, authId, authId).first();
       } else {
         throw insertErr;
       }
     }
 
     if (!result) {
-      throw new Error('Failed to create user: INSERT returned null');
+      throw new Error('account_creation_blocked_by_deletion');
     }
 
     // Add plan property if it wasn't returned (pre-migration state)

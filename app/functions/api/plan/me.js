@@ -42,10 +42,12 @@ export async function onRequest(context) {
     let voice = { enabled: false, canStart: false, mode: null, unlimited: false, freeSessionUsed: false, sessionsRemaining: 0 };
     if (voiceEnabled) {
       try {
-        const ent = await getVoiceEntitlement(env, uid);
+        const managed = env.VOICE_MANAGED_CALLS_ENABLED === 'true';
+        const ent = await getVoiceEntitlement(env, uid, { managed });
         const backendReady = ent.reason !== 'not_migrated' && ent.reason !== 'db_unavailable';
         voice = {
           enabled: backendReady,
+          transport: managed ? 'managed' : 'legacy',
           canStart: ent.canStart,
           mode: ent.mode,
           reason: ent.reason,

@@ -16,7 +16,11 @@ name: E2E Tests
 # helpers change state (sync-stripe-plan, Checkout Session creation, portal
 # sessions), in the shared Stripe test-mode account.
 #
-# SKIPPING THE PRE-DEPLOY RUN: put the literal marker [skip-e2e] in the PR
+# Draft PRs never run this deployed-environment suite automatically. This
+# guard does not depend on an editable PR description or a label added after
+# creation. Explicit post-deploy workflow_dispatch remains available.
+#
+# SKIPPING THE PRE-DEPLOY RUN FOR READY PRS: put the literal marker [skip-e2e] in the PR
 # BODY when creating the PR (gh pr create --body-file … with the marker
 # inside). The body is part of the create call, so the very first "opened"
 # run already sees it — unlike a label, which gh applies AFTER creation and
@@ -55,7 +59,7 @@ concurrency:
 
 jobs:
   e2e-tests:
-    if: ${{ github.event_name == 'workflow_dispatch' || (!contains(github.event.pull_request.labels.*.name, 'skip-e2e') && !contains(github.event.pull_request.body, '[skip-e2e]')) }}
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.pull_request.draft == false && !contains(github.event.pull_request.labels.*.name, 'skip-e2e') && !contains(github.event.pull_request.body, '[skip-e2e]')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     

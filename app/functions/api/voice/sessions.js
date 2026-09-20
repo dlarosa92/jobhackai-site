@@ -44,7 +44,7 @@ export async function onRequest(context) {
     const d1User = await getOrCreateUserByAuthId(env, uid, null, { updateActivity: false });
     if (!d1User?.id) return successResponse({ sessions: [] }, 200, origin, env, requestId);
 
-    const ent = await getVoiceEntitlement(env, uid);
+    const ent = await getVoiceEntitlement(env, uid, {managed:env.VOICE_MANAGED_CALLS_ENABLED === 'true'});
     const sessions = await listVoiceSessions(env, d1User.id, ent);
 
     return successResponse({ sessions }, 200, origin, env, requestId);

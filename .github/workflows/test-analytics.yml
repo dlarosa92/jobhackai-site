@@ -3,8 +3,13 @@ on:
   push:
     branches: [main, develop, dev0]
     paths:
+      - 'app/scripts/lib/*reconcile-core.mjs'
       - 'workers/analytics-delivery/**'
       - 'app/db/migrations/027_analytics_delivery.sql'
+      - 'app/db/migrations/028_account_deletion_recovery.sql'
+      - 'app/functions/_lib/account-deletion-admission.js'
+      - 'app/functions/_lib/account-deletion-admission.d.ts'
+      - 'app/functions/_lib/__tests__/analytics-delivery-bundle.test.mjs'
       - 'app/functions/_lib/analytics-money.js'
       - 'app/functions/_lib/collected-revenue.js'
       - 'js/cookie-consent.js'
@@ -41,8 +46,13 @@ on:
   pull_request:
     branches: [main, develop, dev0]
     paths:
+      - 'app/scripts/lib/*reconcile-core.mjs'
       - 'workers/analytics-delivery/**'
       - 'app/db/migrations/027_analytics_delivery.sql'
+      - 'app/db/migrations/028_account_deletion_recovery.sql'
+      - 'app/functions/_lib/account-deletion-admission.js'
+      - 'app/functions/_lib/account-deletion-admission.d.ts'
+      - 'app/functions/_lib/__tests__/analytics-delivery-bundle.test.mjs'
       - 'app/functions/_lib/analytics-money.js'
       - 'app/functions/_lib/collected-revenue.js'
       - 'js/cookie-consent.js'
@@ -97,5 +107,11 @@ jobs:
         working-directory: workers/analytics-delivery
       - run: npm run types -- --check && npm run typecheck && npm test
         working-directory: workers/analytics-delivery
-      - run: npx wrangler deploy --dry-run --env qa
+      - run: |
+          npx wrangler deploy --dry-run --env qa --outdir /tmp/jobhackai-analytics-worker
+          cp /tmp/jobhackai-analytics-worker/index.js /tmp/jobhackai-analytics-worker/index.mjs
         working-directory: workers/analytics-delivery
+      - name: Verify compiled Analytics scheduling and deletion admission without sending live events
+        env:
+          JOBHACKAI_ANALYTICS_BUNDLE: /tmp/jobhackai-analytics-worker/index.mjs
+        run: node --test app/functions/_lib/__tests__/analytics-delivery-bundle.test.mjs

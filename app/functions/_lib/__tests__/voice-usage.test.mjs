@@ -6,6 +6,7 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto;
 import { readFileSync } from 'node:fs';
 import { createVoiceUsage, normalizeVoiceUsage, responseTokenTotals } from '../../../../js/voice-usage.js';
 import { scorecardUsageEvidence } from '../voice-usage.js';
+import { queueAccountWork } from '../account-operation-scope.js';
 import { sqliteD1 } from './sqlite-d1-helper.mjs';
 const usage = { input_tokens: 132, output_tokens: 121, total_tokens: 253,
   input_token_details: { text_tokens:119, audio_tokens:13, image_tokens:0, cached_tokens:64, cached_tokens_details:{text_tokens:64,audio_tokens:0,image_tokens:0} },
@@ -44,7 +45,7 @@ function setup(t){
  db.exec('CREATE TABLE users(id INTEGER PRIMARY KEY, auth_id TEXT); INSERT INTO users VALUES(1,\'owner\'),(2,\'other\');');
  for(const f of ['020_add_voice_entitlements.sql','021_add_voice_end_reason.sql','029_voice_usage_evidence.sql']) db.exec(readFileSync(new URL('../../../db/migrations/'+f,import.meta.url),'utf8'));
  db.exec("INSERT INTO voice_sessions(id,user_id,status,entitlement_mode) VALUES('own',1,'active','free'),('other',2,'active','free')");
- const ctx={Request,Response,console:{log(){},error(){},warn(){}},normalizeVoiceUsage,responseTokenTotals,
+ const ctx={Request,Response,queueAccountWork,console:{log(){},error(){},warn(){}},normalizeVoiceUsage,responseTokenTotals,
  getBearer:r=>r.headers.get('Authorization'),verifyFirebaseIdToken:async()=>({uid:'owner'}),getDb:()=>db,getOrCreateUserByAuthId:async()=>({id:1}),voiceFeatureEnabled:()=>true,
  generateRequestId:()=> 'id', normalizeEndReason:()=> 'user_ended',shouldGenerateScorecard:()=>false,
  successResponse:(body,status)=>Response.json(body,{status}),errorResponse:(error,status)=>Response.json({error},{status})};
