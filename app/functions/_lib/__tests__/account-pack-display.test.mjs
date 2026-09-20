@@ -7,7 +7,7 @@ const start = html.indexOf('    async function renderBillingSection()');
 const end = html.indexOf('    async function startPaidNow', start);
 const render = html.slice(start, end);
 for (const fixture of [
-  { billing: 'free', voice: { mode: 'pack', sessionsRemaining: 4 }, expected: 'Interview Pack', cached: 'pack' },
+  { billing: 'free', voice: { mode: 'pack', sessionsRemaining: 4, packExpiresAt: '2099-12-31T12:00:00.000Z' }, expected: 'Interview Pack', cached: 'pack' },
   { billing: 'free', voice: { mode: null, sessionsRemaining: 0 }, expected: 'Free Account', cached: 'free' },
   { billing: 'monthly', voice: { mode: 'subscription', sessionsRemaining: 4 }, expected: 'Monthly Plan', cached: 'monthly' }
 ]) {
@@ -23,6 +23,9 @@ for (const fixture of [
   await vm.runInContext('let billingSectionRetryCount=0; const MAX_BILLING_RETRIES=3;'+render+';renderBillingSection();', ctx);
   assert.ok(section.innerHTML.includes(fixture.expected), section.innerHTML);
   assert.equal(store.get('user-plan'), fixture.cached);
-  if (fixture.cached === 'pack') assert.ok(!section.innerHTML.includes('Billing Management'));
+  if (fixture.cached === 'pack') {
+    assert.ok(!section.innerHTML.includes('Billing Management'));
+    assert.ok(section.innerHTML.includes('Valid through') && section.innerHTML.includes('2099'));
+  }
 }
 console.log('Account settings pack, exhausted pack and subscription displays passed');

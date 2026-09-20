@@ -161,7 +161,7 @@ export async function getVoiceEntitlement(env, uid) {
     return {
       canStart: true, mode: 'pack', reason: null,
       unlimited: false, freeSessionUsed: !!row.free_session_used,
-      sessionsRemaining: packRemaining, plan, hasEverPaid
+      sessionsRemaining: packRemaining, packExpiresAt: row.pack_expires_at || null, plan, hasEverPaid
     };
   }
 

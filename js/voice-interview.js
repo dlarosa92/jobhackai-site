@@ -1409,6 +1409,9 @@
       return;
     }
     state.ending = true;
+    // Mark unsaved before the asynchronous transcript flush so closing the
+    // tab during that interval receives the same warning as a failed save.
+    state.pendingCompletion = { sessionId: state.sessionId };
     // Terminal for every path — manual, time up, conduct, safety, connection
     // lost, or the natural close. COMPLETE is reachable from any phase, and
     // from here no late event can commit a turn, reopen the session, or start
@@ -1468,6 +1471,9 @@
       if (isSafetyEnd) { historyLiveClear(true); return; }
       var doneStatus = $('vi-done-status');
       if (doneStatus) doneStatus.textContent = 'Interview saved. Preparing your report...';
+      // A failed save removed the optimistic history row. Read the server's
+      // acknowledged row after a successful retry while scoring continues.
+      if (!historyState.liveRow && historyState.voice && historyState.voice.enabled) fetchHistory();
       pollScorecard(0);
     } catch (err) {
       console.error('[VOICE] complete failed:', err);
@@ -2090,7 +2096,6 @@
   // the session was completed server-side (poll timeout): the refetch swaps
   // the local row for the server's real 'scoring' row instead.
   function historyLiveClear(refresh) {
-    if (!historyState.liveRow) return;
     historyState.liveRow = null;
     if (refresh && historyState.voice && historyState.voice.enabled) fetchHistory();
     else renderHistory();

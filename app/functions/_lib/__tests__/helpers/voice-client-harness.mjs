@@ -187,6 +187,7 @@ export function createVoiceClientHarness(options = {}) {
     return { getTracks: () => tracks, getAudioTracks: () => tracks };
   };
 
+  const windowListeners = {};
   const win = {
     crypto: webcrypto,
     location: { search, href: 'https://app.jobhackai.io/voice-interview.html' + search, pathname: '/voice-interview.html' },
@@ -209,7 +210,7 @@ export function createVoiceClientHarness(options = {}) {
     isSafetyReferral,
     isConductWarningLine,
     createTranscriptOrder,
-    addEventListener: () => {},
+    addEventListener: (type, fn) => { (windowListeners[type] ||= []).push(fn); },
     removeEventListener: () => {}
   };
 
@@ -241,6 +242,7 @@ export function createVoiceClientHarness(options = {}) {
   }
 
   return {
+    windowEvent: (type, event) => (windowListeners[type] || []).forEach(fn => fn(event)),
     el: (id) => elements[id],
     logs,
     requests,
