@@ -142,7 +142,7 @@ test('maintenance protects payload cleanup from new writes and deletion while al
   await started;
   await assert.rejects(admitAccountOperation(f.env,'owner1'),/account_operation_busy/);
   const other=await admitAccountOperation(f.env,'owner2');await settleAccountOperation(f.env,other,'finished');
-  await beginDeletionAdmission(f.env,{uid:'owner1'});
+  await beginDeletionAdmission(f.env,{origin:'user_request',uid:'owner1'});
   await assert.rejects(assertDeletionQuiescent(f.env,'owner1'),/operations_pending/);
   release();await running;
   await assertDeletionQuiescent(f.env,'owner1');
@@ -153,7 +153,7 @@ test('earlier operations, deletion intents and tombstones exclude the full accou
   for(const kind of ['operation','intent','tombstone']) {
     const f=setup(t);
     if(kind==='operation')await admitAccountOperation(f.env,'owner1');
-    else if(kind==='intent')await beginDeletionAdmission(f.env,{uid:'owner1'});
+    else if(kind==='intent')await beginDeletionAdmission(f.env,{origin:'user_request',uid:'owner1'});
     else f.db.exec("INSERT INTO deleted_auth_ids VALUES('owner1')");
     const result=await runCleanup({...f.env,RETENTION_MODE:'delete'});
     assert.equal(result.accounts,2);assert.deepEqual(f.kv,[]);
@@ -170,7 +170,7 @@ test('deletion between candidate selection and maintenance admission prevents al
     const stmt=prepare(sql);
     if(sql.startsWith('INSERT INTO account_operation_claims')) {
       const run=stmt.run;
-      stmt.run=async function(){if(!inserted){inserted=true;await beginDeletionAdmission(f.env,{uid:'owner1'});}return run.call(this);};
+      stmt.run=async function(){if(!inserted){inserted=true;await beginDeletionAdmission(f.env,{origin:'user_request',uid:'owner1'});}return run.call(this);};
     }
     return stmt;
   };
@@ -237,7 +237,7 @@ test('real repository schemas preserve FK integrity and distinguish numeric owne
     INSERT INTO cover_letter_history(id,user_id,created_at,updated_at,title,role,seniority,tone,job_description,cover_letter_text,input_hash) VALUES('one','owner1',0,0,'t','r','s','t','j','c','h'),('two','owner2',0,0,'t','r','s','t','j','c','h');`);
   const kv=[],env={JOBHACKAI_DB:db,JOBHACKAI_KV:{delete:async key=>kv.push(key)},RETENTION_MODE:'delete'};
   db.exec("INSERT INTO linkedin_runs(id,user_id,created_at,updated_at,role,input_hash,request_id,input_json) VALUES('unmapped','absent-owner',0,0,'r','h','req3','{}')");
-  await beginDeletionAdmission(env,{uid:'owner2'});
+  await beginDeletionAdmission(env,{origin:'user_request',uid:'owner2'});
   const result=await runCleanup(env);
   assert.equal(result.accounts,1);assert.deepEqual(kv,['raw1','resume:1']);
   assert.equal(result.unmapped_uid_rows,1);

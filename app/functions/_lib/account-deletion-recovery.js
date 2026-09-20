@@ -82,6 +82,32 @@ export async function advanceDeletionRecovery(env, id, phase) {
   return job;
 }
 
+/** Withdraw only before confirmed identity removal, while the caller holds the
+ * exclusive execution token and has freshly confirmed the identity exists.
+ * The transaction refuses a concurrent upgrade to an explicit user request. */
+export async function withdrawInactiveDeletion(env, id, executionToken, reason='inactivity_no_longer_eligible') {
+  if (typeof executionToken!=='string' || !executionToken) throw new Error('deletion_execution_required');
+  if (!['inactivity_no_longer_eligible','inactivity_billing_unconfirmed'].includes(reason)) throw new Error('deletion_withdrawal_reason_invalid');
+  const db=database(env);
+  const results=await db.batch([
+    db.prepare(`INSERT INTO account_deletion_withdrawals(id,auth_id,reason)
+      VALUES (?,(SELECT j.auth_id FROM account_deletion_jobs j
+      JOIN account_deletion_admissions a ON a.id=j.id AND a.auth_id=j.auth_id
+      WHERE j.id=? AND j.execution_token=? AND j.phase IN ('prepared','billing_verified')
+        AND a.origin='inactivity' AND a.state='requested'
+        AND NOT EXISTS(SELECT 1 FROM account_operation_claims o WHERE o.auth_id=j.auth_id AND o.state<>'finished')),
+        ?)`)
+      .bind(id,id,executionToken,reason),
+    db.prepare(`DELETE FROM account_deletion_jobs WHERE id=? AND execution_token=?
+      AND EXISTS(SELECT 1 FROM account_deletion_withdrawals WHERE id=?)`).bind(id,executionToken,id),
+    db.prepare(`DELETE FROM account_deletion_admissions WHERE id=? AND origin='inactivity'
+      AND EXISTS(SELECT 1 FROM account_deletion_withdrawals WHERE id=?)`).bind(id,id)
+  ]);
+  if (results.some(result=>result.meta?.changes!==1)) throw new Error('deletion_withdrawal_conflict');
+  return {ok:true,status:'withdrawn',reference:id,identityRemoved:false,
+    message:'Automatic inactivity cleanup was stopped. Your account and sign-in remain available.'};
+}
+
 /** Finish an identity-confirmed job. KV failures retain every SQL reference and
  * the original manifest; D1 erasure and completion are one atomic transaction.
  * Financial captures/refunds/ledger history are intentionally retained. */
@@ -132,6 +158,7 @@ export async function finishDeletionRecovery(env, id) {
       THEN phase ELSE NULL END WHERE id = ?`)
       .bind(job.auth_id, job.user_id, job.user_id, job.auth_id, id));
     for (const table of uidTables) statements.push(db.prepare(`DELETE FROM ${table} WHERE user_id = ?`).bind(job.auth_id));
+    statements.push(db.prepare('DELETE FROM account_inactivity_warnings WHERE auth_id = ?').bind(job.auth_id));
     if (job.user_id != null) {
       statements.push(db.prepare('DELETE FROM feedback_sessions WHERE resume_session_id IN (SELECT id FROM resume_sessions WHERE user_id = ?)').bind(job.user_id));
       for (const table of userTables) statements.push(db.prepare(`DELETE FROM ${table} WHERE user_id = ?`).bind(job.user_id));

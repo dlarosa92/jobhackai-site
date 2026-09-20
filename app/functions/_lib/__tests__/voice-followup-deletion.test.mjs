@@ -62,7 +62,7 @@ test('deletion before candidate selection or between selection and admission sen
       const all = stmt.all;
       stmt.all = async function () {
         const result = await all.call(this);
-        if (!intercepted) { intercepted = true; await beginDeletionAdmission(f.env, { uid: 'owner' }); }
+        if (!intercepted) { intercepted = true; await beginDeletionAdmission(f.env, {origin:'user_request', uid: 'owner' }); }
         return result;
       };
     }
@@ -78,7 +78,7 @@ test('a deletion intent waits through an earlier send; a simultaneous worker can
   f.fixture.reply = async () => { entered.resolve(); await release.promise; return Response.json({ id: 'fixture-email' }); };
   const first = f.run(); await entered.promise;
   await f.run(); assert.equal(f.calls.length, 1);
-  await beginDeletionAdmission(f.env, { uid: 'owner' });
+  await beginDeletionAdmission(f.env, {origin:'user_request', uid: 'owner' });
   await assert.rejects(assertDeletionQuiescent(f.env, 'owner'), /deletion_operations_pending/);
   release.resolve(); await first;
   await assertDeletionQuiescent(f.env, 'owner');
@@ -105,7 +105,7 @@ test('timeout, rate limit, conflict, server error and malformed success preserve
       await f.run(); await f.run();
       assert.equal(f.calls.length, 1); assert.ok(await f.marker());
       assert.equal((await f.claims())[0].state, 'uncertain');
-      await beginDeletionAdmission(f.env, { uid: 'owner' });
+      await beginDeletionAdmission(f.env, {origin:'user_request', uid: 'owner' });
       await assert.rejects(assertDeletionQuiescent(f.env, 'owner'), /deletion_operations_pending/);
     });
   }
@@ -116,7 +116,7 @@ test('settlement failure retains an active operation and prevents automatic rese
   f.db.exec("CREATE TRIGGER fail_settlement BEFORE UPDATE ON account_operation_claims BEGIN SELECT RAISE(ABORT,'fixture failure'); END;");
   await f.run(); await f.run();
   assert.equal(f.calls.length, 1); assert.equal((await f.claims())[0].state, 'active');
-  await beginDeletionAdmission(f.env, { uid: 'owner' });
+  await beginDeletionAdmission(f.env, {origin:'user_request', uid: 'owner' });
   await assert.rejects(assertDeletionQuiescent(f.env, 'owner'), /deletion_operations_pending/);
 });
 
@@ -150,7 +150,7 @@ test('housekeeping updates only eligible accounts and never writes after their d
   const f = setup(t);
   f.env.VOICE_INTERVIEW_ENABLED = 'false';
   f.db.exec("INSERT INTO users(id,auth_id,email) VALUES(2,'other','other@example.test'); INSERT INTO voice_sessions(id,user_id,status,started_at) VALUES('held',1,'active',datetime('now','-2 hours')),('eligible',2,'created',datetime('now','-2 hours'));");
-  await beginDeletionAdmission(f.env, { uid: 'owner' });
+  await beginDeletionAdmission(f.env, {origin:'user_request', uid: 'owner' });
   await worker.scheduled({}, f.env, {});
   assert.equal(await f.db.prepare("SELECT status FROM voice_sessions WHERE id='held'").first('status'), 'active');
   assert.equal(await f.db.prepare("SELECT status FROM voice_sessions WHERE id='eligible'").first('status'), 'abandoned');

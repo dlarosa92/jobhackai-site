@@ -6,7 +6,7 @@ export function admitAccountOperation(
   options?: { webhookEventId?: string | null; analyticsEventKey?: string | null }
 ): Promise<AccountOperationClaim>;
 export function settleAccountOperation(env: unknown, claim: AccountOperationClaim, outcome: 'finished' | 'uncertain'): Promise<void>;
-export function beginDeletionAdmission(env: unknown, identity: { uid: string; email?: string | null }): Promise<{
-  id: string; auth_id: string; email: string | null; state: 'requested' | 'complete'; created_at: string; updated_at: string;
+export function beginDeletionAdmission(env: unknown, identity: { uid: string; email?: string | null; origin: 'user_request' | 'inactivity' }): Promise<{
+  id: string; auth_id: string; email: string | null; origin: 'user_request' | 'inactivity'; state: 'requested' | 'complete'; created_at: string; updated_at: string;
 }>;
 export function assertDeletionQuiescent(env: unknown, uid: string): Promise<string>;

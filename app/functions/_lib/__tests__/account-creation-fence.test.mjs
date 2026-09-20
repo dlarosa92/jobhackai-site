@@ -39,7 +39,7 @@ function afterAbsentRead(f, action) {
 
 test('deletion intent between missing-row read and insert prevents account recreation', async t => {
   const f = setup(t);
-  const checked = afterAbsentRead(f, () => beginDeletionAdmission(f.env, { uid: 'owner' }));
+  const checked = afterAbsentRead(f, () => beginDeletionAdmission(f.env, {origin:'user_request', uid: 'owner' }));
   await assert.rejects(getOrCreateUserByAuthId(f.env, 'owner', 'owner@example.test'), /account_creation_blocked_by_deletion/);
   checked();
   assert.equal(await f.db.prepare('SELECT COUNT(*) AS n FROM users').first('n'), 0);
@@ -56,7 +56,7 @@ test('legacy tombstone arriving in the same gap also blocks recreation without a
 
 test('completed deletion receipt blocks recreation even after a tombstone has been removed', async t => {
   const f = setup(t);
-  await beginDeletionAdmission(f.env, { uid: 'owner' });
+  await beginDeletionAdmission(f.env, {origin:'user_request', uid: 'owner' });
   f.db.exec("UPDATE account_deletion_admissions SET state='complete',email=NULL");
   await assert.rejects(getOrCreateUserByAuthId(f.env, 'owner'), /account_creation_blocked_by_deletion/);
   const other = await getOrCreateUserByAuthId(f.env, 'other', 'other@example.test');
@@ -68,7 +68,7 @@ test('creation admitted first succeeds but its active operation still holds dele
   const claim = await admitAccountOperation(f.env, 'owner');
   const user = await getOrCreateUserByAuthId(f.env, 'owner', 'owner@example.test');
   assert.equal(user.auth_id, 'owner');
-  await beginDeletionAdmission(f.env, { uid: 'owner' });
+  await beginDeletionAdmission(f.env, {origin:'user_request', uid: 'owner' });
   await assert.rejects(assertDeletionQuiescent(f.env, 'owner'), /operations_pending/);
   await settleAccountOperation(f.env, claim, 'finished');
   assert.ok(await assertDeletionQuiescent(f.env, 'owner'));
@@ -85,7 +85,7 @@ test('missing guard tables fail closed without creating a user', async t => {
 
 test('legacy users schema fallback preserves both atomic guards', async t => {
   const f = setup(t, { legacy: true });
-  await beginDeletionAdmission(f.env, { uid: 'pending' });
+  await beginDeletionAdmission(f.env, {origin:'user_request', uid: 'pending' });
   f.db.exec("INSERT INTO deleted_auth_ids(auth_id) VALUES('deleted')");
   for (const uid of ['pending', 'deleted']) {
     await assert.rejects(getOrCreateUserByAuthId(f.env, uid), /account_creation_blocked_by_deletion/);

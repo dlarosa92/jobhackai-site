@@ -129,7 +129,7 @@ jobs:
         run: node --test app/functions/_lib/__tests__/account-deletion-recovery.test.mjs app/functions/_lib/__tests__/account-deletion-admission.test.mjs app/functions/_lib/__tests__/account-operation-scope.test.mjs app/functions/_lib/__tests__/account-creation-fence.test.mjs app/functions/_lib/__tests__/account-webhook-scope.test.mjs
 
       - name: Recoverable deletion request, Firebase reconciliation and pending UI
-        run: node --test app/functions/_lib/__tests__/account-deletion-process.test.mjs
+        run: node --test app/functions/_lib/__tests__/account-deletion-process.test.mjs app/functions/_lib/__tests__/account-inactivity-policy.test.mjs
 
       - name: Voice follow-up deletion coordination and ambiguous delivery
         run: node --test app/functions/_lib/__tests__/voice-followup-deletion.test.mjs

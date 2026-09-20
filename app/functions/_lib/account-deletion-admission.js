@@ -49,12 +49,17 @@ export async function settleAccountOperation(env, claim, outcome) {
   const row=await db.prepare('SELECT state FROM account_operation_claims WHERE id=? AND auth_id=?').bind(claim.id,claim.uid).first();
   if (row?.state !== outcome) throw new Error('deletion_operation_conflict');
 }
-export async function beginDeletionAdmission(env, { uid, email = null }) {
+export async function beginDeletionAdmission(env, { uid, email = null, origin }) {
   identity(uid);
+  if (!['user_request','inactivity'].includes(origin)) throw new Error('deletion_origin_invalid');
   if (email != null && (typeof email !== 'string' || email.length > 320)) throw new Error('deletion_email_invalid');
   const db = database(env);
-  await db.prepare(`INSERT INTO account_deletion_admissions(id,auth_id,email)
-    VALUES(?,?,?) ON CONFLICT(auth_id) DO NOTHING`).bind(crypto.randomUUID(),uid,email).run();
+  // Only a verified user request may upgrade an inactivity intent. A retry
+  // from an automated worker cannot downgrade or invent cancellation consent.
+  await db.prepare(`INSERT INTO account_deletion_admissions(id,auth_id,email,origin)
+    VALUES(?,?,?,?) ON CONFLICT(auth_id) DO UPDATE SET origin='user_request',updated_at=datetime('now')
+    WHERE excluded.origin='user_request' AND account_deletion_admissions.origin='inactivity'
+      AND account_deletion_admissions.state='requested'`).bind(crypto.randomUUID(),uid,email,origin).run();
   const admission=await db.prepare('SELECT * FROM account_deletion_admissions WHERE auth_id=?').bind(uid).first();
   if (!admission) throw new Error('deletion_admission_unavailable');
   return admission;

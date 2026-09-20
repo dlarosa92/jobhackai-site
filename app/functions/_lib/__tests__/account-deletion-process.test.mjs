@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { generateKeyPairSync, webcrypto } from 'node:crypto';
 import { processAccountDeletion } from '../account-deletion-process.js';
 import { beginDeletionAdmission, admitAccountOperation, settleAccountOperation } from '../account-deletion-admission.js';
-import { prepareDeletionRecovery } from '../account-deletion-recovery.js';
+import { prepareDeletionRecovery, advanceDeletionRecovery, withdrawInactiveDeletion } from '../account-deletion-recovery.js';
 import { createFirebaseDeletionClient } from '../../../../shared/firebase-deletion-client.js';
 import { sqliteD1 } from './sqlite-d1-helper.mjs';
 import { createFakeKV, stubStripeFetch } from './billing-test-helper.mjs';
@@ -36,7 +36,7 @@ function setup(t) {
     {match:'oauth2.googleapis.com/token',reply:()=>({json:{access_token:'fixture-token'}})},
     {match:'accounts:lookup',reply:()=>{
       events.push('lookup');if(fixture.lookupFails)throw Error('private fixture diagnostic');
-      return {json:fixture.lookupReply || (fixture.exists?{users:[{localId:'owner'}]}:{})};
+      return {json:fixture.lookupReply || (fixture.exists?{users:[{localId:'owner',...fixture.activity}]}:{})};
     }},
     {match:'accounts:delete',reply:async()=>{
       events.push('identity-delete');
@@ -65,8 +65,101 @@ function setup(t) {
   const row=()=>db.prepare("SELECT * FROM account_deletion_jobs WHERE auth_id='owner'").first();
   return {db,env,kv,fixture,events,stub,row,
     count:table=>db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first('n'),
-    run:()=>processAccountDeletion(env,{uid:'owner',email:'owner@example.test'})};
+    run:()=>processAccountDeletion(env,{uid:'owner',email:'owner@example.test',requestedByUser:true}),
+    resume:()=>processAccountDeletion(env,{uid:'owner'})};
 }
+
+async function seedInactive(f) {
+  f.db.exec(`UPDATE users SET last_login_at='2020-01-01 00:00:00',last_activity_at=NULL,
+    deletion_warning_sent_at=datetime('now','-40 days');
+    INSERT INTO account_inactivity_warnings(id,auth_id,email,state,provider_id,sent_at)
+    SELECT 'warning',auth_id,email,'sent','mail_fixture',deletion_warning_sent_at FROM users;`);
+  f.fixture.activity={lastLoginAt:String(Date.parse('2020-01-01T00:00:00Z'))};
+  f.fixture.sub.status='canceled';
+  await beginDeletionAdmission(f.env,{uid:'owner',email:'owner@example.test',origin:'inactivity'});
+}
+
+test('a recovery invocation cannot create a deletion request from an arbitrary UID',async t=>{
+  const f=setup(t);await assert.rejects(f.resume(),/admission_required/);
+  assert.equal(await f.count('account_deletion_admissions'),0);assert.equal(f.stub.calls.length,0);
+});
+test('persisted inactivity origin uses only read-only billing before deleting an eligible warned account',async t=>{
+  const f=setup(t);await seedInactive(f);
+  const result=await f.resume();assert.equal(result.status,'complete');
+  assert.equal(f.events.some(event=>event.startsWith('stripe:DELETE')||event.startsWith('stripe:POST')),false);
+  assert.equal(await f.count('users'),0);assert.equal(await f.count('account_inactivity_warnings'),0);
+  assert.equal(await f.db.prepare('SELECT origin FROM account_deletion_admissions').first('origin'),'inactivity');
+});
+test('recent provider activity withdraws an automatic intent and preserves account access',async t=>{
+  const f=setup(t);await seedInactive(f);f.fixture.activity.lastRefreshAt=new Date().toISOString();
+  const result=await f.resume();assert.equal(result.status,'withdrawn');assert.equal(result.identityRemoved,false);
+  assert.equal(await f.count('account_deletion_admissions'),0);assert.equal(await f.count('account_deletion_jobs'),0);
+  assert.equal(await f.count('users'),1);assert.equal(f.fixture.exists,true);assert.equal(await f.count('account_deletion_withdrawals'),1);
+  assert.equal(f.events.some(event=>event.startsWith('stripe:')||event==='identity-delete'),false);
+  assert.ok(await admitAccountOperation(f.env,'owner'));
+});
+test('an old warning timestamp without recorded acceptance cannot trigger deletion',async t=>{
+  const f=setup(t);await seedInactive(f);f.db.exec('DELETE FROM account_inactivity_warnings');
+  assert.equal((await f.resume()).status,'withdrawn');assert.equal(f.fixture.exists,true);
+  assert.equal(f.events.some(event=>event.startsWith('stripe:')||event==='identity-delete'),false);
+});
+test('a paid or unverified Stripe account is released from automatic cleanup without billing mutations',async t=>{
+  const f=setup(t);await seedInactive(f);f.fixture.sub.status='active';
+  assert.equal((await f.resume()).status,'withdrawn');assert.equal(f.fixture.sub.status,'active');
+  assert.equal(await f.db.prepare('SELECT reason FROM account_deletion_withdrawals').first('reason'),'inactivity_billing_unconfirmed');
+  assert.equal(f.events.some(event=>event.startsWith('stripe:DELETE')||event.startsWith('stripe:POST')||event==='identity-delete'),false);
+});
+test('provider activity arriving during billing verification stops identity removal',async t=>{
+  const f=setup(t);await seedInactive(f);
+  f.fixture.billingWait=async()=>{f.fixture.activity.lastRefreshAt=new Date().toISOString();};
+  assert.equal((await f.resume()).status,'withdrawn');assert.equal(f.fixture.exists,true);
+  assert.equal(f.events.includes('identity-delete'),false);
+});
+test('a Stripe outage during automatic cleanup restores access when identity is confirmed present',async t=>{
+  const f=setup(t);await seedInactive(f);f.fixture.billingFails=true;
+  assert.equal((await f.resume()).status,'withdrawn');assert.equal(f.fixture.exists,true);
+  assert.equal(await f.count('account_deletion_admissions'),0);
+  assert.equal(f.events.some(event=>event.startsWith('stripe:DELETE')||event.startsWith('stripe:POST')||event==='identity-delete'),false);
+});
+test('explicit user request upgrades the automatic intent and alone permits subscription cancellation',async t=>{
+  const f=setup(t);await seedInactive(f);f.fixture.sub.status='active';
+  const id=await f.db.prepare('SELECT id FROM account_deletion_admissions').first('id');
+  const result=await f.run();assert.equal(result.status,'complete');assert.equal(result.reference,id);
+  assert.equal(f.fixture.sub.status,'canceled');
+  assert.equal(await f.db.prepare('SELECT origin FROM account_deletion_admissions').first('origin'),'user_request');
+});
+test('withdrawal cannot erase a concurrent explicit request, take over another runner, or erase confirmed progress',async t=>{
+  const f=setup(t);await seedInactive(f);const job=await prepareDeletionRecovery(f.env,{uid:'owner'});
+  f.db.exec("UPDATE account_deletion_jobs SET execution_token='active-runner'");
+  await assert.rejects(withdrawInactiveDeletion(f.env,job.id,'other-runner'));
+  assert.equal(await f.count('account_deletion_withdrawals'),0);
+  await beginDeletionAdmission(f.env,{uid:'owner',origin:'user_request'});
+  await assert.rejects(withdrawInactiveDeletion(f.env,job.id,'active-runner'));
+  assert.equal(await f.count('account_deletion_jobs'),1);assert.equal(await f.count('account_deletion_admissions'),1);
+  assert.equal(await f.count('account_deletion_withdrawals'),0);
+  f.db.exec("UPDATE account_deletion_admissions SET origin='inactivity';UPDATE account_deletion_jobs SET phase='identity_removed'");
+  await assert.rejects(withdrawInactiveDeletion(f.env,job.id,'active-runner'));
+  assert.equal(await f.count('account_deletion_jobs'),1);assert.equal(await f.count('account_deletion_withdrawals'),0);
+});
+test('a user request racing inactivity withdrawal survives and completes on retry',async t=>{
+  const f=setup(t);await seedInactive(f);f.fixture.activity.lastRefreshAt=new Date().toISOString();
+  const batch=f.db.batch.bind(f.db);let upgraded=false;
+  f.db.batch=async statements=>{
+    if(!upgraded && statements[0].sql.includes('INSERT INTO account_deletion_withdrawals')) {
+      upgraded=true;await beginDeletionAdmission(f.env,{uid:'owner',origin:'user_request'});
+    }
+    return batch(statements);
+  };
+  assert.equal((await f.resume()).status,'pending');assert.equal(upgraded,true);
+  assert.equal(await f.count('account_deletion_jobs'),1);assert.equal(await f.count('account_deletion_withdrawals'),0);
+  assert.equal(await f.db.prepare('SELECT origin FROM account_deletion_admissions').first('origin'),'user_request');
+  assert.equal((await f.run()).status,'complete');
+});
+test('inactivity recovery after confirmed remote identity removal finishes storage without billing mutation',async t=>{
+  const f=setup(t);await seedInactive(f);const job=await prepareDeletionRecovery(f.env,{uid:'owner'});
+  await advanceDeletionRecovery(f.env,job.id,'billing_verified');f.fixture.exists=false;
+  assert.equal((await f.resume()).status,'complete');assert.equal(f.events.some(event=>event.startsWith('stripe:')),false);
+});
 
 test('actual processor saves manifest, settles billing, verifies identity removal and atomically queues notification',async t=>{
   const f=setup(t),result=await f.run();
@@ -110,7 +203,7 @@ test('simultaneous retry cannot execute providers while the first runner holds i
 });
 
 test('a crashed execution token never expires into permission to delete',async t=>{
-  const f=setup(t);await beginDeletionAdmission(f.env,{uid:'owner'});const job=await prepareDeletionRecovery(f.env,{uid:'owner'});
+  const f=setup(t);await beginDeletionAdmission(f.env,{origin:'user_request',uid:'owner'});const job=await prepareDeletionRecovery(f.env,{uid:'owner'});
   f.db.exec("UPDATE account_deletion_jobs SET execution_token='interrupted',execution_started_at='2000-01-01'");
   const result=await f.run();assert.equal(result.code,'execution_in_progress');assert.equal(result.reference,job.id);
   assert.equal(f.stub.calls.length,0);assert.equal((await f.row()).execution_token,'interrupted');

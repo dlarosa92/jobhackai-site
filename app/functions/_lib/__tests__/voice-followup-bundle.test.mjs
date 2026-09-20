@@ -17,7 +17,7 @@ test('compiled hourly Worker suppresses deleted users and keeps an admitted send
     (1,'eligible','eligible@example.test','free',1),(2,'deleting','deleting@example.test','free',1);
     INSERT INTO voice_sessions(id,user_id,status,entitlement_mode,ended_at) VALUES
     ('one',1,'completed','free',datetime('now','-49 hours')),('two',2,'completed','free',datetime('now','-49 hours'));
-    INSERT INTO account_deletion_admissions(id,auth_id) VALUES('intent','deleting');`);
+    INSERT INTO account_deletion_admissions(id,auth_id,origin) VALUES('intent','deleting','user_request');`);
   const env = { JOBHACKAI_DB: db, RESEND_API_KEY: 'fixture-only', ENVIRONMENT: 'qa', FRONTEND_URL: 'https://qa.jobhackai.io', VOICE_INTERVIEW_ENABLED: 'true' };
   const originalFetch = globalThis.fetch; let calls = 0;
   t.after(() => { globalThis.fetch = originalFetch; });

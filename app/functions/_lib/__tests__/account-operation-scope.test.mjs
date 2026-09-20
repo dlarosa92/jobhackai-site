@@ -46,7 +46,7 @@ function middleware() {
 test('actual API middleware prevents both checkout routes and signed-in GET writers after deletion intent', async t => {
   for (const [path, method] of [['/api/stripe-checkout','POST'], ['/api/upgrade-plan','POST'], ['/api/plan/me','GET']]) {
     const f = setup(t, path, 'valid', method);
-    await beginDeletionAdmission(f.context.env, { uid:'owner' });
+    await beginDeletionAdmission(f.context.env, {origin:'user_request', uid:'owner' });
     let called = false; f.context.next = async () => { called = true; return new Response('unsafe'); };
     const result = await middleware()(f.context);
     assert.equal(result.status, 409); assert.equal(called, false); assert.equal(await f.count(), 0);
@@ -56,7 +56,7 @@ test('an admitted foreground writer holds deletion until its handler actually fi
   const f = setup(t), entered = deferred(), release = deferred();
   f.context.next = async () => { entered.resolve(); await release.promise; return new Response('ok'); };
   const request = middleware()(f.context); await entered.promise;
-  await beginDeletionAdmission(f.context.env, { uid:'owner' });
+  await beginDeletionAdmission(f.context.env, {origin:'user_request', uid:'owner' });
   await assert.rejects(assertDeletionQuiescent(f.context.env,'owner'), /operations_pending/);
   release.resolve(); assert.equal((await request).status,200);
   assert.equal(await f.state(),'finished'); assert.ok(await assertDeletionQuiescent(f.context.env,'owner'));
@@ -69,7 +69,7 @@ test('child Pages context background work holds the claim beyond HTTP response c
     return Response.json({ status:'completed' });
   };
   assert.equal((await middleware()(f.context)).status,200);
-  await beginDeletionAdmission(f.context.env,{uid:'owner'});
+  await beginDeletionAdmission(f.context.env,{origin:'user_request',uid:'owner'});
   assert.equal(await f.state(),'active');
   await assert.rejects(assertDeletionQuiescent(f.context.env,'owner'), /operations_pending/);
   release.resolve(); await f.flush();
@@ -92,7 +92,7 @@ test('failed background work leaves durable uncertainty even after a successful 
   });
   release.reject(Error('private provider detail')); await f.flush();
   assert.equal(await f.state(),'uncertain');
-  await beginDeletionAdmission(f.context.env,{uid:'owner'});
+  await beginDeletionAdmission(f.context.env,{origin:'user_request',uid:'owner'});
   await assert.rejects(assertDeletionQuiescent(f.context.env,'owner'), /operations_pending/);
 });
 test('server failures and thrown handlers never become finished claims or leak diagnostics', async t => {
@@ -132,7 +132,7 @@ test('failure to record settlement leaves an active claim for recovery', async t
   assert.ok(!(await result.text()).includes('private storage'));
 });
 test('one account deletion does not block another verified account', async t => {
-  const f=setup(t); await beginDeletionAdmission(f.context.env,{uid:'other'});
+  const f=setup(t); await beginDeletionAdmission(f.context.env,{origin:'user_request',uid:'other'});
   assert.equal((await withAccountOperation(f.context,'owner',async()=>new Response('ok'))).status,200);
   assert.equal(await f.state(),'finished');
 });
@@ -148,7 +148,7 @@ test('actual Stripe adapter preserves uncertainty when a handler swallows a time
       return new Response('masked failure',{status:status===503?400:200});
     },'billing');
     await f.flush(); assert.equal(await f.state(),'uncertain');
-    await beginDeletionAdmission(f.context.env,{uid:'owner'});
+    await beginDeletionAdmission(f.context.env,{origin:'user_request',uid:'owner'});
     await assert.rejects(assertDeletionQuiescent(f.context.env,'owner'),/operations_pending/);
   }
 });
@@ -195,7 +195,7 @@ test('actual voice completion cannot release admission before the delayed scorec
   assert.equal((await middleware()(f.context)).status,200);
   assert.equal(await f.db.prepare("SELECT status FROM voice_sessions WHERE id='own'").first('status'),'completed');
   assert.equal(await f.state(),'active');
-  await beginDeletionAdmission(f.context.env,{uid:'owner'});
+  await beginDeletionAdmission(f.context.env,{origin:'user_request',uid:'owner'});
   await assert.rejects(assertDeletionQuiescent(f.context.env,'owner'),/operations_pending/);
   release.resolve(); await f.flush();
   assert.equal(await f.db.prepare("SELECT scorecard_json FROM voice_sessions WHERE id='own'").first('scorecard_json'),'fixture report');

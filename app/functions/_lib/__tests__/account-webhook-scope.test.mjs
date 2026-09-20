@@ -61,7 +61,7 @@ function setup(t) {
     count:table => db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first('n'),
     async send(type,options) { const run=start(type,options); const response=await run.promise; await run.settle(); return {response,event:run.event}; },
     async erase() {
-      await beginDeletionAdmission(env,{uid:'owner'});
+      await beginDeletionAdmission(env,{origin:'user_request',uid:'owner'});
       const job=await prepareDeletionRecovery(env,{uid:'owner'});
       // Identity and billing confirmations are fixture inputs, not live calls.
       await advanceDeletionRecovery(env,job.id,'billing_verified');
@@ -72,7 +72,7 @@ function setup(t) {
 }
 
 test('every entitlement/dunning handler skips existing-account writes after deletion intent', async t => {
-  const f=setup(t); await beginDeletionAdmission(f.env,{uid:'owner'});
+  const f=setup(t); await beginDeletionAdmission(f.env,{origin:'user_request',uid:'owner'});
   f.fixture.sub.status='past_due';
   for (const type of ['checkout.session.completed','checkout.session.async_payment_succeeded',
     'customer.subscription.created','customer.subscription.updated','customer.subscription.deleted','invoice.payment_failed']) {
@@ -104,7 +104,7 @@ test('an earlier webhook holds deletion through its actual atomic grant and ledg
   const f=setup(t),entered=deferred(),release=deferred(),batch=f.db.batch.bind(f.db);
   f.env.DB={...f.db,async batch(statements) {entered.resolve();await release.promise;return batch(statements);}};
   const run=f.start('checkout.session.completed'); await entered.promise;
-  await beginDeletionAdmission(f.env,{uid:'owner'});
+  await beginDeletionAdmission(f.env,{origin:'user_request',uid:'owner'});
   await assert.rejects(assertDeletionQuiescent(f.env,'owner'),/operations_pending/);
   assert.equal(await f.state(),'active'); release.resolve();
   assert.equal((await run.promise).status,200);await run.settle();
@@ -118,7 +118,7 @@ test('post-commit cache work keeps the webhook claim active', async t => {
   f.kv.delete=async key => {if(key==='planByUid:owner'){entered.resolve();await release.promise;}return remove(key);};
   const run=f.start('customer.subscription.updated');await entered.promise;
   assert.equal(await f.db.prepare('SELECT status FROM stripe_event_ledger').first('status'),'processed');
-  await beginDeletionAdmission(f.env,{uid:'owner'});
+  await beginDeletionAdmission(f.env,{origin:'user_request',uid:'owner'});
   await assert.rejects(assertDeletionQuiescent(f.env,'owner'),/operations_pending/);
   release.resolve();assert.equal((await run.promise).status,200);await run.settle();
   assert.equal(await f.state(),'finished');
@@ -129,7 +129,7 @@ test('a queued cancellation email holds admission after the HTTP response', asyn
   f.fixture.email=async()=>{entered.resolve();await release.promise;return {json:{id:'fixture_email'}};};
   const run=f.start('customer.subscription.deleted');
   assert.equal((await run.promise).status,200);await entered.promise;
-  await beginDeletionAdmission(f.env,{uid:'owner'});
+  await beginDeletionAdmission(f.env,{origin:'user_request',uid:'owner'});
   assert.equal(await f.state(),'active');
   await assert.rejects(assertDeletionQuiescent(f.env,'owner'),/operations_pending/);
   release.resolve();await run.settle();assert.equal(await f.state(),'finished');
@@ -142,7 +142,7 @@ test('failed critical write preserves durable uncertainty and rolls back the pla
   assert.equal(await f.state(),'uncertain');
   assert.equal(await f.db.prepare('SELECT plan FROM users').first('plan'),'monthly');
   assert.equal(await f.db.prepare('SELECT status FROM stripe_event_ledger').first('status'),'failed');
-  await beginDeletionAdmission(f.env,{uid:'owner'});
+  await beginDeletionAdmission(f.env,{origin:'user_request',uid:'owner'});
   await assert.rejects(assertDeletionQuiescent(f.env,'owner'),/operations_pending/);
 });
 
@@ -187,7 +187,7 @@ test('failure to settle an otherwise successful webhook leaves its durable claim
   await assert.rejects(f.send('customer.subscription.updated'),/fixture settlement failure/);
   assert.equal(await f.state(),'active');
   assert.equal(await f.db.prepare('SELECT status FROM stripe_event_ledger').first('status'),'processed');
-  await beginDeletionAdmission(f.env,{uid:'owner'});
+  await beginDeletionAdmission(f.env,{origin:'user_request',uid:'owner'});
   await assert.rejects(assertDeletionQuiescent(f.env,'owner'),/operations_pending/);
 });
 
@@ -261,6 +261,6 @@ test('rejected queued work preserves uncertainty after a successful response', a
     return new Response('ok');
   }, { eventId:'evt_rejected_fixture' });
   assert.equal(response.status,200);await Promise.all(waited);assert.equal(await f.state(),'uncertain');
-  await beginDeletionAdmission(f.env,{uid:'owner'});
+  await beginDeletionAdmission(f.env,{origin:'user_request',uid:'owner'});
   await assert.rejects(assertDeletionQuiescent(f.env,'owner'),/operations_pending/);
 });

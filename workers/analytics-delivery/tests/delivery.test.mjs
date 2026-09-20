@@ -154,7 +154,7 @@ test('deletion intent or legacy tombstone suppresses both new and previously que
     for(const marker of ['intent','tombstone']) {
       const f=setup(t);f.refund();
       if(alreadyQueued)await enqueue(f.db,'qa',NOW);
-      if(marker==='intent')await beginDeletionAdmission(f.env,{uid:'owner'});
+      if(marker==='intent')await beginDeletionAdmission(f.env,{origin:'user_request',uid:'owner'});
       else f.db.exec("INSERT INTO deleted_auth_ids VALUES('owner')");
       await f.run();assert.equal(f.calls.length,0);
       assert.equal(await f.db.prepare('SELECT net_collected FROM stripe_collected_payment_totals').first('net_collected'),3800);
@@ -170,7 +170,7 @@ test('deletion inserted between eligible read and atomic admission sends no debu
     if(sql.startsWith('INSERT INTO account_operation_claims')) {
       const run=stmt.run;
       stmt.run=async function(){
-        if(!injected){injected=true;await beginDeletionAdmission(f.env,{uid:'owner'});}
+        if(!injected){injected=true;await beginDeletionAdmission(f.env,{origin:'user_request',uid:'owner'});}
         return run.call(this);
       };
     }
@@ -203,7 +203,7 @@ test('deletion requested during validation waits for the request and prevents su
   const f=setup(t);
   await f.run({request:async(url,init)=>{
     assert.match(url,/\/debug\//);
-    await beginDeletionAdmission(f.env,{uid:'owner'});
+    await beginDeletionAdmission(f.env,{origin:'user_request',uid:'owner'});
     await assert.rejects(assertDeletionQuiescent(f.env,'owner'),/operations_pending/);
     return f.request(url,init);
   }});
@@ -218,7 +218,7 @@ test('an earlier collection holds deletion through its provider response and fin
     if(!url.includes('/debug/')) {entered();await release;}
     return f.request(url,init);
   }});
-  await started;await beginDeletionAdmission(f.env,{uid:'owner'});
+  await started;await beginDeletionAdmission(f.env,{origin:'user_request',uid:'owner'});
   await assert.rejects(assertDeletionQuiescent(f.env,'owner'),/operations_pending/);
   assert.equal((await f.rows())[0].state,'sending');
   resolve();await running;
@@ -238,7 +238,7 @@ test('ambiguous collection keeps a traceable unresolved claim and cannot be retr
   f.db.exec("UPDATE analytics_delivery SET state='pending',next_attempt_at=0,lease_until=NULL; UPDATE account_operation_claims SET created_at='2000-01-01';");
   await f.run();assert.equal(f.calls.length,1);
   assert.equal((await f.rows())[0].last_reason,'analytics_delivery_unresolved');
-  await beginDeletionAdmission(f.env,{uid:'owner'});
+  await beginDeletionAdmission(f.env,{origin:'user_request',uid:'owner'});
   await assert.rejects(assertDeletionQuiescent(f.env,'owner'),/operations_pending/);
 });
 
@@ -253,7 +253,7 @@ test('crashed admission and failed settlement remain active instead of being sil
   failed.db.exec("CREATE TRIGGER reject_settlement BEFORE UPDATE ON account_operation_claims BEGIN SELECT RAISE(ABORT,'fixture failure'); END;");
   await assert.rejects(failed.run(),/fixture failure/);
   assert.equal(await failed.db.prepare('SELECT state FROM account_operation_claims').first('state'),'active');
-  await beginDeletionAdmission(failed.env,{uid:'owner'});
+  await beginDeletionAdmission(failed.env,{origin:'user_request',uid:'owner'});
   await assert.rejects(assertDeletionQuiescent(failed.env,'owner'),/operations_pending/);
 });
 

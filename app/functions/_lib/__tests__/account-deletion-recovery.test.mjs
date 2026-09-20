@@ -40,7 +40,7 @@ function setup(t) {
   return {db,env,deleted,
     row:id=>db.prepare('SELECT * FROM account_deletion_jobs WHERE id = ?').bind(id).first(),
     count:table=>db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first('n'),
-    prepare:async()=>{await beginDeletionAdmission(env,{uid:'owner',email:'token@example.test'});return prepareDeletionRecovery(env,{uid:'owner',email:'token@example.test'});}};
+    prepare:async()=>{await beginDeletionAdmission(env,{origin:'user_request',uid:'owner',email:'token@example.test'});return prepareDeletionRecovery(env,{uid:'owner',email:'token@example.test'});}};
 }
 async function ready(f) {
   const job=await f.prepare();
@@ -127,7 +127,7 @@ test('owner reassignment is refused before cleanup, including a race at the fina
 });
 test('Firebase-only jobs clean UID data without deleting a different database account',async t=>{
   const f=setup(t);
-  await beginDeletionAdmission(f.env,{uid:'firebase-only',email:'only@example.test'});
+  await beginDeletionAdmission(f.env,{origin:'user_request',uid:'firebase-only',email:'only@example.test'});
   const job=await prepareDeletionRecovery(f.env,{uid:'firebase-only',email:'only@example.test'});
   assert.equal(job.user_id,null);await advanceDeletionRecovery(f.env,job.id,'billing_verified');await advanceDeletionRecovery(f.env,job.id,'identity_removed');
   await finishDeletionRecovery(f.env,job.id);assert.equal(await f.count('users'),2);assert.equal(await f.count('voice_sessions'),2);
@@ -157,7 +157,7 @@ test('repository schema and migrations support the erasure transaction and attri
       VALUES('purchase:ch_one','ch_one','cs_one','purchase',1,1,1);
   `);
   const env={JOBHACKAI_DB:db,JOBHACKAI_KV:{delete:async()=>{}}};
-  await beginDeletionAdmission(env,{uid:'owner'});
+  await beginDeletionAdmission(env,{origin:'user_request',uid:'owner'});
   const job=await prepareDeletionRecovery(env,{uid:'owner'});
   await advanceDeletionRecovery(env,job.id,'billing_verified');await advanceDeletionRecovery(env,job.id,'identity_removed');
   await finishDeletionRecovery(env,job.id);

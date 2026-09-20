@@ -40,9 +40,29 @@ CREATE TABLE IF NOT EXISTS account_deletion_admissions (
   id TEXT PRIMARY KEY,
   auth_id TEXT NOT NULL UNIQUE,
   email TEXT,
+  origin TEXT NOT NULL CHECK (origin IN ('user_request','inactivity')),
   state TEXT NOT NULL DEFAULT 'requested' CHECK (state IN ('requested','complete')),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Only an accepted warning for the current address can start the inactivity
+-- notice period. Legacy timestamps alone are not delivery evidence.
+CREATE TABLE IF NOT EXISTS account_inactivity_warnings (
+  id TEXT PRIMARY KEY,
+  auth_id TEXT NOT NULL UNIQUE,
+  email TEXT NOT NULL,
+  state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending','sending','sent','needs_review','canceled')),
+  provider_id TEXT,
+  operation_id TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  sent_at TEXT
+);
+CREATE TABLE IF NOT EXISTS account_deletion_withdrawals (
+  id TEXT PRIMARY KEY,
+  auth_id TEXT NOT NULL,
+  reason TEXT NOT NULL CHECK (reason IN ('inactivity_no_longer_eligible','inactivity_billing_unconfirmed')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS account_operation_claims (
   id TEXT PRIMARY KEY,

@@ -12,7 +12,7 @@ export async function onRequest(context) {
   try { verified=await verifyFirebaseIdToken(token,env.FIREBASE_PROJECT_ID); }
   catch(_) { return Response.json({error:'Invalid token'},{status:401,headers}); }
   try {
-    const result=await processAccountDeletion(env,{uid:verified.uid,email:verified.payload?.email || null});
+    const result=await processAccountDeletion(env,{uid:verified.uid,email:verified.payload?.email || null,requestedByUser:true});
     return Response.json(result,{status:result.status==='complete'?200:202,headers});
   } catch(_) {
     // Configuration/database/provider details and identifiers never escape.

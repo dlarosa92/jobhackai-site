@@ -32,7 +32,7 @@ test('compiled scheduled Analytics Worker holds deletion through collection and 
     assert.equal(await db.prepare('SELECT state FROM account_operation_claims').first('state'), 'active');
     if (address.pathname === '/debug/mp/collect') return Response.json({ validationMessages: [] });
     assert.equal(address.pathname, '/mp/collect');
-    await beginDeletionAdmission(env, { uid: 'owner' });
+    await beginDeletionAdmission(env, {origin:'user_request', uid: 'owner' });
     await assert.rejects(assertDeletionQuiescent(env, 'owner'), /operations_pending/);
     return new Response(null, { status: 204 });
   };

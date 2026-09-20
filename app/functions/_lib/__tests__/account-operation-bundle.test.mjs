@@ -39,7 +39,7 @@ test('compiled Pages Worker enforces admission before real checkout handlers and
   const before=await run('/api/stripe-checkout');
   assert.equal(before.status,422,await before.clone().text());
   assert.equal(await db.prepare("SELECT state FROM account_operation_claims WHERE auth_id='owner'").first('state'),'finished');
-  await beginDeletionAdmission(env,{uid:'owner'});
+  await beginDeletionAdmission(env,{origin:'user_request',uid:'owner'});
   for (const [path,method] of [['/api/stripe-checkout','POST'],['/api/upgrade-plan','POST'],['/api/plan/me','GET']]) {
     const result=await run(path,token,method);
     assert.equal(result.status,409);assert.equal((await result.json()).error,'account_deletion_pending');
