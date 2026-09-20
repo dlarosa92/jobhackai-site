@@ -11,6 +11,7 @@ on:
       - 'pricing.html'
       - 'js/voice-cta.js'
       - 'app/functions/api/**'
+      - 'app/functions/pricing.js'
       - 'app/functions/_lib/**'
       - 'app/functions/_middleware.js'
       - 'app/db/**'
@@ -24,6 +25,7 @@ on:
       - 'pricing.html'
       - 'js/voice-cta.js'
       - 'app/functions/api/**'
+      - 'app/functions/pricing.js'
       - 'app/functions/_lib/**'
       - 'app/functions/_middleware.js'
       - 'app/db/**'
@@ -102,7 +104,7 @@ jobs:
         run: node app/functions/_lib/__tests__/account-pack-display.test.mjs
 
       - name: Voice offer eligibility and checkout return routes
-        run: node --test app/functions/_lib/__tests__/voice-offer-display.test.mjs app/functions/_lib/__tests__/checkout-return.test.mjs
+        run: node --test app/functions/_lib/__tests__/voice-offer-display.test.mjs app/functions/_lib/__tests__/checkout-return.test.mjs app/functions/_lib/__tests__/pricing-route.test.mjs
 
       - name: Collected payments and refunds (real SQLite)
         run: node app/functions/_lib/__tests__/collected-revenue.test.mjs
