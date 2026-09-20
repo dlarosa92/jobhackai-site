@@ -6,6 +6,7 @@
   },
   "scripts": {
     "build:roles": "node marketing/scripts/build-role-pages.mjs",
+    "build:directory": "node marketing/scripts/build-directory.mjs",
     "test:voice:transcripts:smoke": "node app/tests/voice-transcripts/run-evals.mjs --mode smoke",
     "test:voice:transcripts:full": "node app/tests/voice-transcripts/run-evals.mjs --mode full",
     "test:voice:transcripts:stability": "node app/tests/voice-transcripts/run-evals.mjs --mode stability",
