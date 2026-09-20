@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import vm from 'node:vm';
+import { webcrypto } from 'node:crypto';
+if (!globalThis.crypto) globalThis.crypto = webcrypto;
 import { readFileSync } from 'node:fs';
 import { createVoiceUsage, normalizeVoiceUsage, responseTokenTotals } from '../../../../js/voice-usage.js';
 import { scorecardUsageEvidence } from '../voice-usage.js';
