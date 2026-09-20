@@ -92,14 +92,18 @@ export function welcomeEmail(userName, appOrigin) {
 /**
  * Confirmation email after account deletion
  */
-export function accountDeletedEmail(userEmail) {
+export function accountDeletedEmail(userEmail, { cleanupPending = null } = {}) {
   const body = `
     <h2 style="margin:0 0 16px;font-size:20px;color:#1F2937;">Your account has been deleted</h2>
     <p style="margin:0 0 16px;font-size:15px;color:#374151;line-height:1.6;">
-      Your JobHackAI account and all associated data have been permanently removed. This includes your personal information, tool history, and any active subscription.
+      Your JobHackAI sign-in access has been removed. ${cleanupPending === true
+        ? 'Some account cleanup could not be confirmed. Please contact privacy@jobhackai.io so we can investigate.'
+        : cleanupPending === false
+          ? 'The account cleanup steps have completed. Limited billing and deletion records may remain as described in our privacy policy.'
+          : 'Contact us if you need confirmation of the data cleanup status. Limited billing and deletion records may remain as described in our privacy policy.'}
     </p>
     <p style="margin:0 0 16px;font-size:15px;color:#374151;line-height:1.6;">
-      If this was a mistake, you can create a new account at any time. Note that previous data cannot be recovered.
+      Account deletion does not refund previous purchases or erase existing payment obligations. Contact us if you need help with billing or a deletion request.
     </p>
     <p style="margin:0;font-size:15px;color:#374151;line-height:1.6;">
       Questions? Contact us at <a href="mailto:privacy@jobhackai.io" style="color:#1976D2;text-decoration:underline;">privacy@jobhackai.io</a>.

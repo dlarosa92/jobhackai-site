@@ -111,3 +111,6 @@ jobs:
 
       - name: Consent-owned payment attribution (real SQLite)
         run: node --test app/functions/_lib/__tests__/payment-attribution.test.mjs
+
+      - name: Account deletion billing safety
+        run: node --test app/functions/_lib/__tests__/account-deletion-billing.test.mjs
