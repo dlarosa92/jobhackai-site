@@ -31,7 +31,7 @@ export async function onRequest({ request, env }) {
     // KV billingStatus/cusByUid are shared by dev and QA and may be stale or
     // incorrectly mapped. Neither cached results nor cached identities grant
     // access to billing details. force=1 remains accepted but is unnecessary.
-    const account = await resolveBillingAccount(env, { uid: identity.uid, email: identity.payload?.email || '' });
+    const account = await resolveBillingAccount(env, { uid: identity.uid, email: identity.payload?.email || '' }, { allowMappedLegacySubscription: true });
     if (!account) return json(noSubscription, 200, origin, env);
     const subscriptions = account.subscriptions.filter(sub =>
       ['active', 'trialing', 'past_due', 'unpaid'].includes(sub.status));

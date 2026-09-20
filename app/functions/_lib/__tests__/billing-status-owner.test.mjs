@@ -92,3 +92,14 @@ test('provider failure returns retryable error, never fabricated free plan or pr
   const response=await h.run();assert.equal(response.status,503);const body=await response.json();
   assert.equal(body.plan,undefined);assert.ok(!JSON.stringify(body).includes('private'));assert.ok(!JSON.stringify(h.logs).includes('private provider'));
 });
+
+test('legacy unstamped subscription can be displayed only with exact local D1 and subscription UID ownership',async t=>{
+  const h=setup(t);delete h.subscription.metadata.environment;
+  assert.equal((await (await h.run()).json()).plan,'monthly');
+  delete h.subscription.metadata.firebaseUid;assert.equal((await h.run()).status,409);
+  h.subscription.metadata.firebaseUid='owner';h.db.exec("UPDATE users SET stripe_subscription_id='sub_unrelated' WHERE id=1");
+  assert.equal((await h.run()).status,409);
+});
+test('display exception never overrides an explicit foreign environment stamp',async t=>{
+  const h=setup(t);h.subscription.metadata.environment='dev';assert.equal((await h.run()).status,409);
+});
