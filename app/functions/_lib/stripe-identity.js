@@ -216,3 +216,11 @@ export function partitionCustomersByUidClaim(customers, uid) {
   }
   return { owned, unproven, foreign };
 }
+
+// Use the same Stripe snapshot as the billing period, including immediately
+// after a customer reverses cancellation before its webhook reaches D1.
+export function readSubscriptionCancellation(subscription, periodEndIso) {
+  if (Number.isSafeInteger(subscription?.cancel_at) && subscription.cancel_at > 0) return subscription.cancel_at * 1000;
+  const periodEnd = periodEndIso ? Date.parse(periodEndIso) : NaN;
+  return subscription?.cancel_at_period_end === true && Number.isFinite(periodEnd) ? periodEnd : null;
+}
