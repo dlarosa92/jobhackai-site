@@ -339,7 +339,8 @@
 
     // Initialize gtag config
     window.dataLayer = window.dataLayer || [];
-    function gtag(...args) {
+    function gtag() {
+      const args = arguments; // gtag.js consumes the standard Arguments command format.
       if (!hasAnalyticsConsent() || window['ga-disable-' + GA_MEASUREMENT_ID]) return;
       if (args[0] === 'event') {
         const params = { ...(args[2] || {}) };
