@@ -51,7 +51,8 @@ function reset() {
     CREATE TABLE users (id INTEGER PRIMARY KEY, auth_id TEXT, email TEXT, plan TEXT, created_at TEXT, updated_at TEXT);
     INSERT INTO users VALUES (1, 'test-user', NULL, 'free', NULL, NULL);` +
     readFileSync(new URL('../../../db/migrations/020_add_voice_entitlements.sql', import.meta.url), 'utf8') +
-    readFileSync(new URL('../../../db/migrations/021_add_voice_end_reason.sql', import.meta.url), 'utf8') });
+    readFileSync(new URL('../../../db/migrations/021_add_voice_end_reason.sql', import.meta.url), 'utf8') +
+    readFileSync(new URL('../../../db/migrations/029_voice_usage_evidence.sql', import.meta.url), 'utf8') });
   sql('UPDATE users SET voice_sessions_remaining = 2');
 }
 const user = () => sql('SELECT * FROM users').results[0];

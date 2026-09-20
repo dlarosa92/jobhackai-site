@@ -33,6 +33,7 @@
     "test:voice:entitlements": "node functions/_lib/__tests__/voice-entitlements.test.mjs",
     "test:voice:lifecycle": "node functions/_lib/__tests__/voice-lifecycle.test.mjs",
     "test:voice:conduct": "node functions/_lib/__tests__/voice-conduct.test.mjs",
+    "test:voice:usage": "node --test functions/_lib/__tests__/voice-usage.test.mjs",
     "test:voice:client": "node functions/_lib/__tests__/voice-client.test.mjs",
     "test:voice:history": "node functions/_lib/__tests__/voice-history.test.mjs",
     "test:voice": "npm run test:voice:entitlements && npm run test:voice:lifecycle && npm run test:voice:conduct && npm run test:voice:interviewer && npm run test:voice:client && npm run test:voice:history && npm run test:voice:transcript-order && npm run test:voice:transcripts:unit && npm run test:voice:reservation",
