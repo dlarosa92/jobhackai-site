@@ -7,6 +7,8 @@ on:
   push:
     branches: [main, develop, dev0]
     paths:
+      - 'account-setting.html'
+      - 'pricing.html'
       - 'app/functions/api/**'
       - 'app/functions/_lib/**'
       - 'app/functions/_middleware.js'
@@ -17,6 +19,8 @@ on:
   pull_request:
     branches: [main, develop, dev0]
     paths:
+      - 'account-setting.html'
+      - 'pricing.html'
       - 'app/functions/api/**'
       - 'app/functions/_lib/**'
       - 'app/functions/_middleware.js'
@@ -91,3 +95,6 @@ jobs:
 
       - name: Migration 022/023 verification (sqlite3)
         run: bash scripts/verify-billing-migrations.sh
+
+      - name: Account pack display
+        run: node app/functions/_lib/__tests__/account-pack-display.test.mjs

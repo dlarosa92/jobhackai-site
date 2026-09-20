@@ -436,6 +436,31 @@ for (const reason of ['session_expired', 'session_ended']) {
   });
 }
 
+for (const status of [401, 500]) {
+  test('failed completion ' + status + ' retains the payload and offers retry before scoring', async () => {
+    let attempts = 0;
+    const h = await liveInterviewWithOneAnswer({ routes: {
+      ...LIVE_ROUTES,
+      '/api/voice/session/': (url) => url.includes('/complete')
+        ? (++attempts === 1 ? { __status: status, error: 'temporary save failure' } : { status: 'completed' })
+        : { scorecardReady: false }
+    } });
+    try {
+      await h.click('vi-end-btn');
+      assert.equal(h.completeBodies().length, 1);
+      assert.ok(h.el('vi-save-status').textContent.includes('has not been saved'));
+      assert.equal(h.el('vi-save-retry').style.display, '');
+      assert.equal(h.requests.filter(r => r.method === 'GET' && r.url.includes('/api/voice/session/')).length, 0);
+      await h.click('vi-save-retry');
+      assert.equal(h.completeBodies().length, 2);
+      assert.deepEqual(h.completeBodies()[0], h.completeBodies()[1], 'retry preserves the complete original transcript and duration');
+      assert.equal(h.el('vi-save-status').textContent, '');
+      assert.equal(h.el('vi-save-retry').style.display, 'none');
+      assert.ok(h.el('vi-done-status').textContent.includes('Interview saved'));
+    } finally { h.dispose(); }
+  });
+}
+
 for (const t of pending) await t();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

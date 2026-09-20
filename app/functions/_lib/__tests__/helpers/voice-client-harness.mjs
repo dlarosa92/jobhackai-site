@@ -42,7 +42,7 @@ const CLIENT_SRC = new URL('../../../../../js/voice-interview.js', import.meta.u
 const ELEMENT_IDS = [
   'vi-setup-view', 'vi-live-view', 'vi-done-view', 'vi-disabled-view',
   'vi-status', 'vi-caption', 'vi-timer', 'vi-speaking',
-  'vi-done-status', 'vi-scorecard',
+  'vi-done-status', 'vi-scorecard', 'vi-save-status', 'vi-save-retry',
   'vi-entitlement', 'vi-role', 'vi-seniority', 'vi-jd',
   'vi-start-btn', 'vi-end-btn', 'vi-mute-btn', 'vi-reconnect-btn',
   'vi-remote-audio'

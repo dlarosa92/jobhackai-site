@@ -47,6 +47,8 @@
     order: null,               // ordered transcript assembler (voice-transcript-order.js)
     usage: { input: 0, output: 0 },
     ending: false,
+    pendingCompletion: null,
+    savingCompletion: false,
     connected: false,
     audioPlaying: false,       // interviewer's audio is mid-playback
     audioResponseId: '',       // which response that audio belongs to
@@ -1242,6 +1244,7 @@
   // ---------- lifecycle ----------
 
   async function startInterview() {
+    if (state.pendingCompletion) { show('vi-done-view'); return; }
     var role = ($('vi-role') && $('vi-role').value || '').trim();
     var seniority = ($('vi-seniority') && $('vi-seniority').value || '').trim();
     var jd = ($('vi-jd') && $('vi-jd').value || '').trim();
@@ -1434,36 +1437,45 @@
     await flushPendingTranscript();
     teardownConnection();
 
+    // Keep the exact payload in memory until acknowledged. A retry must not
+    // recompute duration or lose the transcript after the connection closes.
+    state.pendingCompletion = {
+      sessionId: state.sessionId,
+      transcript: getTranscript(), durationSeconds: durationSeconds,
+      inputTokens: state.usage.input, outputTokens: state.usage.output,
+      reason: reason || 'user_ended'
+    };
+    await saveCompletion();
+  }
+
+  async function saveCompletion() {
+    if (!state.pendingCompletion || state.savingCompletion) return;
+    state.savingCompletion = true;
+    var pending = state.pendingCompletion;
+    var isSafetyEnd = pending.reason === 'ended_for_safety';
+    var retryBtn = $('vi-save-retry');
+    var saveStatus = $('vi-save-status');
+    if (retryBtn) { retryBtn.disabled = true; retryBtn.style.display = 'none'; }
+    if (saveStatus) saveStatus.textContent = 'Saving interview...';
     try {
-      await api('/api/voice/session/' + encodeURIComponent(state.sessionId) + '/complete', {
-        method: 'POST',
-        body: JSON.stringify({
-          transcript: getTranscript(),
-          durationSeconds: durationSeconds,
-          inputTokens: state.usage.input,
-          outputTokens: state.usage.output,
-          reason: reason || 'user_ended'
-        })
+      var saved = await api('/api/voice/session/' + encodeURIComponent(pending.sessionId) + '/complete', {
+        method: 'POST', body: JSON.stringify(pending)
       });
-      track('voice_session_complete', { duration_seconds: durationSeconds, reason: reason || 'user_ended' });
-      if (isSafetyEnd) {
-        // Already showing the safety view; no polling for a scorecard the
-        // server deliberately never generates.
-        historyLiveClear(true);
-        return;
-      }
+      if (!saved.ok) throw new Error((saved.data && saved.data.error) || 'save_failed');
+      state.pendingCompletion = null;
+      if (saveStatus) saveStatus.textContent = '';
+      track('voice_session_complete', { duration_seconds: pending.durationSeconds, reason: pending.reason });
+      if (isSafetyEnd) { historyLiveClear(true); return; }
+      var doneStatus = $('vi-done-status');
+      if (doneStatus) doneStatus.textContent = 'Interview saved. Preparing your report...';
       pollScorecard(0);
     } catch (err) {
       console.error('[VOICE] complete failed:', err);
-      if (isSafetyEnd) {
-        // The safety view stays up regardless — never replace it with
-        // score-oriented error copy.
-        historyLiveClear(false);
-        return;
-      }
-      if (doneStatus) doneStatus.textContent = 'The session ended but saving failed. Your session is recorded; check back shortly.';
+      if (saveStatus) saveStatus.textContent = 'Your interview has not been saved. Keep this page open and retry saving.';
+      if (!isSafetyEnd && $('vi-done-status')) $('vi-done-status').textContent = 'Interview ended. Saving needs another attempt.';
+      if (retryBtn) { retryBtn.style.display = ''; retryBtn.disabled = false; }
       historyLiveClear(false);
-    }
+    } finally { state.savingCompletion = false; }
   }
 
   function pollScorecard(attempt) {
@@ -2161,11 +2173,12 @@
     initRoleSelector();
     if (startBtn) startBtn.addEventListener('click', startInterview);
     if (endBtn) endBtn.addEventListener('click', function () { endInterview('user_ended'); });
+    if ($('vi-save-retry')) $('vi-save-retry').addEventListener('click', saveCompletion);
     if (muteBtn) muteBtn.addEventListener('click', toggleMute);
     if (reconnectBtn) reconnectBtn.addEventListener('click', reconnect);
 
     window.addEventListener('beforeunload', function (e) {
-      if (state.connected && !state.ending) {
+      if ((state.connected && !state.ending) || state.pendingCompletion) {
         e.preventDefault();
         e.returnValue = '';
       }
