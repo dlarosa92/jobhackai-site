@@ -20,3 +20,9 @@ Production deployment and public privacy/cookie text remain within the release h
 ## Isolated vendor verification
 
 Created the existing-service project **JobHackAI QA**, public ID `yl6ysb5n74`, website `https://qa.jobhackai.io/`. Its Cookies default is Off, and no Google Analytics or ads account is connected. Production project `wskzma4clw` settings were inspected only. The QA project is not yet a default script destination: QA subdomain cookie isolation and real vendor stop/masking must be verified before enabling it. Use synthetic text on localhost for the initial vendor recording test, with production GA and Clarity explicitly disabled.
+
+### Real vendor evidence, September 20
+
+A localhost fixture using the actual candidate script and only QA project `yl6ysb5n74` loaded Clarity SDK **0.8.70** after an explicit grant. Before grant its visible diagnostic showed no Clarity resource. After grant the vendor runtime, its cookies and collector resource entries appeared. Withdrawal at fixture elapsed 57 seconds made the runtime inactive and removed both Clarity cookies. No newer collector entries appeared through elapsed 122 seconds, including after regrant; a final entry at withdrawal is treated as the SDK's flush of earlier events. A fresh navigation with the saved grant loaded a new active runtime and sent new collector requests.
+
+Microsoft's QA project received the localhost live session. Its replay iframe showed the public control text readable while the private dummy heading and dynamically changed paragraph were replaced by mask glyphs. This verifies receipt and masking for the synthetic test in SDK 0.8.70, not historic production recordings or every device. Production Cookies is currently On, while QA is Off; production vendor defaults remain part of the held release configuration review. QA subdomain isolation is still unverified, so no QA default Clarity destination was added.
