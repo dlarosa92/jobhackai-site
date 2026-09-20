@@ -5,6 +5,8 @@ on:
     paths:
       - 'js/cookie-consent.js'
       - 'app/functions/api/cookie-consent.js'
+      - 'app/functions/_lib/db.js'
+      - 'functions/_lib/db.js'
       - 'functions/api/cookie-consent.js'
       - 'app/functions/_lib/__tests__/consent-api.test.mjs'
       - 'app/functions/analytics-check.js'
@@ -18,6 +20,8 @@ on:
     paths:
       - 'js/cookie-consent.js'
       - 'app/functions/api/cookie-consent.js'
+      - 'app/functions/_lib/db.js'
+      - 'functions/_lib/db.js'
       - 'functions/api/cookie-consent.js'
       - 'app/functions/_lib/__tests__/consent-api.test.mjs'
       - 'app/functions/analytics-check.js'

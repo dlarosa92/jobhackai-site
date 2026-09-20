@@ -74,7 +74,7 @@ export async function onRequest({ request, env }) {
       // Old or malformed stored data is not an analytics grant.
       return json({ok:true,consent:validConsent(consent) ? {
         version:1,analytics:consent.analytics,updatedAt:consent.updatedAt
-      } : null},200,origin,env);
+      } : null, ...(consent != null && !validConsent(consent) ? {resetConsent:true} : {})},200,origin,env);
     }
 
     const body = await request.json().catch(() => null);

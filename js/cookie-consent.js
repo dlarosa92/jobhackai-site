@@ -86,9 +86,9 @@
 
       if (response.ok) {
         const data = await response.json();
-        if (data.ok && Object.prototype.hasOwnProperty.call(data, 'consent') && revision === consentRevision) {
-          if (!data.consent) {
-            // Missing or invalid server decisions cannot leave a stale local grant.
+        if (data.ok && (data.consent || data.resetConsent === true) && revision === consentRevision) {
+          if (data.resetConsent === true) {
+            // Invalid stored decisions cannot leave a stale local grant.
             localStorage.removeItem(CONSENT_KEY);
             return null;
           }

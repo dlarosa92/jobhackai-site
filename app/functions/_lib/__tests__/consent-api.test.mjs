@@ -57,6 +57,18 @@ for(const path of ['app/functions/api/cookie-consent.js','functions/api/cookie-c
     assert.equal((await h.request({consent},{Cookie:'other=a; jha_client_id='+clientId})).status,200);
   });
   test(path+': malformed persisted consent never becomes a grant',async()=>{
-    const h=harness(path,{stored:{version:1,analytics:'true'}});const response=await h.request(null,{Cookie:'jha_client_id='+clientId},'GET');assert.deepEqual(await response.json(),{ok:true,consent:null});
+    const h=harness(path,{stored:{version:1,analytics:'true'}});const response=await h.request(null,{Cookie:'jha_client_id='+clientId},'GET');assert.deepEqual(await response.json(),{ok:true,consent:null,resetConsent:true});
+  });
+}
+
+for (const path of ['app/functions/_lib/db.js','functions/_lib/db.js']) {
+  test(path+': missing record differs from corrupt or null JSON',async()=>{
+    const ctx={console:{error(){}},sanitizeRoleSpecificFeedback:value=>value};vm.createContext(ctx);
+    vm.runInContext(readFileSync(new URL(path,root),'utf8').replace(/^import .*;\n/gm,'').replace(/^export /gm,'')+'\nglobalThis.readConsent=getCookieConsent;',ctx);
+    for(const row of [null,{consent_json:'not-json'},{consent_json:'null'},{consent_json:''}]){
+      const env={DB:{prepare:()=>({bind:()=>({first:async()=>row})})}};
+      const value=await ctx.readConsent(env,null,clientId);
+      if(row===null)assert.equal(value,null);else {assert.equal(value.analytics,false);assert.equal(value.version,0);}
+    }
   });
 }

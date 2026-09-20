@@ -38,7 +38,7 @@ function harness({host = 'app.jobhackai.io', consent = true, config, pendingServ
   vm.createContext(ctx); vm.runInContext(source,ctx);
   return {ctx, scripts, insertedScripts, requests, node,
     init:()=>listeners.DOMContentLoaded(),
-    finishServer:analytics=>resolveServer({ok:true,json:async()=>({ok:true,consent:analytics===null?null:{analytics}})}),
+    finishServer:analytics=>resolveServer({ok:true,json:async()=>({ok:true,consent:analytics===null?null:{analytics}, ...(analytics===null?{resetConsent:true}:{})})}),
     runTimers(){while(timers.length)timers.shift()();},
     events:name=>(ctx.dataLayer||[]).filter(a=>a[0]==='event'&&a[1]===name),
     setConsent(analytics){ctx.JHA.cookieConsent.openPreferences();node('jha-toggle-analytics').checked=analytics;node('jha-save-preferences').onclick();}
@@ -141,7 +141,7 @@ for (const tokenResult of ['reject', 'empty']) {
   });
 }
 
-test('an explicit missing or invalid server decision clears a stale browser grant',async()=>{
+test('an explicit invalid server decision clears a stale browser grant',async()=>{
   const h=harness({pendingServer:true,consent:true});const pending=h.init();h.finishServer(null);await pending;h.runTimers();
   assert.equal(h.ctx.JHA.cookieConsent.hasAnalyticsConsent(),null);assert.equal(h.scripts.length,0);assert.equal(h.ctx.JHA.cookieConsent.hasConsent(),false);
 });
