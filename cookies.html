@@ -158,6 +158,7 @@
 
   <main>
     <div class="cookie-container">
+      <!-- Release gate: update the policy date with the approved production release. -->
       <!-- Cookie Policy Header -->
       <div class="cookie-header">
         <h1>Cookie Policy</h1>
@@ -185,35 +186,33 @@
         </ul>
         
         <h3>Analytics Cookies (Optional)</h3>
-        <p>These cookies help us understand how visitors interact with our website by collecting and reporting information anonymously. We use this information to improve our website and services.</p>
+        <p>Optional analytics helps us understand visits, tool interactions and marketing performance. It can use browser or account identifiers and associate campaign links with signup, checkout, purchases and refunds. This information is not necessarily anonymous.</p>
         <p><strong>We will not run analytics cookies until you choose to accept them.</strong> You can manage your preferences at any time through the cookie preferences control on our website or in your Account Settings.</p>
         <p>Examples include:</p>
         <ul>
           <li>Google Analytics cookies to track page views and user interactions</li>
-          <li>Performance monitoring cookies to identify and fix technical issues</li>
+          <li>Microsoft Clarity cookies for session replay and heatmaps, with private tool and account content masked</li>
+          <li>Campaign cookies that remember the first and most recent tagged visit for up to 90 days</li>
         </ul>
       </section>
 
-      <!-- What We Do Not Do Section -->
       <section class="cookie-section">
-        <h2>What We Do Not Do</h2>
-        <p>We do not:</p>
-        <ul>
-          <li>Use cookies to track you across other websites</li>
-          <li>Share cookie data with third parties for advertising purposes</li>
-          <li>Use cookies to create detailed profiles of your browsing behavior</li>
-          <li>Require cookies for basic website functionality (except essential cookies)</li>
-        </ul>
+        <h2>Campaign Measurement and Withdrawal</h2>
+        <p>With analytics consent, tagged blog, LinkedIn, Instagram and other campaign links can be associated with activity on JobHackAI and collected payments. This measures our own campaigns; a contact-link click or checkout start is not counted as a completed sale.</p>
+        <p>If you withdraw consent, optional tracking stops and campaign cookies are cleared on this browser. When your choice is saved to your account, associated campaign attribution is also removed. If account sync fails, the site shows a notice and retries; your browser choice takes effect immediately. Previously sent provider events are not automatically erased by changing this setting.</p>
+        <p>If you accept analytics again on the same page, Google Analytics can resume immediately. Clarity session recording resumes on your next page navigation.</p>
       </section>
 
       <!-- Third-Party Cookies Section -->
       <section class="cookie-section">
         <h2>Third-Party Cookies and Services</h2>
-        <p>Some cookies are placed by third-party services that appear on our pages. We do not control these cookies. These third parties may use cookies to collect information about your online activities across different websites.</p>
+        <p>Our analytics choice controls loading of Google Analytics and Microsoft Clarity on JobHackAI. Providers also have their own privacy practices. Stripe and Firebase provide payment security and authentication needed to operate the service.</p>
         <p>Third-party services we use include:</p>
         <ul>
           <li><strong>Google Analytics:</strong> Helps us understand how visitors use our website. You can opt out of Google Analytics by visiting <a href="https://tools.google.com/dlpage/gaoptout" target="_blank" rel="noopener noreferrer">Google Analytics Opt-out</a>.</li>
-          <li><strong>Stripe:</strong> Processes payments and may set cookies for fraud prevention and security purposes.</li>
+          <li><strong>Microsoft Clarity:</strong> Records page interactions for session replay and heatmaps to help improve usability. See the <a href="https://privacy.microsoft.com/en-us/privacystatement" target="_blank" rel="noopener noreferrer">Microsoft Privacy Statement</a>.</li>
+          <li><strong>Stripe:</strong> Processes payments and may set cookies for fraud prevention and security purposes. See <a href="https://stripe.com/privacy" target="_blank" rel="noopener noreferrer">Stripe's Privacy Policy</a>.</li>
+          <li><strong>Firebase:</strong> Stores authentication state to keep you signed in. See <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener noreferrer">Firebase privacy information</a>.</li>
         </ul>
         <p>For more information about how these third parties use cookies, please visit their respective privacy policies.</p>
       </section>
@@ -225,17 +224,17 @@
         <h3>Cookie Banner and Preference Controls</h3>
         <p>When you first visit our website, you will see a cookie banner that allows you to:</p>
         <ul>
-          <li>Accept all cookies (including analytics)</li>
+          <li>Accept optional analytics</li>
           <li>Reject non-essential cookies (only essential cookies will be used)</li>
           <li>Manage your preferences (choose which types of cookies to allow)</li>
         </ul>
         <p>You can change your cookie preferences at any time by:</p>
         <ul>
-          <li>Clicking the "Cookie Preferences" link in the footer of any page</li>
-          <li>Visiting your Account Settings page and clicking "Cookie Preferences"</li>
-          <li>Visiting this Cookie Policy page</li>
+          <li>Using the Cookie Preferences button below</li>
+          <li>Visiting Account Settings and choosing Cookie Preferences</li>
         </ul>
         
+        <p><button type="button" id="open-cookie-preferences" class="jha-btn-manage">Cookie Preferences</button></p>
         <h3>Browser Controls</h3>
         <p>Most web browsers allow you to control cookies through their settings. You can set your browser to refuse cookies or delete certain cookies. However, if you choose to disable cookies, some parts of our website may not function properly.</p>
         <p>To learn more about how to manage cookies in your browser, visit:</p>

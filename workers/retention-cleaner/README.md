@@ -16,7 +16,7 @@ Before enabling deletion, review a current audit, the target D1/KV bindings, ret
 
 - Unpinned LinkedIn runs use their creation time; pinned runs are retained.
 - Resume sessions with recent updates or feedback are retained. Old feedback is evaluated independently.
-- Old completed voice transcripts and scorecards are removed. For a user without current voice access, the newest completed session may retain metadata for the expired-report history entry. A newer incomplete session does not replace that exception.
+- Old completed voice transcripts, scorecards and supplied role/job context are removed. For a user without current voice access, the newest completed session may retain metadata for the expired-report history entry. A newer incomplete session does not replace that exception.
 - These distinctions are not represented by a blanket promise that every stored row disappears precisely 90 days after creation. The daily job, manual deletion and retained account/billing/security records are separate mechanisms.
 
 ## Failure behavior and validation

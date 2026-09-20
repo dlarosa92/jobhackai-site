@@ -23,13 +23,13 @@ function setup(t) {
     INSERT INTO cover_letter_history VALUES('old',0),('recent',9999999999999);
     CREATE TABLE usage_events(id TEXT,created_at TEXT);
     INSERT INTO usage_events VALUES('old',datetime('now','-100 days'));
-    CREATE TABLE voice_sessions(id TEXT,user_id INTEGER,status TEXT,started_at TEXT,transcript_json TEXT,scorecard_json TEXT,updated_at TEXT);
+    CREATE TABLE voice_sessions(id TEXT,user_id INTEGER,status TEXT,started_at TEXT,transcript_json TEXT,scorecard_json TEXT,updated_at TEXT,role TEXT,seniority TEXT,jd_excerpt TEXT);
     INSERT INTO voice_sessions VALUES
-      ('free-old',1,'completed',datetime('now','-110 days'),'transcript','score',NULL),
-      ('free-last',1,'completed',datetime('now','-100 days'),'transcript','score',NULL),
-      ('free-incomplete',1,'active',datetime('now','-95 days'),'transcript',NULL,NULL),
-      ('paid-old',2,'completed',datetime('now','-100 days'),'transcript','score',NULL),
-      ('recent',3,'completed',datetime('now','-2 days'),'transcript','score',NULL);
+      ('free-old',1,'completed',datetime('now','-110 days'),'transcript','score',NULL,'Synthetic role','Senior','Synthetic confidential job context'),
+      ('free-last',1,'completed',datetime('now','-100 days'),'transcript','score',NULL,'Synthetic role','Senior','Synthetic confidential job context'),
+      ('free-incomplete',1,'active',datetime('now','-95 days'),'transcript',NULL,NULL,'Synthetic role','Senior','Synthetic confidential job context'),
+      ('paid-old',2,'completed',datetime('now','-100 days'),'transcript','score',NULL,'Synthetic role','Senior','Synthetic confidential job context'),
+      ('recent',3,'completed',datetime('now','-2 days'),'transcript','score',NULL,'Synthetic role','Senior','Synthetic confidential job context');
   `);
   const kv=[];const env={JOBHACKAI_DB:db,JOBHACKAI_KV:{delete:async key=>kv.push(key)}};
   const snapshot=async()=>{
@@ -57,7 +57,9 @@ test('explicit deletion removes expired content but preserves pinned, reused and
   assert.deepEqual(after.linkedin_runs.map(r=>r.id),['pinned','recent']);
   assert.deepEqual(after.voice_sessions.map(r=>r.id),['free-last','recent']);
   assert.equal(after.voice_sessions[0].transcript_json,null);assert.equal(after.voice_sessions[0].scorecard_json,null);
+  for(const key of ['role','seniority','jd_excerpt']) assert.equal(after.voice_sessions[0][key],null);
   assert.equal(after.voice_sessions[1].transcript_json,'transcript');
+  assert.equal(after.voice_sessions[1].jd_excerpt,'Synthetic confidential job context');
   const again=await runCleanup({...f.env,RETENTION_MODE:'delete'});assert.equal(again.voice_sessions,0);assert.equal(again.voice_sessions_stripped,0);
 });
 test('KV failure retains resume references for retry rather than orphaning payloads',async t=>{
@@ -77,4 +79,16 @@ test('missing bindings or voice schema fail before deleting anything',async t=>{
 test('database failure rejects the cleanup rather than logging a successful completion',async t=>{
   const f=setup(t);f.db.exec('DROP TABLE linkedin_runs');
   await assert.rejects(runCleanup(f.env),/database operation failed/);assert.deepEqual(f.kv,[]);
+});
+
+test('previously stripped reports still lose surviving role and job context in audit and deletion',async t=>{
+  const f=setup(t);
+  f.db.exec("UPDATE voice_sessions SET transcript_json=NULL,scorecard_json=NULL WHERE id='free-last'");
+  const before=await f.snapshot();
+  assert.equal((await runCleanup(f.env)).voice_sessions_stripped,1);
+  assert.deepEqual(await f.snapshot(),before);
+  await runCleanup({...f.env,RETENTION_MODE:'delete'});
+  const row=await f.db.prepare("SELECT * FROM voice_sessions WHERE id='free-last'").first();
+  for(const key of ['transcript_json','scorecard_json','role','seniority','jd_excerpt']) assert.equal(row[key],null);
+  assert.equal(row.status,'completed');
 });
