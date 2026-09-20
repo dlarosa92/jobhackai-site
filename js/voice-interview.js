@@ -1077,7 +1077,7 @@
       // No new interviewer turns once the wrap-up is announced. Responses
       // are serial, so anything created during CLOSING is a new turn racing
       // the mic shutdown — cancel it before it speaks.
-      if (lifecycle().is(PHASES.CLOSING)) {
+      if (state.ending || lifecycle().is(PHASES.CLOSING)) {
         sendRealtime({ type: 'response.cancel' });
         return;
       }
@@ -1085,6 +1085,7 @@
       return;
     }
     if (type === 'output_audio_buffer.started') {
+      if (state.ending) { stopRemotePlayback(); return; }
       if (evt.response_id) state.lastAssistantResponseId = evt.response_id;
       state.audioPlaying = true;
       // Which response is speaking, not merely that something is. A bare
@@ -1122,7 +1123,9 @@
 
     state.audioEl = $('vi-remote-audio') || document.createElement('audio');
     state.audioEl.autoplay = true;
-    pc.ontrack = function (e) { state.audioEl.srcObject = e.streams[0]; };
+    pc.ontrack = function (e) {
+      if (!state.ending && state.pc === pc && state.audioEl) state.audioEl.srcObject = e.streams[0];
+    };
 
     state.micStream.getTracks().forEach(function (t) { pc.addTrack(t, state.micStream); });
 
@@ -1209,10 +1212,25 @@
   }
 
   function teardownConnection() {
+    stopRemotePlayback();
     try { if (state.dc) state.dc.close(); } catch (_) {}
     try { if (state.pc) state.pc.close(); } catch (_) {}
     stopMicrophone();
     state.pc = null; state.dc = null; state.connected = false;
+  }
+
+  // Transcript delivery may still need the data channel for up to 1.5s.
+  // Audible playback does not: once completion starts, a buffered or racing
+  // response must not keep talking over the report view. Natural/conduct/
+  // safety closes reach this point only after their guarded closing audio.
+  function stopRemotePlayback() {
+    if (state.audioEl) {
+      try { state.audioEl.pause(); } catch (_) {}
+      try { state.audioEl.srcObject = null; } catch (_) {}
+    }
+    state.audioPlaying = false;
+    state.audioResponseId = '';
+    setSpeaking(false);
   }
 
   // Whisper transcripts for the last turn routinely arrive after the turn is
@@ -1427,6 +1445,7 @@
 
     var durationSeconds = state.startedAtMs ? Math.round((Date.now() - state.startedAtMs) / 1000) : 0;
     stopMicrophone();
+    stopRemotePlayback();
 
     show('vi-done-view');
     var doneStatus = $('vi-done-status');
