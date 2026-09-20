@@ -238,7 +238,7 @@ ${JSON.stringify(breadcrumbLd, null, 2)}
   <link rel="stylesheet" href="../css/header.css">
   <link rel="stylesheet" href="../css/footer.css">
   <link rel="stylesheet" href="../css/marketing.css">
-  <script src="https://app.jobhackai.io/js/cookie-consent.js?v=20260613-1" defer></script>
+  <script src="/js/cookie-consent.js" defer></script>
 ${pageStyles}
 </head>
 <body>
@@ -275,7 +275,7 @@ ${faqHtml}
 
 ${footer()}
 
-  <script src="../js/component-loader.js?v=20260206-1"></script>
+  <script src="../js/component-loader.js?v=20260920-marketing-2"></script>
 </body>
 </html>
 `;
@@ -319,7 +319,7 @@ ${JSON.stringify(listLd, null, 2)}
   <link rel="stylesheet" href="../css/header.css">
   <link rel="stylesheet" href="../css/footer.css">
   <link rel="stylesheet" href="../css/marketing.css">
-  <script src="https://app.jobhackai.io/js/cookie-consent.js?v=20260613-1" defer></script>
+  <script src="/js/cookie-consent.js" defer></script>
 ${pageStyles}
 </head>
 <body>
@@ -341,7 +341,7 @@ ${ctaBlock('your target role')}
 
 ${footer()}
 
-  <script src="../js/component-loader.js?v=20260206-1"></script>
+  <script src="../js/component-loader.js?v=20260920-marketing-2"></script>
 </body>
 </html>
 `;
