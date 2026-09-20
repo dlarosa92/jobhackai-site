@@ -12,6 +12,10 @@ async function test(name, run) {
   db.exec('CREATE TABLE users (id INTEGER PRIMARY KEY, auth_id TEXT);');
   db.exec(oldMigration);
   db.exec(migration);
+  db.exec('CREATE TABLE cookie_consents(user_id INTEGER,client_id TEXT,consent_json TEXT);');
+  for (const file of ['025_checkout_attribution.sql','026_payment_campaign_links.sql']) {
+    db.exec(readFileSync(new URL('../../../db/migrations/'+file, import.meta.url),'utf8'));
+  }
   const env = makeEnv({ ENVIRONMENT: 'qa', STRIPE_SECRET_KEY: 'sk_test_fixture', DB: db,
     GA4_MEASUREMENT_ID: 'G-FIXTURE', GA4_API_SECRET: 'fixture' });
   const fixture = {
@@ -180,6 +184,23 @@ await test('currency changes and malformed values cannot overwrite a known payme
   assert.equal((await send()).response.status, 503); assert.equal((await totals()).currency, 'usd');
   fixture.charge.currency = 'usd'; fixture.charge.amount_captured = 19.5;
   assert.equal((await send()).response.status, 503); assert.equal((await totals()).gross_captured, 1950);
+});
+
+
+
+await test('signed charge event links consented checkout context in its atomic financial batch',async({db,fixture,send})=>{
+  db.exec(`INSERT INTO users(id,auth_id) VALUES(42,'attributed-owner');
+    INSERT INTO cookie_consents(user_id,consent_json) VALUES(42,'{"version":1,"analytics":true}');`);
+  await db.prepare(`INSERT INTO checkout_attributions(checkout_session_id,user_id,client_id,stripe_customer_id,environment,ga_client_id,first_touch_json,captured_at,expires_at) VALUES('cs_pack',42,'7bbba230-b755-4d31-b475-e20cf6d00ed9','cus_owner','qa','123.456','{"source":"linkedin","medium":"social","campaign":"qa_voice"}',?,?)`).bind(fixture.charge.created*1000-1000,Date.now()+86400000).run();
+  assert.equal((await send()).response.status,200);
+  assert.equal(await db.prepare('SELECT checkout_session_id FROM stripe_payment_attributions').first('checkout_session_id'),'cs_pack');
+  assert.equal(await db.prepare('SELECT net_collected FROM stripe_campaign_revenue').first('net_collected'),1950);
+});
+await test('missing attribution migration rolls back money and leaves the webhook retryable',async({db,send})=>{
+  db.exec('DROP TABLE stripe_payment_attributions;');
+  assert.equal((await send()).response.status,503);
+  assert.equal(await db.prepare('SELECT COUNT(*) AS n FROM stripe_collected_payments').first('n'),0);
+  assert.equal(await db.prepare('SELECT status FROM stripe_event_ledger').first('status'),'failed');
 });
 
 console.log(`${tests} real SQLite revenue/webhook tests passed`);

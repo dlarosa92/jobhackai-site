@@ -91,6 +91,17 @@ export async function onRequest({ request, env }) {
     // Store only the supported decision, with the server receipt time. Never
     // persist arbitrary caller fields or treat the string "false" as consent.
     const consent = {version:1,analytics:body.consent.analytics,updatedAt:new Date().toISOString()};
+    if (consent.analytics) {
+      const previous = await getCookieConsent(env, userId, clientId);
+      const browserPrevious = userId && clientId ? await getCookieConsent(env, null, clientId) : previous;
+      const granted = value => validConsent(value) && value.analytics === true;
+      // A failed earlier cleanup must not resurrect old attribution when the
+      // user later opts in again. Purge before replacing the stored rejection.
+      if ((!granted(previous) || (browserPrevious != null && !granted(browserPrevious))) &&
+          !await revokeCheckoutAttribution(env, {userId,clientId})) {
+        return json({ok:false,error:'Consent cleanup unavailable'},503,origin,env);
+      }
+    }
     const saved = await upsertCookieConsent(env, {userId,authId,clientId,consent});
     if (saved && !consent.analytics && !await revokeCheckoutAttribution(env, {userId,clientId})) {
       return json({ok:false,error:'Consent cleanup unavailable'},503,origin,env);

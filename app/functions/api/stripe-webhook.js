@@ -72,6 +72,7 @@ import {
 import { resolveOwnerUid, assertNoCrossUserStripeIds, readSubscriptionPeriod, TransientStripeError } from '../_lib/stripe-identity.js';
 import { claimEvent, buildMarkProcessedStatement, markEventFailed, RECIPIENT_GUARD_ERROR } from '../_lib/stripe-event-ledger.js';
 import { REVENUE_EVENTS, stageCollectedRevenue } from '../_lib/collected-revenue.js';
+import { stageCheckoutAttribution } from '../_lib/payment-attribution.js';
 import { sendEmail } from '../_lib/email.js';
 import { subscriptionCancelledEmail, paymentFailedEmail } from '../_lib/email-templates.js';
 
@@ -425,6 +426,7 @@ async function stagePackGrant(env, event, ctx, { uid, customerEmail, sessionId, 
   const statements = buildPackGrantStatements(db, { uid, eventId: event.id, sessionId });
   if (statements.length === 0) return transient('pack_grant_unstageable');
   ctx.statements.push(...statements);
+  stageCheckoutAttribution(env, ctx, { session: sess, uid });
   ctx.requiredUserRows.add(uid); // no recipient row at commit → whole batch rolls back, retryable
   console.log(`✍️ STAGING PACK GRANT: +${PACK_SESSION_COUNT} sessions for uid=${redactId(uid)}`);
 
@@ -615,6 +617,8 @@ async function handleCheckoutCompleted(env, event, ctx) {
     hasEverPaid: isPaidPlan(effectivePlan) ? 1 : undefined
   }, event.created);
   console.log(`✅ D1 WRITE ${planApplied ? 'STAGED' : 'SKIPPED (out-of-order)'}: ${redactId(uid)} → ${effectivePlan}`);
+
+  stageCheckoutAttribution(env, ctx, { session: sess, uid });
 
   return ok();
 }
