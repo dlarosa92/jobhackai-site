@@ -72,6 +72,11 @@ transcript and usage.
 6. Human ending/naturalness acceptance, live unknown/legacy recovery, operational
    monitoring and the broader billing/Analytics release gates remain open.
 
+The staging monitoring query and the existing hourly owner-notification route
+are described in [voice operational follow-up](../../docs/voice-operational-monitoring.md).
+An empty ledger before deployment is not evidence of healthy live calls. The
+heartbeat observes only; it never retries or clears an uncertain provider action.
+
 ## Local verification
 
 `npm ci --ignore-scripts`, `npm run typecheck`, `npm test`, and
