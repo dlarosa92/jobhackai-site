@@ -9,7 +9,7 @@ const customer = (id, owner='owner') => ({id, metadata:owner ? {firebaseUid:owne
 const sub = (id, customer='cus_1', status='active') => ({id, customer, status, metadata:{environment:'qa'}});
 const checkout = (id='cs_1', customer='cus_1') => ({id,customer,status:'open',payment_status:'unpaid',mode:'payment',metadata:{firebaseUid:'owner',environment:'qa'}});
 const payment = (id='pi_1', status='succeeded', customer='cus_1') => ({id,status,customer,metadata:{}});
-function setup({ customers=[customer('cus_1')], subscriptions=[sub('sub_1')], sessions=[], payments=[], mapped='cus_1', override, conflict=false, kvFailure=false }={}) {
+function setup({ customers=[customer('cus_1')], subscriptions=[sub('sub_1')], sessions=[], payments=[], invoices=[], schedules=[], mapped='cus_1', override, conflict=false, kvFailure=false }={}) {
   const calls=[];
   const ctx={URL, Set, Map, encodeURIComponent, assertStripeKeyMatchesEnvironment, isForeignEnvironmentStamp, canonicalEnvironmentName, canonicalizeEnvironmentStamp,
     kvCusKey:uid=>'cusByUid:'+uid,
@@ -31,6 +31,8 @@ function setup({ customers=[customer('cus_1')], subscriptions=[sub('sub_1')], se
       if(url.pathname==='/subscriptions') return Response.json({data:subscriptions.filter(s=>s.customer===url.searchParams.get('customer')),has_more:false});
       if(url.pathname==='/checkout/sessions') return Response.json({data:sessions.filter(s=>s.customer===url.searchParams.get('customer')),has_more:false});
       if(url.pathname==='/payment_intents') return Response.json({data:payments.filter(p=>p.customer===url.searchParams.get('customer')),has_more:false});
+      if(url.pathname==='/invoices') return Response.json({data:invoices.filter(p=>p.customer===url.searchParams.get('customer')),has_more:false});
+      if(url.pathname==='/subscription_schedules') return Response.json({data:schedules.filter(p=>p.customer===url.searchParams.get('customer')),has_more:false});
       return Response.json(customers.find(c=>path.endsWith('/'+c.id))||{}, {status:customers.some(c=>path.endsWith('/'+c.id))?200:404});
     }
   };
@@ -238,5 +240,58 @@ test('checkout and payment pagination inspect later-page pending resources',asyn
       return Response.json({data:endpoint==='/checkout/sessions'?[{...checkout(later?'cs_pending':'cs_paid'),status:'complete',payment_status:later?'unpaid':'paid'}]:[payment(later?'pi_pending':'pi_paid',later?'processing':'succeeded')],has_more:!later});
     }});
     await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method!=='GET').length,0);assert.ok(h.calls.some(c=>c.path.includes('starting_after=')));
+  }
+});
+
+test('draft/open/uncollectible invoices block deletion before every mutation',async()=>{
+  for(const status of ['draft','open','uncollectible','unknown']) {
+    const h=setup({sessions:[checkout()],invoices:[{id:'in_1',customer:'cus_1',status}]});
+    await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method!=='GET').length,0);
+  }
+});
+test('future or active schedules block deletion even without a live subscription',async()=>{
+  for(const status of ['not_started','active','unknown']) {
+    const h=setup({subscriptions:[],schedules:[{id:'sub_sched_1',customer:'cus_1',status}]});
+    await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method!=='GET').length,0);
+  }
+});
+test('settled invoice/schedule history permits cancellation without financial-history mutation',async()=>{
+  const h=setup({invoices:['paid','void'].map((status,i)=>({id:'in_'+i,customer:'cus_1',status})),schedules:['completed','released','canceled'].map((status,i)=>({id:'sub_sched_'+i,customer:'cus_1',status}))});
+  assert.equal((await h.run()).canceledSubscriptions,1);
+  assert.deepEqual(h.calls.filter(c=>c.method!=='GET').map(c=>c.path),['/subscriptions/sub_1']);
+});
+test('later-page invoices and schedules are not skipped',async()=>{
+  for(const endpoint of ['/invoices','/subscription_schedules']) {
+    const h=setup({override:path=>{
+      const u=new URL('https://x.test'+path);if(u.pathname!==endpoint)return;
+      const later=u.searchParams.has('starting_after');
+      return Response.json({data:[{id:later?'later':'first',customer:'cus_1',status:endpoint==='/invoices'?(later?'open':'paid'):(later?'not_started':'canceled')}],has_more:!later});
+    }});
+    await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method!=='GET').length,0);
+    assert.ok(h.calls.some(c=>c.path.includes('starting_after=first')));
+  }
+});
+test('invoice or schedule API failure and foreign customer responses fail closed',async()=>{
+  for(const endpoint of ['/invoices','/subscription_schedules']) {
+    for(const mode of ['unavailable','wrong_customer','malformed']) {
+      const h=setup({override:path=>{
+        if(!path.startsWith(endpoint+'?'))return;
+        if(mode==='unavailable')return new Response('',{status:503});
+        if(mode==='malformed')return Response.json({data:[]});
+        return Response.json({data:[{id:'wrong',customer:'other',status:endpoint==='/invoices'?'paid':'canceled'}],has_more:false});
+      }});
+      await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method!=='GET').length,0);
+    }
+  }
+});
+test('late invoice or schedule after cancellation still prevents identity eligibility',async()=>{
+  for(const kind of ['invoice','schedule']) {
+    const invoices=[],schedules=[];
+    const h=setup({invoices,schedules,override:(_path,init)=>{
+      if(init.method!=='DELETE')return;
+      if(kind==='invoice')invoices.push({id:'in_late',customer:'cus_1',status:'draft'});
+      else schedules.push({id:'sub_sched_late',customer:'cus_1',status:'not_started'});
+    }});
+    await assert.rejects(h.run(),/requires reconciliation/);assert.equal(h.calls.filter(c=>c.method==='DELETE').length,1);
   }
 });

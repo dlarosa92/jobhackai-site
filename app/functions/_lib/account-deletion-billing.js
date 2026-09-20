@@ -95,6 +95,26 @@ async function inspectSubscriptions(env, customer, uid) {
   return live;
 }
 
+async function assertNoOtherBillingObligations(env, customer) {
+  // A future schedule or draft invoice can create a charge without a currently
+  // active subscription/PaymentIntent. Keep sign-in and require reconciliation;
+  // account deletion is not authorization to forgive debt or finalize invoices.
+  for (const invoice of await listAll(env, `/invoices?customer=${encodeURIComponent(customer.id)}`)) {
+    if (!invoice?.id || objectId(invoice.customer) !== customer.id ||
+        !['draft', 'open', 'paid', 'void', 'uncollectible'].includes(invoice.status)) {
+      throw new Error('Invalid billing invoice');
+    }
+    if (!['paid', 'void'].includes(invoice.status)) throw new Error('Invoice requires reconciliation');
+  }
+  for (const schedule of await listAll(env, `/subscription_schedules?customer=${encodeURIComponent(customer.id)}`)) {
+    if (!schedule?.id || objectId(schedule.customer) !== customer.id ||
+        !['not_started', 'active', 'completed', 'released', 'canceled'].includes(schedule.status)) {
+      throw new Error('Invalid billing schedule');
+    }
+    if (['not_started', 'active'].includes(schedule.status)) throw new Error('Subscription schedule requires reconciliation');
+  }
+}
+
 /** Verify every candidate before canceling anything, then confirm cancellation
  * before the caller removes Firebase access. Email alone is never ownership. */
 export async function cancelBillingBeforeDeletion(env, { uid, user, email }) {
@@ -129,6 +149,7 @@ export async function cancelBillingBeforeDeletion(env, { uid, user, email }) {
     }
     const live = await inspectSubscriptions(env, customer, uid);
     const sessions = await inspectCheckouts(env, customer, uid, { allowOpen: true });
+    await assertNoOtherBillingObligations(env, customer);
     if (owner !== uid) {
       if (mapped.has(customer.id) || live.length) throw new Error('Billing ownership unverified');
       continue;
@@ -149,6 +170,7 @@ export async function cancelBillingBeforeDeletion(env, { uid, user, email }) {
   const pending = new Map();
   for (const customer of ownedCustomers) {
     await inspectCheckouts(env, customer, uid, { allowOpen: false });
+    await assertNoOtherBillingObligations(env, customer);
     for (const sub of await inspectSubscriptions(env, customer, uid)) pending.set(sub.id, sub);
   }
   for (const sub of pending.values()) {
@@ -164,6 +186,7 @@ export async function cancelBillingBeforeDeletion(env, { uid, user, email }) {
   // the caller must preserve sign-in and report possible partial cancellation.
   for (const customer of ownedCustomers) {
     await inspectCheckouts(env, customer, uid, { allowOpen: false });
+    await assertNoOtherBillingObligations(env, customer);
     if ((await inspectSubscriptions(env, customer, uid)).length) throw new Error('Billing cancellation remains unsettled');
   }
   return { canceledSubscriptions: pending.size, expiredCheckouts: openCheckouts.size };
