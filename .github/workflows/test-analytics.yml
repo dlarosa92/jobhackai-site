@@ -1,0 +1,27 @@
+name: Analytics integrity
+on:
+  push:
+    branches: [main, develop, dev0]
+    paths:
+      - 'js/cookie-consent.js'
+      - 'js/firebase-config.js'
+      - 'marketing/js/firebase-config.js'
+      - 'app/functions/_lib/__tests__/analytics-consent.test.mjs'
+      - '.github/workflows/test-analytics.yml'
+  pull_request:
+    branches: [main, develop, dev0]
+    paths:
+      - 'js/cookie-consent.js'
+      - 'js/firebase-config.js'
+      - 'marketing/js/firebase-config.js'
+      - 'app/functions/_lib/__tests__/analytics-consent.test.mjs'
+      - '.github/workflows/test-analytics.yml'
+jobs:
+  consent-and-destinations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: node --test app/functions/_lib/__tests__/analytics-consent.test.mjs

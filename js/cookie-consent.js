@@ -9,26 +9,39 @@
 
   const CONSENT_KEY = 'jha_cookie_consent_v1';
   const CLIENT_ID_COOKIE = 'jha_client_id';
-  // Allow the GA ID to be overridden per-environment via window.JHA_CONFIG
-  // (set inline in the HTML head, e.g. <script>window.JHA_CONFIG={GA_ID:'G-...'}</script>),
-  // and fall back to the production property otherwise.
-  const GA_MEASUREMENT_ID = (window.JHA_CONFIG && window.JHA_CONFIG.GA_ID) || 'G-SQYSWPFM5X';
-  const GA_SCRIPT_URL = `https://www.googletagmanager.com/gtag/js?l=dataLayer&id=${GA_MEASUREMENT_ID}`;
-  // Microsoft Clarity project ID — optional; loads only if configured.
-  // Override per-environment via window.JHA_CONFIG.CLARITY_ID, else use the production project.
-  const CLARITY_PROJECT_ID = (window.JHA_CONFIG && window.JHA_CONFIG.CLARITY_ID) || 'wskzma4clw';
-
-  // Domain-aware API routing: marketing site (jobhackai.io) routes API calls
-  // to app.jobhackai.io so consent persists in D1 across both domains.
   const hostname = (window.location.hostname || '').toLowerCase();
-  const isAppDomain = hostname.startsWith('app.') || hostname.startsWith('dev.') || hostname.startsWith('qa.') || hostname === 'localhost';
-  const API_BASE = isAppDomain ? '' : 'https://app.jobhackai.io';
+  const productionHost = ['jobhackai.io', 'www.jobhackai.io', 'app.jobhackai.io'].includes(hostname);
+  const config = window.JHA_CONFIG || {};
+  const PRODUCTION_GA_ID = 'G-SQYSWPFM5X';
+  const PRODUCTION_CLARITY_ID = 'wskzma4clw';
+  // Nonproduction is off by default. An explicit, separate test destination
+  // is allowed; accidentally copying production's ID must still fail closed.
+  function destination(key, productionId) {
+    const value = Object.prototype.hasOwnProperty.call(config, key)
+      ? config[key] : (productionHost ? productionId : '');
+    return typeof value === 'string' && (productionHost || value !== productionId) ? value : '';
+  }
+  // Verified existing development property (502443078), stream 12184859894.
+  // Only QA opts in; dev, previews and localhost remain off by default.
+  if (hostname === 'qa.jobhackai.io' && !Object.prototype.hasOwnProperty.call(config, 'GA_ID')) {
+    config.GA_ID = 'G-VH888WWY3M';
+  }
+  const GA_MEASUREMENT_ID = destination('GA_ID', PRODUCTION_GA_ID);
+  const CLARITY_PROJECT_ID = destination('CLARITY_ID', PRODUCTION_CLARITY_ID);
+  const GA_SCRIPT_URL = `https://www.googletagmanager.com/gtag/js?l=dataLayer&id=${GA_MEASUREMENT_ID}`;
+  if (!productionHost) window['ga-disable-' + PRODUCTION_GA_ID] = true;
+
+  // Only the production marketing domains send consent to the production app.
+  // Previews and local development must never write production consent records.
+  const API_BASE = ['jobhackai.io', 'www.jobhackai.io'].includes(hostname) ? 'https://app.jobhackai.io' : '';
   window.JHA = window.JHA || {};
   window.JHA.apiBase = API_BASE;
   // Cookie domain: use .jobhackai.io so the client_id cookie is shared across subdomains
-  const COOKIE_DOMAIN = hostname.endsWith('jobhackai.io') ? '; Domain=.jobhackai.io' : '';
+  const COOKIE_DOMAIN = productionHost ? '; Domain=.jobhackai.io' : '';
 
   // Module-level variables for banner and GA loading guard
+  let consentRevision = 0;
+  let pageViewSent = false;
   let bannerElement = null;
   let gaLoadingPrevented = false;
   let escHandler = null; // Persistent ESC handler for modal
@@ -45,6 +58,7 @@
 
   // Helper: Fetch consent from server (D1 source of truth)
   async function fetchConsentFromServer() {
+    const revision = consentRevision;
     try {
       const clientId = getOrCreateClientId();
       
@@ -70,7 +84,7 @@
 
       if (response.ok) {
         const data = await response.json();
-        if (data.ok && data.consent) {
+        if (data.ok && data.consent && revision === consentRevision) {
           // Sync server consent to localStorage
           setConsentLocal(data.consent);
           return data.consent;
@@ -172,6 +186,7 @@
 
   // Helper: Set consent (local + server)
   function setConsent(consent) {
+    consentRevision++;
     setConsentLocal(consent);
     // Fire-and-forget: don't await server sync so the UI updates instantly
     syncConsentToServer(consent);
@@ -205,6 +220,9 @@
 
   // Analytics Script Loading: Prevent if consent denied (covers GA + Clarity)
   function preventGALoading() {
+    // Removing a script does not stop listeners that already ran. Google's
+    // disable flag also blocks collection by the previously loaded tag.
+    if (GA_MEASUREMENT_ID) window['ga-disable-' + GA_MEASUREMENT_ID] = true;
     // Always remove tracker scripts if they exist (needed when revoking after
     // they've already loaded). Clarity is torn down explicitly so any
     // already-loaded queue stops processing for the rest of the session.
@@ -231,7 +249,7 @@
     }
     document.createElement = function(tagName) {
       const element = originalCreateElement.call(document, tagName);
-      if (tagName.toLowerCase() === 'script' && !hasAnalyticsConsent()) {
+      if (tagName.toLowerCase() === 'script' && (!hasAnalyticsConsent() || (!GA_MEASUREMENT_ID && !CLARITY_PROJECT_ID))) {
         const originalSetAttribute = element.setAttribute;
         element.setAttribute = function(name, value) {
           if (name === 'src' && shouldBlockAnalyticsScriptSrc(value)) {
@@ -276,12 +294,34 @@
     })(window, document, 'clarity', 'script', CLARITY_PROJECT_ID);
   }
 
+  // Authentication links can contain action tokens and checkout session IDs.
+  // Only controlled campaign slugs belong in analytics URLs.
+  function analyticsUrl(raw, includeCampaign = false) {
+    try {
+      const url = new URL(raw, window.location.href);
+      const safe = new URL(url.origin + url.pathname);
+      if (includeCampaign) {
+        for (const key of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_id', 'utm_term']) {
+          const value = url.searchParams.get(key);
+          if (value && /^[a-z0-9_.-]{1,100}$/i.test(value)) safe.searchParams.set(key, value);
+        }
+      }
+      return safe.href;
+    } catch (_) { return ''; }
+  }
+
   // Load GA script if consent granted
   function loadGAScript() {
     if (!hasAnalyticsConsent()) {
       preventGALoading();
       return;
     }
+    if (!GA_MEASUREMENT_ID) {
+      loadClarityScript();
+      return;
+    }
+
+    window['ga-disable-' + GA_MEASUREMENT_ID] = false;
 
     // Check if already loaded
     if (document.querySelector(`script[src*="googletagmanager.com/gtag/js"]`)) {
@@ -299,11 +339,31 @@
 
     // Initialize gtag config
     window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
+    function gtag(...args) {
+      if (!hasAnalyticsConsent() || window['ga-disable-' + GA_MEASUREMENT_ID]) return;
+      if (args[0] === 'event') {
+        const params = { ...(args[2] || {}) };
+        if ('page_location' in params) params.page_location = analyticsUrl(params.page_location, true);
+        if ('page_referrer' in params) params.page_referrer = analyticsUrl(params.page_referrer);
+        if ('page_path' in params) params.page_path = String(params.page_path).split(/[?#]/)[0];
+        args[2] = params;
+      }
+      if (args[0] === 'event' && args[1] === 'page_view') {
+        if (pageViewSent) return;
+        pageViewSent = true;
+      }
+      window.dataLayer.push(args);
+    }
     window.gtag = gtag;
     gtag('js', new Date());
     gtag('config', GA_MEASUREMENT_ID, {
       send_page_view: false,
+      debug_mode: !productionHost,
+      page_location: analyticsUrl(window.location.href, true),
+      page_referrer: document.referrer ? analyticsUrl(document.referrer) : '',
+      cookie_domain: productionHost ? 'jobhackai.io' : hostname,
+      allow_google_signals: false,
+      allow_ad_personalization_signals: false,
       // Cross-domain measurement: one session across the marketing site and
       // the app (GA4 admin side configured in runbook Task 0).
       linker: { domains: ['jobhackai.io', 'app.jobhackai.io'] }
@@ -326,7 +386,7 @@
     // then re-flush so we don't double-fire alongside main.js/trackPageView.
     if (!flushedPageView) {
       window.setTimeout(function emitFallbackPageViewIfStillNeeded() {
-        if (!hasAnalyticsConsent()) return;
+        if (!hasAnalyticsConsent() || pageViewSent) return;
         if (flushPendingGtagCalls()) return;
         try {
           window.gtag('event', 'page_view', {
@@ -338,7 +398,7 @@
       }, 0);
     }
 
-    // Dispatch event for firebase-config.js to initialize Firebase Analytics
+    // Notify consumers that consented analytics is available.
     window.dispatchEvent(new CustomEvent('cookie-consent-granted'));
   }
 
@@ -538,7 +598,7 @@
   const _pendingClarityIdentify = [];
   const MAX_PENDING_CALLS = 50;
   function flushPendingGtagCalls() {
-    if (!hasAnalyticsConsent() || !window.gtag) return false;
+    if (!GA_MEASUREMENT_ID || !hasAnalyticsConsent() || !window.gtag) return false;
     let flushedPageView = false;
     while (_pendingGtagCalls.length) {
       const args = _pendingGtagCalls.shift();
@@ -570,7 +630,7 @@
   // kick off loadGAScript() ourselves so we aren't stuck waiting on a
   // network round-trip that will never produce gtag.
   function flushAnalyticsBeforeNavigate() {
-    if (!hasAnalyticsConsent()) return Promise.resolve();
+    if (!GA_MEASUREMENT_ID || !hasAnalyticsConsent()) return Promise.resolve();
     if (typeof window.gtag === 'function') {
       flushPendingGtagCalls();
       flushPendingClarityIdentify();
@@ -609,6 +669,7 @@
   // should flow through this so they're applied in correct order
   // regardless of whether GA has finished loading.
   window.JHA.gtagSafe = function(...args) {
+    if (!GA_MEASUREMENT_ID) return;
     if (!hasAnalyticsConsent()) {
       if (getConsent() === null && _pendingGtagCalls.length < MAX_PENDING_CALLS) {
         _pendingGtagCalls.push(args);
