@@ -31,6 +31,7 @@ import {
   isSafetyReferral,
   isConductWarningLine
 } from '../../../../../js/voice-conduct.js';
+import { createVoiceUsage } from '../../../../../js/voice-usage.js';
 import { createTranscriptOrder } from '../../../../../js/voice-transcript-order.js';
 
 const CLIENT_SRC = new URL('../../../../../js/voice-interview.js', import.meta.url);
@@ -210,6 +211,7 @@ export function createVoiceClientHarness(options = {}) {
     isSafetyReferral,
     isConductWarningLine,
     createTranscriptOrder,
+    createVoiceUsage,
     addEventListener: (type, fn) => { (windowListeners[type] ||= []).push(fn); },
     removeEventListener: () => {}
   };

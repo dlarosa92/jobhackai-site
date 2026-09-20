@@ -45,7 +45,7 @@
     timerInterval: null,
     maxMinutes: 20,
     order: null,               // ordered transcript assembler (voice-transcript-order.js)
-    usage: { input: 0, output: 0 },
+    usage: null,
     ending: false,
     pendingCompletion: null,
     savingCompletion: false,
@@ -966,6 +966,9 @@
 
   function handleRealtimeEvent(evt) {
     var type = evt.type || '';
+    // Include audio checks and control utterances: they consume tokens too.
+    if (state.usage && type === 'response.done') state.usage.add('response', evt.response && evt.response.id, evt.response && evt.response.usage);
+    if (state.usage && type === 'conversation.item.input_audio_transcription.completed') state.usage.add('transcription', evt.item_id, evt.usage);
 
     // Items are announced in true conversation order and carry the id that
     // the (later, out-of-order) transcript events reference. The lifecycle
@@ -1059,10 +1062,6 @@
     // picked up here on API versions that only surface it in the output, and
     // only then does the closing turn count as complete.
     if (type === 'response.done') {
-      if (evt.response && evt.response.usage) {
-        state.usage.input += Number(evt.response.usage.input_tokens || 0);
-        state.usage.output += Number(evt.response.usage.output_tokens || 0);
-      }
       handleToolCall(readToolCall(evt));
       setSpeaking(false);
       // The audio-check greeting finished generating; the next candidate
@@ -1313,7 +1312,7 @@
       state.model = res.data.model;
       state.maxMinutes = res.data.maxMinutes || 20;
       state.order = newTranscriptOrder();
-      state.usage = { input: 0, output: 0 };
+      state.usage = typeof window.createVoiceUsage === 'function' ? window.createVoiceUsage() : null;
       state.ending = false;
       state.audioPlaying = false;
       state.audioResponseId = '';
@@ -1469,7 +1468,7 @@
     state.pendingCompletion = {
       sessionId: state.sessionId,
       transcript: getTranscript(), durationSeconds: durationSeconds,
-      inputTokens: state.usage.input, outputTokens: state.usage.output,
+      usageEvidence: state.usage ? state.usage.snapshot() : null,
       reason: reason || 'user_ended'
     };
     await saveCompletion();
