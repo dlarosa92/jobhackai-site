@@ -53,7 +53,8 @@ export async function onRequest(context) {
           monthlyRemaining: ent.monthlyRemaining ?? null,
           unlimited: ent.unlimited,
           freeSessionUsed: ent.freeSessionUsed,
-          sessionsRemaining: ent.sessionsRemaining
+          sessionsRemaining: ent.sessionsRemaining,
+          packExpiresAt: ent.packExpiresAt ?? null
         };
       } catch (voiceErr) {
         console.warn('[PLAN-ME] Voice entitlement lookup failed (non-fatal):', voiceErr?.message || voiceErr);
@@ -94,4 +95,3 @@ function corsHeaders(origin, env) {
     'Vary': 'Origin'
   };
 }
-

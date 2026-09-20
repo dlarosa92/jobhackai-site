@@ -470,6 +470,7 @@
         try { localStorage.setItem('selectedPlan', JSON.stringify(payload)); } catch (_) {}
       }
 
+      var packCheckoutAttemptId = null;
       async function startCheckout(plan, button) {
         var meta = PLAN_META[plan];
         var original = button.textContent;
@@ -499,11 +500,12 @@
           var res = await fetch('/api/stripe-checkout', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + idToken },
-            body: JSON.stringify({ plan: plan })
+            body: JSON.stringify({ plan: plan, ...(plan === 'pack' ? { checkoutAttemptId: packCheckoutAttemptId || (packCheckoutAttemptId = crypto.randomUUID()) } : {}) })
           });
           var data = await res.json();
 
           if (data && data.ok && data.url) {
+            packCheckoutAttemptId = null;
             window.location.href = data.url;
             return;
           }

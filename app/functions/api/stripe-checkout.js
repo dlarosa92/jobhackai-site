@@ -1,3 +1,4 @@
+import { packCheckoutAttemptKey } from '../_lib/checkout-attempt.js';
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { isTrialEligible, getUserPlanData, getOrCreateUserByAuthId, getDb } from '../_lib/db.js';
 import { sendEmail } from '../_lib/email.js';
@@ -42,6 +43,9 @@ export async function onRequest(context) {
     }
     console.log('🔵 [CHECKOUT] Parsed body', body);
     const { plan } = body || {};
+    if (plan === 'pack' && body.checkoutAttemptId != null && !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(body.checkoutAttemptId))) {
+      return json({ ok: false, error: 'Invalid checkout attempt id' }, 400, origin, env);
+    }
 
     // Check required environment variables
     if (!env.FIREBASE_PROJECT_ID) {
@@ -336,7 +340,9 @@ export async function onRequest(context) {
     // Generate idempotency key (forceNew for fresh session if requested from frontend)
     const forceNew = !!body.forceNew;
     let idem;
-    if (forceNew) {
+    if (isOneTimePack) {
+      idem = packCheckoutAttemptKey(await makeIdemKey(uid, sessionBody), body.checkoutAttemptId);
+    } else if (forceNew) {
       try {
         idem = `${uid}:${crypto.randomUUID()}`;
       } catch (e) {

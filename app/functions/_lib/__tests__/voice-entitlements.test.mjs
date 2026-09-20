@@ -242,6 +242,7 @@ await test('pack credits decrement atomically and never below zero', async () =>
   assert.equal(ent.canStart, true);
   assert.equal(ent.mode, 'pack');
   assert.equal(ent.sessionsRemaining, 2);
+  assert.equal(ent.packExpiresAt, state.users.get('u4').pack_expires_at);
 
   assert.equal(await consumeVoiceSession(env, 'u4', 'pack'), true);
   assert.equal(await consumeVoiceSession(env, 'u4', 'pack'), true);
