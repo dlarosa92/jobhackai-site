@@ -140,6 +140,43 @@ test('revoking and regranting reuse the same GA runtime and configuration',async
   assert.equal(h.events('page_view').length,1);
 });
 
+test('Clarity receives analytics-only consent before loading, never advertising consent',async()=>{
+  const h=harness({config:{GA_ID:'',CLARITY_ID:'test-project'}});await h.init();
+  assert.equal(h.insertedScripts.length,1);
+  const command=h.ctx.clarity.q[0];
+  assert.equal(command[0],'consentv2');assert.equal(command[1].analytics_Storage,'granted');assert.equal(command[1].ad_Storage,'denied');
+});
+test('loaded Clarity receives denial and stop, then reuses one runtime on a new grant',async()=>{
+  const h=harness({config:{GA_ID:'',CLARITY_ID:'test-project'}});await h.init();
+  const vendorCalls=[];h.ctx.clarity=(...args)=>vendorCalls.push(args);
+  h.setConsent(false);
+  assert.equal(vendorCalls[0][0],'consentv2');assert.equal(vendorCalls[0][1].analytics_Storage,'denied');
+  assert.equal(vendorCalls[0][1].ad_Storage,'denied');assert.equal(vendorCalls[1][0],'stop');
+  h.ctx.JHA.clarityIdentifySafe('must-not-send');assert.equal(vendorCalls.length,2);
+  h.setConsent(true);
+  assert.equal(vendorCalls[2][0],'start');assert.equal(vendorCalls[3][1].analytics_Storage,'granted');
+  assert.equal(vendorCalls[3][1].ad_Storage,'denied');assert.equal(h.insertedScripts.length,1);
+});
+test('withdrawal during download clears queued identities and stops a late-loaded vendor',async()=>{
+  const h=harness({config:{GA_ID:'',CLARITY_ID:'test-project'}});await h.init();
+  h.ctx.JHA.clarityIdentifySafe('old-identity');h.setConsent(false);
+  assert.ok(!h.ctx.clarity.q.some(call=>call[0]==='identify'));
+  const calls=[];h.ctx.clarity=(...args)=>calls.push(args);h.scripts[0].onload();
+  assert.equal(calls[0][1].analytics_Storage,'denied');assert.equal(calls[1][0],'stop');
+  // Clarity's stopped runtime can leave commands queued; a new grant must
+  // discard the old stop before asking that runtime to restart.
+  h.ctx.clarity.q=[['stop'],['identify','stale']];h.setConsent(true);
+  assert.equal(h.ctx.clarity.q.length,0);assert.equal(calls[2][0],'start');
+  assert.equal(h.insertedScripts.length,1);
+});
+test('private tool and account pages explicitly mask their rendered contents',()=>{
+  for(const name of ['voice-interview','mock-interview','cover-letter-generator','interview-questions','linkedin-optimizer','resume-feedback-pro','account-setting','dashboard','dashboard-trial','free-account-onboarding']) {
+    const html=readFileSync(new URL('../../../../'+name+'.html',import.meta.url),'utf8');
+    assert.match(html,/<body\b[^>]*data-clarity-mask="true"/,name);
+    assert.doesNotMatch(html,/data-clarity-unmask\s*=\s*["']true["']/i,name);
+  }
+});
+
 for (const tokenResult of ['reject', 'empty']) {
   test('a signed-in token failure does not become anonymous consent: '+tokenResult, async () => {
     const h=harness();
