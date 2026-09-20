@@ -52,3 +52,47 @@ test('compiled Pages Worker enforces admission before real checkout handlers and
   assert.equal(calls.length,1,'real verifier uses one fixture JWKS fetch and no Stripe request');
   await Promise.all(waits);
 });
+
+test('compiled deletion route verifies JWT and runs durable cleanup without admitting itself as account work',async t=>{
+  const db=sqliteD1();t.after(()=>db.close());
+  const sql=name=>readFileSync(new URL('../../../db/'+name,import.meta.url),'utf8');
+  db.exec(sql('schema.sql'));
+  for(const name of ['002_add_feature_daily_usage','006_linkedin_runs','008_add_cookie_consents','009_role_templates',
+    '024_collected_payments','025_checkout_attribution','026_payment_campaign_links','027_analytics_delivery','028_account_deletion_recovery']) {
+    db.exec(sql('migrations/'+name+'.sql'));
+  }
+  const cover=readFileSync(new URL('../../api/cover-letter/generate.js',import.meta.url),'utf8');
+  db.exec(cover.match(/`(CREATE TABLE IF NOT EXISTS cover_letter_history[\s\S]+?)`/)[1]);
+  db.exec("INSERT INTO users(id,auth_id,email) VALUES(1,'owner','owner@example.test')");
+  const pem='-----BEGIN PRIVATE KEY-----\n'+Buffer.from(await crypto.subtle.exportKey('pkcs8',pair.privateKey)).toString('base64')+'\n-----END PRIVATE KEY-----';
+  let exists=true;const calls=[],originalFetch=globalThis.fetch;
+  t.after(()=>{globalThis.fetch=originalFetch;});
+  globalThis.fetch=async(input,init={})=>{
+    const url=String(input instanceof Request?input.url:input);calls.push(url);
+    if(url==='https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com')return Response.json({keys:[jwk]});
+    if(url.startsWith('https://api.stripe.com/v1/customers?'))return Response.json({data:[],has_more:false});
+    if(url==='https://oauth2.googleapis.com/token')return Response.json({access_token:'fixture-admin-token'});
+    if(url==='https://identitytoolkit.googleapis.com/v1/projects/fixture/accounts:lookup') {
+      assert.deepEqual(JSON.parse(init.body),{localId:['owner']});return Response.json(exists?{users:[{localId:'owner'}]}:{});
+    }
+    if(url==='https://identitytoolkit.googleapis.com/v1/projects/fixture/accounts:delete') {
+      assert.deepEqual(JSON.parse(init.body),{localId:'owner'});
+      assert.equal(await db.prepare('SELECT phase FROM account_deletion_jobs').first('phase'),'billing_verified');
+      exists=false;return Response.json({});
+    }
+    throw Error('Unexpected fixture request: '+url);
+  };
+  const env={DB:db,JOBHACKAI_KV:{get:async()=>null,delete:async()=>{}},FIREBASE_PROJECT_ID:'fixture',
+    FIREBASE_SERVICE_ACCOUNT_JSON:JSON.stringify({project_id:'fixture',client_email:'fixture@fixture.iam.gserviceaccount.com',private_key:pem}),
+    ENVIRONMENT:'qa',STRIPE_SECRET_KEY:'sk_test_fixture',FRONTEND_URL:'https://qa.jobhackai.io',ASSETS:{fetch:async()=>new Response('fixture asset')}};
+  const context={waitUntil(){throw Error('Deletion must persist before answering');},passThroughOnException(){throw Error('fail open forbidden');}};
+  const response=await worker.fetch(new Request('https://qa.jobhackai.io/api/user/delete',{
+    method:'POST',headers:{Authorization:'Bearer '+token},body:JSON.stringify({uid:'other'})
+  }),env,context);
+  assert.equal(response.status,200,await response.clone().text());assert.equal((await response.json()).status,'complete');
+  assert.equal(response.headers.get('x-qa-mw'),'hit');assert.match(response.headers.get('cache-control'),/no-store/);
+  assert.equal(await db.prepare('SELECT COUNT(*) AS n FROM users').first('n'),0);
+  assert.equal(await db.prepare('SELECT COUNT(*) AS n FROM account_operation_claims').first('n'),0);
+  assert.equal(await db.prepare('SELECT state FROM account_deletion_notifications').first('state'),'pending');
+  assert.equal(calls.filter(url=>url.endsWith('accounts:delete')).length,1);
+});

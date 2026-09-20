@@ -10,12 +10,28 @@ CREATE TABLE IF NOT EXISTS account_deletion_jobs (
   kv_keys_json TEXT NOT NULL,
   attempts INTEGER NOT NULL DEFAULT 0,
   last_error_code TEXT,
+  -- Exclusive execution, with no automatic crash/timeout takeover. A stuck
+  -- token requires explicit reconciliation before another runner can proceed.
+  execution_token TEXT,
+  execution_started_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   completed_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_account_deletion_pending
   ON account_deletion_jobs(phase, updated_at);
+
+-- Completion notification is independent of erased content. A sender must
+-- enforce bounded retry/retention and provider idempotency before deployment.
+CREATE TABLE IF NOT EXISTS account_deletion_notifications (
+  job_id TEXT PRIMARY KEY REFERENCES account_deletion_jobs(id),
+  email TEXT NOT NULL,
+  state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending','sent','needs_review')),
+  attempts INTEGER NOT NULL DEFAULT 0,
+  last_error_code TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  sent_at TEXT
+);
 
 -- A deletion intent stops NEW operations immediately. Existing operations must
 -- finish or be explicitly reconciled before billing/identity deletion begins.

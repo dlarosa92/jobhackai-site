@@ -47,7 +47,7 @@ async function resumeKeys(db, userId) {
  * is idempotent, but this function does not itself block application writes. */
 export async function prepareDeletionRecovery(env, { uid, email = null }) {
   validateUid(uid);
-  await assertDeletionQuiescent(env, uid);
+  const admissionId = await assertDeletionQuiescent(env, uid);
   const db = database(env);
   const existing = await db.prepare('SELECT * FROM account_deletion_jobs WHERE auth_id = ?').bind(uid).first();
   if (existing) return existing;
@@ -60,7 +60,7 @@ export async function prepareDeletionRecovery(env, { uid, email = null }) {
   await db.prepare(`
     INSERT INTO account_deletion_jobs(id, auth_id, user_id, email, kv_keys_json)
     VALUES (?, ?, ?, ?, ?) ON CONFLICT(auth_id) DO NOTHING
-  `).bind(crypto.randomUUID(), uid, user?.id ?? null, user?.email || email, JSON.stringify(keys)).run();
+  `).bind(admissionId, uid, user?.id ?? null, user?.email || email, JSON.stringify(keys)).run();
   const job = await db.prepare('SELECT * FROM account_deletion_jobs WHERE auth_id = ?').bind(uid).first();
   if (!job) throw new Error('deletion_manifest_not_saved');
   return job;
@@ -138,6 +138,11 @@ export async function finishDeletionRecovery(env, id) {
       statements.push(db.prepare('DELETE FROM resume_sessions WHERE user_id = ?').bind(job.user_id));
       statements.push(db.prepare('DELETE FROM users WHERE id = ? AND auth_id = ?').bind(job.user_id, job.auth_id));
     }
+    // Save delivery information atomically before clearing the manifest. A
+    // notification outage must never undo erasure or lose its retry record.
+    statements.push(db.prepare(`INSERT INTO account_deletion_notifications(job_id,email)
+      SELECT id,email FROM account_deletion_jobs WHERE id=? AND phase='identity_removed'
+        AND email IS NOT NULL AND email<>'' ON CONFLICT(job_id) DO NOTHING`).bind(id));
     // The retained operational receipt contains no email or resume paths.
     statements.push(db.prepare(`UPDATE account_deletion_jobs SET phase = 'complete',
       email = NULL, kv_keys_json = '[]', last_error_code = NULL,

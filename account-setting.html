@@ -1326,8 +1326,22 @@
             throw new Error(data.error || 'Deletion failed');
           }
 
-          // Firebase Auth user is deleted server-side by /api/user/delete.
-          // Sign out locally to clear the session.
+          if (data.status !== 'complete' && data.status !== 'pending') {
+            throw new Error('Deletion status could not be confirmed. Please retry or contact privacy@jobhackai.io.');
+          }
+          if (data.status === 'pending') {
+            alert((data.message || 'Your deletion request is saved, but cleanup is not yet complete.') +
+              (data.reference ? '\n\nReference: ' + data.reference : ''));
+            if (data.identityRemoved !== true) {
+              // Keep the still-valid token so the owner can check the same
+              // deletion request, even when ordinary account work is fenced.
+              btn.textContent = 'Check Deletion Status';
+              btn.disabled = false;
+              return;
+            }
+          }
+
+          // Clear the local session only after confirmed sign-in removal.
           try {
             if (window.FirebaseAuthManager?.signOut) {
               await window.FirebaseAuthManager.signOut();
@@ -1335,18 +1349,6 @@
           } catch (_) {}
 
           localStorage.clear();
-
-          // Surface any partial-cleanup warnings from the API before redirecting.
-          // The API returns { ok: true, warnings: [...] } when Firebase Auth was
-          // deleted but some cleanup steps (Stripe, D1 tables, KV) had issues.
-          if (data.warnings && data.warnings.length > 0) {
-            console.warn('[ACCOUNT-SETTINGS] Deletion warnings:', data.warnings);
-            alert(
-              'Your account has been deleted, but some cleanup steps encountered issues:\n\n' +
-              data.warnings.map(w => '- ' + w).join('\n') +
-              '\n\nIf billing continues, please contact support at privacy@jobhackai.io.'
-            );
-          }
 
           window.location.href = 'index.html';
         } catch (error) {
