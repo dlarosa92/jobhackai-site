@@ -23,11 +23,11 @@ Marketing pages load their own deployed copies instead of reaching into the prod
 
 Blog offers now describe free preparation tools, one lifetime free voice interview with a feedback preview, and full paid reports/transcripts. Existing CTA blocks are reused. A CTA view requires at least 50 percent visibility, a visible document, and analytics consent; loading a below-fold CTA is not a view. No extra analytics identity or storage is introduced.
 
-Preview navigation, footer and blog CTA app destinations use development, or QA for the `develop` marketing alias. Actual production hosts continue using the production app.
+Preview navigation, footer, hero, plan-card and article app destinations use development, or QA for the `develop` marketing alias. Actual production hosts continue using the production app.
 
 ## Evidence and limits
 
-- 42 local tests passed: blog visibility/consent, duplication, preview destinations, shared navigation/footer and existing analytics consent regressions.
+- 43 local tests passed: blog visibility/consent, duplication, preview destinations, shared navigation/footer and existing analytics consent regressions.
 - Shared asset equality and article script/style/icon existence checks passed.
 - Local Chrome desktop and 375px iframe rendering checked; mobile menu opened and cookie rejection was operable. This is responsive browser evidence, not a native mobile-device test.
 - Article remained a draft throughout. Neither a public post nor GA receipt was produced by these checks.

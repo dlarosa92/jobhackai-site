@@ -12,11 +12,17 @@
   function applyEnvironmentAwareFooterLinks(root) {
     var scope = root || document;
     var appBaseUrl = getAppBaseUrl();
-    var links = scope.querySelectorAll('.site-footer a[data-app-path]');
+    // Static HTML remains usable by crawlers. Preview pages must also keep
+    // hero, plan-card and article links out of production authentication/billing.
+    var links = scope.querySelectorAll('a[data-app-path], a[href^="https://app.jobhackai.io/"]');
 
     for (var i = 0; i < links.length; i += 1) {
       var link = links[i];
       var appPath = link.getAttribute('data-app-path');
+      if (!appPath) {
+        var destination = new URL(link.getAttribute('href'));
+        appPath = destination.pathname + destination.search + destination.hash;
+      }
       if (!appPath) continue;
       link.href = appBaseUrl + appPath;
     }

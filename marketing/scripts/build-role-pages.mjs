@@ -275,7 +275,7 @@ ${faqHtml}
 
 ${footer()}
 
-  <script src="../js/component-loader.js?v=20260206-1"></script>
+  <script src="../js/component-loader.js?v=20260920-marketing-2"></script>
 </body>
 </html>
 `;
@@ -341,7 +341,7 @@ ${ctaBlock('your target role')}
 
 ${footer()}
 
-  <script src="../js/component-loader.js?v=20260206-1"></script>
+  <script src="../js/component-loader.js?v=20260920-marketing-2"></script>
 </body>
 </html>
 `;

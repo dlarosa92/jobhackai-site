@@ -60,3 +60,14 @@ test('marketing preview navigation and footer use the matching nonproduction app
     assert.equal(link.href,`https://${base}.jobhackai.io/cookies`);
   }
 });
+test('preview hero and plan links preserve their route, query and fragment without production checkout',()=>{
+  const components=readFileSync(new URL('../../../../marketing/js/component-loader.js',import.meta.url),'utf8');
+  const links=['/login?plan=free','/pricing?utm_campaign=preview#plans'].map(path=>({
+    getAttribute:name=>name==='href'?'https://app.jobhackai.io'+path:null,href:''
+  }));
+  const window={location:{hostname:'dev0.jobhackai-app-marketing-seo.pages.dev'}};
+  const document={readyState:'complete',querySelectorAll:selector=>selector.includes('a[href^=')?links:[]};
+  vm.runInNewContext(components,{window,document,console,URL});
+  assert.equal(links[0].href,'https://dev.jobhackai.io/login?plan=free');
+  assert.equal(links[1].href,'https://dev.jobhackai.io/pricing?utm_campaign=preview#plans');
+});
