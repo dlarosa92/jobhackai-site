@@ -130,7 +130,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
       - name: Install locked application dependencies for Pages bundling
         run: npm ci --prefix app --ignore-scripts
       - name: Build the candidate Pages Worker
