@@ -33,7 +33,8 @@ async function listAll(env, path) {
 const terminal = new Set(['canceled', 'incomplete_expired']);
 const statuses = new Set(['active', 'trialing', 'past_due', 'unpaid', 'paused', 'incomplete', ...terminal]);
 
-export async function resolvePortalCustomer(env, { uid, email }) {
+// Return the checked snapshot so status display does not re-fetch unchecked data.
+export async function resolveBillingAccount(env, { uid, email }) {
   const db = getDb(env);
   if (!db) throw new Error('Billing database unavailable');
   // D1 is authoritative. A stale KV customer cannot override this mapping.
@@ -74,7 +75,8 @@ export async function resolvePortalCustomer(env, { uid, email }) {
   }
   // Dev and QA currently share a Stripe account. A full customer portal can
   // change every subscription, so reject mixed or unproven active ownership.
-  for (const sub of await listAll(env, `/subscriptions?customer=${encodeURIComponent(customer.id)}&status=all`)) {
+  const subscriptions = await listAll(env, `/subscriptions?customer=${encodeURIComponent(customer.id)}&status=all`);
+  for (const sub of subscriptions) {
     const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id;
     if (!sub.id || customerId !== customer.id || !statuses.has(sub.status) ||
         (sub.metadata?.firebaseUid && sub.metadata.firebaseUid !== uid) ||
@@ -86,5 +88,9 @@ export async function resolvePortalCustomer(env, { uid, email }) {
       throw new PortalOwnershipError();
     }
   }
-  return customer.id;
+  return { customer, subscriptions };
+}
+
+export async function resolvePortalCustomer(env, identity) {
+  return (await resolveBillingAccount(env, identity))?.customer.id || null;
 }

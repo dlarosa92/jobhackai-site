@@ -76,6 +76,9 @@ jobs:
       - name: Billing portal ownership and environment isolation
         run: node --test app/functions/_lib/__tests__/billing-portal-owner.test.mjs
 
+      - name: Billing status ownership and fresh snapshot
+        run: node --test app/functions/_lib/__tests__/billing-status-owner.test.mjs
+
       # dev0 voice integration: the one-time Interview Pack through the
       # hardened webhook (atomic grant + legacy stripe_event_log reconciliation),
       # weekly/monthly subscriptions, and the classifier's handling of pack rows.
