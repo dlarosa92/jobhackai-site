@@ -496,11 +496,12 @@
           }
           if (!user) throw new Error('not_authenticated');
           var idToken = await user.getIdToken(true);
+          var checkoutAnalytics = await window.JHA?.cookieConsent?.getCheckoutAnalyticsContext?.();
 
           var res = await fetch('/api/stripe-checkout', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + idToken },
-            body: JSON.stringify({ plan: plan, ...(plan === 'pack' ? { checkoutAttemptId: packCheckoutAttemptId || (packCheckoutAttemptId = crypto.randomUUID()) } : {}) })
+            body: JSON.stringify({ plan: plan, ...(checkoutAnalytics ? { analytics: checkoutAnalytics } : {}), ...(plan === 'pack' ? { checkoutAttemptId: packCheckoutAttemptId || (packCheckoutAttemptId = crypto.randomUUID()) } : {}) })
           });
           var data = await res.json();
 
