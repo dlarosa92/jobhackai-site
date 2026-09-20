@@ -575,6 +575,124 @@ test('a natural wrap-up keeps its audio until playback finishes, then releases i
   } finally { h.dispose(); }
 });
 
+
+// Connection setup can settle after End, or after a replacement connection.
+// Drive actual pending browser operations rather than inspecting source text.
+function deferred() {
+  let resolve;
+  const promise = new Promise(r => { resolve = r; });
+  return { promise, resolve };
+}
+function trackedMic() {
+  const track = { enabled: true, stop() { this.enabled = false; } };
+  return { track, getTracks: () => [track], getAudioTracks: () => [track] };
+}
+
+test('End releases a microphone granted after the interview has already completed', async () => {
+  const permission = deferred();
+  const lateMic = trackedMic();
+  let micRequests = 0;
+  const h = createVoiceClientHarness({ routes: LIVE_ROUTES,
+    getUserMedia: () => ++micRequests === 1 ? Promise.resolve(trackedMic()) : permission.promise });
+  try {
+    await h.ready(); h.el('vi-role').value = 'Product Manager';
+    const starting = h.click('vi-start-btn');
+    await h.settle();
+    assert.equal(micRequests, 2, 'the connection microphone request is pending');
+    await h.click('vi-end-btn');
+    permission.resolve(lateMic);
+    await starting;
+    assert.equal(lateMic.track.enabled, false, 'late microphone must be stopped');
+    assert.equal(h.requests.filter(r => r.url.includes('/realtime/calls')).length, 0);
+    assert.equal(h.peerConnection(), null);
+    assert.equal(h.completeBodies().length, 1);
+    assert.equal(h.el('vi-done-view').style.display, '');
+    assert.equal(h.logs.filter(l => l[0] === 'alert').length, 0);
+  } finally { permission.resolve(lateMic); h.dispose(); }
+});
+
+test('End aborts an in-flight SDP exchange and ignores its late answer', async () => {
+  const answer = deferred();
+  const h = createVoiceClientHarness({ routes: { ...LIVE_ROUTES,
+    'api.openai.com/v1/realtime/calls': () => answer.promise } });
+  try {
+    await h.ready(); h.el('vi-role').value = 'Product Manager';
+    const starting = h.click('vi-start-btn');
+    await h.settle();
+    const pc = h.peerConnection();
+    const request = h.requests.find(r => r.url.includes('/realtime/calls'));
+    assert.ok(request, 'SDP request was sent');
+    await h.click('vi-end-btn');
+    answer.resolve({ __text: 'v=0 late answer' });
+    await starting;
+    assert.equal(request.signal?.aborted, true);
+    assert.equal(pc.connectionState, 'closed');
+    assert.equal(pc.remoteDescription, undefined, 'ended connection must not accept an answer');
+    assert.ok(pc.tracks.every(t => t.enabled === false));
+    assert.equal(h.completeBodies().length, 1);
+    assert.equal(h.el('vi-done-view').style.display, '');
+    assert.equal(h.logs.filter(l => l[0] === 'alert').length, 0);
+  } finally { answer.resolve({ __text: 'v=0 late answer' }); h.dispose(); }
+});
+
+test('End during reconnect token lookup cannot reopen the microphone or overwrite the report', async () => {
+  const token = deferred();
+  let calls = 0;
+  const session = LIVE_ROUTES['/api/voice/session'];
+  const h = await liveInterviewWithOneAnswer({ routes: { ...LIVE_ROUTES,
+    '/api/voice/session': () => ++calls === 1 ? session() : token.promise } });
+  try {
+    const oldPc = h.peerConnection();
+    const reconnecting = h.click('vi-reconnect-btn');
+    await h.settle();
+    assert.equal(calls, 2);
+    await h.click('vi-end-btn');
+    token.resolve(session());
+    await reconnecting;
+    assert.equal(h.peerConnection(), oldPc, 'no replacement peer connection after End');
+    assert.equal(h.requests.filter(r => r.url.includes('/realtime/calls')).length, 1);
+    assert.equal(h.completeBodies().length, 1);
+    assert.equal(h.el('vi-done-view').style.display, '');
+  } finally { token.resolve(session()); h.dispose(); }
+});
+
+test('events from a replaced data channel cannot end or speak into the replacement interview', async () => {
+  const h = await liveInterviewWithOneAnswer();
+  try {
+    const oldPc = h.peerConnection();
+    const oldChannel = h.dataChannel();
+    await h.click('vi-reconnect-btn');
+    assert.notEqual(h.peerConnection(), oldPc);
+    oldChannel.onmessage({ data: JSON.stringify({ type: 'conversation.item.input_audio_transcription.completed',
+      item_id: 'stale-end', transcript: "I'll end the interview" }) });
+    oldChannel.onopen();
+    oldPc.ontrack({ streams: [{}] });
+    await h.settle();
+    assert.equal(h.completeBodies().length, 0, 'a stale channel does not own the current session');
+    assert.equal(h.el('vi-live-view').style.display, '');
+    assert.equal(h.el('vi-remote-audio').srcObject, null);
+  } finally { h.dispose(); }
+});
+
+test('an aborted SDP fetch cannot replace the completed report with a connection error', async () => {
+  const h = createVoiceClientHarness({ routes: { ...LIVE_ROUTES,
+    'api.openai.com/v1/realtime/calls': (url, options) => new Promise((resolve, reject) => {
+      options.signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+    }) } });
+  try {
+    await h.ready(); h.el('vi-role').value = 'Product Manager';
+    const starting = h.click('vi-start-btn');
+    await h.settle();
+    await h.click('vi-end-btn');
+    await starting;
+    assert.equal(h.el('vi-done-view').style.display, '');
+    assert.equal(h.completeBodies().length, 1);
+    assert.equal(h.logs.filter(l => l[0] === 'alert').length, 0);
+    assert.equal(h.peerConnection().connectionState, 'closed');
+    assert.ok(h.peerConnection().tracks.every(t => t.enabled === false));
+  } finally { h.dispose(); }
+});
+
 for (const t of pending) await t();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
