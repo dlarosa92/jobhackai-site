@@ -9,7 +9,11 @@ Status: draft preparation only. Production deployment, public posting and schedu
 - Campaign: `voice_beta_2026_09`; asset: `tell_me_about_yourself_blog_01`.
 - Adapted from the owned Penny draft, with original wording, explicitly fictional examples, and links to Indeed and The Muse for the answer structure. The timed exercise is guidance, not a research finding.
 - Draft is `noindex, nofollow`, visibly labeled for review, absent from the blog index and sitemap, and contains no invented publication date or customer outcome.
-- Before approved publication: finish the linked legacy mock-interview guide's factual review; check the final copy; add the actual publication metadata, discovery links and indexing; verify the deployed canonical page before adding social campaign URLs.
+- Before approved publication: check both final articles; add the actual publication metadata, discovery links and indexing; verify the deployed canonical page before adding social campaign URLs.
+
+## Linked practice guide
+
+The existing `/blog/mock-interview-online` guide is revised in this same draft: practical advice replaces unsupported neuroscience/therapy claims, an invented 15 percent result, guaranteed-outcome framing, and generated images presented as product screenshots. The original publication date and canonical path are retained; a new publication/modification date is not invented before release. The title, description, social metadata and existing blog card match the revised copy. The product section distinguishes typed practice from voice and the free preview from full paid reports.
 
 ## Shared assets
 
@@ -31,6 +35,6 @@ Preview navigation, footer and blog CTA app destinations use development, or QA 
 
 ## Social handoff
 
-Sonny saved separate LinkedIn and Instagram article adaptations; their public release remains held. On September 20, Codex saved and reopened a clearer LinkedIn body beginning “A useful way to prepare for ‘Tell me about yourself’ is to write three prompts”. It contains an illustrative coordinator example and no unverified URL. A duplicate-looking card still needs saved-ID reconciliation by Sonny; do not delete drafts as a metadata workaround.
+Sonny saved separate LinkedIn and Instagram article adaptations; their public release remains held. On September 20, Codex saved and reopened a clearer LinkedIn body beginning “A useful way to prepare for ‘Tell me about yourself’ is to write three prompts”. It contains an illustrative coordinator example and no unverified URL. Sonny subsequently read the saved records and reported canonical LinkedIn record `496a8590-3e55-4688-bb22-7bcd2afb8816`; its parent `47784b1e-ad32-4ef2-b498-a274f93fdc24` carries the older copy and is superseded in the register, with no publishing, scheduling or deletion. These IDs come from his recorded handoff, while the canonical body was independently saved and reopened through the UI. Do not delete drafts as a metadata workaround.
 
 Codex may verify final destinations and supply campaign URLs after approved publication. This routine verification does not require the owner personally to check a URL. Use the correct platform source and distinct content IDs. Leave verified destination and publication timestamp blank until evidenced. The older draft backlog is excluded from this launch until individually reviewed.
