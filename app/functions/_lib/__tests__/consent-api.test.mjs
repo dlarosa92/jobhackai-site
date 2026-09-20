@@ -28,8 +28,16 @@ for(const path of ['app/functions/api/cookie-consent.js','functions/api/cookie-c
     const failed=harness(path,{cleanupFailure:true});
     assert.equal((await failed.request({consent:{version:1,analytics:false}},headers)).status,503);
     assert.equal(failed.writes[0].consent.analytics,false);
-    const grant=harness(path);await grant.request({clientId,consent:{version:1,analytics:true}});
+    const grant=harness(path,{stored:{version:1,analytics:true}});await grant.request({clientId,consent:{version:1,analytics:true}});
     assert.equal(grant.revocations.length,0);
+  });
+  test(path+': regrant cannot revive contexts after failed withdrawal cleanup',async()=>{
+    const h=harness(path,{stored:{version:1,analytics:false},cleanupFailure:true});
+    assert.equal((await h.request({clientId,consent:{version:1,analytics:true}})).status,503);
+    assert.equal(h.writes.length,0);assert.equal(h.revocations.length,1);
+    const success=harness(path,{stored:{version:1,analytics:false}});
+    assert.equal((await success.request({clientId,consent:{version:1,analytics:true}})).status,200);
+    assert.equal(success.revocations.length,1);assert.equal(success.writes[0].consent.analytics,true);
   });
   test(path+': invalid signed-in token never reads or writes anonymous consent',async()=>{
     const h=harness(path,{authFailure:true});

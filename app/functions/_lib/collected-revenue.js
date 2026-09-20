@@ -1,6 +1,7 @@
 // Financial evidence only. No GA requests, generated browser IDs, list prices,
 // inferred purchases from plan changes, or consent/campaign assumptions.
 import { getDb } from './db.js';
+import { paymentAttributionStatement } from './payment-attribution.js';
 import { canonicalEnvironmentName, canonicalizeEnvironmentStamp, resolveExpectedLivemode } from './stripe-environment.js';
 
 export const REVENUE_EVENTS = new Set([
@@ -146,6 +147,7 @@ export async function stageCollectedRevenue(env, event, ctx) {
     if (refund && !refunds.some((r) => r.id === refund.id)) refunds.push(refund);
     const unique = new Map(refunds.map((r) => [r.id, r]));
     for (const current of unique.values()) statements.push(refundStatement(db, current, charge, event));
+    statements.push(paymentAttributionStatement(db, { chargeId, environment }));
     ctx.statements.push(...statements); // same D1 batch as the event processed mark
     return { kind: 'ok' };
   } catch (error) {
