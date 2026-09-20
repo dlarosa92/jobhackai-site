@@ -90,3 +90,16 @@ test('OpenAI client reads native cached-token detail and labels application cach
  const missing=await callOpenAI({messages:[],maxRetries:1},{OPENAI_API_KEY:'test-fixture'});
  assert.equal(missing.usage.promptTokens,null);assert.equal(missing.usage.completionTokens,null);assert.equal(missing.usage.cachedTokens,null);
 });
+
+test('a short interview stores explicit no-request evidence and makes no provider call', async t => {
+ const h=setup(t);
+ await h.db.prepare("UPDATE voice_sessions SET transcript_json='[]', usage_details_json=? WHERE id='own'").bind(JSON.stringify({version:1,realtime:{source:'client_reported'}})).run();
+ const source=readFileSync(new URL('../voice-scorecard.js',import.meta.url),'utf8');
+ let calls=0;
+ const ctx={console:{log(){},warn(){},error(){}},getDb:()=>h.db,scorecardUsageEvidence,callOpenAI:async()=>{calls++;throw Error('short interview must not call provider');}};
+ vm.createContext(ctx);vm.runInContext(source.replace(/^import .*;\n/gm,'').replace(/^export /gm,'')+'\nglobalThis.generate=generateAndStoreScorecard;',ctx);
+ assert.equal((await ctx.generate({},'own')).tooShort,true);assert.equal(calls,0);
+ const saved=JSON.parse(await h.db.prepare("SELECT usage_details_json FROM voice_sessions WHERE id='own'").first('usage_details_json'));
+ assert.equal(saved.realtime.source,'client_reported');assert.equal(saved.scorecard.source,'local_no_request');assert.equal(saved.scorecard.providerRequestMade,false);
+ assert.equal(saved.scorecard.promptTokens,undefined);
+});
