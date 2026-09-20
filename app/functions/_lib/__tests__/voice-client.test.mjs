@@ -319,6 +319,23 @@ test('the hand-synced fallback holds when js/voice-lifecycle.js fails to load', 
   } finally { h.dispose(); }
 });
 
+for (const withoutModules of [[], ['isExplicitEndRequest']]) {
+  test(`live QA standalone stop stays out of persisted transcript (${withoutModules.length ? 'fallback' : 'module'})`, async () => {
+    const h = await liveInterviewWithOneAnswer({ withoutModules });
+    try {
+      h.event({ type: 'conversation.item.created', item: { id: 'qa-stop' } });
+      h.event({ type: 'input_audio_buffer.committed', item_id: 'qa-stop' });
+      h.event({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'qa-stop', transcript: "I'll end the interview." });
+      await h.settle();
+      const bodies = h.completeBodies();
+      assert.equal(bodies.length, 1);
+      assert.equal(bodies[0].reason, 'user_ended');
+      assert.ok(bodies[0].transcript.some(turn => turn.speaker === 'user'), 'retain the actual answer');
+      assert.ok(!bodies[0].transcript.some(turn => turn.text.includes("I'll end")));
+    } finally { h.dispose(); }
+  });
+}
+
 // --------------------------------------------------- live safety end view
 
 test('a session that ends live for safety shows the same visible, scoreless state', async () => {
@@ -474,6 +491,20 @@ test('closing during transcript flush warns before completion is assembled', asy
     assert.equal(warned, true);
     h.event({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'pending-answer', transcript: 'My last answer.' });
     await ending;
+  } finally { h.dispose(); }
+});
+
+test('a stop transcription arriving during the completion flush is excluded', async () => {
+  const h = await liveInterviewWithOneAnswer();
+  try {
+    h.event({ type: 'conversation.item.created', item: { id: 'late-stop' } });
+    h.event({ type: 'input_audio_buffer.committed', item_id: 'late-stop' });
+    const ending = h.click('vi-end-btn');
+    h.event({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'late-stop', transcript: "I'll end the interview." });
+    await ending;
+    assert.equal(h.completeBodies().length, 1);
+    assert.ok(!h.completeBodies()[0].transcript.some(turn => turn.text.includes("I'll end")));
+    assert.ok(h.completeBodies()[0].transcript.some(turn => turn.speaker === 'user'));
   } finally { h.dispose(); }
 });
 

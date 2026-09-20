@@ -400,6 +400,9 @@
     if (typeof text !== 'string') return false;
     var lower = text.toLowerCase().replace(/[‘’]/g, "'");
     if (lower.length < 8 || lower.length > 240) return false;
+    // A short, standalone stop command observed in live QA. Do not broaden
+    // this to future-tense stories or instructions about how to finish.
+    if (/^(?:(?:ok|okay|alright|all right)[, ]+)?i(?:'ll| will) end (?:this|the) interview(?: now| here| please)*[.!]?$/i.test(lower.trim())) return true;
     var sentences = lower.replace(/([.!?])/g, '$1\n').split('\n');
     for (var i = 0; i < sentences.length; i++) {
       var s = sentences[i].trim();
@@ -916,9 +919,8 @@
   // NOT record it. The check runs before recordTurn on purpose: exclusion gates
   // future writes, it cannot unwrite one.
   function handleSpokenEndRequest(transcript, itemId) {
-    if (state.ending) return false;
     var lc = lifecycle();
-    if (!lc.is(PHASES.AUDIO_CHECK) && !lc.is(PHASES.ACTIVE_INTERVIEW)) return false;
+    if (!state.ending && !lc.is(PHASES.AUDIO_CHECK) && !lc.is(PHASES.ACTIVE_INTERVIEW) && !lc.is(PHASES.CLOSING)) return false;
     var check;
     if (typeof window.isExplicitEndRequest === 'function') {
       check = window.isExplicitEndRequest;
@@ -935,6 +937,9 @@
     if (itemId && state.order && typeof state.order.drop === 'function') {
       state.order.drop(itemId);
     }
+    // Transcription may arrive after the interviewer has already wrapped up.
+    // Exclude the control turn during the flush without restarting completion.
+    if (state.ending || lc.is(PHASES.CLOSING)) return true;
     console.log('[VOICE] candidate asked to end the interview; ending it, and the request stays out of the transcript');
     track('voice_manual_end', { via: 'spoken_request' });
     // A conduct or safety close already in flight owns the ending; endInterview
