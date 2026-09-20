@@ -88,8 +88,13 @@
         const data = await response.json();
         if (data.ok && (data.consent || data.resetConsent === true) && revision === consentRevision) {
           if (data.resetConsent === true) {
-            // Invalid stored decisions cannot leave a stale local grant.
+            // Invalid stored decisions revoke both the cached grant and any
+            // events/identity queued while this server check was in flight.
             localStorage.removeItem(CONSENT_KEY);
+            _pendingGtagCalls.length = 0;
+            _pendingClarityIdentify.length = 0;
+            preventGALoading();
+            window.dispatchEvent(new CustomEvent('cookie-consent-revoked'));
             return null;
           }
           // Sync server consent to localStorage
@@ -804,4 +809,3 @@
     init();
   }
 })();
-

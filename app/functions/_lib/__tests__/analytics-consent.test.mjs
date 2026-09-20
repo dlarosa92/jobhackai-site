@@ -145,6 +145,19 @@ test('an explicit invalid server decision clears a stale browser grant',async()=
   const h=harness({pendingServer:true,consent:true});const pending=h.init();h.finishServer(null);await pending;h.runTimers();
   assert.equal(h.ctx.JHA.cookieConsent.hasAnalyticsConsent(),null);assert.equal(h.scripts.length,0);assert.equal(h.ctx.JHA.cookieConsent.hasConsent(),false);
 });
+test('resetting invalid server consent discards queued events and identity before a later grant',async()=>{
+  const h=harness({pendingServer:true,consent:true});
+  const pending=h.init();
+  h.ctx.JHA.gtagSafe('event','stale_grant_event',{});
+  h.ctx.JHA.clarityIdentifySafe('stale_identity');
+  h.finishServer(null);await pending;h.runTimers();
+  assert.equal(h.ctx['ga-disable-'+GA],true);
+  h.setConsent(true);h.runTimers();
+  assert.equal(h.events('stale_grant_event').length,0);
+  assert.ok(!(h.ctx.clarity?.q||[]).some(call=>call[0]==='identify'&&call[1]==='stale_identity'));
+  h.ctx.JHA.gtagSafe('event','fresh_grant_event',{});
+  assert.equal(h.events('fresh_grant_event').length,1);
+});
 test('a legacy or corrupt anonymous cookie is rotated before consent sync',async()=>{
   const h=harness();h.ctx.document.cookie='jha_client_id=legacy-corrupted-value';await h.init();h.setConsent(false);
   await new Promise(resolve=>setImmediate(resolve));
