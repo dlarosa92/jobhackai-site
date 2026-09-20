@@ -4,21 +4,33 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 const root = new URL('../../../../',import.meta.url);
 const clientId = '7bbba230-b755-4d31-b475-e20cf6d00ed9';
-function harness(path, {authFailure=false, userMissing=false, saveFailure=false, stored=null}={}) {
-  const writes=[],reads=[];
+function harness(path, {authFailure=false, userMissing=false, saveFailure=false, cleanupFailure=false, stored=null}={}) {
+  const writes=[],reads=[],revocations=[];
   const ctx={Request,Response,Date,console:{error(){}},
     getBearer:r=>r.headers.get('Authorization')?.match(/^Bearer (.+)$/)?.[1],
     verifyFirebaseIdToken:async()=>{if(authFailure)throw Error('private token details');return {uid:'verified-user'};},
     getOrCreateUserByAuthId:async()=>userMissing?null:{id:42},
     getCookieConsent:async(...args)=>{reads.push(args);return stored;},
-    upsertCookieConsent:async(_env,row)=>{writes.push(row);return !saveFailure;}
+    upsertCookieConsent:async(_env,row)=>{writes.push(row);return !saveFailure;},
+    revokeCheckoutAttribution:async(_env,row)=>{revocations.push(row);return !cleanupFailure;}
   };
   vm.createContext(ctx);
   const source=readFileSync(new URL(path,root),'utf8').replace(/^import .*;\n/gm,'').replace('export async function onRequest','async function onRequest');
   vm.runInContext(source+'\nglobalThis.handler=onRequest;',ctx);
-  return {writes,reads,request:(body,headers={},method='POST')=>ctx.handler({env:{FIREBASE_PROJECT_ID:'qa'},request:new Request('https://qa.jobhackai.io/api/cookie-consent',{method,headers, ...(method==='POST'?{body:JSON.stringify(body)}:{})})})};
+  return {writes,reads,revocations,request:(body,headers={},method='POST')=>ctx.handler({env:{FIREBASE_PROJECT_ID:'qa'},request:new Request('https://qa.jobhackai.io/api/cookie-consent',{method,headers, ...(method==='POST'?{body:JSON.stringify(body)}:{})})})};
 }
 for(const path of ['app/functions/api/cookie-consent.js','functions/api/cookie-consent.js']) {
+  test(path+': rejection removes verified account and browser context and surfaces cleanup failure',async()=>{
+    const h=harness(path);
+    const headers={Authorization:'Bearer valid',Cookie:'jha_client_id='+clientId};
+    assert.equal((await h.request({consent:{version:1,analytics:false},userId:900},headers)).status,200);
+    assert.equal(h.revocations[0].userId,42);assert.equal(h.revocations[0].clientId,clientId);
+    const failed=harness(path,{cleanupFailure:true});
+    assert.equal((await failed.request({consent:{version:1,analytics:false}},headers)).status,503);
+    assert.equal(failed.writes[0].consent.analytics,false);
+    const grant=harness(path);await grant.request({clientId,consent:{version:1,analytics:true}});
+    assert.equal(grant.revocations.length,0);
+  });
   test(path+': invalid signed-in token never reads or writes anonymous consent',async()=>{
     const h=harness(path,{authFailure:true});
     for(const method of ['GET','POST'])assert.equal((await h.request({clientId,consent:{version:1,analytics:false}},{Authorization:'Bearer stale',Cookie:'jha_client_id='+clientId},method)).status,401);

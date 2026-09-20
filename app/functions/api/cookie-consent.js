@@ -1,6 +1,7 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { getOrCreateUserByAuthId } from '../_lib/db.js';
 import { upsertCookieConsent, getCookieConsent } from '../_lib/db.js';
+import { revokeCheckoutAttribution } from '../_lib/checkout-attribution.js';
 
 function corsHeaders(origin, env) {
   const fallbackOrigins = [
@@ -91,6 +92,9 @@ export async function onRequest({ request, env }) {
     // persist arbitrary caller fields or treat the string "false" as consent.
     const consent = {version:1,analytics:body.consent.analytics,updatedAt:new Date().toISOString()};
     const saved = await upsertCookieConsent(env, {userId,authId,clientId,consent});
+    if (saved && !consent.analytics && !await revokeCheckoutAttribution(env, {userId,clientId})) {
+      return json({ok:false,error:'Consent cleanup unavailable'},503,origin,env);
+    }
     return saved ? json({ok:true},200,origin,env) : json({ok:false,error:'Failed to save consent'},503,origin,env);
   } catch (error) {
     console.error('[COOKIE-CONSENT] Storage operation failed:', error?.name || 'Error');

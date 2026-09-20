@@ -1,4 +1,5 @@
 import { packCheckoutAttemptKey } from '../_lib/checkout-attempt.js';
+import { saveCheckoutAttribution } from '../_lib/checkout-attribution.js';
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { isTrialEligible, getUserPlanData, getOrCreateUserByAuthId, getDb } from '../_lib/db.js';
 import { sendEmail } from '../_lib/email.js';
@@ -41,7 +42,6 @@ export async function onRequest(context) {
       console.log('🔴 [CHECKOUT] Invalid JSON body', parseErr?.message || parseErr);
       return json({ ok: false, error: 'invalid_json' }, 400, origin, env);
     }
-    console.log('🔵 [CHECKOUT] Parsed body', body);
     const { plan } = body || {};
     if (plan === 'pack' && body.checkoutAttemptId != null && !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(body.checkoutAttemptId))) {
       return json({ ok: false, error: 'Invalid checkout attempt id' }, 400, origin, env);
@@ -388,7 +388,8 @@ export async function onRequest(context) {
         return json({ ok: false, error: 'Invalid response from Stripe' }, 500, origin, env);
       }
       
-      console.log('✅ [CHECKOUT] Session created', { id: s.id, url: s.url });
+      await saveCheckoutAttribution(env, { request, session: s, uid, customerId, analytics: body.analytics });
+      console.log('✅ [CHECKOUT] Session created', { id: redactId(s.id) });
       return json({ ok: true, url: s.url, sessionId: s.id }, 200, origin, env);
     } catch (sessionError) {
       console.log('🔴 [CHECKOUT] Session create exception', {
