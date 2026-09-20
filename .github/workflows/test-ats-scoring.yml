@@ -5,6 +5,8 @@ on:
     branches: [main, dev0]
     paths:
       - 'app/functions/_lib/**'
+      - 'app/tests/voice-transcripts/**'
+      - '.github/workflows/test-ats-scoring.yml'
       - 'app/functions/api/voice/**'
       - 'app/functions/dictionaries/**'
       # These are browser modules, but their suites live in _lib/__tests__ —
@@ -19,6 +21,8 @@ on:
     branches: [main, dev0]
     paths:
       - 'app/functions/_lib/**'
+      - 'app/tests/voice-transcripts/**'
+      - '.github/workflows/test-ats-scoring.yml'
       - 'app/functions/api/voice/**'
       - 'app/functions/dictionaries/**'
       # These are browser modules, but their suites live in _lib/__tests__ —
@@ -107,3 +111,6 @@ jobs:
         run: node voice-history.test.mjs
 
 
+
+      - name: Run voice scorecard grounding and evaluation tests
+        run: node app/tests/voice-transcripts/unit.test.mjs
