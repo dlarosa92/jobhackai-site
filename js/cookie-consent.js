@@ -56,7 +56,8 @@
   function getConsent() {
     try {
       const stored = localStorage.getItem(CONSENT_KEY);
-      return stored ? JSON.parse(stored) : null;
+      const value = stored ? JSON.parse(stored) : null;
+      return value?.version === 1 && typeof value.analytics === 'boolean' ? value : null;
     } catch (e) {
       return null;
     }

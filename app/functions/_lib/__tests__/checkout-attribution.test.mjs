@@ -76,3 +76,11 @@ test('unknown environments, malformed consent, and unavailable storage never imp
   assert.equal(normalizeCheckoutAnalytics({analyticsConsent:'true'}),null);
   h.env.ENVIRONMENT='qa';h.db.exec('DROP TABLE checkout_attributions;');assert.equal(await h.save(),false);
 });
+
+test('a slightly fast device clock preserves attribution without storing future timestamps',()=>{
+  const now=1789880000000;
+  const touch={at:now+120000,source:'linkedin',medium:'social',campaign:'voice_beta'};
+  const context=normalizeCheckoutAnalytics({analyticsConsent:true,firstTouch:touch,lastTouch:touch},now);
+  assert.equal(context.first.at,now);assert.equal(context.last.at,now);
+  assert.equal(normalizeCheckoutAnalytics({analyticsConsent:true,firstTouch:{...touch,at:now+360000}},now).first,null);
+});

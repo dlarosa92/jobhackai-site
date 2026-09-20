@@ -284,3 +284,12 @@ test('a valid recent last touch survives an expired first touch',async()=>{
   const context=await h.ctx.JHA.cookieConsent.getCheckoutAnalyticsContext();
   assert.equal(context.firstTouch,null);assert.equal(context.lastTouch.campaign,'recent');
 });
+
+test('legacy cached consent without a server record is undecided so visitors can choose again',async()=>{
+  for(const value of [{analytics:true},{version:2,analytics:true},{version:1,analytics:'true'},[]]){
+    const h=harness();h.store.set('jha_cookie_consent_v1',JSON.stringify(value));await h.init();
+    assert.equal(h.ctx.JHA.cookieConsent.hasConsent(),false);
+    assert.equal(h.ctx.JHA.cookieConsent.hasAnalyticsConsent(),null);
+    assert.equal(h.scripts.length,0);
+  }
+});

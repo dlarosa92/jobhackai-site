@@ -2,10 +2,13 @@ import { getDb } from './db.js';
 import { canonicalEnvironmentName } from './stripe-environment.js';
 
 const WINDOW_MS = 90 * 86400000;
+const CLOCK_SKEW_MS = 5 * 60000;
 const CLIENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function touch(value, now) {
-  if (!value || !Number.isSafeInteger(value.at) || value.at > now || value.at < now - WINDOW_MS) return null;
-  const result = { at: value.at };
+  if (!value || !Number.isSafeInteger(value.at) || value.at > now + CLOCK_SKEW_MS || value.at < now - WINDOW_MS) return null;
+  // Browser timestamps are untrusted and devices can be slightly ahead.
+  // Bound skew, then clamp accepted future times to the server receipt.
+  const result = { at: Math.min(value.at, now) };
   for (const key of ['source', 'medium', 'campaign', 'asset', 'id']) {
     if (value[key] != null) {
       if (typeof value[key] !== 'string' || !/^[a-z0-9_.-]{1,100}$/i.test(value[key])) return null;
