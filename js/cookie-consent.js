@@ -354,17 +354,33 @@
   }
 
   let clarityStopped = false;
-  // ConsentV2 alone can leave Clarity in cookieless tracking mode. Its SDK's
-  // stop command removes the active observers/listeners; removing a script
-  // element does not. Keep one runtime and explicitly restart on a new grant.
+  let clarityScriptFailed = false;
+  let clarityBootstrap = null;
+  // The vendor's consent-denial API can schedule an internal restart. Stop
+  // directly instead, clear its cookies, and keep replay stopped until the
+  // next document. GA can resume in this document after a later grant.
+  function clearClarityCookies() {
+    const domains = ['', '; Domain=' + hostname];
+    if (productionHost) {
+      domains.push('; Domain=.jobhackai.io');
+    }
+    for (const name of ['_clck', '_clsk']) {
+      for (const domain of domains) {
+        document.cookie = `${name}=; Max-Age=0; Path=/${domain}; SameSite=Lax`;
+      }
+    }
+  }
   function teardownClarity() {
     try {
-      if (typeof window.clarity !== 'function') return;
-      if (Array.isArray(window.clarity.q)) window.clarity.q.length = 0;
-      window.clarity('consentv2', { analytics_Storage: 'denied', ad_Storage: 'denied' });
-      window.clarity('stop');
-      clarityStopped = true;
-    } catch (_) { /* ignore */ }
+      if (typeof window.clarity === 'function') {
+        clarityStopped = true;
+        if (Array.isArray(window.clarity.q)) window.clarity.q.length = 0;
+        // A pending bootstrap processes this stop when its SDK arrives. Do
+        // not queue consentv2 denial: it can restart the vendor internally.
+        window.clarity('stop');
+      }
+    } catch (_) { /* Cookie cleanup must still run if the vendor fails. */ }
+    clearClarityCookies();
   }
 
   // Analytics Script Loading: Prevent if consent denied (covers GA + Clarity)
@@ -427,33 +443,38 @@
     };
   }
 
-  // Load Microsoft Clarity if a project ID is configured.
-  // Idempotent: safe to call after Clarity has already loaded.
+  // Load only after consent. After withdrawal, replay stays stopped until
+  // navigation; never restart an SDK whose storage defaults may have changed.
   function loadClarityScript() {
     if (!CLARITY_PROJECT_ID || !hasAnalyticsConsent()) return;
-    if (document.querySelector('script[src*="clarity.ms/tag/"]')) {
-      if (typeof window.clarity === 'function') {
-        if (clarityStopped) {
-          // A stopped SDK queues commands. Remove stale stop/identity calls
-          // before start processes that queue under the new consent decision.
-          if (Array.isArray(window.clarity.q)) window.clarity.q.length = 0;
-          window.clarity('start');
-          clarityStopped = false;
-        }
-        window.clarity('consentv2', { analytics_Storage: 'granted', ad_Storage: 'denied' });
-      }
-      return;
+    let existing = document.querySelector('script[src*="clarity.ms/tag/"]');
+    if (clarityScriptFailed && window.clarity === clarityBootstrap) {
+      // An external tag that failed to download never executed. Only that
+      // known bootstrap is safe to replace; never replace a running SDK.
+      if (existing) existing.remove();
+      window.clarity = undefined;
+      clarityBootstrap = null;
+      clarityScriptFailed = false;
+      clarityStopped = false;
+      existing = null;
     }
-    // Standard Clarity bootstrap snippet, inlined so we avoid an extra file.
-    (function(c,l,a,r,i,t,y){
-      c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
-      c[a]('consentv2', { analytics_Storage: 'granted', ad_Storage: 'denied' });
-      t=l.createElement(r);t.async=1;t.src='https://www.clarity.ms/tag/'+i;
-      // A withdrawal while the download is pending must still stop the
-      // vendor when it finishes. The current decision always wins.
-      t.onload=()=>{ if (!hasAnalyticsConsent()) teardownClarity(); };
-      y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
-    })(window, document, 'clarity', 'script', CLARITY_PROJECT_ID);
+    if (clarityStopped || existing) return;
+    clarityBootstrap = window.clarity || function() {
+      (clarityBootstrap.q = clarityBootstrap.q || []).push(arguments);
+    };
+    window.clarity = clarityBootstrap;
+    window.clarity('consentv2', { analytics_Storage: 'granted', ad_Storage: 'denied' });
+    const script = document.createElement('script');
+    script.async = true;
+    script.src = 'https://www.clarity.ms/tag/' + CLARITY_PROJECT_ID;
+    script.onerror = () => { clarityScriptFailed = true; };
+    script.onload = () => {
+      clarityScriptFailed = false;
+      // A quick withdrawal/regrant does not cancel the stop while loading.
+      if (clarityStopped || !hasAnalyticsConsent()) teardownClarity();
+    };
+    const first = document.getElementsByTagName('script')[0];
+    first.parentNode.insertBefore(script, first);
   }
 
   // Authentication links can contain action tokens and checkout session IDs.
@@ -778,7 +799,7 @@
   }
 
   function flushPendingClarityIdentify() {
-    if (!hasAnalyticsConsent() || typeof window.clarity !== 'function') return;
+    if (clarityStopped || !hasAnalyticsConsent() || typeof window.clarity !== 'function') return;
     while (_pendingClarityIdentify.length) {
       const id = _pendingClarityIdentify.shift();
       try {
@@ -863,6 +884,7 @@
       return;
     }
     try { loadClarityScript(); } catch (_) { /* ignore */ }
+    if (clarityStopped) return;
     if (typeof window.clarity === 'function') {
       try { window.clarity('identify', id); } catch (_) { /* ignore */ }
       flushPendingClarityIdentify();
