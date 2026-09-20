@@ -31,7 +31,8 @@ export async function cancelBillingBeforeDeletion(env, { uid, user, email }) {
   if (!assertStripeKeyMatchesEnvironment(env).ok) throw new Error('Billing environment configuration invalid');
   const mapped = new Set([user?.stripe_customer_id].filter(Boolean));
   // An unavailable cache might hide an older customer. Fail closed.
-  const cached = await env.JOBHACKAI_KV?.get(kvCusKey(uid));
+  if (typeof env.JOBHACKAI_KV?.get !== 'function') throw new Error('Billing cache unavailable');
+  const cached = await env.JOBHACKAI_KV.get(kvCusKey(uid));
   if (cached) mapped.add(cached);
   const customers = new Map();
   for (const id of mapped) {

@@ -70,6 +70,15 @@ test('a cancellation HTTP failure or success without canceled status cannot pass
 });
 test('no billing credential fails before a lookup',async()=>{const h=setup();delete h.env.STRIPE_SECRET_KEY;await assert.rejects(h.run());assert.equal(h.calls.length,0);});
 
+test('missing or unusable cache cannot be treated as an empty billing history',async()=>{
+  for(const cache of [undefined,null,{}, {get:null}]) {
+    const h=setup({customers:[],subscriptions:[],mapped:null});
+    h.env.JOBHACKAI_KV=cache;
+    await assert.rejects(h.run(),/Billing cache unavailable/);
+    assert.equal(h.calls.length,0);
+  }
+});
+
 function routeHarness({billingFails=false,firebaseFails=false,clientFallback=false,kvFails=false}={}) {
   const events=[];let emailOptions;
   const ctx={Request,Response,Date,console:{log(){},warn(){},error(){}},
