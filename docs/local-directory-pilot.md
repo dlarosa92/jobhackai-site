@@ -2,6 +2,12 @@
 
 Owner-confirmed outcome: a directory website experiment on existing JobHackAI infrastructure, with one researched category, public browsing, individual provider pages, a Get listed entry point and measurable contact interest. Voice and career-product campaigns remain separate. Production and public promotion remain held.
 
+## Operating model: self-service and written communication
+
+The owner wants to operate without customer calls, meetings or personal sales conversations. Design onboarding, listing corrections, billing, cancellation and support around company-branded forms and email. Routine requests may be handled by agents using approved facts and policies; uncertain claims, complaints, refunds and exceptions go to an asynchronous owner review queue. Do not promise zero owner work or pretend an AI agent is a named human employee.
+
+The pilot directs consumers to providers for service booking, quotes and fulfillment. JobHackAI is not scheduling appointments or guaranteeing a provider's work. Any later paid placement offer should describe the actual placement and reporting clearly; do not promise a quantity or quality of leads until it has evidence and an explicit delivery definition. No mandatory phone field or book-a-call onboarding step is required. Inbox receipt and resolution need verification before claiming the support workflow is automated.
+
 ## Current prototype
 
 Mobile detailing is the working category for the prototype, not a validated commercial conclusion. Six providers publish useful comparison information. The directory emphasizes differences in package scope and water/power requirements rather than unsupported rankings or a cheapest-first list. Each listing links to its first-party source and records the check date in `marketing/data/directory/mobile-detailing.json`. Published starting prices are not quotes or like-for-like comparisons.
