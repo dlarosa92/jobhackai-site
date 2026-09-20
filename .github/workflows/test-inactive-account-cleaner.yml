@@ -3,6 +3,7 @@ on:
   pull_request:
     branches: [dev0, develop, main]
     paths:
+      - 'app/scripts/lib/*reconcile-core.mjs'
       - 'workers/inactive-account-cleaner/**'
       - 'app/functions/_lib/**'
       - 'shared/firebase-deletion-client.js'
@@ -11,6 +12,7 @@ on:
   push:
     branches: [dev0, develop, main]
     paths:
+      - 'app/scripts/lib/*reconcile-core.mjs'
       - 'workers/inactive-account-cleaner/**'
       - 'app/functions/_lib/**'
       - 'shared/firebase-deletion-client.js'
@@ -35,4 +37,4 @@ jobs:
       - name: Verify compiled warning, completion delivery and durable deletion with intercepted providers
         env:
           JOBHACKAI_INACTIVE_BUNDLE: /tmp/jobhackai-inactive-worker/index.mjs
-        run: node --test --test-name-pattern='scheduled handler|eligible warned account|scheduled ambiguous|scheduled completion' workers/inactive-account-cleaner/tests/cleanup.test.mjs
+        run: node --test --test-name-pattern='scheduled handler|eligible warned account|scheduled ambiguous|scheduled completion|reconciled uncertain warning' workers/inactive-account-cleaner/tests/cleanup.test.mjs

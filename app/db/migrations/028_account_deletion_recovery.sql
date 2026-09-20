@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS account_operation_claims (
   id TEXT PRIMARY KEY,
   auth_id TEXT NOT NULL,
   kind TEXT NOT NULL CHECK (kind IN ('billing','account','maintenance')),
+  purpose TEXT NOT NULL DEFAULT 'api' CHECK (purpose IN ('api','webhook','analytics','followup','retention','inactivity','maintenance')),
   -- A crashed webhook can be matched to its durable event ledger without
   -- retaining event payloads, email, credentials or interview content.
   webhook_event_id TEXT,
@@ -94,6 +95,48 @@ CREATE INDEX IF NOT EXISTS idx_account_operations_pending
   ON account_operation_claims(auth_id,state);
 CREATE INDEX IF NOT EXISTS idx_account_operations_analytics
   ON account_operation_claims(analytics_event_key,state);
+
+-- Operational receipts contain no customer content or provider payloads.
+-- Suppressed delivery stays suppressed even if an outbox/marker is reset.
+CREATE TABLE IF NOT EXISTS account_operation_reconciliations (
+  id TEXT PRIMARY KEY NOT NULL,
+  operation_id TEXT NOT NULL,
+  auth_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  purpose TEXT NOT NULL,
+  state_before TEXT NOT NULL CHECK (state_before IN ('active','uncertain')),
+  updated_before TEXT NOT NULL,
+  analytics_event_key TEXT,
+  disposition TEXT NOT NULL CHECK (disposition IN ('verified','retry_storage','suppress_delivery')),
+  evidence_sha256 TEXT NOT NULL CHECK (length(evidence_sha256)=64),
+  operator_ref TEXT NOT NULL,
+  invocation_ref TEXT NOT NULL,
+  provider_ref TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  CHECK (disposition<>'retry_storage' OR purpose='retention'),
+  CHECK (disposition<>'suppress_delivery' OR purpose IN ('analytics','followup','inactivity'))
+);
+CREATE INDEX IF NOT EXISTS idx_operation_reconciliation_owner
+  ON account_operation_reconciliations(auth_id,purpose,disposition);
+CREATE INDEX IF NOT EXISTS idx_operation_reconciliation_event
+  ON account_operation_reconciliations(analytics_event_key,disposition);
+CREATE TRIGGER IF NOT EXISTS reconcile_stopped_account_operation
+AFTER INSERT ON account_operation_reconciliations BEGIN
+  UPDATE account_operation_claims SET state='finished',updated_at=datetime('now')
+  WHERE id=NEW.operation_id AND auth_id=NEW.auth_id AND kind=NEW.kind AND purpose=NEW.purpose
+    AND state=NEW.state_before AND updated_at=NEW.updated_before
+    AND analytics_event_key IS NEW.analytics_event_key;
+  SELECT CASE WHEN changes()<>1 THEN RAISE(ABORT,'operation_reconciliation_conflict') END;
+  UPDATE analytics_delivery SET
+    state=CASE WHEN state IN ('accepted_unverified','rejected','expired','ineligible') THEN state ELSE 'uncertain' END,
+    lease_until=NULL,last_reason='operator_suppressed',updated_at=unixepoch()*1000
+    WHERE event_key=NEW.analytics_event_key AND NEW.purpose='analytics' AND NEW.disposition='suppress_delivery';
+  UPDATE users SET voice_followup_email_sent_at=COALESCE(voice_followup_email_sent_at,datetime('now'))
+    WHERE auth_id=NEW.auth_id AND NEW.purpose='followup' AND NEW.disposition='suppress_delivery';
+  UPDATE account_inactivity_warnings SET state='needs_review',last_error_code='operator_suppressed'
+    WHERE auth_id=NEW.auth_id AND operation_id=NEW.operation_id
+      AND NEW.purpose='inactivity' AND NEW.disposition='suppress_delivery';
+END;
 
 -- Operator-only recovery of a verified stopped deletion execution. The single
 -- INSERT and its trigger form one atomic operation, including the audit receipt.

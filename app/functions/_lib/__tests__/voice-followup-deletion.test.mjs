@@ -1,3 +1,4 @@
+import {inspectionSql,inspectReport,planReconciliation} from '../../../scripts/lib/account-operation-reconcile-core.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -13,7 +14,8 @@ function setup(t) {
   const db = sqliteD1();
   t.after(() => db.close());
   db.exec(readFileSync(new URL('../../../db/schema.sql', import.meta.url), 'utf8'));
-  db.exec(readFileSync(new URL('../../../db/migrations/028_account_deletion_recovery.sql', import.meta.url), 'utf8'));
+  for(const name of ['024_collected_payments','025_checkout_attribution','026_payment_campaign_links','027_analytics_delivery','028_account_deletion_recovery'])
+    db.exec(readFileSync(new URL('../../../db/migrations/'+name+'.sql', import.meta.url), 'utf8'));
   db.exec(`INSERT INTO users(id,auth_id,email,plan,free_session_used) VALUES(1,'owner','owner@example.test','free',1);
     INSERT INTO voice_sessions(id,user_id,status,entitlement_mode,ended_at,scorecard_json)
     VALUES('session',1,'completed','free',datetime('now','-49 hours'),'{"topImprovement":"Use a concrete result <img src=x onerror=alert(1)>"}');`);
@@ -171,4 +173,17 @@ test('missing migration, missing credentials, bad destination and dev cutover do
   await assert.rejects(f.run(), /no such table/);
   await worker.scheduled({}, f.env, {});
   assert.equal(f.calls.length, 0); assert.equal(await f.marker(), null);
+});
+
+test('reconciled uncertain follow-up is not resent even if its marker is reset',async t=>{
+  const f=setup(t);f.fixture.reply=async()=>{throw Error('fixture_timeout');};await f.run();
+  const claim=(await f.claims())[0];assert.equal(claim.purpose,'followup');assert.equal(claim.state,'uncertain');
+  const row=await f.db.prepare(inspectionSql(claim.id)).first(),now=Date.now(),report=inspectReport('qa',row,now);
+  report.disposition='suppress_delivery';
+  report.evidence={operatorRef:'fixture-operator',invocation:{status:'completed',executionToken:claim.id,observedAt:new Date(now).toISOString(),reference:'fixture/returned-invocation'},
+    providers:{status:'settled_unknown',pendingRequests:false,observedAt:new Date(now).toISOString(),reference:'fixture/intercepted-provider'}};
+  await f.db.prepare(planReconciliation(report,row,'qa',now).sql).run();
+
+  f.db.exec('UPDATE users SET voice_followup_email_sent_at=NULL');
+  await f.run();assert.equal(f.calls.length,1);assert.equal((await f.claims())[0].state,'finished');
 });

@@ -6,7 +6,7 @@ export const TARGETS = Object.freeze({
   prod:'f9b709fd-56c3-4a0b-8141-4542327c9d4d'
 });
 const fields=['id','auth_id','phase','execution_token','execution_started_at','attempts','updated_at','origin','admission_state','pending_operations'];
-const ref = value => typeof value==='string' && /^[A-Za-z0-9][A-Za-z0-9:/._-]{0,199}$/.test(value);
+export const ref = value => typeof value==='string' && /^[A-Za-z0-9][A-Za-z0-9:/._-]{0,199}$/.test(value);
 export function literal(value) {
   if(typeof value!=='string' || value.includes('\0'))throw Error('reconciliation_value_invalid');
   return "'"+value.replace(/'/g,"''")+"'";
@@ -41,6 +41,19 @@ function timestamp(value) {
   const parsed=Date.parse(value);
   return Number.isFinite(parsed) && new Date(parsed).toISOString().replace('.000Z','Z')===value.replace('.000Z','Z')?parsed:NaN;
 }
+export function validateReviewEvidence(evidence,{executionId,startedAt,providerStates=['settled'],now=Date.now()}) {
+  const terminalAt=timestamp(evidence?.invocation?.observedAt),providerAt=timestamp(evidence?.providers?.observedAt);
+  const startText=String(startedAt).replace(' ','T');
+  const started=timestamp(startText.endsWith('Z')?startText:startText+'Z');
+  if(!ref(evidence?.operatorRef) || !ref(evidence?.invocation?.reference) || !ref(evidence?.providers?.reference) ||
+      !['completed','terminated'].includes(evidence?.invocation?.status) ||
+      evidence?.invocation?.executionToken!==executionId || evidence?.providers?.pendingRequests!==false ||
+      !Number.isFinite(started) || !Number.isFinite(terminalAt) || !Number.isFinite(providerAt) ||
+      terminalAt<started || providerAt<terminalAt || providerAt>now || now-providerAt>30*60*1000 ||
+      !providerStates.includes(evidence.providers.status)) {
+    throw Error('reconciliation_review_evidence_required');
+  }
+}
 export function planReconciliation(report,current,environment,now=Date.now()) {
   const databaseId=assertTarget(environment);
   if(report?.version!==1 || report.environment!==environment || report.databaseId!==databaseId)throw Error('reconciliation_target_mismatch');
@@ -50,17 +63,8 @@ export function planReconciliation(report,current,environment,now=Date.now()) {
       !ref(job.execution_token) || !job.execution_started_at || job.admission_state!=='requested' ||
       !['user_request','inactivity'].includes(job.origin) || job.pending_operations!==0)throw Error('reconciliation_job_not_releasable');
   const evidence=report.evidence;
-  const terminalAt=timestamp(evidence?.invocation?.observedAt),providerAt=timestamp(evidence?.providers?.observedAt);
-  const startText=job.execution_started_at.replace(' ','T');
-  const started=timestamp(startText.endsWith('Z')?startText:startText+'Z');
-  if(!ref(evidence?.operatorRef) || !ref(evidence?.invocation?.reference) || !ref(evidence?.providers?.reference) ||
-      !['completed','terminated'].includes(evidence?.invocation?.status) ||
-      evidence?.invocation?.executionToken!==job.execution_token || evidence?.providers?.pendingRequests!==false ||
-      !Number.isFinite(started) || !Number.isFinite(terminalAt) || !Number.isFinite(providerAt) ||
-      terminalAt<started || providerAt<terminalAt || providerAt>now || now-providerAt>30*60*1000 ||
-      (evidence.providers.status!=='settled' && !(job.phase==='identity_removed' && evidence.providers.status==='storage_only'))) {
-    throw Error('reconciliation_review_evidence_required');
-  }
+  validateReviewEvidence(evidence,{executionId:job.execution_token,startedAt:job.execution_started_at,
+    providerStates:job.phase==='identity_removed'?['settled','storage_only']:['settled'],now});
   // This validates an operator's reviewed evidence, not the truth of a checkbox.
   // The runbook requires authoritative invocation and provider observations.
   const evidenceHash=createHash('sha256').update(JSON.stringify(report)).digest('hex');

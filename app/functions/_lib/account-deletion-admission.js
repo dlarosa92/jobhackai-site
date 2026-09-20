@@ -11,34 +11,49 @@ function database(env) {
 function identity(uid) {
   if (typeof uid !== 'string' || !uid || uid.length > 128) throw new Error('deletion_identity_invalid');
 }
-export async function admitAccountOperation(env, uid, kind = 'account', { webhookEventId = null, analyticsEventKey = null } = {}) {
+export async function admitAccountOperation(env, uid, kind = 'account', { webhookEventId = null, analyticsEventKey = null, purpose } = {}) {
   identity(uid);
   if (!['billing', 'account', 'maintenance'].includes(kind)) throw new Error('deletion_operation_invalid');
   if (webhookEventId !== null && (kind !== 'billing' || typeof webhookEventId !== 'string' ||
       !/^evt_[a-zA-Z0-9_]{1,196}$/.test(webhookEventId))) throw new Error('deletion_webhook_event_invalid');
   if (analyticsEventKey !== null && (kind !== 'account' || typeof analyticsEventKey !== 'string' ||
       !/^(purchase:ch_|refund:re_)[a-zA-Z0-9_]{1,196}$/.test(analyticsEventKey))) throw new Error('deletion_analytics_event_invalid');
+  purpose ??= webhookEventId?'webhook':analyticsEventKey?'analytics':kind==='maintenance'?'maintenance':'api';
+  const validPurpose=({api:['account','billing'],webhook:['billing'],analytics:['account'],followup:['account'],
+    retention:['maintenance'],inactivity:['maintenance'],maintenance:['maintenance']})[purpose];
+  if(!Array.isArray(validPurpose) || !validPurpose.includes(kind) ||
+      (purpose==='webhook')!==(webhookEventId!==null) || (purpose==='analytics')!==(analyticsEventKey!==null))throw Error('deletion_operation_purpose_invalid');
   const db = database(env), id = crypto.randomUUID();
   // This check and admission are ONE statement, serialized with deletion's
   // intent insert. An unlocked SELECT followed by INSERT would race deletion.
-  const result = await db.prepare(`INSERT INTO account_operation_claims(id,auth_id,kind,webhook_event_id,analytics_event_key)
-    SELECT ?,?,?,?,? WHERE NOT EXISTS (
+  const result = await db.prepare(`INSERT INTO account_operation_claims(id,auth_id,kind,webhook_event_id,analytics_event_key,purpose)
+    SELECT ?,?,?,?,?,? WHERE NOT EXISTS (
       SELECT 1 FROM account_deletion_admissions WHERE auth_id = ?
     ) AND (? IS NULL OR NOT EXISTS (
       SELECT 1 FROM account_operation_claims WHERE analytics_event_key=? AND state!='finished'
     )) AND NOT EXISTS (
       SELECT 1 FROM account_operation_claims WHERE auth_id=? AND state!='finished'
         AND (kind='maintenance' OR ?='maintenance')
-    )`).bind(id,uid,kind,webhookEventId,analyticsEventKey,uid,analyticsEventKey,analyticsEventKey,uid,kind).run();
+    ) AND NOT EXISTS (SELECT 1 FROM account_operation_reconciliations r WHERE
+      (? IS NOT NULL AND r.analytics_event_key=?) OR (r.auth_id=? AND r.purpose=? AND
+        (?='followup' OR (?='inactivity' AND r.disposition='suppress_delivery'))))`)
+    .bind(id,uid,kind,webhookEventId,analyticsEventKey,purpose,uid,analyticsEventKey,analyticsEventKey,uid,kind,
+      analyticsEventKey,analyticsEventKey,uid,purpose,purpose,purpose).run();
   if (result.meta?.changes !== 1) {
     // Diagnostic only: this read grants no permission. The atomic INSERT is
     // the admission decision; neither a stale lease nor another UID bypasses it.
     const deleting = await db.prepare('SELECT 1 FROM account_deletion_admissions WHERE auth_id=?').bind(uid).first();
     if (deleting) throw new Error('account_deletion_pending');
+    const suppressed=await db.prepare(`SELECT 1 FROM account_operation_reconciliations r WHERE
+      (? IS NOT NULL AND analytics_event_key=?) OR (auth_id=? AND purpose=? AND
+        (?='followup' OR (?='inactivity' AND disposition='suppress_delivery')))`)
+      .bind(analyticsEventKey,analyticsEventKey,uid,purpose,purpose,purpose).first();
+    if(suppressed)throw Error(analyticsEventKey?'analytics_delivery_suppressed':'account_operation_suppressed');
     const unresolved = analyticsEventKey && await db.prepare("SELECT 1 FROM account_operation_claims WHERE analytics_event_key=? AND state!='finished'").bind(analyticsEventKey).first();
     throw new Error(unresolved ? 'analytics_delivery_unresolved' : 'account_operation_busy');
   }
-  return { id, uid, kind };
+  console.log('[account-operation] started',{operation:id,kind,purpose});
+  return { id, uid, kind, purpose };
 }
 export async function settleAccountOperation(env, claim, outcome) {
   identity(claim?.uid);

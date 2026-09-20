@@ -184,8 +184,8 @@ export async function deliver(env: Env, options: {now?:()=>number; request?:Requ
       operation=await admitAccountOperation(env,row.auth_id,'account',{analyticsEventKey:key});
     } catch(error) {
       const reason=error instanceof Error ? error.message : '';
-      if(reason==='account_deletion_pending' || reason==='analytics_delivery_unresolved' || reason==='account_operation_busy') {
-        await finish(db,key,lease,reason==='account_deletion_pending'?'ineligible':'pending',reason,clock());
+      if(reason==='account_deletion_pending' || reason==='analytics_delivery_suppressed' || reason==='analytics_delivery_unresolved' || reason==='account_operation_busy') {
+        await finish(db,key,lease,['account_deletion_pending','analytics_delivery_suppressed'].includes(reason)?'ineligible':'pending',reason,clock());
         continue;
       }
       throw error; // Missing schema/binding must not reach a provider.

@@ -53,7 +53,7 @@ export async function runCleanup(env, { afterUserId } = {}) {
     let claim = null;
     try {
       if (!audit) {
-        try { claim = await admitAccountOperation(env, owner.auth_id, 'maintenance'); }
+        try { claim = await admitAccountOperation(env, owner.auth_id, 'maintenance',{purpose:'retention'}); }
         catch (error) {
           if (['account_operation_busy', 'account_deletion_pending'].includes(error?.message)) { results.accounts_skipped++; continue; }
           throw error;

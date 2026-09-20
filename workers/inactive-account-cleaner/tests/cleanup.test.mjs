@@ -1,3 +1,4 @@
+import {inspectionSql,inspectReport,planReconciliation} from '../../../app/scripts/lib/account-operation-reconcile-core.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -228,4 +229,18 @@ test('invalid configuration cannot silently widen a scoped run or select an unkn
   }
   f.env.INACTIVITY_TEST_UID='owner';f.env.INACTIVITY_MODE='delete';await assert.rejects(f.run(),/configuration_invalid/);
   assert.equal(f.calls.length,0);assert.equal(await f.count('account_operation_claims'),0);
+});
+
+test('reconciled uncertain warning remains held for review while the account is released',async t=>{
+  const f=setup(t);f.state.outcome='timeout';await f.run();
+  const claim=await f.db.prepare("SELECT * FROM account_operation_claims WHERE state='uncertain'").first();
+  const row=await f.db.prepare(inspectionSql(claim.id)).first(),now=Date.now(),report=inspectReport('qa',row,now);
+  report.disposition='suppress_delivery';
+  report.evidence={operatorRef:'fixture-operator',invocation:{status:'completed',executionToken:claim.id,observedAt:new Date(now).toISOString(),reference:'fixture/returned-invocation'},
+    providers:{status:'settled_unknown',pendingRequests:false,observedAt:new Date(now).toISOString(),reference:'fixture/intercepted-provider'}};
+  await f.db.prepare(planReconciliation(report,row,'qa',now).sql).run();
+
+  const result=await f.run();assert.equal(result.skipped,1);assert.equal(f.sent().length,1);assert.equal(f.deleted.size,0);
+  assert.equal((await f.warning()).state,'needs_review');
+  await beginDeletionAdmission(f.env,{uid:'owner',origin:'user_request'});await assertDeletionQuiescent(f.env,'owner');
 });

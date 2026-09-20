@@ -3,6 +3,7 @@ on:
   push:
     branches: [main, develop, dev0]
     paths:
+      - 'app/scripts/lib/*reconcile-core.mjs'
       - 'workers/analytics-delivery/**'
       - 'app/db/migrations/027_analytics_delivery.sql'
       - 'app/db/migrations/028_account_deletion_recovery.sql'
@@ -45,6 +46,7 @@ on:
   pull_request:
     branches: [main, develop, dev0]
     paths:
+      - 'app/scripts/lib/*reconcile-core.mjs'
       - 'workers/analytics-delivery/**'
       - 'app/db/migrations/027_analytics_delivery.sql'
       - 'app/db/migrations/028_account_deletion_recovery.sql'

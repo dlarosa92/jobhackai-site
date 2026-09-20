@@ -5,21 +5,27 @@ import { readFileSync,writeFileSync,mkdtempSync,rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join,resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assertTarget,inspectionSql,receiptSql,inspectReport,planReconciliation } from './lib/deletion-execution-reconcile-core.mjs';
+import { assertTarget } from './lib/deletion-execution-reconcile-core.mjs';
+import * as jobs from './lib/deletion-execution-reconcile-core.mjs';
+import * as operations from './lib/account-operation-reconcile-core.mjs';
+function target(args) {
+  if(Boolean(args.job)===Boolean(args.operation))throw Error('reconciliation_one_target_required');
+  return args.operation?{core:operations,id:args.operation,key:'operationId',column:'operation_id'}:{core:jobs,id:args.job,key:'jobId',column:'job_id'};
+}
 
 export function parseArgs(argv) {
   const result={apply:false};
   for(const arg of argv) {
     if(arg==='--apply') {if(result.apply)throw Error('reconciliation_duplicate_argument');result.apply=true;continue;}
-    const match=/^--(env|job|report|review|receipt)=(.+)$/.exec(arg);
+    const match=/^--(env|job|operation|report|review|receipt)=(.+)$/.exec(arg);
     if(!match || Object.hasOwn(result,match[1]))throw Error('reconciliation_argument_invalid');
     result[match[1]]=match[2];
   }
   assertTarget(result.env);
-  if(!result.job || !result.report || (result.apply && !result.review))throw Error('reconciliation_arguments_required');
+  if(!result.report || (result.apply && !result.review))throw Error('reconciliation_arguments_required');
   if(result.receipt && (result.apply || result.review))throw Error('reconciliation_argument_invalid');
   if(result.apply && result.env==='prod')throw Error('production_reconciliation_held');
-  inspectionSql(result.job);
+  const selected=target(result);selected.core.inspectionSql(selected.id);
   return result;
 }
 export function d1Query(environment,sql,{execute=execFileSync}={}) {
@@ -42,37 +48,39 @@ export function d1Query(environment,sql,{execute=execFileSync}={}) {
 export async function run(args,{query=d1Query,now=Date.now}={}) {
   // Reserve a private output path before any possible remote write. Never
   // overwrite the review evidence or an earlier report.
+  const selected=target(args),{core,id,key,column}=selected;
+  const identifier={[key]:id};
   const fdPath=resolve(args.report);
   writeFileSync(fdPath,'',{mode:0o600,flag:'wx'});
   try {
     if(args.receipt) {
-      const receipts=await query(args.env,receiptSql(args.receipt,args.job));
+      const receipts=await query(args.env,core.receiptSql(args.receipt,id));
       writeFileSync(fdPath,JSON.stringify({mode:'receipt',environment:args.env,receipts},null,2)+'\n');
       return {mode:'receipt',found:receipts.length===1,report:fdPath};
     }
-    const rows=await query(args.env,inspectionSql(args.job));
+    const rows=await query(args.env,core.inspectionSql(id));
     if(rows.length!==1)throw Error('reconciliation_job_missing');
     const current=rows[0];
     if(!args.review) {
-      writeFileSync(fdPath,JSON.stringify(inspectReport(args.env,current,now()),null,2)+'\n');
-      return {mode:'inspection',jobId:args.job,report:fdPath};
+      writeFileSync(fdPath,JSON.stringify(core.inspectReport(args.env,current,now()),null,2)+'\n');
+      return {mode:'inspection',...identifier,report:fdPath};
     }
     const review=JSON.parse(readFileSync(args.review,'utf8'));
-    if(review?.snapshot?.id!==args.job)throw Error('reconciliation_target_mismatch');
-    const plan=planReconciliation(review,current,args.env,now());
+    if(review?.snapshot?.id!==id)throw Error('reconciliation_target_mismatch');
+    const plan=core.planReconciliation(review,current,args.env,now());
     if(!args.apply) {
       writeFileSync(fdPath,JSON.stringify({mode:'plan',...plan},null,2)+'\n');
-      return {mode:'plan',jobId:args.job,report:fdPath};
+      return {mode:'plan',...identifier,report:fdPath};
     }
     if(args.env==='prod')throw Error('production_reconciliation_held');
     // Save the exact candidate command before dispatch, including if its
     // response is lost. Never re-dispatch automatically after an error.
     writeFileSync(fdPath,JSON.stringify({mode:'apply_pending',...plan},null,2)+'\n');
     await query(args.env,plan.sql);
-    const receipts=await query(args.env,receiptSql(plan.id,plan.jobId));
-    if(receipts.length!==1 || receipts[0].job_id!==plan.jobId || receipts[0].evidence_sha256!==plan.evidenceHash)throw Error('reconciliation_receipt_unconfirmed');
-    writeFileSync(fdPath,JSON.stringify({mode:'applied',id:plan.id,jobId:plan.jobId,phase:plan.phase,evidenceHash:plan.evidenceHash},null,2)+'\n');
-    return {mode:'applied',id:plan.id,jobId:args.job,report:fdPath};
+    const receipts=await query(args.env,core.receiptSql(plan.id,id));
+    if(receipts.length!==1 || receipts[0][column]!==id || receipts[0].evidence_sha256!==plan.evidenceHash)throw Error('reconciliation_receipt_unconfirmed');
+    writeFileSync(fdPath,JSON.stringify({mode:'applied',id:plan.id,...identifier,phase:plan.phase,disposition:plan.disposition,evidenceHash:plan.evidenceHash},null,2)+'\n');
+    return {mode:'applied',id:plan.id,...identifier,report:fdPath};
   } catch(error) {
     // An apply_pending report is preserved for read-only receipt lookup.
     throw error;

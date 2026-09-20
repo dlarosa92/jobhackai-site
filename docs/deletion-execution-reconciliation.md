@@ -1,6 +1,6 @@
 # Recovering an interrupted deletion execution
 
-This operator procedure is for a saved deletion job whose execution token remains after its Worker invocation stopped. It does not reconcile unfinished account, billing, maintenance, email or Analytics claims. Those claims must be resolved separately; this command refuses to release a job while any remain. It cannot mark deletion complete, advance its phase, cancel billing, remove identity, send email or erase content. It releases one verified stopped attempt so the existing processor can recheck its saved phase.
+This operator procedure is for a saved deletion job whose execution token remains after its Worker invocation stopped. Use the separate [account-operation mode](account-operation-reconciliation.md) for unfinished account, billing, maintenance, email or Analytics claims. The deletion-job mode refuses to release a job while any such claims remain. It cannot mark deletion complete, advance its phase, cancel billing, remove identity, send email or erase content. It releases one verified stopped attempt so the existing processor can recheck its saved phase.
 
 The command is local, defaults to read-only inspection, pins the Cloudflare account and database UUID, and has no public endpoint. Production inspection/planning is supported, but production application is held in code. Migration 028 is required; it remains unapplied as of this draft. Do not activate the recovery worker until the full release gates in [account-deletion-recovery.md](account-deletion-recovery.md) pass.
 

@@ -1,3 +1,4 @@
+import {inspectionSql,inspectReport,planReconciliation} from '../../../app/scripts/lib/account-operation-reconcile-core.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -10,6 +11,7 @@ function setup(t){
   db.exec('CREATE TABLE users(id INTEGER PRIMARY KEY,auth_id TEXT UNIQUE NOT NULL); INSERT INTO users VALUES(1,\'owner\'); CREATE TABLE deleted_auth_ids(auth_id TEXT PRIMARY KEY); CREATE TABLE cookie_consents(user_id INTEGER,client_id TEXT,consent_json TEXT);');
   for(const file of ['024_collected_payments.sql','025_checkout_attribution.sql','026_payment_campaign_links.sql','027_analytics_delivery.sql','028_account_deletion_recovery.sql'])
     db.exec(readFileSync(new URL('../../../app/db/migrations/'+file,import.meta.url),'utf8'));
+  db.exec('ALTER TABLE users ADD COLUMN voice_followup_email_sent_at TEXT; ALTER TABLE users ADD COLUMN deletion_warning_sent_at TEXT;');
   const env={DB:db,ENVIRONMENT:'qa',DELIVERY_ENABLED:'true',GA4_MEASUREMENT_ID:'G-VH888WWY3M',GA4_API_SECRET:'test-only',DEBUG_EVENTS:'true'};
   db.exec(`INSERT INTO cookie_consents VALUES(1,'browser','{"version":1,"analytics":true}');
     INSERT INTO stripe_collected_payments(charge_id,payment_intent_id,customer_id,environment,livemode,currency,amount_captured,charge_created_at,first_event_id,last_event_id)
@@ -272,4 +274,20 @@ test('maintenance postpones Analytics without dropping or collecting the event, 
   assert.equal((await f.rows())[0].state,'pending');assert.equal((await f.rows())[0].last_reason,'account_operation_busy');
   await settleAccountOperation(f.env,claim,'finished');
   await f.run({now:()=>NOW+300000});assert.equal((await f.rows())[0].state,'accepted_unverified');
+});
+
+test('reconciled uncertain collection remains suppressed after a reset without fabricating Google receipt',async t=>{
+  const f=setup(t);await f.run({request:async(url,init)=>{if(!url.includes('/debug/'))throw Error('fixture_timeout');return f.request(url,init);}});
+  const claim=await f.db.prepare("SELECT * FROM account_operation_claims WHERE state='uncertain'").first();
+  const row=await f.db.prepare(inspectionSql(claim.id)).first(),now=Date.now(),report=inspectReport('qa',row,now);
+  report.disposition='suppress_delivery';
+  report.evidence={operatorRef:'fixture-operator',invocation:{status:'completed',executionToken:claim.id,observedAt:new Date(now).toISOString(),reference:'fixture/returned-invocation'},
+    providers:{status:'settled_unknown',pendingRequests:false,observedAt:new Date(now).toISOString(),reference:'fixture/intercepted-provider'}};
+  await f.db.prepare(planReconciliation(report,row,'qa',now).sql).run();
+
+  f.db.exec("UPDATE analytics_delivery SET state='pending',next_attempt_at=0");
+  await f.run({request:()=>assert.fail('A reconciled event must never contact Google again')});
+  assert.equal((await f.rows())[0].state,'ineligible');assert.equal((await f.rows())[0].last_reason,'analytics_delivery_suppressed');
+  assert.equal(await f.db.prepare('SELECT verified_at FROM analytics_delivery').first('verified_at'),null);
+  assert.equal(await f.db.prepare('SELECT amount_captured FROM stripe_collected_payments').first('amount_captured'),3900);
 });

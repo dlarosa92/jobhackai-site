@@ -3,6 +3,7 @@ on:
   pull_request:
     branches: [dev0, develop, main]
     paths:
+      - 'app/scripts/lib/*reconcile-core.mjs'
       - 'workers/retention-cleaner/**'
       - 'app/functions/_lib/dev-cutover.js'
       - 'app/functions/_lib/account-deletion-admission.js'
@@ -12,6 +13,7 @@ on:
   push:
     branches: [dev0, develop, main]
     paths:
+      - 'app/scripts/lib/*reconcile-core.mjs'
       - 'workers/retention-cleaner/**'
       - 'app/functions/_lib/dev-cutover.js'
       - 'app/functions/_lib/account-deletion-admission.js'
@@ -34,4 +36,4 @@ jobs:
       - name: Verify compiled retention with real schemas and intercepted KV
         env:
           JOBHACKAI_RETENTION_BUNDLE: /tmp/jobhackai-retention-worker/index.mjs
-        run: node --test --test-name-pattern='real repository schemas' workers/retention-cleaner/tests/cleanup.test.mjs
+        run: node --test --test-name-pattern='real repository schemas|reconciled stopped retention' workers/retention-cleaner/tests/cleanup.test.mjs

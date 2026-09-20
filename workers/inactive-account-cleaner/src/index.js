@@ -75,9 +75,9 @@ export async function runInactiveAccountCleanup(env,{afterUserId}={}) {
   for(const owner of owners) {
     let claim=null,outcome='finished';
     try {
-      try {claim=await admitAccountOperation(env,owner.auth_id,'maintenance');}
+      try {claim=await admitAccountOperation(env,owner.auth_id,'maintenance',{purpose:'inactivity'});}
       catch(error) {
-        if(['account_operation_busy','account_deletion_pending'].includes(error.message)){results.skipped++;continue;}
+        if(['account_operation_busy','account_deletion_pending','account_operation_suppressed'].includes(error.message)){results.skipped++;continue;}
         throw error;
       }
       let user=await db.prepare('SELECT * FROM users WHERE id=? AND auth_id=?').bind(owner.id,owner.auth_id).first();

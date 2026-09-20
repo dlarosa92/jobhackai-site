@@ -1,3 +1,4 @@
+import {inspectionSql,inspectReport,planReconciliation} from '../../../app/scripts/lib/account-operation-reconcile-core.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -36,7 +37,9 @@ function setup(t) {
       ('paid-old',2,'completed',datetime('now','-100 days'),'transcript','score',NULL,'Synthetic role','Senior','Synthetic confidential job context'),
       ('recent',3,'completed',datetime('now','-2 days'),'transcript','score',NULL,'Synthetic role','Senior','Synthetic confidential job context');
   `);
-  db.exec(readFileSync(new URL('../../../app/db/migrations/028_account_deletion_recovery.sql',import.meta.url),'utf8'));
+  db.exec('ALTER TABLE users ADD COLUMN voice_followup_email_sent_at TEXT; ALTER TABLE users ADD COLUMN deletion_warning_sent_at TEXT;');
+  for(const name of ['024_collected_payments','025_checkout_attribution','026_payment_campaign_links','027_analytics_delivery','028_account_deletion_recovery'])
+    db.exec(readFileSync(new URL('../../../app/db/migrations/'+name+'.sql',import.meta.url),'utf8'));
   db.exec("CREATE TABLE deleted_auth_ids(auth_id TEXT PRIMARY KEY);");
   for(const table of ['linkedin_runs','cover_letter_history']) db.exec(`ALTER TABLE ${table} ADD COLUMN user_id TEXT; UPDATE ${table} SET user_id='owner1';`);
   for(const table of ['resume_sessions','interview_question_sets','mock_interview_sessions','usage_events']) db.exec(`ALTER TABLE ${table} ADD COLUMN user_id INTEGER; UPDATE ${table} SET user_id=1;`);
@@ -245,4 +248,20 @@ test('real repository schemas preserve FK integrity and distinguish numeric owne
   for(const table of ['resume_sessions','feedback_sessions','cover_letter_history'])
     assert.equal(await db.prepare(`SELECT COUNT(*) n FROM ${table}`).first('n'),1);
   assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
+});
+
+test('a reconciled stopped retention pass can retry partial KV cleanup through the actual worker',async t=>{
+  const f=setup(t);f.env.RETENTION_MODE='delete';f.env.JOBHACKAI_KV.delete=async()=>{throw Error('fixture_partial_storage');};
+  await assert.rejects(runCleanup(f.env));
+  const claim=await f.db.prepare("SELECT * FROM account_operation_claims WHERE state='uncertain'").first();assert.equal(claim.purpose,'retention');
+  const row=await f.db.prepare(inspectionSql(claim.id)).first(),now=Date.now(),report=inspectReport('qa',row,now);
+  report.disposition='retry_storage';
+  report.evidence={operatorRef:'fixture-operator',invocation:{status:'completed',executionToken:claim.id,observedAt:new Date(now).toISOString(),reference:'fixture/returned-invocation'},
+    providers:{status:'storage_only',pendingRequests:false,observedAt:new Date(now).toISOString(),reference:'fixture/intercepted-provider'}};
+  await f.db.prepare(planReconciliation(report,row,'qa',now).sql).run();
+
+  f.env.JOBHACKAI_KV.delete=async key=>f.kv.push(key);await runCleanup(f.env);
+  assert.equal(await f.db.prepare("SELECT COUNT(*) n FROM resume_sessions WHERE id='old'").first('n'),0);
+  assert.equal(await f.db.prepare("SELECT COUNT(*) n FROM voice_sessions WHERE id='free-last'").first('n'),1);
+  assert.equal(await f.db.prepare("SELECT COUNT(*) n FROM account_operation_claims WHERE state<>'finished'").first('n'),0);
 });
