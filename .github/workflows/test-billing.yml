@@ -114,3 +114,6 @@ jobs:
 
       - name: Account deletion billing safety
         run: node --test app/functions/_lib/__tests__/account-deletion-billing.test.mjs
+
+      - name: Durable deletion recovery (real SQLite)
+        run: node --test app/functions/_lib/__tests__/account-deletion-recovery.test.mjs
