@@ -97,6 +97,12 @@ try {
   assert.equal(user().voice_sessions_remaining, 2);
 
   reset();
+  sql('UPDATE users SET pack_expires_at = ?', [new Date(Date.now() + 86400000).toISOString()]);
+  assert.equal((await reserveVoiceSession(env, session('iso-future'))).inserted, true, 'SQLite accepts ISO expiry including milliseconds and trailing Z');
+  sql('UPDATE users SET pack_expires_at = ?', [new Date(Date.now() - 86400000).toISOString()]);
+  assert.equal((await reserveVoiceSession(env, session('iso-expired'))).inserted, false);
+
+  reset();
   const capped = { ...env, VOICE_FAIR_USE_CAP: '1' };
   assert.equal((await reserveVoiceSession(capped, session('sub1', 'subscription'))).inserted, true);
   assert.equal((await reserveVoiceSession(capped, session('sub2', 'subscription'))).reason, 'limit_reached');
@@ -168,6 +174,28 @@ try {
     const ended = await start({ request: startRequest(), env: { ...startEnv, ENVIRONMENT: 'production' } });
     assert.equal(ended.status, 409);
     assert.equal((await ended.json()).reason, 'session_ended');
+    // Both initial lookups finish before either provider mint returns.
+    // Test the last-credit zero-row path and the remaining-pack UNIQUE path.
+    for (const mode of ['free', 'pack']) {
+      sql('DELETE FROM voice_sessions');
+      sql('UPDATE users SET free_session_used=0, voice_sessions_remaining=?, pack_expires_at=NULL', [mode === 'pack' ? 2 : 0]);
+      let mintCount = 0;
+      const releases = [];
+      globalThis.fetch = async () => {
+        mintCount++;
+        if (mintCount <= 2) await new Promise(resolve => {
+          releases.push(resolve);
+          if (releases.length === 2) releases.forEach(fn => fn());
+        });
+        return new Response(JSON.stringify({ value: 'fake-ephemeral-secret' }));
+      };
+      const simultaneous = await Promise.all([1,2].map(() => start({ request: startRequest(), env: startEnv })));
+      assert.deepEqual(simultaneous.map(r => r.status), [200,200]);
+      const payloads = await Promise.all(simultaneous.map(r => r.json()));
+      assert.equal(payloads.filter(p => p.resumed).length, 1);
+      assert.equal(rows().length, 1);
+      assert.equal(mode === 'pack' ? user().voice_sessions_remaining : user().free_session_used, 1);
+    }
   } finally { globalThis.fetch = realFetch; }
   console.log('Voice reservation rollback, competing starts, expiry, cap, and completion race checks passed.');
 } finally { rmSync(dir, { recursive: true, force: true }); }

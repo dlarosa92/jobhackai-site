@@ -149,7 +149,7 @@ export async function onRequest(context) {
     }
 
     // ---- Resume path: reattach to an existing session, never re-consume ----
-    if (resumeId) {
+    async function resumeExistingSession(resumeId) {
       const session = await db.prepare(
         `SELECT id, user_id, role, seniority, jd_excerpt, status, started_at
          FROM voice_sessions WHERE id = ?`
@@ -217,6 +217,8 @@ export async function onRequest(context) {
       }, 200, origin, env, requestId);
     }
 
+    if (resumeId) return await resumeExistingSession(resumeId);
+
     // ---- New session path ----
     const role = String(body.role || '').trim().slice(0, 120);
     const seniority = String(body.seniority || '').trim().slice(0, 60);
@@ -264,11 +266,27 @@ export async function onRequest(context) {
       if (!minted) return errorResponse('Could not start the voice session. Please try again.', 502, origin, env, requestId);
 
       const sessionId = startRequestId || crypto.randomUUID();
-      const reserved = await reserveVoiceSession(env, {
-        sessionId, userRowId: d1User.id, role, seniority: seniority || null,
-        jd: jd || null, mode: ent.mode, model
-      });
+      let reserved;
+      try {
+        reserved = await reserveVoiceSession(env, {
+          sessionId, userRowId: d1User.id, role, seniority: seniority || null,
+          jd: jd || null, mode: ent.mode, model
+        });
+      } catch (reservationError) {
+        // A same-id retry can pass the initial lookup while its first request
+        // is still minting. The transaction rolls back a conflicting insert;
+        // resolve that winner through the normal ownership/expiry resume gate.
+        const winner = startRequestId && await db.prepare('SELECT id FROM voice_sessions WHERE id = ?')
+          .bind(startRequestId).first();
+        if (winner) return await resumeExistingSession(winner.id);
+        throw reservationError;
+      }
       if (!reserved.inserted) {
+        // With the last free/pack credit consumed, the duplicate INSERT can
+        // affect zero rows instead of throwing a unique-constraint error.
+        const winner = startRequestId && await db.prepare('SELECT id FROM voice_sessions WHERE id = ?')
+          .bind(startRequestId).first();
+        if (winner) return await resumeExistingSession(winner.id);
         if (reserved.reason === 'limit_reached') {
           return errorResponse("You have reached this month's session limit. It resets at the start of next month.",
             403, origin, env, requestId, { reason: 'limit_reached' });
