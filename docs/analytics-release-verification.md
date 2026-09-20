@@ -17,7 +17,8 @@ Owner instruction, September 19, 2026: analytics must not be an afterthought. Pr
 
 ## Code findings to resolve or verify
 
-- Both development and production Firebase config specify the production measurement ID. cookie-consent.js also defaults every hostname to production GA4 and Clarity.
+- Candidate dev0 before repair: both development and production Firebase config specify G-SQYSWPFM5X; cookie-consent.js defaults every hostname to the same production ID and Clarity project.
+- Production branch ed00ca6 differs: cookie-consent.js defaults to G-X48E90B00S, while production Firebase config uses G-SQYSWPFM5X. This split is a separate concrete configuration defect. The live homepage DOM references the matching main-branch script URL (v=20260506-1). Opening that live script directly in Chrome was blocked with ERR_BLOCKED_BY_CLIENT, so its fetched response body was not verified through Chrome.
 - Firebase Analytics and cookie-consent.js both initialize analytics. Consolidate ownership and prove exactly one page_view per document, including consent granted late and revoked/regranted.
 - The browser has a consent gate, but stripe-webhook.js sends server-side events without checking current consent. It uses a synthetic server.<uid> client ID rather than the browser client/session identifiers. This cannot be accepted as a proven campaign revenue join.
 - Checkout currently stores identity and plan metadata but no verified attribution context. No first/last campaign persistence found in the inspected implementation.
@@ -44,3 +45,9 @@ The browser suppresses duplicate manual/fallback page views, sets Google's colle
 Still open: Clarity runtime consent/recording behavior (removing a script alone is not proof of teardown), automatic enhanced-measurement payload review, authenticated server consent enforcement, real browser client/session attribution at checkout, durable paid-invoice/refund accounting, live QA receipt and Stripe reconciliation. No production GA4 settings, production deployment, or production schema was changed during this audit.
 
 Official implementation references: [Google collection-disable flag](https://developers.google.com/tag-platform/security/guides/privacy), [Measurement Protocol events and session context](https://developers.google.com/analytics/devguides/collection/protocol/ga4/sending-events), and [Clarity consent behavior](https://learn.microsoft.com/en-us/clarity/setup-and-installation/clarity-consent-api-v2). A consent-denied Clarity mode can still involve limited tracking, so it does not by itself satisfy the no-tracking acceptance check.
+
+## Browser receipt evidence, September 20 UTC
+
+Using PR #864 commit af5237c's actual cookie-consent.js in an isolated localhost test page, a browser consent grant followed by one labeled `analytics_delivery_check` event was observed in Google Analytics DebugView for development property 502443078. The event detail showed `test_run=20260920_browser_01` and `page_location=http://127.0.0.1:8766/?utm_source=qa&utm_medium=verification&utm_campaign=analytics_repair_20260920`. DebugView showed one each of first_visit, session_start, page_view and analytics_delivery_check for this run (23:51 Eastern September 19). This verifies browser-to-Google delivery and preservation of the controlled campaign URL. It does not prove processed campaign attribution, cross-domain continuity, signup, purchase, refund, renewal, or production delivery. No synthetic signup/purchase was emitted.
+
+The first local browser attempt revealed a command-queue compatibility issue in the proposed change; it was corrected to Google's standard Arguments command format, added to the regression checks, and browser receipt was then verified. This is why local unit checks alone do not close this release gate.
