@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { sqliteD1 } from '../../../app/functions/_lib/__tests__/sqlite-d1-helper.mjs';
 import { runCleanup } from '../src/index.js';
+import { getVoiceEntitlement } from '../../../app/functions/_lib/voice-entitlements.js';
+import { ENTITLED_SUBSCRIPTION_STATUSES } from '../../../app/functions/_lib/billing-ownership.js';
 function setup(t) {
   const db=sqliteD1();t.after(()=>db.close());
   db.exec(`
@@ -91,4 +93,37 @@ test('previously stripped reports still lose surviving role and job context in a
   const row=await f.db.prepare("SELECT * FROM voice_sessions WHERE id='free-last'").first();
   for(const key of ['transcript_json','scorecard_json','role','seniority','jd_excerpt']) assert.equal(row[key],null);
   assert.equal(row.status,'completed');
+});
+
+test('retention exception agrees with actual entitlement status, grace, null and pack rules',async t=>{
+  const f=setup(t);
+  f.db.exec("ALTER TABLE users ADD COLUMN auth_id TEXT; ALTER TABLE users ADD COLUMN free_session_used INTEGER DEFAULT 1; ALTER TABLE users ADD COLUMN has_ever_paid INTEGER DEFAULT 1;");
+  const future=new Date(Date.now()+86400000).toISOString();
+  const grace=new Date(Date.now()-86400000).toISOString();
+  const expired=new Date(Date.now()-5*86400000).toISOString();
+  const cases=[
+    ...ENTITLED_SUBSCRIPTION_STATUSES.map(status=>['monthly',status,grace,0,null]),
+    ['monthly','unpaid',expired,0,null],
+    ['monthly',null,future,0,null],
+    ['monthly','active','invalid',0,null],
+    ['monthly','active','',0,null],
+    ['free',null,null,1,future],
+    ['free',null,null,1,expired],
+    ['free',null,null,1,''],
+    ['free',null,null,null,null]
+  ];
+  const expected=[];
+  for(let i=0;i<cases.length;i++){
+    const id=10+i,auth='fixture-'+id;
+    await f.db.prepare('INSERT INTO users(id,auth_id,plan,subscription_status,current_period_end,voice_sessions_remaining,pack_expires_at) VALUES(?,?,?,?,?,?,?)').bind(id,auth,...cases[i]).run();
+    await f.db.prepare("INSERT INTO voice_sessions(id,user_id,status,started_at,transcript_json) VALUES(?,?,'completed',datetime('now','-100 days'),'private')").bind(auth,id).run();
+    const access=await getVoiceEntitlement(f.env,auth);
+    if(access.mode!=='subscription'&&access.mode!=='pack')expected.push(auth);
+  }
+  const audit=await runCleanup(f.env);
+  assert.equal(audit.voice_sessions_stripped,1+expected.length);
+  await runCleanup({...f.env,RETENTION_MODE:'delete'});
+  const remaining=(await f.db.prepare("SELECT id,transcript_json FROM voice_sessions WHERE user_id>=10 ORDER BY user_id").all()).results;
+  assert.deepEqual(remaining.map(row=>row.id),expected);
+  assert.ok(remaining.every(row=>row.transcript_json===null));
 });

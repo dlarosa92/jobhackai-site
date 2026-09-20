@@ -131,13 +131,13 @@ export async function runCleanup(env) {
     // Mirrors getVoiceEntitlement (app/functions/_lib/voice-entitlements.js):
     // active subscription = eligible plan label + live Stripe status + period
     // not lapsed beyond the 3-day grace; usable pack = credits > 0, not expired.
-    const activeVoicePlan = `(
+    const activeVoicePlan = `COALESCE((
         (u.plan IN ('weekly','monthly','trial','essential','pro','premium')
-         AND u.subscription_status IN ('active','trialing','past_due')
-         AND (u.current_period_end IS NULL OR datetime(u.current_period_end) > datetime('now','-3 days')))
+         AND u.subscription_status IN ('active','trialing','past_due','unpaid')
+         AND (u.current_period_end IS NULL OR u.current_period_end = '' OR datetime(u.current_period_end) > datetime('now','-3 days')))
         OR (u.voice_sessions_remaining > 0
-         AND (u.pack_expires_at IS NULL OR datetime(u.pack_expires_at) > datetime('now')))
-      )`;
+         AND (u.pack_expires_at IS NULL OR u.pack_expires_at = '' OR datetime(u.pack_expires_at) > datetime('now')))
+      ), 0)`;
     // Newest COMPLETED row only: the history list ignores created/active/
     // abandoned rows, so a newer incomplete session must not steal the
     // carve-out from the completed session the list actually keeps.
