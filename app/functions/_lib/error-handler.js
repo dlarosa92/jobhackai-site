@@ -39,7 +39,7 @@ export function errorResponse(error, statusCode, origin, env, requestId = null, 
     error: errorMessage,
     ...(requestId && { requestId }),
     // Expose select additional fields for clients (e.g., upgradeRequired, needsFeedback)
-    ...(['upgradeRequired', 'needsFeedback', 'retryable'].reduce((acc, key) => {
+    ...(['upgradeRequired', 'needsFeedback', 'retryable', 'reason'].reduce((acc, key) => {
       if (Object.prototype.hasOwnProperty.call(additionalData, key)) {
         acc[key] = additionalData[key];
       }
@@ -121,4 +121,3 @@ export function successResponse(data, statusCode = 200, origin, env, requestId =
 export function generateRequestId() {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }
-

@@ -144,7 +144,7 @@ try {
   });
   const start = (await import('data:text/javascript;base64,' + Buffer.from(startSource + '\n//# sourceURL=voice-start-test.js').toString('base64'))).onRequest;
   const realFetch = globalThis.fetch;
-  const startEnv = { ...env, OPENAI_API_KEY: 'test-only' };
+  const startEnv = { ...env, ENVIRONMENT: 'qa', OPENAI_API_KEY: 'test-only' };
   const startId = '11111111-1111-4111-8111-111111111111';
   const startRequest = () => new Request('https://qa.jobhackai.io/api/voice/session', { method: 'POST', body: JSON.stringify({ role: 'Engineer', startRequestId: startId }) });
   try {
@@ -159,6 +159,15 @@ try {
     assert.equal(recovered.status, 200);
     assert.equal((await recovered.json()).resumed, true);
     assert.equal(rows().length, 1);
+    // Assert the actual wire response, not a client-only fixture: the shared
+    // response helper must expose these reasons outside development too.
+    sql("UPDATE voice_sessions SET started_at=datetime('now','-1 hour') WHERE id=?", [startId]);
+    const expired = await start({ request: startRequest(), env: startEnv });
+    assert.equal(expired.status, 409);
+    assert.equal((await expired.json()).reason, 'session_expired');
+    const ended = await start({ request: startRequest(), env: { ...startEnv, ENVIRONMENT: 'production' } });
+    assert.equal(ended.status, 409);
+    assert.equal((await ended.json()).reason, 'session_ended');
   } finally { globalThis.fetch = realFetch; }
   console.log('Voice reservation rollback, competing starts, expiry, cap, and completion race checks passed.');
 } finally { rmSync(dir, { recursive: true, force: true }); }
