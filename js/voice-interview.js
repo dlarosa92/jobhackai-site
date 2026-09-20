@@ -35,6 +35,7 @@
 
   var state = {
     sessionId: null,
+    startRequestId: null, // retained across failed starts to recover without spending twice
     model: null,
     pc: null,
     dc: null,
@@ -46,6 +47,8 @@
     order: null,               // ordered transcript assembler (voice-transcript-order.js)
     usage: { input: 0, output: 0 },
     ending: false,
+    pendingCompletion: null,
+    savingCompletion: false,
     connected: false,
     audioPlaying: false,       // interviewer's audio is mid-playback
     audioResponseId: '',       // which response that audio belongs to
@@ -127,13 +130,19 @@
       if (voice.canStart) {
         startBtn.disabled = false;
         if (voice.unlimited) {
-          banner.textContent = 'Your plan includes unlimited voice interviews.';
+          banner.textContent = Number.isFinite(voice.monthlyRemaining) && Number.isFinite(voice.monthlyLimit)
+            ? 'You have ' + voice.monthlyRemaining + ' of ' + voice.monthlyLimit + ' voice interviews left this calendar month (UTC), while your subscription is active.'
+            : 'Your subscription includes voice interviews with a calendar-month session limit.';
         } else if (voice.mode === 'pack') {
           banner.textContent = 'You have ' + voice.sessionsRemaining + ' session' + (voice.sessionsRemaining === 1 ? '' : 's') + ' left in your Interview Pack.';
         } else {
           banner.textContent = 'Your first voice interview is free. Make it count.';
         }
         banner.className = 'vi-banner vi-banner-ok';
+      } else if (voice.reason === 'limit_reached' || voice.mode === 'subscription' || voice.unlimited) {
+        startBtn.disabled = true;
+        banner.textContent = 'You have reached your voice interview limit for this calendar month. Your allowance resets on the first day of next month at 00:00 UTC, with an active subscription.';
+        banner.className = 'vi-banner';
       } else {
         startBtn.disabled = true;
         banner.innerHTML = 'Your free voice interview is used. <a href="/pricing">See plans</a> to keep practicing.';
@@ -391,6 +400,9 @@
     if (typeof text !== 'string') return false;
     var lower = text.toLowerCase().replace(/[‘’]/g, "'");
     if (lower.length < 8 || lower.length > 240) return false;
+    // A short, standalone stop command observed in live QA. Do not broaden
+    // this to future-tense stories or instructions about how to finish.
+    if (/^(?:(?:ok|okay|alright|all right)[, ]+)?i(?:'ll| will) end (?:this|the) interview(?: now| here| please)*[.!]?$/i.test(lower.trim())) return true;
     var sentences = lower.replace(/([.!?])/g, '$1\n').split('\n');
     for (var i = 0; i < sentences.length; i++) {
       var s = sentences[i].trim();
@@ -907,9 +919,8 @@
   // NOT record it. The check runs before recordTurn on purpose: exclusion gates
   // future writes, it cannot unwrite one.
   function handleSpokenEndRequest(transcript, itemId) {
-    if (state.ending) return false;
     var lc = lifecycle();
-    if (!lc.is(PHASES.AUDIO_CHECK) && !lc.is(PHASES.ACTIVE_INTERVIEW)) return false;
+    if (!state.ending && !lc.is(PHASES.AUDIO_CHECK) && !lc.is(PHASES.ACTIVE_INTERVIEW) && !lc.is(PHASES.CLOSING)) return false;
     var check;
     if (typeof window.isExplicitEndRequest === 'function') {
       check = window.isExplicitEndRequest;
@@ -926,6 +937,9 @@
     if (itemId && state.order && typeof state.order.drop === 'function') {
       state.order.drop(itemId);
     }
+    // Transcription may arrive after the interviewer has already wrapped up.
+    // Exclude the control turn during the flush without restarting completion.
+    if (state.ending || lc.is(PHASES.CLOSING)) return true;
     console.log('[VOICE] candidate asked to end the interview; ending it, and the request stays out of the transcript');
     track('voice_manual_end', { via: 'spoken_request' });
     // A conduct or safety close already in flight owns the ending; endInterview
@@ -1235,6 +1249,7 @@
   // ---------- lifecycle ----------
 
   async function startInterview() {
+    if (state.pendingCompletion) { show('vi-done-view'); return; }
     var role = ($('vi-role') && $('vi-role').value || '').trim();
     var seniority = ($('vi-seniority') && $('vi-seniority').value || '').trim();
     var jd = ($('vi-jd') && $('vi-jd').value || '').trim();
@@ -1254,12 +1269,17 @@
     }
 
     try {
+      if (!state.startRequestId) state.startRequestId = crypto.randomUUID();
       var res = await api('/api/voice/session', {
         method: 'POST',
-        body: JSON.stringify({ role: role, seniority: seniority, jd: jd })
+        body: JSON.stringify({ role: role, seniority: seniority, jd: jd, startRequestId: state.startRequestId })
       });
 
       if (!res.ok) {
+        if (res.status === 409 && res.data &&
+            (res.data.reason === 'session_expired' || res.data.reason === 'session_ended')) {
+          state.startRequestId = null;
+        }
         if (res.status === 403) {
           await loadEntitlement();
           show('vi-setup-view');
@@ -1298,6 +1318,7 @@
       historyLiveStart(role, seniority);
 
       await connectRealtime(res.data.clientSecret, state.model);
+      state.startRequestId = null;
       startTimer(state.maxMinutes);
     } catch (err) {
       console.error('[VOICE] start failed:', err);
@@ -1393,6 +1414,9 @@
       return;
     }
     state.ending = true;
+    // Mark unsaved before the asynchronous transcript flush so closing the
+    // tab during that interval receives the same warning as a failed save.
+    state.pendingCompletion = { sessionId: state.sessionId };
     // Terminal for every path — manual, time up, conduct, safety, connection
     // lost, or the natural close. COMPLETE is reachable from any phase, and
     // from here no late event can commit a turn, reopen the session, or start
@@ -1421,36 +1445,48 @@
     await flushPendingTranscript();
     teardownConnection();
 
+    // Keep the exact payload in memory until acknowledged. A retry must not
+    // recompute duration or lose the transcript after the connection closes.
+    state.pendingCompletion = {
+      sessionId: state.sessionId,
+      transcript: getTranscript(), durationSeconds: durationSeconds,
+      inputTokens: state.usage.input, outputTokens: state.usage.output,
+      reason: reason || 'user_ended'
+    };
+    await saveCompletion();
+  }
+
+  async function saveCompletion() {
+    if (!state.pendingCompletion || state.savingCompletion) return;
+    state.savingCompletion = true;
+    var pending = state.pendingCompletion;
+    var isSafetyEnd = pending.reason === 'ended_for_safety';
+    var retryBtn = $('vi-save-retry');
+    var saveStatus = $('vi-save-status');
+    if (retryBtn) { retryBtn.disabled = true; retryBtn.style.display = 'none'; }
+    if (saveStatus) saveStatus.textContent = 'Saving interview...';
     try {
-      await api('/api/voice/session/' + encodeURIComponent(state.sessionId) + '/complete', {
-        method: 'POST',
-        body: JSON.stringify({
-          transcript: getTranscript(),
-          durationSeconds: durationSeconds,
-          inputTokens: state.usage.input,
-          outputTokens: state.usage.output,
-          reason: reason || 'user_ended'
-        })
+      var saved = await api('/api/voice/session/' + encodeURIComponent(pending.sessionId) + '/complete', {
+        method: 'POST', body: JSON.stringify(pending)
       });
-      track('voice_session_complete', { duration_seconds: durationSeconds, reason: reason || 'user_ended' });
-      if (isSafetyEnd) {
-        // Already showing the safety view; no polling for a scorecard the
-        // server deliberately never generates.
-        historyLiveClear(true);
-        return;
-      }
+      if (!saved.ok) throw new Error((saved.data && saved.data.error) || 'save_failed');
+      state.pendingCompletion = null;
+      if (saveStatus) saveStatus.textContent = '';
+      track('voice_session_complete', { duration_seconds: pending.durationSeconds, reason: pending.reason });
+      if (isSafetyEnd) { historyLiveClear(true); return; }
+      var doneStatus = $('vi-done-status');
+      if (doneStatus) doneStatus.textContent = 'Interview saved. Preparing your report...';
+      // A failed save removed the optimistic history row. Read the server's
+      // acknowledged row after a successful retry while scoring continues.
+      if (!historyState.liveRow && historyState.voice && historyState.voice.enabled) fetchHistory();
       pollScorecard(0);
     } catch (err) {
       console.error('[VOICE] complete failed:', err);
-      if (isSafetyEnd) {
-        // The safety view stays up regardless — never replace it with
-        // score-oriented error copy.
-        historyLiveClear(false);
-        return;
-      }
-      if (doneStatus) doneStatus.textContent = 'The session ended but saving failed. Your session is recorded; check back shortly.';
+      if (saveStatus) saveStatus.textContent = 'Your interview has not been saved. Keep this page open and retry saving.';
+      if (!isSafetyEnd && $('vi-done-status')) $('vi-done-status').textContent = 'Interview ended. Saving needs another attempt.';
+      if (retryBtn) { retryBtn.style.display = ''; retryBtn.disabled = false; }
       historyLiveClear(false);
-    }
+    } finally { state.savingCompletion = false; }
   }
 
   function pollScorecard(attempt) {
@@ -2065,7 +2101,6 @@
   // the session was completed server-side (poll timeout): the refetch swaps
   // the local row for the server's real 'scoring' row instead.
   function historyLiveClear(refresh) {
-    if (!historyState.liveRow) return;
     historyState.liveRow = null;
     if (refresh && historyState.voice && historyState.voice.enabled) fetchHistory();
     else renderHistory();
@@ -2148,11 +2183,12 @@
     initRoleSelector();
     if (startBtn) startBtn.addEventListener('click', startInterview);
     if (endBtn) endBtn.addEventListener('click', function () { endInterview('user_ended'); });
+    if ($('vi-save-retry')) $('vi-save-retry').addEventListener('click', saveCompletion);
     if (muteBtn) muteBtn.addEventListener('click', toggleMute);
     if (reconnectBtn) reconnectBtn.addEventListener('click', reconnect);
 
     window.addEventListener('beforeunload', function (e) {
-      if (state.connected && !state.ending) {
+      if ((state.connected && !state.ending) || state.pendingCompletion) {
         e.preventDefault();
         e.returnValue = '';
       }

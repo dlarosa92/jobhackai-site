@@ -319,6 +319,23 @@ test('the hand-synced fallback holds when js/voice-lifecycle.js fails to load', 
   } finally { h.dispose(); }
 });
 
+for (const withoutModules of [[], ['isExplicitEndRequest']]) {
+  test(`live QA standalone stop stays out of persisted transcript (${withoutModules.length ? 'fallback' : 'module'})`, async () => {
+    const h = await liveInterviewWithOneAnswer({ withoutModules });
+    try {
+      h.event({ type: 'conversation.item.created', item: { id: 'qa-stop' } });
+      h.event({ type: 'input_audio_buffer.committed', item_id: 'qa-stop' });
+      h.event({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'qa-stop', transcript: "I'll end the interview." });
+      await h.settle();
+      const bodies = h.completeBodies();
+      assert.equal(bodies.length, 1);
+      assert.equal(bodies[0].reason, 'user_ended');
+      assert.ok(bodies[0].transcript.some(turn => turn.speaker === 'user'), 'retain the actual answer');
+      assert.ok(!bodies[0].transcript.some(turn => turn.text.includes("I'll end")));
+    } finally { h.dispose(); }
+  });
+}
+
 // --------------------------------------------------- live safety end view
 
 test('a session that ends live for safety shows the same visible, scoreless state', async () => {
@@ -360,6 +377,134 @@ test('the client adds no fixed silence cutoff and no artificial turn delay', asy
       assert.ok(!JSON.stringify(sent).includes('silence_duration_ms'));
       assert.ok(!JSON.stringify(sent).includes('turn_detection'));
     }
+  } finally { h.dispose(); }
+});
+
+// The subscription limit is distinct from spending the lifetime free session.
+for (const [name, voice, expected, disabled] of [
+  ['subscriber balance', { canStart: true, unlimited: true, mode: 'subscription', monthlyLimit: 60, monthlyRemaining: 7 }, '7 of 60', false],
+  ['capped subscriber', { canStart: false, unlimited: true, mode: 'subscription', reason: 'limit_reached', monthlyLimit: 60, monthlyRemaining: 0 }, '00:00 UTC', true],
+  ['older subscriber API', { canStart: true, unlimited: true, mode: 'subscription' }, 'calendar-month session limit', false],
+  ['free first session', { canStart: true, unlimited: false, mode: 'free' }, 'first voice interview is free', false],
+  ['pack balance', { canStart: true, unlimited: false, mode: 'pack', sessionsRemaining: 3 }, '3 sessions', false]
+]) {
+  test('entitlement banner: ' + name, async () => {
+    const h = createVoiceClientHarness({ routes: {
+      '/api/plan/me': () => ({ voice: { enabled: true, ...voice } })
+    } });
+    try {
+      await h.ready();
+      assert.ok(h.el('vi-entitlement').textContent.includes(expected));
+      assert.equal(h.el('vi-start-btn').disabled, disabled);
+      assert.ok(!h.el('vi-entitlement').textContent.includes('unlimited'));
+      if (voice.mode === 'subscription') {
+        assert.ok(!h.el('vi-entitlement').innerHTML.includes('/pricing'));
+        assert.ok(!h.el('vi-entitlement').textContent.includes('free voice interview is used'));
+      }
+    } finally { h.dispose(); }
+  });
+}
+
+test('a lost creation response retries the same session id', async () => {
+  let attempts = 0;
+  const h = createVoiceClientHarness({ routes: {
+    '/api/plan/me': () => PLAN_PAYLOAD,
+    '/api/voice/sessions': () => ({ sessions: [] }),
+    '/api/voice/session': () => {
+      if (++attempts === 1) throw new Error('response lost');
+      return { sessionId: 'retry', clientSecret: 'ek_test', model: 'test', maxMinutes: 20 };
+    },
+    'api.openai.com/v1/realtime/calls': () => ({ __text: 'v=0 answer' })
+  } });
+  try {
+    await h.ready();
+    h.el('vi-role').value = 'Engineer';
+    await h.click('vi-start-btn');
+    await h.click('vi-start-btn');
+    const starts = h.requests.filter(r => r.url === '/api/voice/session');
+    assert.equal(starts.length, 2);
+    assert.match(starts[0].body.startRequestId, /^[0-9a-f-]{36}$/);
+    assert.equal(starts[0].body.startRequestId, starts[1].body.startRequestId);
+  } finally { h.dispose(); }
+});
+
+for (const reason of ['session_expired', 'session_ended']) {
+  test('terminal reservation ' + reason + ' permits a new creation id', async () => {
+    let attempts = 0;
+    const h = createVoiceClientHarness({ routes: {
+      '/api/plan/me': () => PLAN_PAYLOAD,
+      '/api/voice/sessions': () => ({ sessions: [] }),
+      '/api/voice/session': () => {
+        attempts++;
+        if (attempts === 1) throw new Error('lost response');
+        if (attempts === 2) return { __status: 409, reason, error: reason };
+        return { sessionId: 'new', clientSecret: 'ek_test', model: 'test', maxMinutes: 20 };
+      },
+      'api.openai.com/v1/realtime/calls': () => ({ __text: 'v=0 answer' })
+    } });
+    try {
+      await h.ready(); h.el('vi-role').value = 'Engineer';
+      for (let n = 0; n < 3; n++) await h.click('vi-start-btn');
+      const starts = h.requests.filter(r => r.url === '/api/voice/session');
+      assert.equal(starts.length, 3);
+      assert.equal(starts[0].body.startRequestId, starts[1].body.startRequestId);
+      assert.notEqual(starts[1].body.startRequestId, starts[2].body.startRequestId);
+    } finally { h.dispose(); }
+  });
+}
+
+for (const status of [401, 500]) {
+  test('failed completion ' + status + ' retains the payload and offers retry before scoring', async () => {
+    let attempts = 0;
+    const h = await liveInterviewWithOneAnswer({ routes: {
+      ...LIVE_ROUTES,
+      '/api/voice/session/': (url) => url.includes('/complete')
+        ? (++attempts === 1 ? { __status: status, error: 'temporary save failure' } : { status: 'completed' })
+        : { scorecardReady: false }
+    } });
+    try {
+      await h.click('vi-end-btn');
+      assert.equal(h.completeBodies().length, 1);
+      assert.ok(h.el('vi-save-status').textContent.includes('has not been saved'));
+      assert.equal(h.el('vi-save-retry').style.display, '');
+      assert.equal(h.requests.filter(r => r.method === 'GET' && r.url.includes('/api/voice/session/')).length, 0);
+      const historyReads = h.requests.filter(r => r.url === '/api/voice/sessions').length;
+      await h.click('vi-save-retry');
+      assert.ok(h.requests.filter(r => r.url === '/api/voice/sessions').length > historyReads, 'recovered save refreshes history while scoring');
+      assert.equal(h.completeBodies().length, 2);
+      assert.deepEqual(h.completeBodies()[0], h.completeBodies()[1], 'retry preserves the complete original transcript and duration');
+      assert.equal(h.el('vi-save-status').textContent, '');
+      assert.equal(h.el('vi-save-retry').style.display, 'none');
+      assert.ok(h.el('vi-done-status').textContent.includes('Interview saved'));
+    } finally { h.dispose(); }
+  });
+}
+
+test('closing during transcript flush warns before completion is assembled', async () => {
+  const h = await liveInterviewWithOneAnswer();
+  try {
+    h.event({ type: 'conversation.item.created', item: { id: 'pending-answer' } });
+    h.event({ type: 'input_audio_buffer.committed', item_id: 'pending-answer' });
+    const ending = h.click('vi-end-btn');
+    let warned = false;
+    h.windowEvent('beforeunload', { preventDefault() { warned = true; } });
+    assert.equal(warned, true);
+    h.event({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'pending-answer', transcript: 'My last answer.' });
+    await ending;
+  } finally { h.dispose(); }
+});
+
+test('a stop transcription arriving during the completion flush is excluded', async () => {
+  const h = await liveInterviewWithOneAnswer();
+  try {
+    h.event({ type: 'conversation.item.created', item: { id: 'late-stop' } });
+    h.event({ type: 'input_audio_buffer.committed', item_id: 'late-stop' });
+    const ending = h.click('vi-end-btn');
+    h.event({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'late-stop', transcript: "I'll end the interview." });
+    await ending;
+    assert.equal(h.completeBodies().length, 1);
+    assert.ok(!h.completeBodies()[0].transcript.some(turn => turn.text.includes("I'll end")));
+    assert.ok(h.completeBodies()[0].transcript.some(turn => turn.speaker === 'user'));
   } finally { h.dispose(); }
 });
 

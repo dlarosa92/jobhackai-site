@@ -44,7 +44,7 @@
         "name": "Weekly Pass",
         "price": "17.00",
         "priceCurrency": "USD",
-        "description": "Unlimited voice mock interviews, billed weekly, cancel anytime",
+        "description": "Up to 60 voice interviews per calendar month (UTC) while subscribed, billed weekly, cancel anytime",
         "url": "https://app.jobhackai.io/pricing"
       },
       {
@@ -52,7 +52,7 @@
         "name": "Monthly",
         "price": "34.00",
         "priceCurrency": "USD",
-        "description": "Unlimited voice mock interviews, billed monthly",
+        "description": "Up to 60 voice interviews per calendar month (UTC) while subscribed, billed monthly",
         "url": "https://app.jobhackai.io/pricing"
       },
       {
@@ -244,16 +244,16 @@
       <span class="vp-hero-sub">Free account required. No card needed for your first session.</span>
     </section>
 
-    <!-- Free vs Pro comparison -->
+    <!-- Free vs paid plans comparison -->
     <section class="vp-section">
-      <h2 class="vp-h2">Free with your account vs Pro</h2>
+      <h2 class="vp-h2">Free with your account vs paid plans</h2>
       <div class="vp-compare-wrap">
-        <table class="vp-compare" role="table" aria-label="Free vs Pro comparison">
+        <table class="vp-compare" role="table" aria-label="Free vs paid plans comparison">
           <thead>
             <tr>
               <th>What you get</th>
               <th>Free</th>
-              <th>Pro</th>
+              <th>Paid plans</th>
             </tr>
           </thead>
           <tbody>
@@ -262,7 +262,7 @@
             <tr><td>Cover letter generator</td><td class="vp-yes">✓</td><td class="vp-yes">✓</td></tr>
             <tr><td>Interview question generator</td><td class="vp-yes">✓</td><td class="vp-yes">✓</td></tr>
             <tr><td>Typed mock interview</td><td class="vp-yes">✓</td><td class="vp-yes">✓</td></tr>
-            <tr><td>Voice mock interview</td><td class="vp-note">1 full session</td><td class="vp-note">Unlimited sessions</td></tr>
+            <tr><td>Voice mock interview</td><td class="vp-note">1 full session</td><td class="vp-note">Subscriptions: up to 60 per calendar month. Pack: 5 sessions.</td></tr>
             <tr><td>Scorecard and feedback report</td><td class="vp-note">Partial after your free session</td><td class="vp-note">Full report, every session</td></tr>
             <tr><td>Interview transcripts</td><td class="vp-no">✕</td><td class="vp-yes">✓</td></tr>
             <tr><td>Progress tracking across sessions</td><td class="vp-no">✕</td><td class="vp-yes">✓</td></tr>
@@ -280,7 +280,7 @@
           <h3>Weekly Pass</h3>
           <div class="vp-price">$17 <span>per week</span></div>
           <ul>
-            <li>Unlimited voice interviews</li>
+            <li>Up to 60 voice interviews per calendar month</li>
             <li>Full scorecards and transcripts</li>
             <li>Cancel anytime</li>
           </ul>
@@ -292,7 +292,7 @@
           <h3>Monthly</h3>
           <div class="vp-price">$34 <span>per month</span></div>
           <ul>
-            <li>Unlimited voice interviews</li>
+            <li>Up to 60 voice interviews per calendar month</li>
             <li>Full scorecards and transcripts</li>
             <li>Progress tracking across sessions</li>
             <li>Cancel anytime</li>
@@ -312,6 +312,7 @@
           <button class="vp-buy" data-plan="pack" data-cta="pricing-card-pack">Get the Pack</button>
         </div>
       </div>
+      <p class="vp-free-note">Subscription access requires an active plan. The 60-session allowance resets on the first day of each month at 00:00 UTC, not each billing renewal. Sessions started this month count toward it, including sessions ended early. Reconnecting to the same session does not use another slot.</p>
       <p class="vp-free-note">Just exploring? The resume, cover letter, and interview question tools are <a href="login.html?mode=signup">free with an account</a>, and your first voice interview is on us.</p>
     </section>
 
@@ -413,7 +414,7 @@
   <script src="js/firebase-auth.js?v=20260207-2" type="module"></script>
   <!-- Load navigation system -->
   <script src="js/auth-persistence.js"></script>
-  <script src="js/navigation.js?v=20260208-1" defer></script>
+  <script src="js/navigation.js?v=20260920-1" defer></script>
   <script src="js/universal-logout.js?v=20260208-1" defer></script>
   <script src="js/analytics.js" type="module"></script>
   <script src="js/main.js" type="module"></script>
@@ -469,6 +470,7 @@
         try { localStorage.setItem('selectedPlan', JSON.stringify(payload)); } catch (_) {}
       }
 
+      var packCheckoutAttemptId = null;
       async function startCheckout(plan, button) {
         var meta = PLAN_META[plan];
         var original = button.textContent;
@@ -498,11 +500,12 @@
           var res = await fetch('/api/stripe-checkout', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + idToken },
-            body: JSON.stringify({ plan: plan })
+            body: JSON.stringify({ plan: plan, ...(plan === 'pack' ? { checkoutAttemptId: packCheckoutAttemptId || (packCheckoutAttemptId = crypto.randomUUID()) } : {}) })
           });
           var data = await res.json();
 
           if (data && data.ok && data.url) {
+            packCheckoutAttemptId = null;
             window.location.href = data.url;
             return;
           }

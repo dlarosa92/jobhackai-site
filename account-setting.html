@@ -662,7 +662,7 @@
   </footer>
   <!-- Removed duplicate checkAuthentication - now handled by firebase-auth-ready event -->
   <!-- Load navigation system -->
-  <script src="js/navigation.js?v=20260208-1"></script>
+  <script src="js/navigation.js?v=20260920-1"></script>
   <script src="js/universal-logout.js?v=20260208-1"></script>
   <script src="js/stripe-integration.js"></script>
   <!-- Inactivity tracker - auto-logout after 30 minutes of inactivity -->
@@ -869,7 +869,15 @@
           return;
         }
         
-        const plan = data.plan || 'free';
+        let planMeta = null;
+        try {
+          const metaRes = await fetch('/api/plan/me', { headers: { Authorization: `Bearer ${idToken}` } });
+          if (metaRes.ok) {
+            planMeta = await metaRes.json();
+          }
+        } catch (_) {}
+
+        const plan = (data.plan === 'free' && planMeta?.voice?.mode === 'pack' && planMeta.voice.sessionsRemaining > 0) ? 'pack' : (data.plan || 'free');
         const storedPlan = localStorage.getItem('user-plan');
         const storedDevPlan = localStorage.getItem('dev-plan');
         const planChanged = storedPlan !== plan || storedDevPlan !== plan;
@@ -897,14 +905,6 @@
           // Non-critical, continue rendering
         }
         
-        let planMeta = null;
-        try {
-          const metaRes = await fetch('/api/plan/me', { headers: { Authorization: `Bearer ${idToken}` } });
-          if (metaRes.ok) {
-            planMeta = await metaRes.json();
-          }
-        } catch (_) {}
-
         // Plan name mapping
         const planNames = {
           free: 'Free Account',
@@ -953,6 +953,11 @@
               <span class="plan-badge free">${planBadgeText[plan] || plan}</span>
             </div>
           `;
+        } else if (plan === 'pack') {
+          const remaining = Number(planMeta?.voice?.sessionsRemaining || 0);
+          const expires = planMeta?.voice?.packExpiresAt;
+          const expiryText = expires && Number.isFinite(Date.parse(expires)) ? ` Valid through ${new Date(expires).toLocaleDateString('en-US')}.` : '';
+          html += `<div style="margin-bottom:0.8rem;"><strong>Interview Pack</strong><p>${remaining} voice interviews remaining.${expiryText}</p><p>$39 one-time purchase for five sessions, valid 90 days. No recurring subscription.</p></div><a href="/pricing" class="btn-primary">View plans and packs</a>`;
         } else {
           html += `<div style="margin-bottom:0.8rem;">`;
           

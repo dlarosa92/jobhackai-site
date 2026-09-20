@@ -145,6 +145,8 @@ export function isHearingCheckTurn(text) {
  *     ("I'm going to end the interview", "I'm ready to end the call") are NOT
  *     a request register: that is exactly how a candidate narrates what they
  *     would do as the interviewer, and it cost a paid session to find out
+ *   - the short standalone "I'll end the interview" is also accepted; no
+ *     hypothetical opener, explanatory tail, or future time is allowed
  *   - nothing after the named target continues the VERB PHRASE. A request
  *     stops where it names the thing, or adds a new clause of its own — a
  *     reason, a courtesy, a restatement ("..., something came up", "..., can
@@ -223,6 +225,9 @@ export function isExplicitEndRequest(text) {
   if (typeof text !== 'string') return false;
   var lower = text.toLowerCase().replace(/[‘’]/g, "'");
   if (lower.length < 8 || lower.length > END_REQUEST_MAX_CHARS) return false;
+  // A short, standalone stop command observed in live QA. Do not broaden
+  // this to future-tense stories or instructions about how to finish.
+  if (/^(?:(?:ok|okay|alright|all right)[, ]+)?i(?:'ll| will) end (?:this|the) interview(?: now| here| please)*[.!]?$/i.test(lower.trim())) return true;
   var sentences = lower.replace(/([.!?])/g, '$1\n').split('\n');
   for (var i = 0; i < sentences.length; i++) {
     var s = sentences[i].trim();

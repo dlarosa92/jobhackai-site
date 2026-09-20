@@ -5,7 +5,7 @@ import assert from 'node:assert';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
-  transcriptToText, scoreVoiceTranscript, MIN_SCOREABLE_CHARS
+  transcriptToText, scoreVoiceTranscript, MIN_SCOREABLE_CHARS, groundedMoments
 } from '../../functions/_lib/voice-scorecard.js';
 import { conceptAppears, coachingText, allFeedbackText, CONCEPTS } from './lib/concepts.mjs';
 import {
@@ -107,6 +107,32 @@ export async function testScoreVoiceTranscriptContextBlocks() {
   } finally {
     globalThis.fetch = origFetch;
   }
+}
+
+export async function testMomentGrounding() {
+  const transcript = [
+    { speaker: 'assistant', text: 'Can you share a specific example of a particular parcel?' },
+    { speaker: 'user', text: 'I reduced processing from six weeks to one hour. It improved our turnaround.' },
+    { speaker: 'user', text: 'We measured the results against our targets.' }
+  ];
+  const moments = [
+    { quote: 'Can you share a specific example of a particular parcel?', comment: 'Wrong speaker.' },
+    { quote: 'I reduced processing from six weeks to one hour.', comment: 'Supported.' },
+    { quote: 'I saved a million dollars.', comment: 'Invented.' },
+    { quote: 'turnaround. We measured', comment: 'Stitched turns.' },
+    { quote: 'WE MEASURED THE RESULTS', comment: 'Typography allowed.' }
+  ];
+  assert.deepStrictEqual(groundedMoments(moments, transcript), [moments[1], moments[4]]);
+  assert.deepStrictEqual(groundedMoments(moments, []), []);
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({
+    ok: true, status: 200, headers: { get: () => null },
+    json: async () => ({ model: 'test', choices: [{ message: { content: JSON.stringify(sampleScorecard({ moments })) }, finish_reason: 'stop' }], usage: {} })
+  });
+  try {
+    const result = await scoreVoiceTranscript({ role: 'Product Manager', transcript }, { OPENAI_API_KEY: 'sk-test' });
+    assert.deepStrictEqual(result.scorecard.moments, [moments[1], moments[4]], 'production scoring must enforce speaker grounding');
+  } finally { globalThis.fetch = origFetch; }
 }
 
 export function testToVoiceTranscript() {
@@ -468,6 +494,7 @@ const TESTS = [
   testTranscriptToText,
   testScoreVoiceTranscriptTooShortPath,
   testScoreVoiceTranscriptContextBlocks,
+  testMomentGrounding,
   testToVoiceTranscript,
   testConceptMatching,
   testFeedbackTextExtraction,

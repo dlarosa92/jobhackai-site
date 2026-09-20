@@ -242,6 +242,7 @@ await test('pack credits decrement atomically and never below zero', async () =>
   assert.equal(ent.canStart, true);
   assert.equal(ent.mode, 'pack');
   assert.equal(ent.sessionsRemaining, 2);
+  assert.equal(ent.packExpiresAt, state.users.get('u4').pack_expires_at);
 
   assert.equal(await consumeVoiceSession(env, 'u4', 'pack'), true);
   assert.equal(await consumeVoiceSession(env, 'u4', 'pack'), true);
@@ -417,6 +418,26 @@ await test('stale current_period_end (beyond grace) blocks subscription access',
   const ent = await getVoiceEntitlement(makeEnv(state), 'u11');
   assert.equal(ent.canStart, false);
   assert.equal(ent.reason, 'paywall');
+});
+
+await test('subscription allowance reports the enforced cap and nonnegative balance', async () => {
+  const state = {
+    users: new Map([['u-limit', userRow({ plan: 'weekly', subscription_status: 'active', free_session_used: 1 })]]),
+    eventLog: new Set(), sessionCount: 59
+  };
+  const env = makeEnv(state);
+  let ent = await getVoiceEntitlement(env, 'u-limit');
+  assert.equal(ent.monthlyLimit, 60);
+  assert.equal(ent.monthlyRemaining, 1);
+  assert.equal(ent.canStart, true);
+  state.sessionCount = 61;
+  ent = await getVoiceEntitlement(env, 'u-limit');
+  assert.equal(ent.monthlyRemaining, 0);
+  assert.equal(ent.reason, 'limit_reached');
+  ent = await getVoiceEntitlement(makeEnv(state, { VOICE_FAIR_USE_CAP: '75' }), 'u-limit');
+  assert.equal(ent.monthlyLimit, 75);
+  assert.equal(ent.monthlyRemaining, 14);
+  assert.equal(ent.canStart, true);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

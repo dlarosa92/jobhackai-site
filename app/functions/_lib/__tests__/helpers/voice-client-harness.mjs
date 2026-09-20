@@ -1,3 +1,4 @@
+import { webcrypto } from 'node:crypto';
 /**
  * Test harness for js/voice-interview.js.
  *
@@ -41,7 +42,7 @@ const CLIENT_SRC = new URL('../../../../../js/voice-interview.js', import.meta.u
 const ELEMENT_IDS = [
   'vi-setup-view', 'vi-live-view', 'vi-done-view', 'vi-disabled-view',
   'vi-status', 'vi-caption', 'vi-timer', 'vi-speaking',
-  'vi-done-status', 'vi-scorecard',
+  'vi-done-status', 'vi-scorecard', 'vi-save-status', 'vi-save-retry',
   'vi-entitlement', 'vi-role', 'vi-seniority', 'vi-jd',
   'vi-start-btn', 'vi-end-btn', 'vi-mute-btn', 'vi-reconnect-btn',
   'vi-remote-audio'
@@ -186,7 +187,9 @@ export function createVoiceClientHarness(options = {}) {
     return { getTracks: () => tracks, getAudioTracks: () => tracks };
   };
 
+  const windowListeners = {};
   const win = {
+    crypto: webcrypto,
     location: { search, href: 'https://app.jobhackai.io/voice-interview.html' + search, pathname: '/voice-interview.html' },
     navigator: { mediaDevices: { getUserMedia: async () => micStream() } },
     FirebaseAuthManager: {
@@ -207,7 +210,7 @@ export function createVoiceClientHarness(options = {}) {
     isSafetyReferral,
     isConductWarningLine,
     createTranscriptOrder,
-    addEventListener: () => {},
+    addEventListener: (type, fn) => { (windowListeners[type] ||= []).push(fn); },
     removeEventListener: () => {}
   };
 
@@ -239,6 +242,7 @@ export function createVoiceClientHarness(options = {}) {
   }
 
   return {
+    windowEvent: (type, event) => (windowListeners[type] || []).forEach(fn => fn(event)),
     el: (id) => elements[id],
     logs,
     requests,

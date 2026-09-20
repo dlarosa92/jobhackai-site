@@ -347,8 +347,8 @@ export function planRank(plan) {
     trial: 0,
     essential: 1,
     weekly: 2,
-    pro: 3,
-    monthly: 4,
+    monthly: 3,
+    pro: 4,
     premium: 5
   };
   return ranks[plan] ?? -1;
