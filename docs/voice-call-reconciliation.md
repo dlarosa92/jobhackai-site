@@ -1,5 +1,10 @@
 # Verified voice-call recovery
 
+**Staging update, September 20:** migration028 is applied and verified in dev
+and QA, but not production. No live recovery has been applied. The draft app
+and deadline worker remain undeployed. See the
+[cutover record](voice-managed-cutover-2026-09-20.md).
+
 Draft, not deployed. Migration028 contains the receipt tables and atomic
 guards. This is an internal operator workflow. There is no public recovery
 endpoint, automatic timeout release or automatic repeat of an uncertain

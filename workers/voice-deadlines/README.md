@@ -3,6 +3,13 @@
 Draft only. Nothing in this folder deploys automatically. Managed voice and
 deadline scheduling remain disabled remotely; production release is held.
 
+Staging update, September 20: migration028 is now applied and verified in dev
+and QA, after private backups and tests against both database copies. It remains
+unapplied in production. The worker itself is still undeployed and unbound;
+matching private OpenAI keys and the old-issuer cutover remain pending. See the
+[cutover record](../../docs/voice-managed-cutover-2026-09-20.md). Earlier statements
+below about an unapplied migration describe the implementation increment.
+
 One SQLite-backed Durable Object per interview persists an alarm at the
 original D1 deadline. The authenticated Pages handler must receive its RPC
 acknowledgment **before** creating or replacing a provider call. A missing

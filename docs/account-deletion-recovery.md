@@ -1,5 +1,11 @@
 # Durable deletion recovery — integration in progress
 
+**Staging update, September 20:** migration028 is now applied and verified in
+dev and QA; production remains unchanged. The application and workers in this
+draft are still undeployed. This supersedes the historical unapplied-migration
+statements below. See the [cutover record](voice-managed-cutover-2026-09-20.md)
+for database verification, private-key prerequisites and outstanding live QA.
+
 Inactivity integration prerequisites now include a separate, read-only `assertInactiveBillingClear` guard. Unlike explicit account deletion, it rejects every nonterminal subscription and open Checkout instead of canceling or expiring them. It shares the ownership, pagination, payment, invoice and schedule checks with the deletion guard. Failed or ambiguous evidence does not establish eligibility. The replacement inactive-account worker now invokes this helper under exclusive maintenance admission; the scan itself is not a lock.
 
 The project-pinned Firebase client can now fetch a fresh, minimal activity projection, validating `lastLoginAt` as epoch milliseconds and `lastRefreshAt` as RFC3339. Missing timestamps remain unknown; a missing identity is a distinct result. Malformed timestamps, invalid calendars, foreign users/tenants and a malformed `users:null` response fail closed. The latter previously could be mistaken for an absent identity. No provider account data besides the two timestamps is returned. Field semantics were checked against [Google's UserInfo reference](https://docs.cloud.google.com/identity-platform/docs/reference/rest/v1/UserInfo).
