@@ -59,7 +59,7 @@ export async function onRequest(context) {
     if (!session || !d1User || session.user_id !== d1User.id) {
       return errorResponse('Session not found', 404, origin, env, requestId);
     }
-    if (session.status === 'completed' && session.transcript_json) {
+    if (session.status === 'completed') {
       // Idempotent: keep the original completion, still ensure a scorecard
       // exists — except for a safety-ended session, which is never scored.
       if (shouldGenerateScorecard(session.end_reason)) {
@@ -100,7 +100,7 @@ export async function onRequest(context) {
     // impossible to audit or count.
     const endReason = normalizeEndReason(body.reason);
 
-    await db.prepare(
+    const completion = await db.prepare(
       `UPDATE voice_sessions SET
          status = 'completed',
          ended_at = datetime('now'),
@@ -111,8 +111,22 @@ export async function onRequest(context) {
          output_tokens = ?,
          cost_usd = ?,
          updated_at = datetime('now')
-       WHERE id = ?`
+       WHERE id = ? AND status != 'completed'`
     ).bind(endReason, durationSeconds, transcriptJson, inputTokens, outputTokens, costUsd, sessionId).run();
+
+    if ((completion?.meta?.changes ?? 0) !== 1) {
+      // Another completion won after our SELECT. Never replace its transcript
+      // or make a scoring decision from the losing request's end reason.
+      const saved = await db.prepare('SELECT status, end_reason FROM voice_sessions WHERE id = ?')
+        .bind(sessionId).first();
+      if (!saved || saved.status !== 'completed') {
+        return errorResponse('Session not found', 404, origin, env, requestId);
+      }
+      if (shouldGenerateScorecard(saved.end_reason)) {
+        context.waitUntil(generateAndStoreScorecard(env, sessionId));
+      }
+      return successResponse({ sessionId, status: 'completed', alreadyCompleted: true, endReason: saved.end_reason || null }, 200, origin, env, requestId);
+    }
 
     // Unit economics log line (client-reported usage; see runbook brief §2)
     console.log(`[VOICE-COST] session=${sessionId} uid=${uid} duration=${durationSeconds}s in=${inputTokens} out=${outputTokens} cost_usd=${costUsd} end=${endReason || 'unknown'}`);

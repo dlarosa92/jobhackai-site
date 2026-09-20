@@ -96,6 +96,10 @@ jobs:
         working-directory: app/functions/_lib/__tests__
         run: node voice-entitlements.test.mjs
 
+      - name: Run voice reservation and completion race tests
+        working-directory: app/functions/_lib/__tests__
+        run: node voice-reservation.test.mjs
+
       - name: Run voice history tests
         working-directory: app/functions/_lib/__tests__
         run: node voice-history.test.mjs

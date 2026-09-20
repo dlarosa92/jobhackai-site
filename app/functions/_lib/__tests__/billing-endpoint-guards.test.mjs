@@ -259,4 +259,13 @@ const guardUser = () => ({ id: 1, auth_id: 'uid_A', email: 'a@example.com', plan
   assert.deepStrictEqual(selectSubscriptionsToCancel([essentialActive, canceledPremium, premiumUnpaid], 'sub_ess_active').map((s) => s.id), ['sub_prem_unpaid']);
 }
 
+// Voice-only Monthly must not displace grandfathered Pro on equal status.
+{
+  const env = { ...ENV, STRIPE_PRICE_PRO_MONTHLY: 'price_pro', STRIPE_PRICE_MONTHLY: 'price_monthly' };
+  const sub = (id, price) => ({ id, status: 'active', items: { data: [{ price: { id: price } }] } });
+  const result = pickBestSubscription([sub('monthly', 'price_monthly'), sub('pro', 'price_pro')], env);
+  assert.equal(result.bestSub.id, 'pro');
+  assert.equal(result.currentPlan, 'pro');
+}
+
 console.log('billing-endpoint-guards.test.mjs: all assertions passed');
