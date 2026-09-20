@@ -600,6 +600,8 @@ test('the live sentence that started this is recognized', () => {
 
 test('the plain ways a candidate asks to stop are recognized', () => {
   const asks = [
+    "I'll end the interview.",
+    'I will end this interview now.',
     'Please end this interview.',
     'Can you end the interview?',
     'Could you please end this session?',
@@ -624,6 +626,10 @@ test('interview ANSWERS that talk about ending things are never treated as a req
     // Past tense and narrative: the bare-verb rule alone kills these.
     'I ended the interview process at my last company after two rounds.',
     'We were ending the interview loop early because the req was frozen.',
+    "I'll end the interview with a strong question.",
+    "If we run out of time I'll end the interview.",
+    "I'll end the interview tomorrow.",
+    "In that situation I'll end the interview.",
     'The hiring manager wanted to end the interview but I asked for five more minutes.',
     // Habits, hypotheticals, conditions.
     'When I want to end the interview I thank them and follow up in writing.',

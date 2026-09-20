@@ -58,7 +58,7 @@ export const SCORECARD_SCHEMA = {
           type: 'object',
           additionalProperties: false,
           properties: {
-            quote: { type: 'string', description: 'Short paraphrased quote or moment from the candidate' },
+            quote: { type: 'string', description: 'Exact continuous excerpt from one CANDIDATE answer. Never quote an interviewer question or invent or paraphrase a quote.' },
             comment: { type: 'string', description: 'What worked or what to do differently' }
           },
           required: ['quote', 'comment']
@@ -69,6 +69,24 @@ export const SCORECARD_SCHEMA = {
     required: ['overall', 'dimensions', 'saoBalance', 'saoCoaching', 'topStrength', 'topImprovement', 'moments', 'summary']
   }
 };
+
+// A model can still quote the interviewer despite the prompt. Ground every
+// displayed quotation in a single candidate turn before persisting a report.
+// Ignore typography, but do not allow paraphrases, stitched turns or new facts.
+function quoteWords(value) {
+  return String(value || '').normalize('NFKC').toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+}
+
+export function groundedMoments(moments, transcript) {
+  const answers = (Array.isArray(transcript) ? transcript : [])
+    .filter(turn => turn?.speaker === 'user')
+    .map(turn => ` ${quoteWords(turn.text)} `);
+  return (Array.isArray(moments) ? moments : []).filter(moment => {
+    const quote = quoteWords(moment?.quote);
+    return quote && answers.some(answer => answer.includes(` ${quote} `));
+  });
+}
 
 export function transcriptToText(transcript) {
   if (!Array.isArray(transcript)) return '';
@@ -119,7 +137,7 @@ export async function scoreVoiceTranscript({ role, seniority, transcript, jd = n
   const promptParts = [
     "You are the candidate's personal interview coach at JobHackAI, scoring a voice mock interview transcript.",
     'Score honestly: a rambling or vague performance should score in the 40s-60s, a strong one in the 70s-80s, exceptional in the 90s.',
-    'Base every judgment only on what the CANDIDATE actually said. Quote or closely paraphrase real moments, and never invent quotes.',
+    'Base every judgment only on what the CANDIDATE actually said. Every moment quote must be an exact continuous excerpt from one CANDIDATE answer. Never quote the INTERVIEWER. Put interpretation in the comment, not inside the quote. Return fewer moments when there are not enough supported excerpts.',
     'JobHackAI teaches the S + A = O answer formula: Situation about 5 percent, Action about 10 percent, Outcome about 85 percent of an answer.',
     "Compute saoBalance by classifying the candidate's content, never their fluency: Situation is any background, context, biography, or scene-setting, including openers like \"for context\" or \"to give the full picture\"; Action is any step, process, or how-they-did-it detail, even when specific and impressive; Outcome is ONLY explicitly stated results, such as numbers, metrics, rankings, savings, or clearly named consequences.",
     'Report each share as an integer percent of candidate speaking time, summing to about 100. Report what you measured, not what a good answer would look like.',
@@ -174,6 +192,7 @@ export async function scoreVoiceTranscript({ role, seniority, transcript, jd = n
     ? JSON.parse(result.content)
     : result.content;
 
+  scorecard.moments = groundedMoments(scorecard.moments, transcript);
   return { scorecard, usage: result.usage || null, model: result.model || null };
 }
 

@@ -228,6 +228,10 @@
     }
     main {
       flex: 1 0 auto;
+      width: 100%;
+      max-width: 1232px;
+      min-width: 0;
+      box-sizing: border-box;
     }
     .site-footer {
       flex-shrink: 0;
@@ -239,7 +243,7 @@
     /* Two-pane layout for main content + sticky history sidebar */
     .rf-layout-container {
       display: grid;
-      grid-template-columns: 1fr 380px;
+      grid-template-columns: minmax(0, 1fr) 380px;
       gap: var(--space-lg);
       align-items: start;
       max-width: 1200px;
@@ -247,13 +251,14 @@
     }
     @media (max-width: 1024px) {
       .rf-layout-container {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
       }
     }
     .rf-main-column {
       min-width: 0;
     }
     .rf-sidebar-column {
+      min-width: 0;
       position: sticky;
       top: 100px;
     }
@@ -261,6 +266,21 @@
       .rf-sidebar-column {
         position: static;
       }
+    }
+    .rf-card { overflow-wrap: anywhere; }
+    .rf-upload-controls { flex: 1 1 220px; min-width: 0; }
+    #rf-button-row button, .rf-rewrite-actions button {
+      max-width: 100%;
+      white-space: normal;
+    }
+    #rf-button-row button svg { flex-shrink: 0; }
+    .rf-rewrite-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.2rem; }
+    .rf-rewrite-actions #rf-rewrite-cooldown { flex-basis: 100%; min-width: 0; }
+    .rf-history-header { flex-wrap: wrap; }
+    .rf-historical-banner-text { min-width: 0; }
+    @media (max-width: 520px) {
+      #rf-rewrite-content { padding: 0 !important; }
+      #rf-button-row button { width: 100%; }
     }
     /* Historical view banner */
     .rf-historical-banner {
@@ -348,7 +368,7 @@
     .rf-feedback-label { font-weight: 700; color: var(--color-text-main); margin-bottom: 0.2rem; }
     .rf-feedback-score { display: inline-block; background: #007A30; color: #fff; font-weight: 700; border-radius: 999px; padding: 0.2em 0.8em; font-size: 1rem; margin-left: 0.5rem; }
     .rf-feedback-tip { color: var(--color-text-secondary); font-size: 1.01rem; margin-top: 0.3rem; }
-    .rf-snippet-box { width: 100%; min-height: 120px; border: 2px solid var(--color-divider); border-radius: var(--radius-lg); padding: 1rem; font-family: var(--font-family-base); font-size: var(--font-size-base); font-weight: var(--font-weight-regular); margin-bottom: 1.2rem; background: #F9FAFB; color: var(--color-text-main); resize: vertical; }
+    .rf-snippet-box { box-sizing: border-box; width: 100%; min-height: 120px; border: 2px solid var(--color-divider); border-radius: var(--radius-lg); padding: 1rem; font-family: var(--font-family-base); font-size: var(--font-size-base); font-weight: var(--font-weight-regular); margin-bottom: 1.2rem; background: #F9FAFB; color: var(--color-text-main); resize: vertical; }
     /* Ensure rewrite buttons are same size */
     #rf-rewrite-content .btn-primary,
     #rf-rewrite-content .btn-secondary {
@@ -1372,6 +1392,8 @@
     }
 
     function resetAtsAndRoleUIToDefaults() {
+      delete document.getElementById('rf-feedback-content')?.dataset.savedResult;
+      updateFeedbackDescription();
       const rubricGrid = document.getElementById('rf-rubric-grid');
       if (rubricGrid) {
         rubricGrid.innerHTML = '';
@@ -1415,8 +1437,8 @@
       
       if (!lockedDiv || !formDiv || !resultsDiv) return;
       
-      // Resume Feedback Pro is available for Trial, Essential, Pro, and Premium
-      const locked = (currentPlan === 'free');
+      // Authentication remains enforced by the page guard and API.
+      const locked = !RF_ALLOWED_PLANS.includes(currentPlan);
       lockedDiv.style.display = locked ? 'flex' : 'none';
       formDiv.style.display = locked ? 'none' : '';
       resultsDiv.style.display = 'none';
@@ -1680,7 +1702,7 @@
     }
 
     // --- USER PLAN LOGIC (delegated to shared page-access-control.js) ---
-    const RF_ALLOWED_PLANS = window.PageAccessControl ? window.PageAccessControl.PAID_PLANS : ['trial', 'essential', 'pro', 'premium'];
+    const RF_ALLOWED_PLANS = ['free', 'trial', 'essential', 'pro', 'premium', 'weekly', 'monthly', 'pack'];
 
     function getCurrentUserPlan() {
       if (window.PageAccessControl) return window.PageAccessControl.getCurrentUserPlan(RF_ALLOWED_PLANS, '[RESUME-FEEDBACK]');
@@ -1704,7 +1726,7 @@
     const tryApplyScore = runAuthority?.tryApplyScore?.bind(runAuthority);
     const clearRunAuthority = runAuthority?.clearAuthority?.bind(runAuthority);
     let lastNormalizedRoleValue = '';
-    const ROLE_REQUIRED_PLANS = ['trial', 'essential', 'pro', 'premium'];
+    const ROLE_REQUIRED_PLANS = RF_ALLOWED_PLANS; // Feedback API requires a target role on every supported plan.
     let resumeFileIsValid = false;
 
     function isRoleRequiredPlan(plan) {
@@ -2110,7 +2132,7 @@
         // Map error codes to user-friendly messages
         let errorMessage = error.error || 'Failed to get feedback';
         if (error.error === 'Feature locked') {
-          errorMessage = 'This feature is available on the Pro plan. Upgrade to unlock full feedback.';
+          errorMessage = 'Sign in again to refresh access to this free tool.';
         } else if (error.error === 'Unauthorized') {
           errorMessage = 'Please log in to continue.';
         } else if (response.status === 403) {
@@ -2415,7 +2437,7 @@
         // Map error codes to user-friendly messages
         let errorMessage = error.error || 'Failed to rewrite resume';
         if (error.error === 'Feature locked') {
-          errorMessage = 'This feature is available on the Pro plan. Upgrade to unlock full feedback.';
+          errorMessage = 'Sign in again to refresh access to this free tool.';
         } else if (error.error === 'Unauthorized') {
           errorMessage = 'Please log in to continue.';
         } else if (response.status === 403) {
@@ -2545,86 +2567,11 @@
         error.context?.upgradeRequired ||
         (error.message && error.message.includes('Upgrade to Pro'));
       
-      // Handle upgrade-required errors with direct Stripe checkout
       if (upgradeRequired) {
-        const upgradeToPro = async () => {
-          try {
-            if (typeof window.upgradePlan === 'function') {
-              await window.upgradePlan('pro', {
-                source: 'resume-feedback',
-                returnUrl: window.location.href
-              });
-              return;
-            }
-
-            const user = window.FirebaseAuthManager?.getCurrentUser?.();
-            const idToken = user ? await user.getIdToken() : null;
-            const confirmed = typeof window.requestUpgradeConfirmation === 'function'
-              ? await window.requestUpgradeConfirmation('pro', { mode: 'checkout', currentPlan: localStorage.getItem('user-plan') || 'free' })
-              : true;
-            if (!confirmed) {
-              return;
-            }
-            // Show loading state only after confirmation
-            if (window.showLoadingOverlay) {
-              window._currentLoadingOverlay = window.showLoadingOverlay('Upgrading plan...');
-            }
-            // Use upgrade-plan endpoint to properly handle existing subscriptions
-            const res = await fetch('/api/upgrade-plan', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                ...(idToken ? { Authorization: `Bearer ${idToken}` } : {})
-              },
-              body: JSON.stringify({
-                targetPlan: 'pro',
-                source: 'resume-feedback',
-                returnUrl: window.location.href
-              })
-            });
-            const data = await res.json();
-            if (!res.ok) {
-              throw new Error(data?.error || data?.code || 'Upgrade failed');
-            }
-            if (data?.action === 'redirect' && data.url) {
-              window.location.href = data.url;
-              return;
-            }
-            if (data?.action === 'updated') {
-              // Plan updated successfully, reload to refresh UI
-              window.location.reload();
-              return;
-            }
-            throw new Error('Unexpected response from upgrade endpoint');
-          } catch (e) {
-            console.error('Upgrade checkout error:', e);
-            // Hide loading overlay
-            if (window._currentLoadingOverlay) {
-              window._currentLoadingOverlay();
-              window._currentLoadingOverlay = null;
-            }
-            // Fallback to pricing page if checkout fails
-            window.location.href = 'pricing.html';
-          }
-        };
-
-        if (window.showErrorModal) {
-          window.showErrorModal(
-            'Trial Complete',
-            'You\'ve used all 3 feedback attempts. Upgrade to Pro for unlimited feedback and unlock all features.',
-            {
-              showUpgrade: true,
-              upgradeCallback: upgradeToPro,
-              upgradeButtonText: 'Upgrade to Pro',
-              buttonText: 'Maybe Later'
-            }
-          );
-          return;
-        }
+        message = 'Your available runs for this tool have been used. Check your usage above for the current allowance.';
+        messageWasModified = true;
       }
-      
-      
-      
+
       // Map error messages to user-friendly modals
       if (message.includes('Unauthorized') || message.includes('Not authenticated')) {
         message = 'Please log in to continue.';
@@ -2632,7 +2579,7 @@
         action = () => window.location.href = 'login.html';
         actionLabel = 'Go to Login';
       } else if (message.includes('Usage limit') || message.includes('limit reached')) {
-        message = message + ' Upgrade to unlock more features.';
+        message = 'Your available runs for this tool have been used. Check your usage above for the current allowance.';
         messageWasModified = true;
         action = () => window.location.href = 'pricing.html';
         actionLabel = 'View Pricing';
@@ -2712,7 +2659,7 @@
       // For initial loads ("Analyzing") - use skeleton loading instead of overlay
       // This provides better UX with contextual placeholders that match the final content layout
       const userPlan = getCurrentUserPlan();
-      const willGetFeedback = ['trial', 'essential', 'pro', 'premium'].includes(userPlan);
+      const willGetFeedback = RF_ALLOWED_PLANS.includes(userPlan);
       
       // Show skeletons for initial analysis
       const jobTitleInput = document.getElementById('rf-job-title');
@@ -2720,11 +2667,11 @@
       showSkeletons(willGetFeedback, hasRole);
       hideHeaderSkeleton();
       
-      // For Pro/Premium users, show skeleton on "Your Original Snippet" text box during analysis
-      if (userPlan === 'pro' || userPlan === 'premium') {
+      // For supported plans, show skeleton on "Your Original Snippet" text box during analysis
+      if (RF_ALLOWED_PLANS.includes(userPlan)) {
         const rewriteContent = document.getElementById('rf-rewrite-content');
         if (rewriteContent) {
-          // Ensure rewrite content is visible (it should already be for Pro/Premium)
+          // Ensure rewrite content is visible (it available on every supported plan)
           rewriteContent.style.display = 'block';
           // Show skeleton on the original snippet box (first textarea, index 0)
           const originalSnippetBox = rewriteContent.querySelectorAll('.rf-snippet-box')[0];
@@ -2738,8 +2685,8 @@
       currentLoadingOverlay = () => {
         hideSkeletons();
         hideATSSkeleton();
-        // Also hide skeleton on original snippet box for Pro/Premium
-        if (userPlan === 'pro' || userPlan === 'premium') {
+        // Also hide skeleton on original snippet box for supported plans
+        if (RF_ALLOWED_PLANS.includes(userPlan)) {
           const rewriteContent = document.getElementById('rf-rewrite-content');
           if (rewriteContent) {
             const originalSnippetBox = rewriteContent.querySelectorAll('.rf-snippet-box')[0];
@@ -2813,7 +2760,7 @@
       const rewrittenBox = document.querySelectorAll('#rf-rewrite-content .rf-snippet-box')[1];
       if (!rewrittenBox) return;
 
-      // Entitlement check - Pro/Premium only
+      // Keep download access aligned with the free rewrite API.
       const allowedPlans = ['free', 'trial', 'essential', 'pro', 'premium', 'weekly', 'monthly', 'pack']; // repositioning: rewrite is free with signup
       let currentPlan = null;
       try {
@@ -3602,6 +3549,9 @@
           const applied = attemptApplyScoreCandidate(candidate, () => {
             console.log('[RESUME-FEEDBACK] Loading score from resume feedback history:', cachedScore.score);
             updateProgressRing(cachedScore.score);
+            const feedbackContent = document.getElementById('rf-feedback-content');
+            if (feedbackContent) feedbackContent.dataset.savedResult = 'true';
+            updateFeedbackDescription();
             // Hide placeholder
             hidePlaceholder();
             // Show rubric grid
@@ -4031,7 +3981,7 @@
               // CRITICAL: Ensure feedback content is visible after feedback is generated (Pro & Premium)
               const feedbackContentEl = document.getElementById('rf-feedback-content');
               const userPlanCheck = getCurrentUserPlan();
-              if (feedbackContentEl && ['pro', 'premium'].includes(userPlanCheck)) {
+              if (feedbackContentEl && RF_ALLOWED_PLANS.includes(userPlanCheck)) {
                 feedbackContentEl.style.display = 'block';
                 console.log('[RESUME-FEEDBACK] Feedback content shown after optimize for:', userPlanCheck);
               }
@@ -4131,6 +4081,8 @@
         }
 
         const jobTitleInput = document.getElementById('rf-job-title');
+        delete document.getElementById('rf-feedback-content')?.dataset.savedResult;
+        updateFeedbackDescription();
         const canonicalJobTitle = getCanonicalJobTitle(); // Save final job title once per run
         
         // Save job title to state persistence (even if empty)
@@ -4423,9 +4375,9 @@
 
           // Step 1 complete: "Reading your resume..." overlay is already hidden by uploadResume()
           // Step 2: Show skeleton loading states instead of full-screen overlay
-          // Free users only get ATS scoring, not AI feedback, so show different message
+          // All supported plans receive feedback, subject to server usage limits.
           const userPlan = getCurrentUserPlan();
-          const willGetFeedback = ['trial', 'essential', 'pro', 'premium'].includes(userPlan);
+          const willGetFeedback = RF_ALLOWED_PLANS.includes(userPlan);
           const hasRole = Boolean(canonicalJobTitle && canonicalJobTitle.trim().length > 0);
           
           // Ensure feedback token exists BEFORE showSkeletons runs
@@ -4462,7 +4414,7 @@
           
           // PERFORMANCE FIX: Load original snippet immediately (don't wait for API)
           // This provides instant feedback to users while API processes in background
-          if (userPlan === 'pro' || userPlan === 'premium') {
+          if (RF_ALLOWED_PLANS.includes(userPlan)) {
             const origBox = document.querySelectorAll('#rf-rewrite-content .rf-snippet-box')[0];
             if (origBox) {
               // Show skeleton initially
@@ -4521,73 +4473,9 @@
                     // Show modal immediately, block all API calls
                     if (window.showErrorModal) {
                       window.showErrorModal(
-                        'Trial Complete',
-                        'You\'ve used all 3 feedback attempts. Upgrade to Pro for unlimited feedback and unlock all features.',
-                        {
-                          showUpgrade: true,
-                          upgradeCallback: async () => {
-                            try {
-                          if (typeof window.upgradePlan === 'function') {
-                            await window.upgradePlan('pro', {
-                              source: 'resume-feedback',
-                              returnUrl: window.location.href
-                            });
-                            return;
-                          }
-                          
-                          const user = window.FirebaseAuthManager?.getCurrentUser?.();
-                          const idToken = user ? await user.getIdToken() : null;
-                          const confirmed = typeof window.requestUpgradeConfirmation === 'function'
-                            ? await window.requestUpgradeConfirmation('pro', { mode: 'checkout', currentPlan: localStorage.getItem('user-plan') || 'free' })
-                            : true;
-                          if (!confirmed) {
-                            return;
-                          }
-                          // Show loading state after confirmation
-                          if (window.showLoadingOverlay) {
-                            window._currentLoadingOverlay = window.showLoadingOverlay('Upgrading plan...');
-                          }
-                          // Use upgrade-plan endpoint to properly handle existing subscriptions
-                          const res = await fetch('/api/upgrade-plan', {
-                            method: 'POST',
-                            headers: {
-                              'Content-Type': 'application/json',
-                              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {})
-                                },
-                                body: JSON.stringify({
-                                  targetPlan: 'pro',
-                                  source: 'resume-feedback',
-                                  returnUrl: window.location.href
-                                })
-                              });
-                              const data = await res.json();
-                              if (!res.ok) {
-                                throw new Error(data?.error || data?.code || 'Upgrade failed');
-                              }
-                              if (data?.action === 'redirect' && data.url) {
-                                window.location.href = data.url;
-                                return;
-                              }
-                              if (data?.action === 'updated') {
-                                // Plan updated successfully, reload to refresh UI
-                                window.location.reload();
-                                return;
-                              }
-                              throw new Error('Unexpected response from upgrade endpoint');
-                            } catch (e) {
-                              console.error('Upgrade checkout error:', e);
-                              // Hide loading overlay
-                              if (window._currentLoadingOverlay) {
-                                window._currentLoadingOverlay();
-                                window._currentLoadingOverlay = null;
-                              }
-                              // Fallback to pricing page if checkout fails
-                              window.location.href = 'pricing.html';
-                            }
-                          },
-                          upgradeButtonText: 'Upgrade to Pro',
-                          buttonText: 'Maybe Later'
-                        }
+                        'Feedback Limit Reached',
+                        'You have used the 3 feedback runs included in your trial. Your saved results are still available.',
+                        { buttonText: 'Got it' }
                       );
                     }
                     hideLoadingState();
@@ -4656,10 +4544,10 @@
           const atsPromise = getAtsScore(uploadResult.resumeId, canonicalJobTitleForApis);
           const feedbackPromise = (async () => {
             const plan = getCurrentUserPlan();
-            if (['trial', 'essential', 'pro', 'premium'].includes(plan)) {
+            if (RF_ALLOWED_PLANS.includes(plan)) {
               return await getResumeFeedbackWithAtsWait(uploadResult.resumeId, canonicalJobTitleForApis, atsPromise);
             }
-            return null; // Free plan doesn't get feedback
+            return null; // Unsupported plan; the API remains authoritative.
           })();
 
           // Handle ATS result immediately without waiting for feedback (progressive display)
@@ -4981,7 +4869,7 @@
                             roleSpecificFeedback: roleSpecific
                           };
                           
-                          // FIX 2: Populate original snippet after analysis completes (for Pro/Premium users)
+                          // FIX 2: Populate original snippet after analysis completes (for all supported plans)
                           populateOriginalSnippetAfterAnalysis(uploadResult);
                         }
                       } else {
@@ -5204,7 +5092,7 @@
                             };
                             persistRoleFeedbackIfPossible(updatedFeedbackResult);
                             
-                            // FIX 2: Populate original snippet after analysis completes (for Pro/Premium users)
+                            // FIX 2: Populate original snippet after analysis completes (for all supported plans)
                             populateOriginalSnippetAfterAnalysis(uploadResult);
                           }
                         } else {
@@ -5873,7 +5761,7 @@
             
             // Only show "Generating tips..." if user has a plan AND provided a role
             const userPlan = getCurrentUserPlan();
-            const willGetFeedback = ['trial', 'essential', 'pro', 'premium'].includes(userPlan);
+            const willGetFeedback = RF_ALLOWED_PLANS.includes(userPlan);
             const hasRole = canonicalJobTitle && canonicalJobTitle.trim().length > 0;
             if (willGetFeedback && hasRole) {
               setRoleStatus('Generating tips…');
@@ -6105,7 +5993,7 @@
 
               const feedbackContentEl = document.getElementById('rf-feedback-content');
               const userPlanCheck = getCurrentUserPlan();
-              if (feedbackContentEl && ['pro', 'premium'].includes(userPlanCheck)) {
+              if (feedbackContentEl && RF_ALLOWED_PLANS.includes(userPlanCheck)) {
                 feedbackContentEl.style.display = 'block';
               }
 
@@ -6416,7 +6304,7 @@
       const headerDesc = document.getElementById('rf-header-desc');
       const isHistoricalView = window.JobHackAIHistory?.isHistoricalView?.();
       if (headerDesc && !isHistoricalView) {
-        headerDesc.textContent = 'Get your basic ATS compatibility score.';
+        headerDesc.textContent = 'Improve your resume with ATS insights, role-specific feedback, and AI-powered rewrites. Your available runs are shown above.';
       }
       resetAtsAndRoleUIToDefaults();
       setRoleStatus('');
@@ -7232,10 +7120,10 @@
       el.classList.remove('fade-enter', 'fade-enter-active');
     }
     
-    // Helper: Populate original snippet textarea for Pro/Premium users after analysis completes
+    // Helper: Populate original snippet textarea for all supported plans after analysis completes
     function populateOriginalSnippetAfterAnalysis(uploadResult) {
       const userPlan = getCurrentUserPlan();
-      if ((userPlan === 'pro' || userPlan === 'premium') && uploadResult) {
+      if (RF_ALLOWED_PLANS.includes(userPlan) && uploadResult) {
         const origBox = document.querySelectorAll('#rf-rewrite-content .rf-snippet-box')[0];
         if (origBox) {
           const resumeText = sessionStorage.getItem('currentResumeText') || uploadResult.resumeText;
@@ -7559,366 +7447,54 @@
       summaryContainer.style.display = 'block';
     }
 
-    // Hide details for Free plan
+    // Prep access is independent of the paid voice offer. Usage comes from /api/usage.
     function updateRfTileForPlan() {
-      // Don't update plan badge/tiles during logout; prevents pill/CTA flicker
-      if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('logout-intent') === '1') return;
-      // Don't update tiles while plan is unknown—avoids showing "Locked" during plan hydration race
+      if (sessionStorage.getItem('logout-intent') === '1') return;
       if (document.documentElement.classList.contains('plan-pending')) return;
-      const atsScoreTile = document.getElementById('rf-ats-score-tile');
-      const feedbackTile = document.getElementById('rf-feedback-tile');
-      const rewriteTile = document.getElementById('rf-rewrite-tile');
-      const feedbackContent = document.getElementById('rf-feedback-content');
-      const rewriteContent = document.getElementById('rf-rewrite-content');
       const plan = getCurrentUserPlan();
-      const roleDescEl = document.getElementById('rf-role-desc');
+      const canUsePrepTools = RF_ALLOWED_PLANS.includes(plan);
+      const historical = window.JobHackAIHistory?.isHistoricalView?.() || false;
       const headerBadge = document.getElementById('rf-header-plan-badge');
-      const headerDesc = document.getElementById('rf-header-desc');
-      const feedbackBadge = feedbackTile ? feedbackTile.querySelector('.rf-title .rf-plan-badge') : null;
-      
-      function setHeaderBadgePending(isPending) {
-        if (!headerBadge) return;
-        if (isPending) {
-          headerBadge.classList.add('rf-plan-badge--pending');
-          headerBadge.setAttribute('aria-hidden', 'true');
-          headerBadge.textContent = '';
-          headerBadge.style.background = 'transparent';
-          return;
-        }
+      if (headerBadge) {
+        headerBadge.textContent = 'Free resume tools';
         headerBadge.classList.remove('rf-plan-badge--pending');
         headerBadge.removeAttribute('aria-hidden');
+        headerBadge.style.background = '#007A30';
       }
-      
-      // Hide the header badge while plan is unknown or free to prevent blue flash.
-      setHeaderBadgePending(plan === 'free' || plan === 'visitor' || !plan || plan === 'undefined');
-      
-      // Check if we're viewing historical feedback - don't overwrite score description
-      const isHistoricalView = typeof window.JobHackAIHistory?.isHistoricalView === 'function' 
-        ? window.JobHackAIHistory.isHistoricalView() 
-        : false;
-      
-      // Helper function to safely set text content
-      function safeSetText(element, text) {
-        if (element) element.textContent = text;
+      const headerDesc = document.getElementById('rf-header-desc');
+      const restored = document.getElementById('rf-feedback-content')?.dataset.savedResult === 'true';
+      if (headerDesc && !historical && !restored) {
+        headerDesc.textContent = 'Improve your resume with ATS insights, role-specific feedback, and AI-powered rewrites. Your available runs are shown below.';
       }
-      
-      // Helper function to safely set innerHTML
-      function safeSetHTML(element, html) {
-        if (element) element.innerHTML = html;
-      }
-      
-      // Helper function to safely set style property
-      function safeSetStyle(element, prop, value) {
-        if (element && element.style) element.style[prop] = value;
-      }
-      
-      // Helper function to safely query and set text
-      function safeQueryText(parent, selector, text) {
-        if (!parent) return null;
-        const el = parent.querySelector(selector);
-        if (el) el.textContent = text;
-        return el;
-      }
-      
-      // Helper function to safely query and set style
-      function safeQueryStyle(parent, selector, prop, value) {
-        if (!parent) return null;
-        const el = parent.querySelector(selector);
-        if (el && el.style) el.style[prop] = value;
-        return el;
-      }
-      
-      // Helper function to safely query and set HTML
-      function safeQueryHTML(parent, selector, html) {
-        if (!parent) return null;
-        const el = parent.querySelector(selector);
-        if (el) el.innerHTML = html;
-        return el;
-      }
-      
-      // Helper function to safely query an element (for passing to other functions)
-      function safeQuerySelector(parent, selector) {
-        if (!parent) return null;
-        return parent.querySelector(selector);
-      }
-      
-      // Cache base role description for later restores
-      if (roleDescEl && !roleDescEl.dataset.baseText) {
-        roleDescEl.dataset.baseText = roleDescEl.textContent || '';
-      }
-
-      // Clean up old upgrade banners
-      const cleanupOldBanners = () => {
-        const oldBanners = document.querySelectorAll('#rf-feedback-upgrade-banner, #rf-rewrite-upgrade-banner');
-        oldBanners.forEach(banner => banner.remove());
-      };
-
-      // Reset all tiles to default state
-      // During historical view, preserve feedback/rewrite content visibility to avoid flicker
-      const resetTiles = () => {
-        if (atsScoreTile) atsScoreTile.style.display = 'block';
-        if (feedbackTile) feedbackTile.style.display = 'block';
-        if (rewriteTile) rewriteTile.style.display = 'block';
-        if (!isHistoricalView) {
-          if (feedbackContent) feedbackContent.style.display = 'none';
-          if (rewriteContent) rewriteContent.style.display = 'none';
-        }
-        cleanupOldBanners();
-      };
-
-      resetTiles();
-
-      // Helper function to update description with tooltip preserved
-      function updateDescriptionWithTooltip(element, text, tooltipText) {
-        if (!element) return;
-        const tooltipHtml = `<span class="rf-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-            <circle cx="12" cy="12" r="10"/>
-            <line x1="12" y1="8" x2="12" y2="8"/>
-            <line x1="12" y1="12" x2="12" y2="16"/>
-          </svg>
-          <span class="rf-tooltip-text">${tooltipText}</span>
-        </span>`;
-        element.innerHTML = text + tooltipHtml;
-      }
-
-      // Free Plan Logic
-      if (plan === 'free') {
-        // Badge stays hidden via setHeaderBadgePending(true) above; no pill for free.
-        if (headerDesc && !isHistoricalView) {
-          headerDesc.textContent = 'Get your basic ATS compatibility score.';
-        }
-
-        if (feedbackTile) {
-          const badge = feedbackTile.querySelector('.rf-title .rf-plan-badge');
-          safeSetText(badge, 'Locked');
-          safeSetStyle(badge, 'background', '#E11D48');
-          safeQueryText(feedbackTile, '.rf-upgrade-text strong', 'Start Free Trial');
-          safeQueryHTML(feedbackTile, '.rf-upgrade-text', '<strong>Start Free Trial</strong> to unlock detailed ATS and role-specific feedback instantly.');
-          // Add trial CTA button
-          const upgradeButton = feedbackTile.querySelector('.rf-upgrade-prompt a');
-          if (upgradeButton) {
-            upgradeButton.textContent = 'Start Free Trial';
-            upgradeButton.style.background = 'var(--color-accent-blue)';
-            upgradeButton.style.color = '#fff';
-          }
-        }
-        if (rewriteTile) {
-          const badge = rewriteTile.querySelector('.rf-title .rf-plan-badge');
-          safeSetText(badge, 'Pro Feature');
-          safeSetStyle(badge, 'background', '#6B7280');
-          safeQueryText(rewriteTile, '.rf-upgrade-text strong', 'Upgrade to Pro');
-          safeQueryHTML(rewriteTile, '.rf-upgrade-text', '<strong>Upgrade to Pro</strong> to unlock AI-powered resume rewriting with unlimited revisions');
+      for (const id of ['rf-feedback-tile', 'rf-rewrite-tile']) {
+        const tile = document.getElementById(id);
+        const badge = tile?.querySelector('.rf-plan-badge');
+        if (badge) {
+          badge.textContent = 'Free with signup';
+          badge.classList.remove('rf-plan-badge--pending');
+          badge.removeAttribute('aria-hidden');
+          badge.style.background = '#007A30';
         }
       }
-
-      // Trial Plan Logic
-      else if (plan === 'trial') {
-        setHeaderBadgePending(false);
-        if (headerBadge) {
-          headerBadge.textContent = 'Trial Plan';
-          headerBadge.style.setProperty('background', '#FF9100', 'important');
-        }
-        if (headerDesc && !isHistoricalView) {
-          headerDesc.textContent = 'Your trial includes 3 full ATS score & feedback runs. Each run combines ATS scoring with detailed feedback, so you know exactly what to fix before you apply.';
-        }
-
-        // Trial feedback: 3 full runs total during trial
-        if (feedbackTile) {
-          const badge = feedbackTile.querySelector('.rf-title .rf-plan-badge');
-          safeSetText(badge, 'Trial Plan');
-          if (badge) {
-            badge.style.setProperty('background', '#FF9100', 'important');
-          }
-          safeQueryStyle(feedbackTile, '.rf-upgrade-text', 'display', 'none');
-          if (feedbackContent) {
-            feedbackContent.style.display = 'block';
-          }
-          if (roleDescEl) {
-            const planSpecificText = 'Basic feedback on your resume\'s content and presentation for your target role. Upgrade to Pro for deeper analysis and richer AI suggestions.';
-            roleDescEl.textContent = planSpecificText;
-            // Update baseText to plan-specific text so updateRoleTipsState restores the correct text
-            roleDescEl.dataset.baseText = planSpecificText;
-          }
-        }
-        if (rewriteTile) {
-          const badge = rewriteTile.querySelector('.rf-title .rf-plan-badge');
-          safeSetText(badge, 'Pro Feature');
-          safeSetStyle(badge, 'background', '#6B7280');
-          safeQueryText(rewriteTile, '.rf-upgrade-text strong', 'Upgrade to Pro');
-          safeQueryHTML(rewriteTile, '.rf-upgrade-text', '<strong>Trial shows you what to fix. Pro fixes it now (rewrites unlocked).</strong> Upgrade to Pro to complete your resume optimization.');
-          const upgradePrompt = rewriteTile.querySelector('.rf-upgrade-prompt');
-          if (upgradePrompt) {
-            upgradePrompt.style.display = 'flex';
-          }
-          // Add special upgrade CTA for trial users
-          const upgradeButton = rewriteTile.querySelector('.rf-upgrade-prompt a');
-          if (upgradeButton && upgradeButton.parentNode) {
-            upgradeButton.textContent = 'Upgrade to Pro';
-            upgradeButton.className = 'btn btn-secondary';
-            const freshButton = upgradeButton.cloneNode(true);
-            upgradeButton.parentNode.replaceChild(freshButton, upgradeButton);
-            freshButton.style.setProperty('background', '#1976D2', 'important');
-            freshButton.style.setProperty('color', '#fff', 'important');
-            freshButton.style.setProperty('border', 'none', 'important');
-            freshButton.style.setProperty('display', 'inline-block', 'important');
-            freshButton.addEventListener('mouseenter', function() {
-              this.style.setProperty('background', '#125bb5', 'important');
-            });
-            freshButton.addEventListener('mouseleave', function() {
-              this.style.setProperty('background', '#1976D2', 'important');
-            });
-          }
-        }
-      }
-
-      // Essential Plan Logic
-      else if (plan === 'essential') {
-        setHeaderBadgePending(false);
-        if (headerBadge) {
-          headerBadge.textContent = 'Essential Plan';
-          headerBadge.style.background = '#0077B5';
-        }
-        if (headerDesc && !isHistoricalView) {
-          headerDesc.textContent = 'Get comprehensive ATS scoring and role-specific feedback. Your Essential plan includes 3 detailed feedback runs per month.';
-        }
-
-        // Essential: 3 feedbacks/month
-        if (feedbackTile) {
-          // Check monthly usage (will be updated dynamically via API)
-          const monthlyUsage = 0; // Will be fetched from /api/usage
-          const badge = feedbackTile.querySelector('.rf-title .rf-plan-badge');
-          if (monthlyUsage >= 3) {
-            safeSetText(badge, 'Monthly Limit Reached');
-            safeSetStyle(badge, 'background', '#6B7280');
-            safeQueryText(feedbackTile, '.rf-upgrade-text strong', 'Upgrade to Pro');
-            safeQueryHTML(feedbackTile, '.rf-upgrade-text', '<strong>Upgrade to Pro</strong> for AI resume rewriting and higher feedback limits.');
-          } else {
-            safeSetText(badge, 'Essential Plan');
-            safeSetStyle(badge, 'background', '#0077B5');
-            safeQueryStyle(feedbackTile, '.rf-upgrade-text', 'display', 'none');
-            if (feedbackContent) {
-              feedbackContent.style.display = 'block';
-            }
-            // Ensure Essential feedback limit is clearly communicated
-            let essentialNote = document.getElementById('rf-essential-feedback-note');
-            if (!essentialNote) {
-              essentialNote = document.createElement('div');
-              essentialNote.id = 'rf-essential-feedback-note';
-              essentialNote.style.marginTop = '0.5rem';
-              essentialNote.style.color = 'var(--color-text-secondary)';
-              essentialNote.style.fontSize = '0.9rem';
-              essentialNote.textContent = 'Your Essential plan includes 3 feedback runs per month.';
-              feedbackTile.insertBefore(essentialNote, feedbackContent);
-            }
-            if (roleDescEl) {
-              const planSpecificText = 'Basic feedback on your resume\'s content and presentation for your target role. Upgrade to Pro for deeper analysis and richer AI suggestions.';
-              roleDescEl.textContent = planSpecificText;
-              // Update baseText to plan-specific text so updateRoleTipsState restores the correct text
-              roleDescEl.dataset.baseText = planSpecificText;
-            }
-          }
-        }
-        if (rewriteTile) {
-          const badge = rewriteTile.querySelector('.rf-title .rf-plan-badge');
-          safeSetText(badge, 'Pro Feature');
-          safeSetStyle(badge, 'background', '#6B7280');
-          safeQueryText(rewriteTile, '.rf-upgrade-text strong', 'Upgrade to Pro');
-          safeQueryHTML(rewriteTile, '.rf-upgrade-text', '<strong>Trial shows you what to fix. Pro fixes it now (rewrites unlocked).</strong> Upgrade to Pro to complete your resume optimization.');
-          const upgradePrompt = rewriteTile.querySelector('.rf-upgrade-prompt');
-          if (upgradePrompt) {
-            upgradePrompt.style.display = 'flex';
-          }
-          // Add special upgrade CTA for essential users
-          const upgradeButton = rewriteTile.querySelector('.rf-upgrade-prompt a');
-          if (upgradeButton && upgradeButton.parentNode) {
-            upgradeButton.textContent = 'Upgrade to Pro';
-            upgradeButton.className = 'btn btn-secondary';
-            const freshButton = upgradeButton.cloneNode(true);
-            upgradeButton.parentNode.replaceChild(freshButton, upgradeButton);
-            freshButton.style.setProperty('background', '#1976D2', 'important');
-            freshButton.style.setProperty('color', '#fff', 'important');
-            freshButton.style.setProperty('border', 'none', 'important');
-            freshButton.style.setProperty('display', 'inline-block', 'important');
-            freshButton.addEventListener('mouseenter', function() {
-              this.style.setProperty('background', '#125bb5', 'important');
-            });
-            freshButton.addEventListener('mouseleave', function() {
-              this.style.setProperty('background', '#1976D2', 'important');
-            });
-          }
-        }
-      }
-
-      // Pro & Premium Plan Logic
-      else if (plan === 'pro' || plan === 'premium') {
-        const isProPlan = plan === 'pro';
-        const isPremiumPlan = plan === 'premium';
-        const planLabel = plan.charAt(0).toUpperCase() + plan.slice(1) + ' Plan';
-        const planColor = isProPlan ? '#388E3C' : '#C62828';
-        
-        setHeaderBadgePending(false);
-        if (headerBadge) {
-          headerBadge.textContent = planLabel;
-          headerBadge.style.background = planColor;
-        }
-        if (headerDesc && !isHistoricalView) {
-          if (isPremiumPlan) {
-            headerDesc.textContent = 'Upload your resume once. Improve it step-by-step with ATS insights, role-specific feedback, and AI-powered rewrites! All your AI-generated content gets priority review.';
-          } else {
-            headerDesc.textContent = 'Upload your resume once. Improve it step-by-step with ATS insights, role-specific feedback, and AI-powered rewrites!';
-          }
-        }
-
-        if (feedbackTile) {
-          const badge = feedbackTile.querySelector('.rf-title .rf-plan-badge');
-          safeSetText(badge, planLabel);
-          safeSetStyle(badge, 'background', planColor);
-          safeQueryStyle(feedbackTile, '.rf-upgrade-text', 'display', 'none');
-          if (feedbackContent) {
-            feedbackContent.style.display = 'block';
-            // Premium CTA removed - already exists at bottom of page
-          }
-          if (roleDescEl) {
-            const planSpecificText = 'See how your resume aligns with what hiring managers expect for your target role.';
-            roleDescEl.textContent = planSpecificText;
-            // Update baseText to plan-specific text so updateRoleTipsState restores the correct text
-            roleDescEl.dataset.baseText = planSpecificText;
-          }
-        }
-        if (rewriteTile) {
-          const badge = rewriteTile.querySelector('.rf-title .rf-plan-badge');
-          safeSetText(badge, planLabel);
-          safeSetStyle(badge, 'background', planColor);
-          // Update description text for Pro/Premium users
-          const rewriteDesc = rewriteTile.querySelector('#rf-rewrite-desc');
-          if (rewriteDesc) {
-            const planName = isPremiumPlan ? 'Premium' : 'Pro';
-            rewriteDesc.innerHTML = 'AI rewrites your resume line-by-line using this ATS feedback and your target role. <span class="rf-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg><span class="rf-tooltip-text">See a rewritten version of your resume tailored to your target job - ready to copy and paste. Unlimited with your ' + planName + ' plan.</span></span>';
-          }
-          // Hide upgrade prompt and show content
-          const upgradePrompt = rewriteTile.querySelector('.rf-upgrade-prompt');
-          if (upgradePrompt) upgradePrompt.style.display = 'none';
-          if (rewriteContent) {
-            rewriteContent.style.display = 'block';
-            // Re-attach button listeners when content is shown
-            setTimeout(attachRewriteButtonListeners, 100);
-            // Remove any Premium upgrade banner from rewrite tile (only show in feedback tile)
-            const oldBanner = document.getElementById('rf-rewrite-upgrade-banner');
-            if (oldBanner) oldBanner.remove();
-          }
-        }
-      }
-      if (feedbackBadge) {
-        feedbackBadge.classList.remove('rf-plan-badge--pending');
-        feedbackBadge.removeAttribute('aria-hidden');
-      }
-
-      // Ensure role-required gating reflects the latest plan
+      // Do not clear or repaint saved results during plan hydration.
+      const feedbackContent = document.getElementById('rf-feedback-content');
+      if (feedbackContent && canUsePrepTools) feedbackContent.style.display = 'block';
+      const rewriteContent = document.getElementById('rf-rewrite-content');
+      if (rewriteContent && canUsePrepTools && !historical) rewriteContent.style.display = 'block';
+      updateFeedbackDescription();
       updateGenerateButtonState({ plan });
-
-      // Always update Priority Review CTA
+      attachRewriteButtonListeners();
       updatePriorityReviewCTA();
+    }
+
+    function updateFeedbackDescription() {
+      const description = document.getElementById('rf-feedback-desc');
+      if (!description) return;
+      const historical = window.JobHackAIHistory?.isHistoricalView?.() || false;
+      const restored = document.getElementById('rf-feedback-content')?.dataset.savedResult === 'true';
+      description.textContent = (historical || restored)
+        ? 'Review the ATS breakdown and role-specific feedback saved for this run.'
+        : 'Run ATS Score & Feedback to see your detailed breakdown here.';
     }
 
     // Add usage indicator using shared component
@@ -8464,6 +8040,7 @@
         // Mark as historical view
         _isHistoricalView = true;
         _currentHistoricalSessionId = sessionId;
+        updateFeedbackDescription();
         
         // Show historical banner
         showHistoricalBanner(data);
@@ -8717,7 +8294,7 @@
         // Fallback: minimally reset score description while preserving tooltip
         const scoreDesc = document.getElementById('rf-header-desc');
         if (scoreDesc) {
-          scoreDesc.innerHTML = 'Get your basic ATS compatibility score.';
+          scoreDesc.innerHTML = 'Improve your resume with ATS insights, role-specific feedback, and AI-powered rewrites. Your available runs are shown above.';
         }
       }
     }
@@ -8845,7 +8422,7 @@
           rewritePrompt.style.display = 'block';
           const promptText = rewritePrompt.querySelector('.rf-upgrade-text');
           if (promptText) {
-            promptText.innerHTML = 'AI resume rewrites are a Pro/Premium feature. Upgrade to unlock your detailed rewrites for this resume.';
+            promptText.textContent = 'This saved rewrite is unavailable. Sign in again to refresh your access.';
           }
         }
         if (rewrittenTextarea) rewrittenTextarea.value = '';
@@ -9508,7 +9085,7 @@
              <span class="rf-status-text"></span>
            </div>
         </div>
-        <div style="flex:1;min-width:220px;">
+        <div class="rf-upload-controls">
           <form id="rf-upload-form" style="margin:1rem 0 0.7rem 0;">
             <label for="rf-job-title" style="font-weight:600;display:block;margin-bottom:0.5rem;">Target Role <span class="rf-required" id="rf-role-required-star" style="display:none;">*</span></label>
             <div style="position:relative;max-width:400px;margin-bottom:1rem;">
@@ -9579,10 +9156,10 @@
     <section class="rf-card" id="rf-feedback-tile">
       <div class="rf-title">
         ATS Score & Feedback
-        <span class="rf-plan-badge rf-plan-badge--pending" style="background:#6B7280;" aria-hidden="true">Locked</span>
+        <span class="rf-plan-badge rf-plan-badge--pending" style="background:#6B7280;" aria-hidden="true">Free with signup</span>
       </div>
       <div style="color:var(--color-text-secondary);margin:0.25rem 0 1.2rem;">
-        Run ATS Score &amp; Feedback to see your detailed breakdown here.
+        <span id="rf-feedback-desc">Run ATS Score &amp; Feedback to see your detailed breakdown here.</span>
         <span class="rf-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.35em; vertical-align:middle;">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="width:18px; height:18px;">
             <circle cx="12" cy="12" r="10"/>
@@ -9591,19 +9168,6 @@
           </svg>
           <span class="rf-tooltip-text">Get comprehensive feedback on keyword matching, formatting, structure, tone, and grammar to improve your resume's ATS compatibility.</span>
         </span>
-      </div>
-      <div class="rf-upgrade-prompt" style="display:none !important;">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 5v14M5 12h14"/>
-        </svg>
-        <div class="rf-upgrade-text">
-          <strong>Upgrade to Pro</strong> to unlock detailed ATS and role-specific feedback.
-        </div>
-        <a href="#" class="btn btn-secondary" onclick="startCheckout('pro'); return false;">Upgrade Now</a>
-      </div>
-      <!-- Phase 4.3: Locked feature data notice -->
-      <div id="rf-locked-data-notice" style="display:none;background:#F3F4F6;border-left:3px solid #6B7280;padding:0.75rem 1rem;border-radius:8px;margin-top:1rem;font-size:0.875rem;color:#374151;line-height:1.5;">
-        <strong>Data Notice:</strong> Your uploaded resume stays available in your history for 90 days (last 10 runs), even if this tool is locked.
       </div>
       <div id="rf-feedback-content" style="display:none;">
         <!-- Empty state placeholder -->
@@ -9666,29 +9230,23 @@
     <section class="rf-card" id="rf-rewrite-tile">
       <div class="rf-title">
         Resume Rewriting
-        <span class="rf-plan-badge" style="background:#6B7280;">Pro Only</span>
+        <span class="rf-plan-badge" style="background:#6B7280;">Free with signup</span>
       </div>
       <div id="rf-rewrite-desc" style="color:var(--color-text-secondary);margin-bottom:1.2rem;">
-        AI rewrites your resume line-by-line using this ATS feedback and your target role. Upgrade to Pro to unlock resume rewriting.
+        AI rewrites your resume using this ATS feedback and your target role. Free with your JobHackAI account.
         <span class="rf-tooltip-trigger" tabindex="0" aria-label="More info" style="margin-left:0.4em;">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
             <circle cx="12" cy="12" r="10"/>
             <line x1="12" y1="8" x2="12" y2="8"/>
             <line x1="12" y1="12" x2="12" y2="16"/>
           </svg>
-          <span class="rf-tooltip-text">See a rewritten version of your resume tailored to your target job - ready to copy and paste. Unlimited with your Pro plan.</span>
+          <span class="rf-tooltip-text">See a rewritten version of your resume tailored to your target job - ready to copy and paste. Free with signup; a short cooldown applies between rewrites.</span>
         </span>
       </div>
-      <div class="rf-upgrade-prompt">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 5v14M5 12h14"/>
-        </svg>
-        <div class="rf-upgrade-text">
-          <strong>Upgrade to Pro</strong> to unlock resume rewriting powered by this ATS feedback and your target role.
-        </div>
-        <a href="#" class="btn btn-secondary" onclick="startCheckout('pro'); return false;">Upgrade Now</a>
+      <div class="rf-upgrade-prompt" style="display:none;" role="status">
+        <div class="rf-upgrade-text">This saved rewrite is unavailable. Sign in again to refresh your access.</div>
       </div>
-      <!-- Hidden content that will be shown for Pro/Premium plans -->
+      <!-- Available to signed-in users on every supported plan. -->
       <div id="rf-rewrite-content" style="display:none; padding: 0 1.5rem;">
         <div style="font-weight:600;margin-bottom:0.5rem;">Your Original Snippet</div>
         <textarea class="rf-snippet-box" readonly>Original resume excerpt will appear here after upload.</textarea>
@@ -9729,7 +9287,7 @@
         }
         </style>
 
-        <div style="margin-top:1.2rem;">
+        <div class="rf-rewrite-actions">
           <button class="btn btn-primary" style="display:none;">Copy Rewritten Resume</button>
           <button id="rf-download" class="btn-outline" style="display:none;" disabled aria-disabled="true" type="button">Download PDF</button>
           <button id="rf-generate" class="btn-outline" type="button">Generate Rewrite</button>
