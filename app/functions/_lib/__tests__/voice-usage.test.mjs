@@ -86,4 +86,7 @@ test('OpenAI client reads native cached-token detail and labels application cach
  globalThis.fetch=async()=>{throw Error('cache must not call provider');};
  const cached=await callOpenAI({systemPrompt:'test',messages:[]},{OPENAI_API_KEY:'test-fixture',JOBHACKAI_KV:{get:async()=>JSON.stringify(fresh)}});
  assert.equal(cached.fromCache,true);assert.equal(cached.usage.cachedTokens,70);
+ globalThis.fetch=async()=>new Response(JSON.stringify({choices:[{message:{content:'ok'},finish_reason:'stop'}]}),{status:200});
+ const missing=await callOpenAI({messages:[],maxRetries:1},{OPENAI_API_KEY:'test-fixture'});
+ assert.equal(missing.usage.promptTokens,null);assert.equal(missing.usage.completionTokens,null);assert.equal(missing.usage.cachedTokens,null);
 });
