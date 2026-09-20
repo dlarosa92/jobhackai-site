@@ -266,7 +266,7 @@
   <link rel="icon" type="image/png" sizes="128x128" href="assets/jobhackai_icon_Favicon_128.png">
   <link rel="apple-touch-icon" sizes="180x180" href="assets/jobhackai_apple_touch_icon_180.png">
   <script src="js/dynamic-favicon.js?v=20260418-3" defer></script>
-  <script src="js/cookie-consent.js?v=20260506-1" defer></script>
+  <script src="js/cookie-consent.js?v=20260613-1" defer></script>
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/header.css">
@@ -527,7 +527,7 @@
         <nav class="nav-links" role="navigation">
           <a href="https://jobhackai.io/">Home</a>
           <a href="#what-you-get">What You Get</a>
-          <a href="/pricing-a">Pricing</a>
+          <a href="/pricing">Pricing</a>
           <a href="https://jobhackai.io/blog">Blog</a>
           <a href="login.html">Login</a>
         </nav>
@@ -630,7 +630,7 @@
       </div>
       <!-- Actions Row -->
       <div class="settings-actions-row" style="display:flex; gap:1rem; margin-bottom:2.2rem; flex-wrap:wrap;">
-        <a href="pricing-a.html" class="btn-link" aria-label="Compare subscription plans">Compare Plans</a>
+        <a href="pricing.html" class="btn-link" aria-label="Compare subscription plans">Compare Plans</a>
         <a href="mailto:support@jobhackai.io?subject=Account%20Settings%20Support" class="btn-link" aria-label="Contact support via email">Contact Support</a>
         <button class="btn-outline-grey" type="button" data-action="logout">Log Out</button>
       </div>
@@ -662,7 +662,7 @@
   </footer>
   <!-- Removed duplicate checkAuthentication - now handled by firebase-auth-ready event -->
   <!-- Load navigation system -->
-  <script src="js/navigation.js?v=20260208-1"></script>
+  <script src="js/navigation.js?v=20260920-1"></script>
   <script src="js/universal-logout.js?v=20260208-1"></script>
   <script src="js/stripe-integration.js"></script>
   <!-- Inactivity tracker - auto-logout after 30 minutes of inactivity -->
@@ -869,7 +869,15 @@
           return;
         }
         
-        const plan = data.plan || 'free';
+        let planMeta = null;
+        try {
+          const metaRes = await fetch('/api/plan/me', { headers: { Authorization: `Bearer ${idToken}` } });
+          if (metaRes.ok) {
+            planMeta = await metaRes.json();
+          }
+        } catch (_) {}
+
+        const plan = (data.plan === 'free' && planMeta?.voice?.mode === 'pack' && planMeta.voice.sessionsRemaining > 0) ? 'pack' : (data.plan || 'free');
         const storedPlan = localStorage.getItem('user-plan');
         const storedDevPlan = localStorage.getItem('dev-plan');
         const planChanged = storedPlan !== plan || storedDevPlan !== plan;
@@ -897,38 +905,39 @@
           // Non-critical, continue rendering
         }
         
-        let planMeta = null;
-        try {
-          const metaRes = await fetch('/api/plan/me', { headers: { Authorization: `Bearer ${idToken}` } });
-          if (metaRes.ok) {
-            planMeta = await metaRes.json();
-          }
-        } catch (_) {}
-
         // Plan name mapping
         const planNames = {
           free: 'Free Account',
           trial: 'Trial (3 days)',
           essential: 'Essential',
           pro: 'Pro',
-          premium: 'Premium'
+          premium: 'Premium',
+          weekly: 'Weekly Pass',
+          monthly: 'Monthly',
+          pack: 'Interview Pack'
         };
-        
+
         const planPrices = {
           free: 'Free',
           trial: 'Free for 3 days',
           essential: '$29/month',
           pro: '$59/month',
-          premium: '$99/month'
+          premium: '$99/month',
+          weekly: '$17/week',
+          monthly: '$34/month',
+          pack: '$39 one time'
         };
-        
+
         // Plan badge text mapping
         const planBadgeText = {
           free: 'Free',
           trial: 'Trial',
           essential: 'Essential',
           pro: 'Pro',
-          premium: 'Premium'
+          premium: 'Premium',
+          weekly: 'Weekly',
+          monthly: 'Monthly',
+          pack: 'Pack'
         };
         
         let html = '<div class="settings-label" style="margin-bottom:0.5rem;">Subscription</div>';
@@ -940,10 +949,15 @@
               <div style="color:#6B7280;font-size:0.98rem;margin-top:0.2rem;">Limited features • Upgrade anytime</div>
             </div>
             <div class="subscription-action-row">
-              <a href="/pricing-a" class="btn-primary" style="text-decoration:none;display:inline-block;">View Plans</a>
-              <span class="plan-badge free">${planBadgeText[plan]}</span>
+              <a href="/pricing" class="btn-primary" style="text-decoration:none;display:inline-block;">View Plans</a>
+              <span class="plan-badge free">${planBadgeText[plan] || plan}</span>
             </div>
           `;
+        } else if (plan === 'pack') {
+          const remaining = Number(planMeta?.voice?.sessionsRemaining || 0);
+          const expires = planMeta?.voice?.packExpiresAt;
+          const expiryText = expires && Number.isFinite(Date.parse(expires)) ? ` Valid through ${new Date(expires).toLocaleDateString('en-US')}.` : '';
+          html += `<div style="margin-bottom:0.8rem;"><strong>Interview Pack</strong><p>${remaining} voice interviews remaining.${expiryText}</p><p>$39 one-time purchase for five sessions, valid 90 days. No recurring subscription.</p></div><a href="/pricing" class="btn-primary">View plans and packs</a>`;
         } else {
           html += `<div style="margin-bottom:0.8rem;">`;
           
@@ -965,8 +979,8 @@
               </div>`;
             }
           } else {
-            html += `<div style="font-size:1.1rem;font-weight:600;color:#232B36;">${planNames[plan]} Plan</div>`;
-            html += `<div style="color:#6B7280;font-size:0.98rem;margin-top:0.2rem;">${planPrices[plan]}</div>`;
+            html += `<div style="font-size:1.1rem;font-weight:600;color:#232B36;">${planNames[plan] || plan} Plan</div>`;
+            html += `<div style="color:#6B7280;font-size:0.98rem;margin-top:0.2rem;">${planPrices[plan] || ''}</div>`;
             
             // Show next renewal date for active subscriptions
             if (data.currentPeriodEnd && data.status === 'active') {
@@ -999,7 +1013,7 @@
           html += `</div>`;
           html += `<div class="subscription-action-row">`;
           html += `<button class="btn-outline" type="button" onclick="openBillingPortal()">Billing Management</button>`;
-          html += `<span class="plan-badge ${plan}">${planBadgeText[plan]}</span>`;
+          html += `<span class="plan-badge ${plan}">${planBadgeText[plan] || plan}</span>`;
           html += `</div>`;
           
           // Phase 2.4 & Phase 4.1: Add Stripe portal messaging and billing data notice
@@ -1027,7 +1041,7 @@
         });
         return;
       }
-      window.location.href = 'pricing-a.html?plan=essential';
+      window.location.href = 'pricing.html?plan=essential';
     }
     
     // CRITICAL FIX: Define refreshPlanData function for upgradePlan callback

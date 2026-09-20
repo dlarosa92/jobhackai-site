@@ -74,7 +74,7 @@ export async function onRequest(context) {
 
     // Allow all plans to save question sets for history
     // Mock Interview access is enforced elsewhere (mock-interview.html)
-    const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
+    const allowedPlans = ['free', 'trial', 'essential', 'pro', 'premium', 'weekly', 'monthly', 'pack']; // repositioning: free with signup
     if (!allowedPlans.includes(effectivePlan)) {
       return errorResponse(
         'Saving question sets requires a valid plan.',

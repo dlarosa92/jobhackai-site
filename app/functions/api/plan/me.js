@@ -1,5 +1,6 @@
 import { getBearer, verifyFirebaseIdToken } from '../../_lib/firebase-auth.js';
 import { getUserPlanData, isTrialEligible } from '../../_lib/db.js';
+import { getVoiceEntitlement, voiceFeatureEnabled } from '../../_lib/voice-entitlements.js';
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -31,13 +32,44 @@ export async function onRequest(context) {
     const planData = await getUserPlanData(env, uid);
     const trialEligible = await isTrialEligible(env, uid, email);
 
-    return new Response(JSON.stringify({ 
+    // Voice mock interview entitlement summary (read-only; server enforces).
+    // `enabled` means the feature is actually USABLE: the flag is on AND the
+    // entitlement backend is operational. If migration 020 has not run (or D1
+    // is down), getVoiceEntitlement reports not_migrated/db_unavailable and we
+    // report enabled:false, so the dashboard tile and tool CTAs (which key off
+    // `enabled`) stay hidden instead of surfacing entry points that 503.
+    const voiceEnabled = voiceFeatureEnabled(env);
+    let voice = { enabled: false, canStart: false, mode: null, unlimited: false, freeSessionUsed: false, sessionsRemaining: 0 };
+    if (voiceEnabled) {
+      try {
+        const ent = await getVoiceEntitlement(env, uid);
+        const backendReady = ent.reason !== 'not_migrated' && ent.reason !== 'db_unavailable';
+        voice = {
+          enabled: backendReady,
+          canStart: ent.canStart,
+          mode: ent.mode,
+          reason: ent.reason,
+          monthlyLimit: ent.monthlyLimit ?? null,
+          monthlyRemaining: ent.monthlyRemaining ?? null,
+          unlimited: ent.unlimited,
+          freeSessionUsed: ent.freeSessionUsed,
+          sessionsRemaining: ent.sessionsRemaining,
+          packExpiresAt: ent.packExpiresAt ?? null
+        };
+      } catch (voiceErr) {
+        console.warn('[PLAN-ME] Voice entitlement lookup failed (non-fatal):', voiceErr?.message || voiceErr);
+        // Leave enabled:false so the UI stays hidden until the backend works.
+      }
+    }
+
+    return new Response(JSON.stringify({
       plan: planData?.plan || 'free',
       trialEndsAt: planData?.trialEndsAt || null,
       cancelAt: planData?.cancelAt || null,
       currentPeriodEnd: planData?.currentPeriodEnd || null,
       scheduledPlanChange: planData?.scheduledPlanChange || null,
-      trialEligible
+      trialEligible,
+      voice
     }), {
       headers: corsHeaders(origin, env)
     });
@@ -63,4 +95,3 @@ function corsHeaders(origin, env) {
     'Vary': 'Origin'
   };
 }
-

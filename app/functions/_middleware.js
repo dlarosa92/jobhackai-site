@@ -3,6 +3,7 @@ import {
   notFoundInProductionResponse,
   STANDARD_SECURITY_HEADERS
 } from './_lib/debug-access.js';
+import { isDevCutoverPaused } from './_lib/dev-cutover.js';
 
 // Diagnostic pages/endpoints, reachable ONLY when ENVIRONMENT is explicitly
 // a known non-production value (fail closed: a missing or misspelled
@@ -34,6 +35,20 @@ const RETIRED_PATHS = new Set([
 ]);
 
 export async function onRequest({ request, next, env }) {
+  // Covers webhook deliveries and GET handlers that can write, as well as
+  // POST requests. Stripe retries the 503; no event is acknowledged or lost.
+  if (isDevCutoverPaused(env)) {
+    return new Response('Development maintenance in progress. Please try again shortly.', {
+      status: 503,
+      headers: {
+        ...STANDARD_SECURITY_HEADERS,
+        'content-type': 'text/plain; charset=utf-8',
+        'cache-control': 'no-store',
+        'retry-after': '120',
+        'x-jobhackai-maintenance': 'dev-cutover'
+      }
+    });
+  }
   const pathname = request ? new URL(request.url).pathname.replace(/\/+$/, '') || '/' : null;
 
   if (pathname && RETIRED_PATHS.has(pathname)) {
@@ -50,6 +65,13 @@ export async function onRequest({ request, next, env }) {
   // Security headers — applied on ALL environments (shared with notFoundInProductionResponse)
   for (const [name, value] of Object.entries(STANDARD_SECURITY_HEADERS)) {
     h.set(name, value);
+  }
+
+  // Voice interview needs the same-origin microphone. Mirrors the
+  // /voice-interview rule in app/public/_headers: middleware set() overrides
+  // the _headers layer on every route, so the exception must live here too.
+  if (pathname === '/voice-interview' || pathname === '/voice-interview.html') {
+    h.set('permissions-policy', 'camera=(), microphone=(self), geolocation=()');
   }
 
   // QA-only: prevent indexing and disable caching

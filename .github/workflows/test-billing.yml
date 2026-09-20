@@ -7,6 +7,8 @@ on:
   push:
     branches: [main, develop, dev0]
     paths:
+      - 'account-setting.html'
+      - 'pricing.html'
       - 'app/functions/api/**'
       - 'app/functions/_lib/**'
       - 'app/functions/_middleware.js'
@@ -17,6 +19,8 @@ on:
   pull_request:
     branches: [main, develop, dev0]
     paths:
+      - 'account-setting.html'
+      - 'pricing.html'
       - 'app/functions/api/**'
       - 'app/functions/_lib/**'
       - 'app/functions/_middleware.js'
@@ -59,8 +63,38 @@ jobs:
       - name: Reconciliation core tests
         run: node app/functions/_lib/__tests__/billing-reconcile.test.mjs
 
+      - name: Reconciliation drift aborts the full SQLite transaction
+        run: node app/functions/_lib/__tests__/billing-reconcile-drift.test.mjs
+
       - name: Endpoint ownership guards (PR #851 review round)
         run: node app/functions/_lib/__tests__/billing-endpoint-guards.test.mjs
 
+      # dev0 voice integration: the one-time Interview Pack through the
+      # hardened webhook (atomic grant + legacy stripe_event_log reconciliation),
+      # weekly/monthly subscriptions, and the classifier's handling of pack rows.
+      - name: Interview Pack webhook (atomic grant, replay, legacy log)
+        run: node app/functions/_lib/__tests__/stripe-webhook-pack.test.mjs
+
+      - name: Voice subscription plans through the webhook
+        run: node app/functions/_lib/__tests__/stripe-webhook-voice-plans.test.mjs
+
+      - name: Reconciliation classifier — voice plans and pack rows
+        run: node app/functions/_lib/__tests__/billing-reconcile-voice.test.mjs
+
+      - name: Environment stamp / gate (dev-QA isolation, code half)
+        run: node app/functions/_lib/__tests__/stripe-webhook-environment-gate.test.mjs
+
+      - name: Reconciliation CLI guards (credential mode, rollback ordering, account pin)
+        run: node app/functions/_lib/__tests__/billing-reconcile-guards.test.mjs
+
+      - name: Checkout fulfilment eligibility (paid state, async payments, basil invoices)
+        run: node app/functions/_lib/__tests__/stripe-webhook-fulfilment.test.mjs
+
+      - name: Dev cutover pauses requests and scheduled storage writes
+        run: node app/functions/_lib/__tests__/dev-cutover.test.mjs
+
       - name: Migration 022/023 verification (sqlite3)
         run: bash scripts/verify-billing-migrations.sh
+
+      - name: Account pack display
+        run: node app/functions/_lib/__tests__/account-pack-display.test.mjs

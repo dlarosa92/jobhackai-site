@@ -174,7 +174,7 @@ export async function onRequest(context) {
       effectivePlan = 'pro';
     }
 
-    const allowedPlans = ['pro', 'premium'];
+    const allowedPlans = ['free', 'trial', 'essential', 'pro', 'premium', 'weekly', 'monthly', 'pack']; // repositioning: typed mock interview is free with signup
     if (!allowedPlans.includes(effectivePlan)) {
       return errorResponse(
         'Mock Interviews are available on Pro and Premium plans.',

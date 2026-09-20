@@ -128,7 +128,7 @@ export async function onRequest(context) {
   }
 
   const plan = await getUserPlan(env, uid);
-  if (plan !== 'pro' && plan !== 'premium') {
+  if (!['free', 'trial', 'essential', 'pro', 'premium', 'weekly', 'monthly', 'pack'].includes(plan)) { // repositioning: free with signup
     return json(origin, { error: 'not_authorized' }, 403);
   }
 

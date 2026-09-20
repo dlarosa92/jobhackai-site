@@ -8,11 +8,46 @@ name: E2E Tests
 # 1. Go to repository Settings → Secrets and variables → Actions
 # 2. Click "New repository secret"
 # 3. Add TEST_EMAIL and TEST_PASSWORD
+#
+# WHAT THIS VALIDATES: the suite runs against the DEPLOYED environment of the
+# base branch (dev0 → dev.jobhackai.io, develop → qa.jobhackai.io), i.e. the
+# code currently live there — NOT the PR's code. A green run on a PR proves
+# the deployed environment still works, not the candidate. Several specs and
+# helpers change state (sync-stripe-plan, Checkout Session creation, portal
+# sessions), in the shared Stripe test-mode account.
+#
+# SKIPPING THE PRE-DEPLOY RUN: put the literal marker [skip-e2e] in the PR
+# BODY when creating the PR (gh pr create --body-file … with the marker
+# inside). The body is part of the create call, so the very first "opened"
+# run already sees it — unlike a label, which gh applies AFTER creation and
+# which the opened run may therefore miss. The label still works for PRs
+# that are re-synchronised later.
+#
+# POST-DEPLOY RUN: workflow_dispatch → target_env (dev|qa) + suite. "ui"
+# runs marketing navigation and the terms checkpoint. Authentication setup
+# and loaded application pages can update user activity or billing caches;
+# this is an authenticated UI smoke, not a read-only database check.
+# "full" also creates Checkout/portal sessions, uploads and scores resumes,
+# synchronises billing, sends feedback emails and attempts signup.
 
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     branches: [dev0, develop, main]
+  workflow_dispatch:
+    inputs:
+      target_env:
+        description: 'Deployed environment to test (runs against its CURRENT deployment)'
+        required: true
+        default: 'dev'
+        type: choice
+        options: [dev, qa]
+      suite:
+        description: 'ui = authenticated navigation/terms smoke; full = all tests including billing, uploads and email'
+        required: true
+        default: 'ui'
+        type: choice
+        options: [ui, full]
 
 concurrency:
   group: e2e-tests-${{ github.event.pull_request.number || github.ref }}
@@ -20,6 +55,7 @@ concurrency:
 
 jobs:
   e2e-tests:
+    if: ${{ github.event_name == 'workflow_dispatch' || (!contains(github.event.pull_request.labels.*.name, 'skip-e2e') && !contains(github.event.pull_request.body, '[skip-e2e]')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     
@@ -62,7 +98,7 @@ jobs:
           fi
       
       - name: Run E2E tests (prod smoke only)
-        if: github.base_ref == 'main'
+        if: github.event_name == 'pull_request' && github.base_ref == 'main'
         working-directory: app
         env:
           CI: true
@@ -72,7 +108,7 @@ jobs:
         run: npx playwright test --config tests/playwright.config.js tests/e2e/full-app-check.spec.js tests/e2e/terms-checkpoints.spec.js tests/e2e/feedback-api.spec.js
 
       - name: Run E2E tests (dev/qa full suite)
-        if: github.base_ref != 'main'
+        if: github.event_name == 'pull_request' && github.base_ref != 'main'
         working-directory: app
         env:
           CI: true
@@ -81,6 +117,31 @@ jobs:
           TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
         run: npx playwright test --config tests/playwright.config.js
       
+      # Post-deploy validation of the CURRENT deployment of the chosen environment.
+      - name: Run E2E tests (workflow_dispatch — authenticated UI smoke)
+        if: github.event_name == 'workflow_dispatch' && inputs.suite == 'ui'
+        working-directory: app
+        env:
+          CI: true
+          TEST_ENV: ${{ inputs.target_env }}
+          TEST_EMAIL: ${{ secrets.TEST_EMAIL }}
+          TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
+        # Resume Feedback is excluded: it mocks only ats-score-persist,
+        # then performs real resume-upload and ats-score requests.
+        # Terms tests submit without accepting terms and expect client-side
+        # rejection; accept-terms is observed, not mocked. Run after isolation.
+        run: npx playwright test --config tests/playwright.config.js tests/e2e/marketing-auth.spec.js tests/e2e/terms-checkpoints.spec.js
+
+      - name: Run E2E tests (workflow_dispatch — full suite, changes state)
+        if: github.event_name == 'workflow_dispatch' && inputs.suite == 'full'
+        working-directory: app
+        env:
+          CI: true
+          TEST_ENV: ${{ inputs.target_env }}
+          TEST_EMAIL: ${{ secrets.TEST_EMAIL }}
+          TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
+        run: npx playwright test --config tests/playwright.config.js
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4

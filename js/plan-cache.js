@@ -6,7 +6,7 @@
 (function () {
   'use strict';
 
-  var _cached = null;   // { plan, trialEndsAt }
+  var _cached = null;   // { plan, trialEndsAt, voice }
   var _cachedAt = 0;
   var _inflight = null; // Promise | null
   var _generation = 0;  // Incremented on invalidate to discard stale in-flight results
@@ -18,7 +18,13 @@
     }).then(function (res) {
       if (!res.ok) return null;
       return res.json().then(function (data) {
-        return { plan: (data && data.plan) || null, trialEndsAt: (data && data.trialEndsAt) || null };
+        return {
+          plan: (data && data.plan) || null,
+          trialEndsAt: (data && data.trialEndsAt) || null,
+          // Voice entitlement block, consumed by navigation.js, dashboard,
+          // and voice-cta.js — keeping it here saves their direct fetches.
+          voice: (data && data.voice) || null
+        };
       });
     });
   }
@@ -77,8 +83,10 @@
 
     // Manually seed the cache (e.g. after checkout redirect sets plan via
     // billing-status). Prevents a redundant /api/plan/me round-trip.
+    // Keeps any previously fetched voice block: seeding only knows the plan,
+    // and stale voice state is better than wiping it (30s TTL bounds it).
     setCachedPlan: function (plan, trialEndsAt) {
-      _cached = { plan: plan, trialEndsAt: trialEndsAt || null };
+      _cached = { plan: plan, trialEndsAt: trialEndsAt || null, voice: (_cached && _cached.voice) || null };
       _cachedAt = Date.now();
       persistToLocalStorage(_cached);
     },

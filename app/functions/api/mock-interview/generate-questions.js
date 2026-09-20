@@ -168,7 +168,7 @@ export async function onRequest(context) {
     console.log('[MI-QUESTIONS] Plan check:', { requestId, uid, plan, effectivePlan, isDevEnvironment });
 
     // Mock Interview only available for Pro/Premium
-    const allowedPlans = ['pro', 'premium'];
+    const allowedPlans = ['free', 'trial', 'essential', 'pro', 'premium', 'weekly', 'monthly', 'pack']; // repositioning: typed mock interview is free with signup
     if (!allowedPlans.includes(effectivePlan)) {
       return errorResponse(
         'Mock Interviews are available on Pro and Premium plans. Upgrade to unlock practice sessions.',

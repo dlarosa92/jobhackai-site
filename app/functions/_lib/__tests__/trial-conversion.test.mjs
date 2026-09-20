@@ -71,7 +71,10 @@ const ga4Purchases = (stub) => stub.calls.filter((c) => c.url.includes('google-a
   const commitBatch = db.__state.batches.find((b) => Array.isArray(b) && b.some((sql) => sql.includes('UPDATE users SET')));
   assert.ok(commitBatch.some((sql) => sql.includes('feature_daily_usage')), 'interview reset rides the batch');
   assert.ok(commitBatch.some((sql) => sql.includes('usage_events')), 'feedback reset rides the batch');
-  assert.ok(commitBatch[commitBatch.length - 1].includes("status = 'processed'"), 'processed-mark is the final batch statement');
+  // (dev0 integration) the mark may be the recipient-guarded form
+  // (status = CASE WHEN … THEN 'processed' ELSE NULL END); either way it is
+  // the ledger UPDATE and it is the FINAL statement of the batch.
+  assert.ok(/^UPDATE stripe_event_ledger\s+SET status = (CASE WHEN .* THEN )?'processed'/s.test(commitBatch[commitBatch.length - 1].replace(/\s+/g, ' ')), 'processed-mark is the final batch statement');
 
   // ── (b) immediate replay: zero additional effects ──
   const writesBefore = db.__state.writes;

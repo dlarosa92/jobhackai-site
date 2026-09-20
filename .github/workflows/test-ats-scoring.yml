@@ -5,12 +5,30 @@ on:
     branches: [main, dev0]
     paths:
       - 'app/functions/_lib/**'
+      - 'app/functions/api/voice/**'
       - 'app/functions/dictionaries/**'
+      # These are browser modules, but their suites live in _lib/__tests__ —
+      # without these paths they could break untested.
+      - 'js/voice-transcript-order.js'
+      - 'js/voice-conduct.js'
+      - 'js/voice-lifecycle.js'
+      - 'js/voice-interview.js'
+      - 'js/role-selector.js'
+      - 'js/package.json'
   pull_request:
     branches: [main, dev0]
     paths:
       - 'app/functions/_lib/**'
+      - 'app/functions/api/voice/**'
       - 'app/functions/dictionaries/**'
+      # These are browser modules, but their suites live in _lib/__tests__ —
+      # without these paths they could break untested.
+      - 'js/voice-transcript-order.js'
+      - 'js/voice-conduct.js'
+      - 'js/voice-lifecycle.js'
+      - 'js/voice-interview.js'
+      - 'js/role-selector.js'
+      - 'js/package.json'
 
 jobs:
   test:
@@ -46,5 +64,46 @@ jobs:
       - name: Run ATS scoring tests
         working-directory: app/functions/_lib/__tests__
         run: node ats-scoring-engine.test.mjs
+
+      # Deterministic voice suites — no API key, no cost. These prove the
+      # transcript assembler and the prompt's own text, NOT that the live model
+      # obeys the prompt; that stays a manual dev-session check.
+      - name: Run voice transcript ordering tests
+        working-directory: app/functions/_lib/__tests__
+        run: node voice-transcript-order.test.mjs
+
+      - name: Run voice interviewer prompt tests
+        working-directory: app/functions/_lib/__tests__
+        run: node voice-interviewer.test.mjs
+
+      - name: Run voice conduct gate tests
+        working-directory: app/functions/_lib/__tests__
+        run: node voice-conduct.test.mjs
+
+      - name: Run voice lifecycle tests
+        working-directory: app/functions/_lib/__tests__
+        run: node voice-lifecycle.test.mjs
+
+      # Drives the real js/voice-interview.js against a stub DOM: the report
+      # panel and the realtime event routing are only provable by running it.
+      - name: Run voice client tests
+        working-directory: app/functions/_lib/__tests__
+        run: node voice-client.test.mjs
+
+      - name: Run role selector helper tests
+        working-directory: app/functions/_lib/__tests__
+        run: node role-selector.test.mjs
+
+      - name: Run voice entitlement tests
+        working-directory: app/functions/_lib/__tests__
+        run: node voice-entitlements.test.mjs
+
+      - name: Run voice reservation and completion race tests
+        working-directory: app/functions/_lib/__tests__
+        run: node voice-reservation.test.mjs
+
+      - name: Run voice history tests
+        working-directory: app/functions/_lib/__tests__
+        run: node voice-history.test.mjs
 
 

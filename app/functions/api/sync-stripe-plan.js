@@ -401,6 +401,9 @@ export async function onRequest(context) {
 
 function priceToPlan(env, priceId) {
   if (!priceId) return null;
+  // dev0 voice subscriptions (same env names as billing-utils.planToPrice)
+  if (env.STRIPE_PRICE_WEEKLY && priceId === env.STRIPE_PRICE_WEEKLY) return 'weekly';
+  if (env.STRIPE_PRICE_MONTHLY && priceId === env.STRIPE_PRICE_MONTHLY) return 'monthly';
   // Normalize env price IDs across naming variants
   const essential = env.STRIPE_PRICE_ESSENTIAL_MONTHLY || env.PRICE_ESSENTIAL_MONTHLY || env.STRIPE_PRICE_ESSENTIAL || env.PRICE_ESSENTIAL;
   const pro = env.STRIPE_PRICE_PRO_MONTHLY || env.PRICE_PRO_MONTHLY || env.STRIPE_PRICE_PRO || env.PRICE_PRO;
@@ -413,7 +416,9 @@ function priceToPlan(env, priceId) {
 }
 
 function isPaidPlan(plan) {
-  return ['essential', 'pro', 'premium'].includes(plan);
+  // Mirrors PAID_SUBSCRIPTION_PLANS in _lib/db.js (weekly/monthly are paid
+  // voice subscriptions; the one-time pack never reaches this sync path).
+  return ['weekly', 'monthly', 'essential', 'pro', 'premium'].includes(plan);
 }
 
 function corsHeaders(origin, env) {

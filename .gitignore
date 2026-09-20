@@ -33,6 +33,7 @@ worker/
 .env.test.local
 .env.production.local
 .env.qa
+.env.dev-sandbox.local
 
 # Local wrangler config
 wrangler.local.toml

@@ -251,6 +251,12 @@ export function planToPrice(env, plan) {
   const pro = resolve('PRO');
   const premium = resolve('PREMIUM');
   const map = {
+    // New voice plans (repositioning). Exact env names per the runbook:
+    // STRIPE_PRICE_WEEKLY / STRIPE_PRICE_MONTHLY / STRIPE_PRICE_PACK.
+    weekly: env.STRIPE_PRICE_WEEKLY || null,
+    monthly: env.STRIPE_PRICE_MONTHLY || null,
+    pack: env.STRIPE_PRICE_PACK || null,
+    // Legacy plans (grandfathered)
     trial: essential,  // Map trial to Essential price (3-day trial applied via subscription_data)
     essential,
     pro,
@@ -273,6 +279,10 @@ export function priceIdToPlan(env, priceId, options = {}) {
   if (!priceId) {
     return defaultToEssential ? 'free' : null;
   }
+
+  if (priceId === planToPrice(env, 'weekly')) return 'weekly';
+  if (priceId === planToPrice(env, 'monthly')) return 'monthly';
+  if (priceId === planToPrice(env, 'pack')) return 'pack';
 
   const essential = planToPrice(env, 'essential');
   const pro = planToPrice(env, 'pro');
@@ -336,8 +346,10 @@ export function planRank(plan) {
   const ranks = {
     trial: 0,
     essential: 1,
-    pro: 2,
-    premium: 3
+    weekly: 2,
+    monthly: 3,
+    pro: 4,
+    premium: 5
   };
   return ranks[plan] ?? -1;
 }

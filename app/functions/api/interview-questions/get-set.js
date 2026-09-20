@@ -75,7 +75,7 @@ export async function onRequest(context) {
 
     // Allow all plans to view their own question sets (for history restoration)
     // Mock Interview usage is enforced elsewhere (mock-interview.html)
-    const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
+    const allowedPlans = ['free', 'trial', 'essential', 'pro', 'premium', 'weekly', 'monthly', 'pack']; // repositioning: free with signup
     if (!allowedPlans.includes(effectivePlan)) {
       return errorResponse(
         'Accessing question sets requires a valid plan.',

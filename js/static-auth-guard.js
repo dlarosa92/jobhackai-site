@@ -82,6 +82,15 @@
       resolved = true;
       if (isAuthenticated) {
         document.documentElement.classList.remove('auth-pending');
+      } else if (window.__JHA_ALLOW_PREVIEW__) {
+        // Repositioning: opted-in free tool pages stay visible to logged-out
+        // visitors under a signup gate (js/voice-cta.js) instead of bouncing
+        // to login. Crawlers always received this static HTML; humans now do.
+        console.log('👀 Static auth guard: unauthenticated, entering preview mode');
+        window.__JHA_PREVIEW_MODE__ = true;
+        document.documentElement.classList.remove('auth-pending');
+        document.documentElement.classList.remove('plan-pending');
+        try { document.dispatchEvent(new CustomEvent('jha-preview-mode')); } catch (_) {}
       } else {
         console.log('⏰ Static auth guard resolved unauthenticated, redirecting to login');
         location.replace('/login.html');

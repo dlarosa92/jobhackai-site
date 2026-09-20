@@ -18,7 +18,7 @@ const configDev = {
   storageBucket: "jobhackai-90558.firebasestorage.app",
   messagingSenderId: "40538124818",
   appId: "1:40538124818:web:cd61fc1d120ec79d4ddecb",
-  measurementId: "G-X48E90B00S"
+  measurementId: "G-SQYSWPFM5X" // standardized: production GA4 stream only, sitewide
 };
 
 // Reserved for when QA uses its own Firebase project again

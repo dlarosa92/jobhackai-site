@@ -202,11 +202,11 @@ export async function onRequest(context) {
 
     console.log('[IQ-GENERATE] Plan check:', { requestId, uid, plan, effectivePlan, isDevEnvironment });
 
-    // Interview Questions allowed for: trial, essential, pro, premium
-    const allowedPlans = ['trial', 'essential', 'pro', 'premium'];
+    // Repositioning: Interview Questions is free for every signed-in user
+    const allowedPlans = ['free', 'trial', 'essential', 'pro', 'premium', 'weekly', 'monthly', 'pack'];
     if (!allowedPlans.includes(effectivePlan)) {
       return errorResponse(
-        'Interview Questions is available in Trial, Essential, Pro, or Premium plans.',
+        'Interview Questions requires a free JobHackAI account.',
         403,
         origin,
         env,
@@ -376,8 +376,12 @@ export async function onRequest(context) {
     // Limits are in sets per day (not questions)
     const FEATURE = 'interview_questions';
     const PLAN_LIMITS = {
+      free: 10,        // 10 sets/day (repositioning: tool is free with signup)
+      pack: 10,        // 10 sets/day
       trial: 10,        // 10 sets/day
       essential: 10,    // 10 sets/day
+      weekly: 20,      // 20 sets/day (voice subscribers)
+      monthly: 20,     // 20 sets/day
       pro: 20,         // 20 sets/day
       premium: 50      // 50 sets/day
     };

@@ -54,6 +54,71 @@ export function assertStripeKeyMatchesEnvironment(env) {
   return { ok: true };
 }
 
+// ── Environment stamps (dev/QA isolation) ───────────────────────────────
+// Dev and QA both run Stripe TEST mode against one Stripe account today, so
+// every test-mode event is delivered to BOTH webhooks. livemode cannot tell
+// them apart; the objects each environment creates can. Checkout stamps
+// metadata.environment = <canonical name> on the Checkout Session and on the
+// subscription it creates, and the webhook ignores (200, zero writes) events
+// whose object is stamped for a DIFFERENT environment — the test-mode
+// analogue of the livemode gate. Un-stamped objects (created before the
+// stamp existed, by the Stripe dashboard, or by `stripe trigger` fixtures)
+// are processed exactly as before. Customers are deliberately NOT stamped:
+// one Firebase user has one Stripe customer across environments.
+//
+// This is defence in depth, not isolation on its own: an environment running
+// code without this gate still processes the other environment's objects.
+// Real isolation is a separate Stripe sandbox/account per environment.
+const CANONICAL = { prod: 'prod', production: 'prod', qa: 'qa', dev: 'dev', development: 'dev' };
+
+// 'prod' | 'qa' | 'dev' | null for this deployment.
+export function canonicalEnvironmentName(env) {
+  return CANONICAL[normalizeEnvironmentName(env)] || null;
+}
+
+// Canonical form of a metadata.environment value; unknown non-empty values
+// are returned as-is (they are foreign to every known environment).
+export function canonicalizeEnvironmentStamp(value) {
+  const name = String(value ?? '').trim().toLowerCase();
+  if (!name) return null;
+  return CANONICAL[name] || name;
+}
+
+// Form-encoded fields to add to a Checkout Session body. With
+// { subscription: true } the stamp is also copied onto the subscription the
+// session creates (subscription_data is only valid in subscription mode).
+export function environmentStampFields(env, { subscription = false } = {}) {
+  const stamp = canonicalEnvironmentName(env);
+  if (!stamp) return {};
+  const fields = { 'metadata[environment]': stamp };
+  if (subscription) fields['subscription_data[metadata][environment]'] = stamp;
+  return fields;
+}
+
+// Stamp carried by a webhook event's primary object: session/subscription
+// metadata, or the subscription metadata snapshot on an invoice — which
+// lives at invoice.subscription_details.metadata before Stripe API
+// 2025-03-31.basil and at invoice.parent.subscription_details.metadata from
+// basil onward (this account's default and the pinned endpoint versions).
+// Invoice metadata itself (obj.metadata) is NOT consulted: it is not stamped.
+export function eventEnvironmentStamp(event) {
+  const obj = event?.data?.object || {};
+  const isInvoice = obj?.object === 'invoice' || 'subscription_details' in obj || 'parent' in obj;
+  const raw = isInvoice
+    ? (obj?.subscription_details?.metadata?.environment ?? obj?.parent?.subscription_details?.metadata?.environment ?? null)
+    : (obj?.metadata?.environment ?? null);
+  return canonicalizeEnvironmentStamp(raw);
+}
+
+// True when the object is stamped for another environment. Un-stamped
+// objects are never foreign.
+export function isForeignEnvironmentStamp(env, stamp) {
+  const canon = canonicalizeEnvironmentStamp(stamp); // raw or canonical input
+  if (!canon) return false;
+  const own = canonicalEnvironmentName(env);
+  return own !== null && canon !== own;
+}
+
 // Log-safe form of any identifier (Stripe IDs, Firebase UIDs). Keeps the
 // type prefix and last 4 characters so operators can correlate without the
 // log ever containing a usable identifier.

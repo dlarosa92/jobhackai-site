@@ -76,14 +76,38 @@ export async function claimEvent(env, event) {
 /**
  * The processed-mark, as a prepared statement for the caller's db.batch().
  * MUST ride in the same batch as the event's critical writes.
+ *
+ * requireUserRows: auth_ids whose users row MUST exist when the batch
+ * commits. Every staged users-row write is `UPDATE users … WHERE auth_id = ?`
+ * (auth_id is UNIQUE NOT NULL), so "row exists at commit time" is exactly
+ * "that write affected one row". When any required row is missing, the CASE
+ * yields NULL for the NOT NULL status column, the UPDATE is refused, and the
+ * WHOLE batch rolls back — credits, plan writes and idempotency records alike
+ * — so the event stays retryable instead of being marked processed with no
+ * recipient (a row deleted between ensureUserRow and the commit).
+ * Tombstoned accounts never reach this guard: ensureUserRow turns them into
+ * a deliberate no-op (nothing staged, nothing required) before staging.
  */
-export function buildMarkProcessedStatement(db, eventId) {
+export function buildMarkProcessedStatement(db, eventId, { requireUserRows = [] } = {}) {
+  const uids = [...new Set((requireUserRows || []).filter((u) => typeof u === 'string' && u))];
+  if (uids.length === 0) {
+    return db.prepare(
+      `UPDATE stripe_event_ledger
+       SET status = 'processed', processed_at = datetime('now'), last_error = NULL
+       WHERE event_id = ?`
+    ).bind(eventId);
+  }
+  const placeholders = uids.map((_, i) => `?${i + 2}`).join(', ');
   return db.prepare(
     `UPDATE stripe_event_ledger
-     SET status = 'processed', processed_at = datetime('now'), last_error = NULL
-     WHERE event_id = ?`
-  ).bind(eventId);
+     SET status = CASE WHEN (SELECT COUNT(*) FROM users WHERE auth_id IN (${placeholders})) = ${uids.length} THEN 'processed' ELSE NULL END,
+         processed_at = datetime('now'), last_error = NULL
+     WHERE event_id = ?1`
+  ).bind(eventId, ...uids);
 }
+
+// Distinct marker for the recipient guard above (SQLite/D1 wording).
+export const RECIPIENT_GUARD_ERROR = 'NOT NULL constraint failed: stripe_event_ledger.status';
 
 /**
  * Record a critical failure so the event is operator-visible and retryable.

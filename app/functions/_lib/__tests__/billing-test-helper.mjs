@@ -27,7 +27,9 @@ export function createFakeD1(seed = {}) {
     deleted_auth_ids: seed.deleted_auth_ids || [],
     feature_daily_usage: seed.feature_daily_usage || [],
     usage_events: seed.usage_events || [],
-    stripe_event_ledger: seed.stripe_event_ledger || []
+    stripe_event_ledger: seed.stripe_event_ledger || [],
+    // Legacy pack-grant idempotency log (dev0 voice migration 020).
+    stripe_event_log: seed.stripe_event_log || []
   };
   if (seed.ledgerTableMissing) delete tables.stripe_event_ledger;
 
@@ -132,6 +134,18 @@ export function createFakeD1(seed = {}) {
     if (s.startsWith('UPDATE stripe_event_ledger SET')) {
       const ledger = requireLedger();
       state.writes++;
+      // Recipient-guarded processed-mark (buildMarkProcessedStatement with
+      // requireUserRows): status = CASE WHEN (SELECT COUNT(*) FROM users
+      // WHERE auth_id IN (?2, …)) = n THEN 'processed' ELSE NULL END. Mirrors
+      // SQLite: a NULL for the NOT NULL status column aborts the statement.
+      if (s.includes('SET status = CASE WHEN (SELECT COUNT(*) FROM users WHERE auth_id IN (')) {
+        const [eventId, ...uids] = binds;
+        const present = state.tables.users.filter((u) => uids.includes(u.auth_id)).length;
+        if (present !== uids.length) throw new Error('NOT NULL constraint failed: stripe_event_ledger.status');
+        const row = ledger.find((r) => r.event_id === eventId);
+        if (row) { row.status = 'processed'; row.processed_at = nowIso(); row.last_error = null; }
+        return { first: null, results: [] };
+      }
       if (s.includes("status = 'processed'")) {
         const row = ledger.find((r) => r.event_id === binds[0]);
         if (row) { row.status = 'processed'; row.processed_at = nowIso(); row.last_error = null; }
@@ -143,6 +157,51 @@ export function createFakeD1(seed = {}) {
         return { first: null, results: [] };
       }
       throw new Error(`FakeD1: unsupported ledger update: ${s}`);
+    }
+
+    // ── stripe_event_log (voice migration 020: legacy pack-grant record) ──
+    if (s === 'SELECT 1 AS seen FROM stripe_event_log WHERE event_id = ?') {
+      const row = state.tables.stripe_event_log.find((r) => r.event_id === binds[0]);
+      return { first: row ? { seen: 1 } : null, results: row ? [{ seen: 1 }] : [] };
+    }
+    if (s === 'SELECT event_id, type FROM stripe_event_log WHERE event_id IN (?1, ?2)') {
+      const rows = state.tables.stripe_event_log.filter((r) => r.event_id === binds[0] || r.event_id === binds[1]).map((r) => ({ event_id: r.event_id, type: r.type }));
+      return { first: rows[0] ?? null, results: rows };
+    }
+    if (s.startsWith('INSERT OR IGNORE INTO stripe_event_log')) {
+      if (state.tables.stripe_event_log.some((r) => r.event_id === binds[0])) return { first: null, results: [], changes: 0 };
+      state.writes++;
+      state.tables.stripe_event_log.push({ event_id: binds[0], type: 'pack_grant', processed_at: nowIso() });
+      return { first: null, results: [], changes: 1 };
+    }
+    if (s.startsWith('INSERT INTO stripe_event_log')) {
+      if (state.tables.stripe_event_log.some((r) => r.event_id === binds[0])) {
+        throw new Error('UNIQUE constraint failed: stripe_event_log.event_id');
+      }
+      state.writes++;
+      state.tables.stripe_event_log.push({ event_id: binds[0], type: binds[1] ?? 'pack_grant', processed_at: nowIso() });
+      return { first: null, results: [], changes: 1 };
+    }
+    if (s.startsWith('DELETE FROM stripe_event_log WHERE event_id = ?')) {
+      const before = state.tables.stripe_event_log.length;
+      state.tables.stripe_event_log = state.tables.stripe_event_log.filter((r) => r.event_id !== binds[0]);
+      const changes = before - state.tables.stripe_event_log.length;
+      if (changes) state.writes++;
+      return { first: null, results: [], changes };
+    }
+
+    // ── pack credit grant (voice-entitlements PACK_GRANT_UPDATE_SQL) ──
+    if (s.startsWith('UPDATE users SET voice_sessions_remaining = voice_sessions_remaining + ?')) {
+      const [count, expires, uid] = binds;
+      state.writes++;
+      const row = state.tables.users.find((u) => u.auth_id === uid);
+      if (!row) return { first: null, results: [], changes: 0 };
+      row.voice_sessions_remaining = Number(row.voice_sessions_remaining || 0) + Number(count);
+      row.pack_expires_at = expires;
+      row.has_ever_paid = 1;
+      if (row.plan == null || row.plan === '' || row.plan === 'free') row.plan = 'pack';
+      row.updated_at = nowIso();
+      return { first: null, results: [], changes: 1 };
     }
 
     // ── users reads ──
@@ -280,7 +339,8 @@ export function createFakeD1(seed = {}) {
     __state: state,
     failNext(substring, error) { state.failOnSqlIncludes = substring; state.failError = error || null; },
     usersByAuthId(uid) { return state.tables.users.find((u) => u.auth_id === uid) || null; },
-    ledgerRow(eventId) { return (state.tables.stripe_event_ledger || []).find((r) => r.event_id === eventId) || null; }
+    ledgerRow(eventId) { return (state.tables.stripe_event_ledger || []).find((r) => r.event_id === eventId) || null; },
+    eventLogRow(eventId) { return state.tables.stripe_event_log.find((r) => r.event_id === eventId) || null; }
   };
 }
 
@@ -349,6 +409,10 @@ export function makeEnv(overrides = {}) {
     STRIPE_PRICE_ESSENTIAL_MONTHLY: 'price_essential_test',
     STRIPE_PRICE_PRO_MONTHLY: 'price_pro_test',
     STRIPE_PRICE_PREMIUM_MONTHLY: 'price_premium_test',
+    // dev0 voice repositioning prices (weekly/monthly subscriptions, one-time pack)
+    STRIPE_PRICE_WEEKLY: 'price_weekly_test',
+    STRIPE_PRICE_MONTHLY: 'price_monthly_test',
+    STRIPE_PRICE_PACK: 'price_pack_test',
     FRONTEND_URL: 'https://app.jobhackai.io',
     ...overrides
   };
@@ -426,6 +490,51 @@ export function makeSubscription({
   if (rootPeriodStart !== undefined) sub.current_period_start = rootPeriodStart;
   if (rootPeriodEnd !== undefined) sub.current_period_end = rootPeriodEnd;
   return sub;
+}
+
+// Realistic Checkout Session (the fields the webhook's fulfilment gate reads:
+// status, payment_status, mode, subscription, line_items, customer, metadata).
+export function makeCheckoutSession({
+  id = 'cs_test_session001',
+  mode = 'subscription',
+  status = 'complete',
+  paymentStatus = 'paid',
+  customer = 'cus_testcus001',
+  metadata = {},
+  subscription,
+  priceId = mode === 'payment' ? 'price_pack_test' : 'price_essential_test',
+  unitAmount = mode === 'payment' ? 3900 : 2900,
+  amountTotal,
+  currency = 'usd',
+  email = 'a@example.com',
+  extra = {}
+} = {}) {
+  return {
+    id,
+    object: 'checkout.session',
+    mode,
+    status,
+    payment_status: paymentStatus,
+    customer,
+    customer_details: { email },
+    metadata,
+    subscription: subscription !== undefined ? subscription : (mode === 'subscription' ? 'sub_testsub001' : null),
+    line_items: { data: [{ price: { id: priceId, unit_amount: unitAmount }, quantity: 1 }] },
+    amount_total: amountTotal ?? unitAmount,
+    currency,
+    ...extra
+  };
+}
+
+// Invoice in the 2025-03-31.basil shape (invoice.parent.subscription_details).
+export function makeBasilInvoice({ id = 'in_test001', customer = 'cus_testcus001', subscriptionId = 'sub_testsub001', subscriptionMetadata = {}, extra = {} } = {}) {
+  return {
+    id,
+    object: 'invoice',
+    customer,
+    parent: { type: 'subscription_details', quote_details: null, subscription_details: { subscription: subscriptionId, metadata: subscriptionMetadata } },
+    ...extra
+  };
 }
 
 export async function assertRejectsOrFalse(fn) {

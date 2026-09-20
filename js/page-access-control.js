@@ -5,8 +5,8 @@
 window.PageAccessControl = (function () {
   'use strict';
 
-  var VALID_PLANS = ['visitor', 'free', 'trial', 'essential', 'pro', 'premium'];
-  var PAID_PLANS  = ['trial', 'essential', 'pro', 'premium'];
+  var VALID_PLANS = ['visitor', 'free', 'trial', 'essential', 'pro', 'premium', 'weekly', 'monthly', 'pack'];
+  var PAID_PLANS  = ['trial', 'essential', 'pro', 'premium', 'weekly', 'monthly', 'pack'];
 
   // ---- helpers ----
 
@@ -107,7 +107,7 @@ window.PageAccessControl = (function () {
           console.warn(logPrefix, 'Deferred re-verify: plan is now', apiPlan, '— revoking access');
           window.__JOBHACKAI_ACCESS_VERIFIED__ = false;
           window.__JOBHACKAI_VERIFIED_PLAN__ = null;
-          window.location.href = opts.deniedRedirect || 'pricing-a.html?plan=essential';
+          window.location.href = opts.deniedRedirect || 'pricing.html';
         } else if (apiPlan !== window.__JOBHACKAI_VERIFIED_PLAN__) {
           console.log(logPrefix, 'Deferred re-verify: updating verified plan to', apiPlan);
           window.__JOBHACKAI_VERIFIED_PLAN__ = apiPlan;
@@ -190,9 +190,16 @@ window.PageAccessControl = (function () {
 
     if (!isAuthenticated || allowedPlans.indexOf(plan) === -1) {
       if (!isAuthenticated) {
+        if (window.__JHA_ALLOW_PREVIEW__ || window.__JHA_PREVIEW_MODE__) {
+          window.__JHA_PREVIEW_MODE__ = true;
+          document.documentElement.classList.remove('auth-pending');
+          document.documentElement.classList.remove('plan-pending');
+          try { document.dispatchEvent(new CustomEvent('jha-preview-mode')); } catch (_) {}
+          return;
+        }
         window.location.href = 'login.html';
       } else {
-        window.location.href = opts.deniedRedirect || 'pricing-a.html?plan=essential';
+        window.location.href = opts.deniedRedirect || 'pricing.html';
       }
     } else {
       window.__JOBHACKAI_ACCESS_VERIFIED__ = true;

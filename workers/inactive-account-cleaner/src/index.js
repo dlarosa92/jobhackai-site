@@ -5,8 +5,11 @@
 
 import { deleteFirebaseAuthUserAdmin } from '../../../shared/firebase-auth-admin.js';
 
+import { isDevCutoverPaused } from '../../../app/functions/_lib/dev-cutover.js';
+
 export default {
   async scheduled(event, env, ctx) {
+    if (isDevCutoverPaused(env)) return;
     ctx.waitUntil(runInactiveAccountCleanup(env));
   }
 };

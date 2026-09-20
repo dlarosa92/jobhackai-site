@@ -19,6 +19,39 @@
 //      period, write failure) mark the ledger row 'failed' and return 5xx
 //      so Stripe retries and operators can see stuck events:
 //        SELECT * FROM stripe_event_ledger WHERE status='failed';
+//   7. One-time payments (dev0 Interview Pack) never enter the subscription
+//      plan-mapping path: checkout.session.completed with mode=payment is
+//      routed to stagePackGrant, whose credit writes ride the same atomic
+//      batch as the processed-mark (see stagePackGrant for how the legacy
+//      stripe_event_log from voice migration 020 is reconciled).
+//
+//   8. The processed-mark is recipient-guarded: when a handler staged a
+//      users-row write, the mark refuses (NOT NULL violation → whole batch
+//      rolls back → retryable) if that row no longer exists at commit time,
+//      so an event can never be marked processed with credits or a plan
+//      write that landed on no row.
+//   9. Environment gate (test-mode sub-environments): objects stamped
+//      metadata.environment for ANOTHER environment are acknowledged with
+//      zero writes — see stripe-environment.js for why and for its limits.
+//  10. Fulfillment eligibility: a Checkout Session grants entitlement only
+//      when the re-fetched session is status=complete AND payment_status is
+//      paid (or no_payment_required, e.g. a 100% promotion code). A completed
+//      session whose payment_status is still 'unpaid' (delayed payment
+//      methods) is a recorded no-op; Stripe's later
+//      checkout.session.async_payment_succeeded (same handler, now paid) is
+//      what fulfils it, and async_payment_failed fulfils nothing. A
+//      subscription-mode session fulfils only through its subscription, and
+//      only while that subscription is in an entitled status.
+//  11. Invoice shape: Stripe API 2025-03-31.basil and later (this account's
+//      default AND the pinned endpoint versions) moved invoice.subscription
+//      and invoice.subscription_details to invoice.parent.subscription_details;
+//      both shapes are read.
+//
+// KV marker keys (evtl:/processing:) are scoped by ENVIRONMENT because dev
+// and QA share one Stripe test-mode account (every test event is delivered
+// to both webhooks) AND one KV namespace: an unscoped marker written by one
+// environment would short-circuit the other environment's delivery and its
+// D1 would silently miss the event. The ledger (per-D1) stays authoritative.
 
 import {
   getUserPlanData,
@@ -29,11 +62,15 @@ import {
   buildResetFeatureDailyUsageStatement,
   buildResetUsageEventsStatement
 } from '../_lib/db.js';
-import { stripe, pickBestSubscription } from '../_lib/billing-utils.js';
+import { stripe, pickBestSubscription, invalidateBillingCaches } from '../_lib/billing-utils.js';
 import { ENTITLED_SUBSCRIPTION_STATUSES } from '../_lib/billing-ownership.js';
-import { resolveExpectedLivemode, assertStripeKeyMatchesEnvironment, redactId } from '../_lib/stripe-environment.js';
+import { buildPackGrantStatements, PACK_SESSION_COUNT } from '../_lib/voice-entitlements.js';
+import {
+  resolveExpectedLivemode, assertStripeKeyMatchesEnvironment, redactId, normalizeEnvironmentName,
+  canonicalEnvironmentName, canonicalizeEnvironmentStamp, eventEnvironmentStamp, isForeignEnvironmentStamp
+} from '../_lib/stripe-environment.js';
 import { resolveOwnerUid, assertNoCrossUserStripeIds, readSubscriptionPeriod, TransientStripeError } from '../_lib/stripe-identity.js';
-import { claimEvent, buildMarkProcessedStatement, markEventFailed } from '../_lib/stripe-event-ledger.js';
+import { claimEvent, buildMarkProcessedStatement, markEventFailed, RECIPIENT_GUARD_ERROR } from '../_lib/stripe-event-ledger.js';
 import { sendEmail } from '../_lib/email.js';
 import { subscriptionCancelledEmail, paymentFailedEmail } from '../_lib/email-templates.js';
 
@@ -80,6 +117,9 @@ function subscriptionPriceAmountDollars(subscription) {
 // (e.g. a new paid plan added to isPaidPlan but not mapped here) instead of
 // silently sending value: 0 to GA4 and distorting revenue reports.
 function hardcodedPlanAmountDollars(plan) {
+  if (plan === 'weekly') return 17;
+  if (plan === 'monthly') return 34;
+  if (plan === 'pack') return 39;
   if (plan === 'essential') return 29;
   if (plan === 'pro') return 59;
   if (plan === 'premium') return 99;
@@ -134,6 +174,18 @@ export async function onRequest(context) {
     return new Response('[ignored-wrong-mode]', { status: 200, headers: respHeaders });
   }
 
+  // ── Environment gate (ZERO-WRITE). Dev and QA share one Stripe test-mode
+  // account, so both receive every test event. Objects this environment did
+  // not create — stamped metadata.environment for another environment — are
+  // acknowledged so Stripe stops retrying, and touch neither D1 nor KV.
+  // Un-stamped objects are processed as before. Defence in depth only: the
+  // OTHER environment's webhook decides for itself (see stripe-environment.js).
+  const environmentStamp = eventEnvironmentStamp(event);
+  if (isForeignEnvironmentStamp(env, environmentStamp)) {
+    console.warn(`[WEBHOOK] environment_mismatch type=${event.type} stamp=${environmentStamp} expected=${canonicalEnvironmentName(env)} evt=${redactId(event.id)} — ignored with zero writes`);
+    return new Response('[ignored-other-environment]', { status: 200, headers: respHeaders });
+  }
+
   // ── KV fast-path (performance aid, read-only). The evtl: marker is
   // written only after a durable commit, so a hit can only assert what the
   // ledger already records. A miss falls through to the authoritative claim.
@@ -141,15 +193,17 @@ export async function onRequest(context) {
   // marker BEFORE processing, so trusting it during the 24h rollout window
   // would silently drop retries of events the old code marked but never
   // durably processed. Legacy keys age out on their own TTL.
+  const kvScope = normalizeEnvironmentName(env);
+  const seenKey = `evtl:${kvScope}:${event.id}`;
   try {
-    const seen = await env.JOBHACKAI_KV?.get(`evtl:${event.id}`);
+    const seen = await env.JOBHACKAI_KV?.get(seenKey);
     if (seen) return new Response('[ok]', { status: 200, headers: respHeaders });
   } catch (_) { /* KV unavailable: ledger decides */ }
 
   // ── Processing lock, read side (performance aid: damps racing instances
   // cheaply). Never authoritative for success — a locked event answers 503
   // so Stripe retries, and the ledger claim below serializes true ownership.
-  const lockKey = `processing:${event.id}`;
+  const lockKey = `processing:${kvScope}:${event.id}`;
   try {
     const alreadyProcessing = await env.JOBHACKAI_KV?.get(lockKey);
     if (alreadyProcessing) {
@@ -169,7 +223,7 @@ export async function onRequest(context) {
     return new Response('event ledger unavailable', { status: 503, headers: respHeaders });
   }
   if (claim.outcome === 'already_processed') {
-    try { await env.JOBHACKAI_KV?.put(`evtl:${event.id}`, '1', { expirationTtl: 86400 }); } catch (_) { /* no-op */ }
+    try { await env.JOBHACKAI_KV?.put(seenKey, '1', { expirationTtl: 86400 }); } catch (_) { /* no-op */ }
     return new Response('[ok]', { status: 200, headers: respHeaders });
   }
   if (claim.outcome === 'in_flight') {
@@ -183,9 +237,10 @@ export async function onRequest(context) {
   // ── Route the event. Handlers stage critical writes into ctx and queue
   // side effects; nothing is written until the atomic commit below.
   const ctx = {
-    statements: [],    // critical D1 writes — committed with the processed-mark
-    postCommit: [],    // awaited after commit (KV cache invalidation)
-    fireAndForget: []  // context.waitUntil after commit (GA4, email)
+    statements: [],          // critical D1 writes — committed with the processed-mark
+    requiredUserRows: new Set(), // auth_ids whose row must exist at commit (recipient guard)
+    postCommit: [],          // awaited after commit (KV cache invalidation)
+    fireAndForget: []        // context.waitUntil after commit (GA4, email)
   };
 
   let outcome;
@@ -214,19 +269,32 @@ export async function onRequest(context) {
 
   // ── Atomic commit: every critical write + the processed-mark, together.
   const db = getDb(env);
-  const batch = [...ctx.statements, buildMarkProcessedStatement(db, event.id)];
+  const batch = [...ctx.statements, buildMarkProcessedStatement(db, event.id, { requireUserRows: [...ctx.requiredUserRows] })];
   try {
     await db.batch(batch);
   } catch (err) {
     const msg = String(err?.message || '');
     const isUnique = msg.includes('UNIQUE constraint failed');
-    const reason = isUnique ? 'unique_index_conflict' : 'batch_write_failed';
+    // A UNIQUE refusal on stripe_event_log means another writer got there
+    // between our pre-check and the commit: the pre-ledger webhook granting
+    // this event, or a DISTINCT event fulfilling the same Checkout Session
+    // concurrently. The batch rolled back, nothing was written, and the
+    // retry's pre-check records this event as a no-op. Retryable (503) — it
+    // is not an ownership conflict.
+    const isLegacyLog = isUnique && msg.includes('stripe_event_log');
+    // Recipient guard: a staged users-row write found no row at commit time
+    // (deleted between ensureUserRow and the batch). Nothing landed; the
+    // retry re-creates the row (or meets the tombstone and no-ops).
+    const isRecipientMissing = msg.includes(RECIPIENT_GUARD_ERROR);
+    const reason = isRecipientMissing ? 'recipient_row_missing'
+      : isLegacyLog ? 'event_log_conflict'
+        : (isUnique ? 'unique_index_conflict' : 'batch_write_failed');
     console.error(`❌ [WEBHOOK] atomic commit failed (${reason}) evt=${redactId(event.id)}: ${msg.slice(0, 200)}`);
     await markEventFailed(env, event.id, reason);
     await releaseLock();
     // Unique-index refusals (023) are ownership conflicts: operator-visible,
     // retried by Stripe, resolved by the reconciliation script.
-    return new Response(`event failed: ${reason}`, { status: isUnique ? 500 : 503, headers: respHeaders });
+    return new Response(`event failed: ${reason}`, { status: (isUnique && !isLegacyLog && !isRecipientMissing) ? 500 : 503, headers: respHeaders });
   }
 
   // Post-commit effects: at-most-once by construction (a retry after commit
@@ -239,7 +307,7 @@ export async function onRequest(context) {
   for (const run of ctx.fireAndForget) {
     try { context.waitUntil(run()); } catch (e) { console.warn('[WEBHOOK] post-commit telemetry step failed (non-blocking):', e?.message || e); }
   }
-  try { await env.JOBHACKAI_KV?.put(`evtl:${event.id}`, '1', { expirationTtl: 86400 }); } catch (_) { /* no-op */ }
+  try { await env.JOBHACKAI_KV?.put(seenKey, '1', { expirationTtl: 86400 }); } catch (_) { /* no-op */ }
   await releaseLock();
 
   return new Response('[ok]', { status: 200, headers: respHeaders });
@@ -248,6 +316,13 @@ export async function onRequest(context) {
 async function routeEvent(context, env, event, ctx) {
   switch (event.type) {
     case 'checkout.session.completed': return handleCheckoutCompleted(env, event, ctx);
+    // Delayed payment methods: the session completed earlier with
+    // payment_status 'unpaid' (a recorded no-op); this event carries the
+    // settled payment and is the fulfilment event — same handler, same
+    // eligibility rules, its own ledger row.
+    case 'checkout.session.async_payment_succeeded': return handleCheckoutCompleted(env, event, ctx);
+    // Nothing was granted on completion, so nothing is revoked here.
+    case 'checkout.session.async_payment_failed': return noop('async_payment_failed');
     case 'customer.subscription.created': return handleSubscriptionCreated(env, event, ctx);
     case 'customer.subscription.updated': return handleSubscriptionUpdated(env, event, ctx);
     case 'customer.subscription.deleted': return handleSubscriptionDeleted(env, event, ctx);
@@ -286,7 +361,10 @@ async function stagePlanUpdate(env, ctx, uid, planData, eventTimestampSeconds, p
   }
 
   const stmt = buildUserPlanUpdateStatement(getDb(env), uid, planData);
-  if (stmt) ctx.statements.push(stmt);
+  if (stmt) {
+    ctx.statements.push(stmt);
+    ctx.requiredUserRows.add(uid); // the mark refuses if this row is gone at commit
+  }
 
   // Cache invalidation belongs after the commit (KV is never authoritative).
   ctx.postCommit.push(async () => {
@@ -306,6 +384,17 @@ async function stagePlanUpdate(env, ctx, uid, planData, eventTimestampSeconds, p
   });
 
   return { planApplied: true };
+}
+
+// Handlers that never create rows (deletion, dunning) treat a missing users
+// row as a deliberate no-op: nothing to downgrade or flag in THIS
+// environment (e.g. a customer whose account lives only in another
+// environment). Explicit, so the recipient guard never fails them.
+async function userRowExists(env, uid) {
+  const db = getDb(env);
+  if (!db || !uid) return false;
+  const row = await db.prepare('SELECT id FROM users WHERE auth_id = ?').bind(uid).first();
+  return Boolean(row);
 }
 
 // Ensure the user row exists for first-time subscribers (get-or-create is
@@ -332,6 +421,79 @@ async function ensureUserRow(env, uid, email, eventLabel) {
   }
 }
 
+// ── Interview Pack grant (one-time payment; dev0 voice repositioning) ──
+//
+// Credits are critical writes: they ride the SAME atomic batch as the ledger
+// processed-mark, so a crash can neither grant twice nor consume the event
+// without granting. Two idempotency records cooperate:
+//   * stripe_event_ledger (migration 022) — the authoritative claim for
+//     EVERY event; a processed event never reaches this function again.
+//   * stripe_event_log (voice migration 020) — the pack-grant history the
+//     pre-ledger webhook wrote. It is preserved, still written for every
+//     grant, and consulted FIRST so an event the old code already granted is
+//     never granted again when Stripe replays it into the new code.
+//   * stripe_event_log also holds a per-SESSION fulfilment marker (event_id
+//     = the Checkout Session id): one purchase may be announced by several
+//     DISTINCT events — a checkout.session.completed created while the
+//     payment was still pending but delivered/retried after it settled, plus
+//     checkout.session.async_payment_succeeded — and per-event idempotency
+//     alone would credit the same session twice. The marker is a plain
+//     INSERT inside the batch, so a second event for a fulfilled session
+//     (even one racing the first) fails atomically and the retry records it
+//     as a no-op; the pre-check below is the graceful path, the INSERT is
+//     the guard.
+async function stagePackGrant(env, event, ctx, { uid, customerEmail, sessionId, sess, priceId }) {
+  const rowCheck = await ensureUserRow(env, uid, customerEmail, 'pack grant');
+  if (rowCheck.outcome) return rowCheck.outcome;
+
+  const db = getDb(env);
+  let seen;
+  try {
+    const res = await db.prepare('SELECT event_id, type FROM stripe_event_log WHERE event_id IN (?1, ?2)').bind(event.id, sessionId || '').all();
+    seen = res?.results || [];
+  } catch (e) {
+    // Unreadable log: granting blind could double-credit an event the old
+    // webhook already processed or a session another event already
+    // fulfilled. Retry instead of guessing.
+    console.error('[WEBHOOK] stripe_event_log read failed:', e?.message || e);
+    return transient('legacy_event_log_read_failed');
+  }
+  if (seen.some((r) => r.event_id === event.id)) {
+    console.log(`⏭️ [WEBHOOK] pack already granted for evt=${redactId(event.id)} (pre-ledger webhook); recording as processed`);
+    return noop('pack_already_granted_legacy_log');
+  }
+  if (sessionId && seen.some((r) => r.event_id === sessionId)) {
+    console.log(`⏭️ [WEBHOOK] pack session ${redactId(sessionId)} already fulfilled by an earlier event; ${event.type} evt=${redactId(event.id)} is a no-op`);
+    return noop('pack_session_already_fulfilled');
+  }
+
+  const statements = buildPackGrantStatements(db, { uid, eventId: event.id, sessionId });
+  if (statements.length === 0) return transient('pack_grant_unstageable');
+  ctx.statements.push(...statements);
+  ctx.requiredUserRows.add(uid); // no recipient row at commit → whole batch rolls back, retryable
+  console.log(`✍️ STAGING PACK GRANT: +${PACK_SESSION_COUNT} sessions for uid=${redactId(uid)}`);
+
+  // Cache invalidation and telemetry run only after the commit.
+  ctx.postCommit.push(() => invalidateBillingCaches(env, uid));
+  let packAmount = hardcodedPlanAmountDollars('pack');
+  if (sess?.amount_total != null && Number.isFinite(Number(sess.amount_total))) {
+    packAmount = Number(sess.amount_total) / 100;
+  }
+  ctx.fireAndForget.push(() => sendGa4Event(env, {
+    clientId: `server.${uid}`,
+    userId: uid,
+    name: 'purchase',
+    params: {
+      transaction_id: sessionId,
+      currency: (sess?.currency || 'usd').toUpperCase(),
+      value: packAmount,
+      plan: 'pack',
+      items: [{ item_id: priceId || 'pack', item_name: 'pack', price: packAmount, quantity: 1 }]
+    }
+  }));
+  return ok();
+}
+
 // ── Handlers ────────────────────────────────────────────────────────────
 
 async function handleCheckoutCompleted(env, event, ctx) {
@@ -356,12 +518,70 @@ async function handleCheckoutCompleted(env, event, ctx) {
     return transient('session_fetch_failed');
   }
 
+  // ── Fulfilment eligibility (the re-fetched session is authoritative) ──
+  // Only a COMPLETE session with a settled payment establishes entitlement.
+  // A synthetic or forged "completed" event for a session Stripe still shows
+  // as open/expired cannot grant anything; a completed session awaiting a
+  // delayed payment method is fulfilled by async_payment_succeeded instead.
+  const sessionStatus = sess?.status ?? event.data?.object?.status ?? null;
+  const paymentStatus = sess?.payment_status ?? event.data?.object?.payment_status ?? null;
+  if (sessionStatus !== 'complete') {
+    console.error(`[WEBHOOK] checkout session ${redactId(sessionId)} is not complete (status=${sessionStatus}); refusing fulfilment`);
+    return critical('session_not_complete');
+  }
+  const paymentSettled = paymentStatus === 'paid' || paymentStatus === 'no_payment_required';
+  if (!paymentSettled && paymentStatus !== 'unpaid') {
+    console.error(`[WEBHOOK] checkout session ${redactId(sessionId)} has an unverifiable payment_status (${paymentStatus}); refusing fulfilment`);
+    return critical('payment_status_unverified');
+  }
+
   const priceId = sess?.line_items?.data?.[0]?.price?.id || '';
   const customerId = sess?.customer || event.data?.object?.customer || null;
-  const owner = await resolveOwnerUid(env, { session: event.data?.object, customerId });
+  // Ownership sources: the signed payload's session metadata (stamped at
+  // checkout) first; the re-fetched session's metadata is the same Stripe
+  // object and only fills gaps (dev0 kept this fallback for one-time packs,
+  // which have no follow-up event to heal from).
+  const sessionForOwner = {
+    ...(event.data?.object || {}),
+    metadata: { ...(sess?.metadata || {}), ...(event.data?.object?.metadata || {}) }
+  };
+  const owner = await resolveOwnerUid(env, { session: sessionForOwner, customerId });
   if (owner.conflict) return critical('owner_conflict');
   const { uid, email: customerEmail } = owner;
   if (!uid) return critical('unresolved_owner');
+
+  // ── One-time payments (Interview Pack) never take the subscription path ──
+  // The signed event payload already carries `mode`; the session re-fetch is
+  // only needed for line_items, so a degraded expansion body can never hide
+  // that this was a one-time charge. Every mode=payment session is handled
+  // here or fails closed — it is never plan-mapped.
+  const sessionMode = sess?.mode || event.data?.object?.mode || null;
+  const isOneTimePayment = sessionMode === 'payment';
+  const isPackPurchase = isOneTimePayment && (priceId === env.STRIPE_PRICE_PACK || originalPlan === 'pack');
+  if (isOneTimePayment) {
+    if (!isPackPurchase) {
+      // Unrecognized one-time product: nothing to grant, and no follow-up
+      // event will heal a one-time charge. Critical (500 + ledger 'failed')
+      // so Stripe retries and the misconfiguration is operator-visible.
+      console.error(`❌ [WEBHOOK] Unrecognized one-time payment (plan=${originalPlan}, session=${redactId(sessionId)})`);
+      return critical('unrecognized_one_time_payment');
+    }
+    if (!paymentSettled) {
+      // Delayed payment method: completed but not yet paid. Grant nothing;
+      // checkout.session.async_payment_succeeded fulfils it.
+      console.log(`⏳ [WEBHOOK] pack session ${redactId(sessionId)} completed with payment_status=unpaid; awaiting async_payment_succeeded`);
+      return noop('pack_payment_pending');
+    }
+    return stagePackGrant(env, event, ctx, { uid, customerEmail, sessionId, sess, priceId });
+  }
+  // Fail closed: a pack purchase must never reach the subscription mapping
+  // below (it would write plan='essential', which the voice layer treats as
+  // unlimited, for a one-time charge). metadata.plan=pack with no resolvable
+  // mode means the mode signal was lost everywhere → critical, Stripe retries.
+  if (originalPlan === 'pack') {
+    console.error(`❌ [WEBHOOK] Pack purchase without a resolvable session mode (session=${redactId(sessionId)})`);
+    return critical('pack_mode_unresolved');
+  }
 
   // Determine effective plan based on original plan and subscription status
   let effectivePlan = 'free';
@@ -370,7 +590,7 @@ async function handleCheckoutCompleted(env, event, ctx) {
     // Trial usage is tracked in D1 (source of truth); no authoritative KV flags.
     console.log(`✅ TRIAL STARTED (tracked in D1): ${redactId(uid)}`);
   } else {
-    effectivePlan = priceToPlan(env, priceId) || 'essential';
+    effectivePlan = priceToPlan(env, priceId);
   }
   console.log(`📝 CHECKOUT DATA: originalPlan=${originalPlan}, effectivePlan=${effectivePlan}, customerId=${redactId(customerId)}, uid=${redactId(uid)}`);
 
@@ -396,6 +616,34 @@ async function handleCheckoutCompleted(env, event, ctx) {
       console.error('[WEBHOOK] subscription fetch error:', e?.message || e);
       return transient('subscription_fetch_failed');
     }
+  }
+
+  // A subscription-mode session fulfils only through its subscription: no
+  // subscription means nothing to verify, and a subscription that is not in
+  // an entitled status (incomplete, incomplete_expired, canceled — e.g. a
+  // delayed payment still pending) must not establish a paid plan; the
+  // customer.subscription.updated event that moves it to active will.
+  if (!subscriptionId) {
+    console.error(`[WEBHOOK] subscription-mode session ${redactId(sessionId)} carries no subscription; refusing fulfilment`);
+    return critical('subscription_missing_on_session');
+  }
+  if (!ENTITLED_SUBSCRIPTION_STATUSES.includes(subscription?.status)) {
+    console.log(`⏳ [WEBHOOK] session ${redactId(sessionId)} subscription is ${subscription?.status}; not entitled yet — no plan write`);
+    return noop(`subscription_not_entitled:${subscription?.status}`);
+  }
+  // The retrieved subscription is authoritative if Checkout's line-item
+  // expansion is absent. Metadata alone never supplies a paid entitlement.
+  if (originalPlan !== 'trial') {
+    const mappedItems = (subscription.items?.data || [])
+      .map((item) => priceToPlan(env, item?.price?.id)).filter(Boolean);
+    if (mappedItems.length !== 1) return critical('subscription_price_unrecognized_or_ambiguous');
+    effectivePlan = mappedItems[0];
+  }
+  if (!paymentSettled) {
+    // Entitled subscription but the session's payment is still pending: the
+    // subscription object is the source of truth for access and it is
+    // entitled, so proceed — Stripe keeps the two consistent.
+    console.log(`[WEBHOOK] session ${redactId(sessionId)} payment_status=unpaid while subscription is ${subscription.status}; proceeding on the subscription's status`);
   }
 
   // Determine trial end date. Prefer subscription.trial_end if available.
@@ -484,6 +732,9 @@ async function handleSubscriptionCreated(env, event, ctx) {
   console.log(`🎯 WEBHOOK: ${event.type} received`);
   const sub = event.data.object;
   const status = sub.status;
+  if (!ENTITLED_SUBSCRIPTION_STATUSES.includes(status)) {
+    return noop(`subscription_not_entitled:${status}`);
+  }
   const metadata = sub.metadata || {};
   const originalPlan = metadata.original_plan;
   const items = sub.items?.data || [];
@@ -499,15 +750,17 @@ async function handleSubscriptionCreated(env, event, ctx) {
   let effectivePlan = 'free';
   if (status === 'trialing' && originalPlan === 'trial') {
     effectivePlan = 'trial'; // User is in trial period
-  } else if (status === 'active') {
+  } else if (status === 'active' || status === 'trialing') {
     // Extract plan from price ID (auto-converts trial to essential)
-    effectivePlan = plan || 'essential';
+    if (!plan) return critical('subscription_price_unrecognized');
+    effectivePlan = plan;
   } else if (status === 'past_due' || status === 'unpaid') {
     // Dunning keeps paid access: invoice.payment_failed writes status only,
     // and sync-stripe-plan explicitly preserves the plan for past_due/unpaid
     // ("still has access"). Downgrading here made entitlement flap between
     // the webhook and sync while Stripe retried the charge.
-    effectivePlan = plan || 'essential';
+    if (!plan) return critical('subscription_price_unrecognized');
+    effectivePlan = plan;
   }
 
   const trialEndsAtISO = sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null;
@@ -541,6 +794,11 @@ async function handleSubscriptionCreated(env, event, ctx) {
 async function handleSubscriptionUpdated(env, event, ctx) {
   console.log('🎯 WEBHOOK: customer.subscription.updated received');
   const sub = event.data.object;
+  // An unfinished second checkout must not replace an existing paid
+  // subscription or erase pack entitlements. A later active event can grant.
+  if (['incomplete', 'incomplete_expired'].includes(sub.status)) {
+    return noop(`subscription_not_entitled:${sub.status}`);
+  }
   const customerId = sub.customer || null;
 
   const owner = await resolveOwnerUid(env, { subscription: sub, customerId });
@@ -611,12 +869,14 @@ async function handleSubscriptionUpdated(env, event, ctx) {
   let effectivePlan = 'free';
   if (status === 'trialing' && originalPlan === 'trial') {
     effectivePlan = 'trial';
-  } else if (status === 'active') {
-    effectivePlan = plan || 'essential';
+  } else if (status === 'active' || status === 'trialing') {
+    if (!plan) return critical('subscription_price_unrecognized');
+    effectivePlan = plan;
   } else if (status === 'past_due' || status === 'unpaid') {
     // Dunning keeps paid access — see handleSubscriptionCreated. The status
     // itself is still written as past_due/unpaid below.
-    effectivePlan = plan || 'essential';
+    if (!plan) return critical('subscription_price_unrecognized');
+    effectivePlan = plan;
   }
 
   const trialEndsAtISO = sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null;
@@ -718,6 +978,10 @@ async function handleSubscriptionDeleted(env, event, ctx) {
   if (owner.conflict) return critical('owner_conflict');
   const uid = owner.uid;
   if (!uid) return critical('unresolved_owner');
+  if (!(await userRowExists(env, uid))) {
+    console.log(`⏭️ [WEBHOOK] subscription.deleted for uid=${redactId(uid)} with no users row here; nothing to downgrade`);
+    return noop('user_row_missing');
+  }
 
   console.log(`📝 DELETION DATA: customerId=${redactId(customerId)}, uid=${redactId(uid)}`);
   const deletedItems = deletedSub?.items?.data || [];
@@ -819,7 +1083,7 @@ async function handleInvoicePaymentFailed(env, event, ctx) {
   console.log('🎯 WEBHOOK: invoice.payment_failed received');
   const invoice = event.data?.object || {};
   const customerId = invoice.customer || null;
-  const subscriptionId = invoice.subscription || null;
+  const subscriptionId = invoiceSubscriptionId(invoice);
 
   // Only handle subscription invoices — one-time invoices (e.g. metered
   // charges) have no subscription and should not affect subscription status.
@@ -856,6 +1120,12 @@ async function handleInvoicePaymentFailed(env, event, ctx) {
     return transient('subscription_fetch_failed');
   }
   const subStatus = subData.status || 'past_due';
+  // The invoice payload may lack the subscription metadata snapshot; the
+  // fetched subscription is authoritative for the environment stamp.
+  if (isForeignEnvironmentStamp(env, canonicalizeEnvironmentStamp(subData?.metadata?.environment))) {
+    console.log(`⏭️ [WEBHOOK] invoice.payment_failed for a subscription stamped ${canonicalizeEnvironmentStamp(subData?.metadata?.environment)}; not this environment's`);
+    return noop('other_environment_subscription');
+  }
 
   const owner = await resolveOwnerUid(env, { subscription: subData, customerId });
   if (owner.conflict) return critical('owner_conflict');
@@ -868,6 +1138,10 @@ async function handleInvoicePaymentFailed(env, event, ctx) {
   if (d1Tombstone || kvTombstone) {
     console.log(`⏭️ [WEBHOOK] Skipping invoice.payment_failed: user ${redactId(uid)} was deleted (tombstone found)`);
     return noop('tombstoned_user');
+  }
+  if (!(await userRowExists(env, uid))) {
+    console.log(`⏭️ [WEBHOOK] invoice.payment_failed for uid=${redactId(uid)} with no users row here; nothing to flag`);
+    return noop('user_row_missing');
   }
 
   // Skip if subscription is still active (retries pending) or in a terminal
@@ -899,6 +1173,17 @@ async function handleInvoicePaymentFailed(env, event, ctx) {
   return ok();
 }
 
+// Invoice → subscription id across Stripe API versions: pre-basil exposes
+// invoice.subscription; 2025-03-31.basil and later expose
+// invoice.parent.subscription_details.subscription (id or expanded object).
+function invoiceSubscriptionId(invoice) {
+  const legacy = invoice?.subscription;
+  const basil = invoice?.parent?.subscription_details?.subscription;
+  const raw = legacy ?? basil ?? null;
+  if (!raw) return null;
+  return typeof raw === 'object' ? (raw.id || null) : String(raw);
+}
+
 // ── Verification & plan mapping ─────────────────────────────────────────
 
 async function verifyStripeWebhook(env, req, rawBody) {
@@ -919,7 +1204,10 @@ async function verifyStripeWebhook(env, req, rawBody) {
 const kvPlanKey = (uid) => `planByUid:${uid}`;
 function priceToPlan(env, priceId) {
   if (!priceId) return null;
-  // Normalize env price IDs across naming variants
+  // New voice plans (repositioning)
+  if (priceId === env.STRIPE_PRICE_WEEKLY) return 'weekly';
+  if (priceId === env.STRIPE_PRICE_MONTHLY) return 'monthly';
+  // Normalize legacy env price IDs across naming variants
   const essential = env.STRIPE_PRICE_ESSENTIAL_MONTHLY || env.PRICE_ESSENTIAL_MONTHLY || env.STRIPE_PRICE_ESSENTIAL || env.PRICE_ESSENTIAL;
   const pro = env.STRIPE_PRICE_PRO_MONTHLY || env.PRICE_PRO_MONTHLY || env.STRIPE_PRICE_PRO || env.PRICE_PRO;
   const premium = env.STRIPE_PRICE_PREMIUM_MONTHLY || env.PRICE_PREMIUM_MONTHLY || env.STRIPE_PRICE_PREMIUM || env.PRICE_PREMIUM;
@@ -927,9 +1215,11 @@ function priceToPlan(env, priceId) {
   if (priceId === essential) return 'essential';
   if (priceId === pro) return 'pro';
   if (priceId === premium) return 'premium';
+  // Unknown subscription price IDs fall through to the callers' 'essential'
+  // fallback, which the voice entitlement layer grandfathers as unlimited.
   return null;
 }
 
 function isPaidPlan(plan) {
-  return ['essential', 'pro', 'premium'].includes(plan);
+  return ['weekly', 'monthly', 'essential', 'pro', 'premium'].includes(plan);
 }

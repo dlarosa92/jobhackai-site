@@ -1,5 +1,5 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
-import { getOrCreateUserByAuthId, isD1Available, getFeatureDailyUsage } from '../_lib/db.js';
+import { getOrCreateUserByAuthId, isD1Available, getFeatureDailyUsage, getMockInterviewMonthlyUsage } from '../_lib/db.js';
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -54,48 +54,57 @@ export async function onRequest(context) {
     const plan = await getUserPlan(env, uid);
     const userEmail = payload.email || null;
 
+    // Repositioning: the prep tools are free for every signed-in user.
+    // Quota display tiers mirror the server enforcement: free/pack accounts
+    // use the Essential feedback quota; weekly/monthly are Pro-equivalent.
+    const essentialQuotaPlans = ['free', 'pack', 'essential'];
+    const monthlyCappedMock = plan !== 'premium'; // 20/month for everyone but Premium
+
     // Get usage data from KV
     const usage = {
       atsScans: {
         used: 0,
-        limit: plan === 'free' ? 1 : null, // Free: 1 lifetime, others: unlimited
+        // ats-score.js caps the free plan at 1 lifetime scan; all other
+        // signed-in plans are unlimited. Keep this in sync with that gate so
+        // the dashboard never shows "unlimited" while uploads 403.
+        limit: plan === 'free' ? 1 : null,
         remaining: plan === 'free' ? 1 : null,
         cooldown: 0
       },
       resumeFeedback: {
         used: 0,
-        limit: plan === 'essential' ? 3 : plan === 'trial' ? 3 : null, // Essential: 3/month, Trial: 3 total, Pro/Premium: unlimited
-        remaining: plan === 'essential' ? 3 : plan === 'trial' ? 3 : null,
+        limit: essentialQuotaPlans.includes(plan) ? 3 : plan === 'trial' ? 3 : null, // Free/Pack/Essential: 3/month, Trial: 3 total, others: unlimited
+        remaining: essentialQuotaPlans.includes(plan) ? 3 : plan === 'trial' ? 3 : null,
         cooldown: 0
       },
       resumeRewrite: {
         used: 0,
-        limit: (plan === 'pro' || plan === 'premium') ? null : 0, // Pro/Premium: unlimited (throttled), others: locked
-        remaining: (plan === 'pro' || plan === 'premium') ? null : 0,
+        limit: null, // free with signup (45s server-side throttle)
+        remaining: null,
         cooldown: 0
       },
       coverLetters: {
         used: 0,
-        limit: (plan === 'pro' || plan === 'premium') ? null : 0, // Pro/Premium: unlimited, others: locked
-        remaining: (plan === 'pro' || plan === 'premium') ? null : 0,
+        limit: null, // free with signup
+        remaining: null,
         cooldown: 0
       },
       interviewQuestions: {
         used: 0,
-        limit: (plan === 'trial' || plan === 'essential' || plan === 'pro' || plan === 'premium') ? null : 0, // Trial/Essential/Pro/Premium: unlimited (1-min cooldown), others: locked
-        remaining: (plan === 'trial' || plan === 'essential' || plan === 'pro' || plan === 'premium') ? null : 0,
+        limit: null, // free with signup (daily set limits enforced server-side)
+        remaining: null,
         cooldown: 0 // 1-min cooldown (to be tracked when feature is implemented)
       },
       mockInterviews: {
         used: 0,
-        limit: plan === 'pro' ? 20 : plan === 'premium' ? null : 0, // Pro: 20/month, Premium: unlimited (1/hr, 5/day soft limit), others: locked
-        remaining: plan === 'pro' ? 20 : plan === 'premium' ? null : 0,
+        limit: monthlyCappedMock ? 20 : null, // 20/month for all plans, Premium unlimited
+        remaining: monthlyCappedMock ? 20 : null,
         cooldown: 0 // 1/hr cooldown for Premium (to be tracked when feature is implemented)
       },
       linkedInOptimizer: {
         used: 0,
-        limit: plan === 'premium' ? null : 0, // Premium: unlimited, others: locked
-        remaining: plan === 'premium' ? null : 0,
+        limit: null, // free with signup (removal pending analytics decision)
+        remaining: null,
         cooldown: 0
       },
       priorityReview: {
@@ -125,7 +134,7 @@ export async function onRequest(context) {
 
     // Check feedback usage (Essential: monthly) -- D1 is authority
     // Monthly allowance starts from plan activation date (plan_updated_at), not calendar month start
-    if (plan === 'essential' && isD1Available(env)) {
+    if (['free', 'pack', 'essential'].includes(plan) && isD1Available(env)) { // repositioning: free/pack use the Essential quota
       try {
         const d1User = await getOrCreateUserByAuthId(env, uid, userEmail);
         let feedbackUsed = 0;
@@ -204,7 +213,7 @@ export async function onRequest(context) {
     }
 
     // Check feedback usage for Pro/Premium from D1 usage_events table
-    if ((plan === 'pro' || plan === 'premium') && isD1Available(env)) {
+    if (['pro', 'premium', 'weekly', 'monthly'].includes(plan) && isD1Available(env)) {
       try {
         const d1User = await getOrCreateUserByAuthId(env, uid, userEmail);
         if (d1User && d1User.id) {
@@ -240,7 +249,7 @@ export async function onRequest(context) {
     }
 
     // Check rewrite usage (Pro/Premium: 45s cooldown, KV TTL minimum is 60s)
-    if ((plan === 'pro' || plan === 'premium') && env.JOBHACKAI_KV) {
+    if (env.JOBHACKAI_KV) { // rewrite is free with signup; cooldown applies to all plans
       usage.resumeRewrite.limit = null; // Unlimited for Pro/Premium
       usage.resumeRewrite.used = 0;
       usage.resumeRewrite.remaining = null;
@@ -257,38 +266,33 @@ export async function onRequest(context) {
       }
     }
     
-    // Check mock interview usage (Pro: 20/month, Premium: daily limit 5)
-    if (plan === 'pro' && env.JOBHACKAI_KV) {
-      const now = new Date();
-      const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-      const mockInterviewUsageKey = `mockInterviewUsage:${uid}:${monthKey}`;
-      const mockInterviewUsed = await env.JOBHACKAI_KV.get(mockInterviewUsageKey);
-      usage.mockInterviews.used = mockInterviewUsed ? parseInt(mockInterviewUsed, 10) : 0;
-      usage.mockInterviews.limit = 20; // Monthly limit
-      usage.mockInterviews.remaining = Math.max(0, 20 - usage.mockInterviews.used);
-    } else if (plan === 'premium' && env.JOBHACKAI_KV) {
-      // Premium: check daily limit (5/day)
-      const today = new Date().toISOString().split('T')[0];
-      const dailyKey = `mockInterviewDaily:${uid}:${today}`;
-      const dailyUsed = await env.JOBHACKAI_KV.get(dailyKey);
-      usage.mockInterviews.used = dailyUsed ? parseInt(dailyUsed, 10) : 0;
-      usage.mockInterviews.limit = null; // Unlimited but soft limit
-      usage.mockInterviews.remaining = null;
-      
-      // Check cooldown (1 hour throttle)
-      const hourlyKey = `mockInterviewThrottle:${uid}:hour`;
-      const lastHourly = await env.JOBHACKAI_KV.get(hourlyKey);
-      if (lastHourly) {
-        const lastHourlyTime = parseInt(lastHourly, 10);
-        const timeSinceLastHourly = Date.now() - lastHourlyTime;
-        if (timeSinceLastHourly < 3600000) {
-          usage.mockInterviews.cooldown = Math.ceil((3600000 - timeSinceLastHourly) / 1000); // seconds
+    // Mock interview usage: read from D1 mock_interview_usage, the same source
+    // mock-interview/score.js enforces against (getMockInterviewMonthlyUsage /
+    // incrementMockInterviewMonthlyUsage). The old code read a KV key that
+    // nothing increments, so the dashboard always showed a full quota while the
+    // server was actually counting in D1. 20/month for every plan except
+    // Premium (unlimited), matching SESSION_LIMITS in score.js.
+    if (isD1Available(env)) {
+      try {
+        const d1User = await getOrCreateUserByAuthId(env, uid, userEmail);
+        if (d1User && d1User.id) {
+          const mockUsed = await getMockInterviewMonthlyUsage(env, d1User.id);
+          usage.mockInterviews.used = mockUsed;
+          if (plan === 'premium') {
+            usage.mockInterviews.limit = null;
+            usage.mockInterviews.remaining = null;
+          } else {
+            usage.mockInterviews.limit = 20;
+            usage.mockInterviews.remaining = Math.max(0, 20 - mockUsed);
+          }
         }
+      } catch (mockErr) {
+        console.warn('[USAGE] Mock interview usage read failed (non-blocking):', mockErr?.message || mockErr);
       }
     }
 
     // Get Interview Questions monthly usage from database
-    if ((plan === 'trial' || plan === 'essential' || plan === 'pro' || plan === 'premium') && isD1Available(env)) {
+    if (['free', 'trial', 'essential', 'pro', 'premium', 'weekly', 'monthly', 'pack'].includes(plan) && isD1Available(env)) {
       try {
         const d1User = await getOrCreateUserByAuthId(env, uid, userEmail);
         if (d1User && d1User.id) {

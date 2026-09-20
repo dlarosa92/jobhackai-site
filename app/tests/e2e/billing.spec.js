@@ -14,23 +14,25 @@ async function fetchPlanData(page, token) {
 }
 
 test.describe('Stripe Billing', () => {
-  test('should allow upgrade from trial to essential', async ({ page }) => {
-    await page.goto('/pricing-a.html');
+  test('creates a Stripe checkout session for the Monthly plan', async ({ page }) => {
+    // Repositioning (PR #834): /pricing-a 301s to /pricing, which sells the
+    // voice plans (weekly/monthly/pack) instead of essential/pro/premium.
+    await page.goto('/pricing');
     await page.waitForLoadState('domcontentloaded');
-    
-    const essentialBtn = page.locator('button[data-plan="essential"]').first();
-    await expect(essentialBtn).toBeVisible();
-    
+
+    const monthlyBtn = page.locator('button[data-plan="monthly"]').first();
+    await expect(monthlyBtn).toBeVisible();
+
     const token = await getAuthToken(page);
     expect(token).not.toBeNull();
-    
+
     const planData = await fetchPlanData(page, token);
-    if (planData.plan && ['essential', 'pro', 'premium'].includes(planData.plan)) {
-      test.info().skip(`User is already on ${planData.plan} plan - cannot test trial to essential upgrade`);
+    if (planData.plan && ['weekly', 'monthly'].includes(planData.plan)) {
+      test.info().skip(`User is already on ${planData.plan} plan - cannot test monthly checkout`);
       return;
     }
-    
-    const { response, data } = await postStripeCheckout(page, { plan: 'essential', startTrial: false });
+
+    const { response, data } = await postStripeCheckout(page, { plan: 'monthly', startTrial: false });
 
     if (!data?.ok) {
       const reason = data?.error || data?.code || `status_${response.status()}`;
@@ -52,23 +54,23 @@ test.describe('Stripe Billing', () => {
     expect(data.url).toContain('checkout.stripe.com');
   });
   
-  test('should allow upgrade from essential to pro', async ({ page }) => {
-    await page.goto('/pricing-a.html');
+  test('creates a Stripe checkout session for the Weekly Pass', async ({ page }) => {
+    await page.goto('/pricing');
     await page.waitForLoadState('domcontentloaded');
-    
-    const proBtn = page.locator('button[data-plan="pro"]').first();
-    await expect(proBtn).toBeVisible();
-    
+
+    const weeklyBtn = page.locator('button[data-plan="weekly"]').first();
+    await expect(weeklyBtn).toBeVisible();
+
     const token = await getAuthToken(page);
     expect(token).not.toBeNull();
-    
+
     const planData = await fetchPlanData(page, token);
-    if (planData.plan && ['pro', 'premium'].includes(planData.plan)) {
+    if (planData.plan && ['weekly', 'monthly'].includes(planData.plan)) {
       test.info().skip(`User is already on ${planData.plan} plan`);
       return;
     }
-    
-    const { response, data } = await postStripeCheckout(page, { plan: 'pro', startTrial: false });
+
+    const { response, data } = await postStripeCheckout(page, { plan: 'weekly', startTrial: false });
     
     if (response.status() === 200 && data.ok) {
       expect(data.url).toContain('checkout.stripe.com');
@@ -78,23 +80,18 @@ test.describe('Stripe Billing', () => {
     }
   });
   
-  test('should allow downgrade from premium to pro', async ({ page }) => {
-    await page.goto('/pricing-a.html');
+  test('creates a Stripe checkout session for the Interview Pack (one-time)', async ({ page }) => {
+    await page.goto('/pricing');
     await page.waitForLoadState('domcontentloaded');
-    
-    const proBtn = page.locator('button[data-plan="pro"]').first();
-    await expect(proBtn).toBeVisible();
-    
+
+    const packBtn = page.locator('button[data-plan="pack"]').first();
+    await expect(packBtn).toBeVisible();
+
     const token = await getAuthToken(page);
     expect(token).not.toBeNull();
-    
-    const planData = await fetchPlanData(page, token);
-    if (planData.plan !== 'premium') {
-      test.info().skip(`User is on ${planData.plan || 'unknown'} plan - downgrade requires premium`);
-      return;
-    }
-    
-    const { response, data } = await postStripeCheckout(page, { plan: 'pro', startTrial: false });
+
+    // The pack is a one-time purchase, buyable regardless of current plan.
+    const { response, data } = await postStripeCheckout(page, { plan: 'pack', startTrial: false });
     
     if (response.status() === 200 && data.ok) {
       expect(data.url).toContain('checkout.stripe.com');

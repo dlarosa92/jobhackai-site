@@ -24,6 +24,13 @@ import { sanitizeRoleSpecificFeedback } from './feedback-validator.js';
  */
 const DB_BINDING_NAMES = ['DB', 'JOBHACKAI_DB', 'INTERVIEW_QUESTIONS_DB', 'IQ_D1'];
 
+// Subscription plans that mark has_ever_paid when written: legacy tiers plus
+// the dev0 voice subscriptions. Shared by updateUserPlan and the batch-safe
+// buildUserPlanUpdateStatement so the two write paths cannot drift. The
+// Interview Pack is a one-time purchase: its grant sets has_ever_paid itself
+// (voice-entitlements.js) and never flows through a plan update.
+export const PAID_SUBSCRIPTION_PLANS = new Set(['weekly', 'monthly', 'essential', 'pro', 'premium']);
+
 export function getDb(env) {
   if (!env) return null;
   const direct = env.DB;
@@ -341,7 +348,7 @@ export async function updateUserPlan(env, authId, {
       binds.push(scheduledAt);
     }
 
-    const paidPlans = new Set(['essential', 'pro', 'premium']);
+    const paidPlans = PAID_SUBSCRIPTION_PLANS;
     const normalizedHasEverPaid = hasEverPaid !== undefined ? hasEverPaid : has_ever_paid;
     const shouldMarkEverPaid = (plan !== undefined && paidPlans.has(plan))
       || (normalizedHasEverPaid !== undefined && Number(normalizedHasEverPaid) === 1);
@@ -445,7 +452,7 @@ export function buildUserPlanUpdateStatement(db, authId, {
   if (scheduledPlan !== undefined) push('scheduled_plan', scheduledPlan);
   if (scheduledAt !== undefined) push('scheduled_at', scheduledAt);
 
-  const paidPlans = new Set(['essential', 'pro', 'premium']);
+  const paidPlans = PAID_SUBSCRIPTION_PLANS;
   if ((plan !== undefined && paidPlans.has(plan)) || (hasEverPaid !== undefined && Number(hasEverPaid) === 1)) {
     push('has_ever_paid', 1);
   }

@@ -202,7 +202,7 @@ test.describe('Plan-Based Access Control', () => {
       const planText = await planBadge.textContent();
       // Trim whitespace and extract plan name (handle cases like "Trial Plan" or " essential ")
       const normalizedPlan = planText.trim().toLowerCase();
-      const validPlans = ['free', 'trial', 'essential', 'pro', 'premium'];
+      const validPlans = ['free', 'trial', 'essential', 'pro', 'premium', 'weekly', 'monthly', 'pack'];
       
       // Check if any valid plan name is contained in the text
       const foundPlan = validPlans.find(plan => normalizedPlan.includes(plan));
@@ -217,7 +217,7 @@ test.describe('Plan-Based Access Control', () => {
         const planText = await planIndicator.textContent();
         // Apply same validation as first branch to ensure consistency
         const normalizedPlan = planText.trim().toLowerCase();
-        const validPlans = ['free', 'trial', 'essential', 'pro', 'premium'];
+        const validPlans = ['free', 'trial', 'essential', 'pro', 'premium', 'weekly', 'monthly', 'pack'];
         
         // Check if any valid plan name is contained in the text
         const foundPlan = validPlans.find(plan => normalizedPlan.includes(plan));

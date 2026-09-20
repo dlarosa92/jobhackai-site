@@ -11,8 +11,12 @@ d1_databases = [
   { binding = "JOBHACKAI_DB", database_id = "c5c0eee5-a223-4ea2-974e-f4aee5a28bab" }
 ]
 kv_namespaces = [
-  { binding = "JOBHACKAI_KV", id = "5237372648c34aa6880f91e1a0c9708a" }
+  { binding = "JOBHACKAI_KV", id = "06a6323598244fc8a1b2daadeec8a043" }
 ]
+
+[env.dev.vars]
+ENVIRONMENT = "dev"
+DEV_CUTOVER_PAUSED = "false"
 
 [env.qa]
 name = "jobhackai-retention-cleaner-qa"

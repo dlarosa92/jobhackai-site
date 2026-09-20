@@ -58,7 +58,12 @@ CREATE INDEX IF NOT EXISTS idx_billing_repair_audit_run_id ON billing_repair_aud
 --     may be re-claimed (claimed_at tracks the most recent claim; received_at
 --     keeps the first receipt)
 -- Distinct name from dev0's stripe_event_log (voice migration 020) to avoid
--- a schema collision at merge time; reconciling the two is a dev0-merge step.
+-- a schema collision at merge time. Resolution (dev0 integration): BOTH
+-- tables stay. stripe_event_ledger is the authoritative idempotency record
+-- for every event; stripe_event_log remains the Interview Pack grant history
+-- — still written for every grant inside the same atomic batch, and consulted
+-- before a grant so an event the pre-ledger webhook already granted is never
+-- granted again (see stagePackGrant in api/stripe-webhook.js).
 CREATE TABLE IF NOT EXISTS stripe_event_ledger (
   event_id TEXT PRIMARY KEY,               -- Stripe event id (evt_...)
   event_type TEXT NOT NULL,                -- e.g. customer.subscription.updated

@@ -1,3 +1,4 @@
+import { packCheckoutAttemptKey } from '../_lib/checkout-attempt.js';
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { isTrialEligible, getUserPlanData, getOrCreateUserByAuthId, getDb } from '../_lib/db.js';
 import { sendEmail } from '../_lib/email.js';
@@ -12,7 +13,7 @@ import {
   cacheCustomerId,
   kvCusKey
 } from '../_lib/billing-utils.js';
-import { assertStripeKeyMatchesEnvironment, redactId } from '../_lib/stripe-environment.js';
+import { assertStripeKeyMatchesEnvironment, redactId, environmentStampFields } from '../_lib/stripe-environment.js';
 import { resolveCustomerByEmailOwnership, ENTITLED_SUBSCRIPTION_STATUSES } from '../_lib/billing-ownership.js';
 export async function onRequest(context) {
   const { request, env } = context;
@@ -42,6 +43,9 @@ export async function onRequest(context) {
     }
     console.log('🔵 [CHECKOUT] Parsed body', body);
     const { plan } = body || {};
+    if (plan === 'pack' && body.checkoutAttemptId != null && !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(body.checkoutAttemptId))) {
+      return json({ ok: false, error: 'Invalid checkout attempt id' }, 400, origin, env);
+    }
 
     // Check required environment variables
     if (!env.FIREBASE_PROJECT_ID) {
@@ -261,10 +265,14 @@ export async function onRequest(context) {
       // attached to the wrong user during the incident.
     }
 
+    // Interview Pack is a one-time payment, not a subscription: it can never
+    // duplicate-bill, so the active-subscription guard below does not apply.
+    const isOneTimePack = plan === 'pack';
+
     // Guard against duplicate subscriptions for paid plans.
     let subs = [];
     try {
-      subs = await listSubscriptions(env, customerId);
+      subs = isOneTimePack ? [] : await listSubscriptions(env, customerId);
     } catch (listErr) {
       console.error('[CHECKOUT] Failed to list subscriptions, blocking checkout to prevent duplicates:', listErr?.message || listErr);
       // Fail closed: cannot verify duplicate subscriptions, so block checkout
@@ -293,22 +301,24 @@ export async function onRequest(context) {
       }, 409, origin, env);
     }
 
-    // Create Checkout Session (subscription)
-    
-    // Prepare session body with trial support
+    // Create Checkout Session (subscription, or one-time payment for the pack)
     const sessionBody = {
-      mode: 'subscription',
+      mode: isOneTimePack ? 'payment' : 'subscription',
       customer: customerId,
       'line_items[0][price]': priceId,
       'line_items[0][quantity]': 1,
       success_url: (env.STRIPE_SUCCESS_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/dashboard.html?paid=1`),
-      cancel_url: (env.STRIPE_CANCEL_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/pricing-a`),
+      cancel_url: (env.STRIPE_CANCEL_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/pricing`),
       allow_promotion_codes: 'true',
-      payment_method_collection: 'always',
       'metadata[firebaseUid]': uid,
       'metadata[plan]': plan
     };
-    
+
+    // payment_method_collection only applies to subscription mode
+    if (!isOneTimePack) {
+      sessionBody.payment_method_collection = 'always';
+    }
+
     // Add trial period for trial plan
     if (plan === 'trial') {
       sessionBody['subscription_data[trial_period_days]'] = '3';
@@ -321,11 +331,18 @@ export async function onRequest(context) {
     if (sessionBody.mode === 'subscription') {
       sessionBody['subscription_data[metadata][firebaseUid]'] = uid;
     }
+
+    // Environment stamp (dev/QA share one Stripe test-mode account): the
+    // session — and the subscription it creates — record which environment
+    // made them, so the other environment's webhook can ignore their events.
+    Object.assign(sessionBody, environmentStampFields(env, { subscription: sessionBody.mode === 'subscription' }));
     
     // Generate idempotency key (forceNew for fresh session if requested from frontend)
     const forceNew = !!body.forceNew;
     let idem;
-    if (forceNew) {
+    if (isOneTimePack) {
+      idem = packCheckoutAttemptKey(await makeIdemKey(uid, sessionBody), body.checkoutAttemptId);
+    } else if (forceNew) {
       try {
         idem = `${uid}:${crypto.randomUUID()}`;
       } catch (e) {

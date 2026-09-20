@@ -53,7 +53,7 @@ const PROD_COOKIE_HOSTS = ['app.jobhackai.io', 'jobhackai.io', 'www.jobhackai.io
 const VERIFICATION_ACTION_PATH = '/auth/action';
 const PROD_APP_ORIGIN = 'https://app.jobhackai.io';
 const FIREBASE_AUTH_STORAGE_KEY_PREFIX = 'firebase:authUser:';
-const AUTH_COOKIE_ALLOWED_PLANS = new Set(['free', 'trial', 'essential', 'pro', 'premium', 'pending']);
+const AUTH_COOKIE_ALLOWED_PLANS = new Set(['free', 'trial', 'essential', 'pro', 'premium', 'pending', 'weekly', 'monthly', 'pack']);
 const ACTION_SETTINGS_RECOVERABLE_CODES = new Set([
   'auth/invalid-continue-uri',
   'auth/missing-continue-uri',

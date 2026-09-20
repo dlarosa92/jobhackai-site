@@ -1,6 +1,12 @@
 # JobHackAI ATS Resume Scoring Worker
 
-Edge-based resume scoring Cloudflare Worker with Tesseract OCR and unpdf support.
+This standalone prototype is retired from public access. The security hotfix
+intentionally disables its workers.dev and preview hostnames; no public route
+is configured. Application scoring uses the authenticated Pages API.
+
+The prototype has no authentication and must not be re-exposed by enabling its
+hostname. Future reuse requires an authenticated route or service binding.
+The setup and API examples below are historical reference only.
 
 ## Overview
 
@@ -25,7 +31,7 @@ This standalone Cloudflare Worker provides ATS (Applicant Tracking System) resum
 | Tone & Clarity | 15% | Action-oriented, concise writing |
 | Grammar & Spelling | 10% | Typos and tense correctness |
 
-## Installation
+## Historical installation (do not deploy as a public endpoint)
 
 1. Install dependencies:
 ```bash
@@ -38,7 +44,7 @@ npm install tesseract.js unpdf
 wrangler deploy --config wrangler-resume-worker.toml
 ```
 
-## Usage
+## Historical API reference
 
 ### API Endpoint
 
@@ -206,4 +212,3 @@ curl -X POST https://jobhackai-resume-worker.your-subdomain.workers.dev/ \
 ## License
 
 Part of JobHackAI platform.
-

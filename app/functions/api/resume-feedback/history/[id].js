@@ -143,7 +143,7 @@ export async function onRequest(context) {
 
     // Plan-based rewrite visibility
     const plan = await getUserPlan(env, uid);
-    const isPaidRewrite = plan === 'pro' || plan === 'premium';
+    const isPaidRewrite = ['free', 'trial', 'essential', 'pro', 'premium', 'weekly', 'monthly', 'pack'].includes(plan); // repositioning: rewrite is free with signup
     const rewriteLocked = !isPaidRewrite;
 
     const rawRewritten = session.feedback?.rewrittenResume || null;
