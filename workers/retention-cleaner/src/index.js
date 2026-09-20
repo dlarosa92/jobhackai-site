@@ -124,12 +124,12 @@ export async function runCleanup(env) {
   // 9. Voice sessions — same 90-day rule as mock interviews, with the
   // free-taste carve-out: a user with no active voice plan (no live
   // subscription, no usable pack credits) keeps their most recent session
-  // row as metadata so it stays visible in history, but its transcript and
-  // scorecard are stripped (the report is locked once past retention).
+  // row as metadata so it stays visible in history, but its transcript,
+  // scorecard and supplied role/job context are stripped (the report is locked once past retention).
   // Entitled users' aged sessions are deleted exactly like typed sessions.
   if (hasVoiceSessions) {
     // Mirrors getVoiceEntitlement (app/functions/_lib/voice-entitlements.js):
-    // active subscription = unlimited plan label + live Stripe status + period
+    // active subscription = eligible plan label + live Stripe status + period
     // not lapsed beyond the 3-day grace; usable pack = credits > 0, not expired.
     const activeVoicePlan = `(
         (u.plan IN ('weekly','monthly','trial','essential','pro','premium')
@@ -152,9 +152,9 @@ export async function runCleanup(env) {
           )`;
     results.voice_sessions_stripped = await deleteRows(
       db,
-      `UPDATE voice_sessions SET transcript_json = NULL, scorecard_json = NULL, updated_at = datetime('now')
+      `UPDATE voice_sessions SET transcript_json = NULL, scorecard_json = NULL, role = NULL, seniority = NULL, jd_excerpt = NULL, updated_at = datetime('now')
        WHERE id IN (${carveOutIds})
-         AND (transcript_json IS NOT NULL OR scorecard_json IS NOT NULL)`,
+         AND (transcript_json IS NOT NULL OR scorecard_json IS NOT NULL OR role IS NOT NULL OR seniority IS NOT NULL OR jd_excerpt IS NOT NULL)`,
       cutoff
     );
     results.voice_sessions = await deleteRows(
@@ -184,7 +184,7 @@ function auditDatabase(source) {
       async run() {
         let query;
         const deletion = sql.match(/^\s*DELETE FROM (\w+) WHERE ([\s\S]+)$/i);
-        const stripping = sql.match(/^\s*UPDATE voice_sessions SET transcript_json = NULL, scorecard_json = NULL, updated_at = datetime\('now'\)\s+WHERE ([\s\S]+)$/i);
+        const stripping = sql.match(/^\s*UPDATE voice_sessions SET transcript_json = NULL, scorecard_json = NULL, role = NULL, seniority = NULL, jd_excerpt = NULL, updated_at = datetime\('now'\)\s+WHERE ([\s\S]+)$/i);
         if (deletion) query = `SELECT COUNT(*) AS count FROM ${deletion[1]} WHERE ${deletion[2]}`;
         else if (stripping) query = `SELECT COUNT(*) AS count FROM voice_sessions WHERE ${stripping[1]}`;
         else throw new Error('Unexpected retention audit operation');
