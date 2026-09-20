@@ -56,3 +56,25 @@ test('missing schema refuses both operations and deletion instead of failing ope
  await assert.rejects(admitAccountOperation(env,'owner','billing'));
  await assert.rejects(beginDeletionAdmission(env,{uid:'owner'}));
 });
+
+test('an unresolved Analytics event cannot acquire a second claim, even under another UID or after a stale timestamp',async t=>{
+ const {env,db}=setup(t),options={analyticsEventKey:'purchase:ch_test'};
+ const claim=await admitAccountOperation(env,'owner','account',options);
+ assert.equal(await db.prepare('SELECT analytics_event_key FROM account_operation_claims').first('analytics_event_key'),options.analyticsEventKey);
+ db.exec("UPDATE account_operation_claims SET created_at='2000-01-01'");
+ await assert.rejects(admitAccountOperation(env,'owner','account',options),/analytics_delivery_unresolved/);
+ await assert.rejects(admitAccountOperation(env,'other','account',options),/analytics_delivery_unresolved/);
+ await settleAccountOperation(env,claim,'uncertain');
+ await assert.rejects(admitAccountOperation(env,'owner','account',options),/analytics_delivery_unresolved/);
+ assert.ok(await admitAccountOperation(env,'owner','account',{analyticsEventKey:'refund:re_test'}));
+});
+
+test('finished Analytics validation allows a fresh attempt and metadata is strictly validated',async t=>{
+ const {env}=setup(t),options={analyticsEventKey:'purchase:ch_test'};
+ const claim=await admitAccountOperation(env,'owner','account',options);
+ await settleAccountOperation(env,claim,'finished');
+ assert.ok(await admitAccountOperation(env,'owner','account',options));
+ for(const analyticsEventKey of ['owner@example.test','purchase:re_test',{},'refund:re_'+'x'.repeat(197)])
+  await assert.rejects(admitAccountOperation(env,'owner','account',{analyticsEventKey}),/analytics_event_invalid/);
+ await assert.rejects(admitAccountOperation(env,'owner','billing',options),/analytics_event_invalid/);
+});

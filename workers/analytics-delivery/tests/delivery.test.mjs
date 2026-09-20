@@ -3,11 +3,12 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {sqliteD1} from '../../../app/functions/_lib/__tests__/sqlite-d1-helper.mjs';
 import {deliver,enqueue,retain} from '../src/index.ts';
+import {beginDeletionAdmission,assertDeletionQuiescent,admitAccountOperation,settleAccountOperation} from '../../../app/functions/_lib/account-deletion-admission.js';
 const NOW=1789888000000;
 function setup(t){
   const db=sqliteD1();t.after(()=>db.close());
-  db.exec('CREATE TABLE users(id INTEGER PRIMARY KEY); INSERT INTO users VALUES(1); CREATE TABLE cookie_consents(user_id INTEGER,client_id TEXT,consent_json TEXT);');
-  for(const file of ['024_collected_payments.sql','025_checkout_attribution.sql','026_payment_campaign_links.sql','027_analytics_delivery.sql'])
+  db.exec('CREATE TABLE users(id INTEGER PRIMARY KEY,auth_id TEXT UNIQUE NOT NULL); INSERT INTO users VALUES(1,\'owner\'); CREATE TABLE deleted_auth_ids(auth_id TEXT PRIMARY KEY); CREATE TABLE cookie_consents(user_id INTEGER,client_id TEXT,consent_json TEXT);');
+  for(const file of ['024_collected_payments.sql','025_checkout_attribution.sql','026_payment_campaign_links.sql','027_analytics_delivery.sql','028_account_deletion_recovery.sql'])
     db.exec(readFileSync(new URL('../../../app/db/migrations/'+file,import.meta.url),'utf8'));
   const env={DB:db,ENVIRONMENT:'qa',DELIVERY_ENABLED:'true',GA4_MEASUREMENT_ID:'G-VH888WWY3M',GA4_API_SECRET:'test-only',DEBUG_EVENTS:'true'};
   db.exec(`INSERT INTO cookie_consents VALUES(1,'browser','{"version":1,"analytics":true}');
@@ -124,7 +125,7 @@ test('a delivered refund that Stripe later reverses becomes a visible reconcilia
   assert.equal(await f.db.prepare('SELECT net_collected FROM stripe_collected_payment_totals').first('net_collected'),3900);
 });
 test('collection 5xx is uncertain, 4xx is rejected, and neither is retried',async t=>{
-  for(const [status,state] of [[500,'uncertain'],[403,'rejected']]){
+  for(const [status,state] of [[500,'uncertain'],[408,'uncertain'],[429,'uncertain'],[403,'rejected']]){
     const f=setup(t);let actual=0;
     await f.run({request:async(url,init)=>{if(url.includes('/debug/'))return f.request(url,init);actual++;return new Response(null,{status});}});
     await f.run({now:()=>NOW+300000});assert.equal(actual,1);assert.equal((await f.rows())[0].state,state);
@@ -146,4 +147,121 @@ test('a later complete capture requeues only a previously undelivered missing br
   assert.equal(f.calls.filter(c=>!c.url.includes('/debug/')).length,1);
   assert.equal(f.calls[1].body.events[0].params.value,39);
   assert.equal((await f.rows())[0].state,'accepted_unverified');
+});
+
+test('deletion intent or legacy tombstone suppresses both new and previously queued events without erasing money',async t=>{
+  for(const alreadyQueued of [false,true]) {
+    for(const marker of ['intent','tombstone']) {
+      const f=setup(t);f.refund();
+      if(alreadyQueued)await enqueue(f.db,'qa',NOW);
+      if(marker==='intent')await beginDeletionAdmission(f.env,{uid:'owner'});
+      else f.db.exec("INSERT INTO deleted_auth_ids VALUES('owner')");
+      await f.run();assert.equal(f.calls.length,0);
+      assert.equal(await f.db.prepare('SELECT net_collected FROM stripe_collected_payment_totals').first('net_collected'),3800);
+      assert.equal(await f.db.prepare('SELECT COUNT(*) n FROM account_operation_claims').first('n'),0);
+    }
+  }
+});
+
+test('deletion inserted between eligible read and atomic admission sends no debug or collection request',async t=>{
+  const f=setup(t),prepare=f.db.prepare;let injected=false;
+  f.db.prepare=sql=>{
+    const stmt=prepare(sql);
+    if(sql.startsWith('INSERT INTO account_operation_claims')) {
+      const run=stmt.run;
+      stmt.run=async function(){
+        if(!injected){injected=true;await beginDeletionAdmission(f.env,{uid:'owner'});}
+        return run.call(this);
+      };
+    }
+    return stmt;
+  };
+  await f.run();assert.ok(injected);assert.equal(f.calls.length,0);
+  assert.equal((await f.rows())[0].last_reason,'account_deletion_pending');
+});
+
+test('a changed owner after admission prevents disclosure under the wrong UID',async t=>{
+  const f=setup(t),prepare=f.db.prepare;let inserted=false;
+  f.db.prepare=sql=>{
+    const stmt=prepare(sql);
+    if(sql.startsWith('INSERT INTO account_operation_claims')) {
+      const run=stmt.run;
+      stmt.run=async function(){
+        const result=await run.call(this);
+        if(!inserted){inserted=true;f.db.exec("UPDATE users SET auth_id='replacement'");}
+        return result;
+      };
+    }
+    return stmt;
+  };
+  await f.run();assert.equal(f.calls.length,0);
+  assert.equal((await f.rows())[0].last_reason,'context_changed_before_validation');
+  assert.equal(await f.db.prepare('SELECT state FROM account_operation_claims').first('state'),'finished');
+});
+
+test('deletion requested during validation waits for the request and prevents subsequent collection',async t=>{
+  const f=setup(t);
+  await f.run({request:async(url,init)=>{
+    assert.match(url,/\/debug\//);
+    await beginDeletionAdmission(f.env,{uid:'owner'});
+    await assert.rejects(assertDeletionQuiescent(f.env,'owner'),/operations_pending/);
+    return f.request(url,init);
+  }});
+  assert.equal(f.calls.length,1);assert.equal((await f.rows())[0].last_reason,'context_changed_during_validation');
+  await assertDeletionQuiescent(f.env,'owner');
+});
+
+test('an earlier collection holds deletion through its provider response and final outbox write',async t=>{
+  const f=setup(t);let resolve,entered;
+  const release=new Promise(r=>{resolve=r;}),started=new Promise(r=>{entered=r;});
+  const running=f.run({request:async(url,init)=>{
+    if(!url.includes('/debug/')) {entered();await release;}
+    return f.request(url,init);
+  }});
+  await started;await beginDeletionAdmission(f.env,{uid:'owner'});
+  await assert.rejects(assertDeletionQuiescent(f.env,'owner'),/operations_pending/);
+  assert.equal((await f.rows())[0].state,'sending');
+  resolve();await running;
+  assert.equal((await f.rows())[0].state,'accepted_unverified');
+  await assertDeletionQuiescent(f.env,'owner');
+  await f.run();assert.equal(f.calls.length,2);
+});
+
+test('ambiguous collection keeps a traceable unresolved claim and cannot be retried by resetting its outbox lease',async t=>{
+  const f=setup(t);
+  await f.run({request:async(url,init)=>{
+    if(url.includes('/debug/'))return f.request(url,init);
+    throw Error('fixture collection timeout');
+  }});
+  const claim=await f.db.prepare('SELECT * FROM account_operation_claims').first();
+  assert.equal(claim.state,'uncertain');assert.equal(claim.analytics_event_key,'purchase:ch_test');
+  f.db.exec("UPDATE analytics_delivery SET state='pending',next_attempt_at=0,lease_until=NULL; UPDATE account_operation_claims SET created_at='2000-01-01';");
+  await f.run();assert.equal(f.calls.length,1);
+  assert.equal((await f.rows())[0].last_reason,'analytics_delivery_unresolved');
+  await beginDeletionAdmission(f.env,{uid:'owner'});
+  await assert.rejects(assertDeletionQuiescent(f.env,'owner'),/operations_pending/);
+});
+
+test('crashed admission and failed settlement remain active instead of being silently expired',async t=>{
+  const f=setup(t);
+  await enqueue(f.db,'qa',NOW);
+  await admitAccountOperation(f.env,'owner','account',{analyticsEventKey:'purchase:ch_test'});
+  f.db.exec(`UPDATE analytics_delivery SET state='validating',lease_until=${NOW-1}`);
+  await f.run();assert.equal(f.calls.length,0);
+  assert.equal((await f.rows())[0].last_reason,'analytics_delivery_unresolved');
+  const failed=setup(t);
+  failed.db.exec("CREATE TRIGGER reject_settlement BEFORE UPDATE ON account_operation_claims BEGIN SELECT RAISE(ABORT,'fixture failure'); END;");
+  await assert.rejects(failed.run(),/fixture failure/);
+  assert.equal(await failed.db.prepare('SELECT state FROM account_operation_claims').first('state'),'active');
+  await beginDeletionAdmission(failed.env,{uid:'owner'});
+  await assert.rejects(assertDeletionQuiescent(failed.env,'owner'),/operations_pending/);
+});
+
+test('validation failures finish their claim for safe retry; missing deletion schema never reaches Google',async t=>{
+  const f=setup(t);
+  await f.run({request:async()=>{throw Error('fixture validation timeout');}});
+  assert.equal(await f.db.prepare('SELECT state FROM account_operation_claims').first('state'),'finished');
+  await f.run({now:()=>NOW+300000});assert.equal((await f.rows())[0].state,'accepted_unverified');
+  const missing=setup(t);missing.db.exec('DROP TABLE account_deletion_admissions');
+  await assert.rejects(missing.run(),/no such table/);assert.equal(missing.calls.length,0);
 });

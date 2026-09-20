@@ -51,9 +51,14 @@ CREATE TABLE IF NOT EXISTS account_operation_claims (
   -- A crashed webhook can be matched to its durable event ledger without
   -- retaining event payloads, email, credentials or interview content.
   webhook_event_id TEXT,
+  -- Provider reconciliation needs the event identity, never its campaign or
+  -- browser payload. An unfinished delivery may not acquire another claim.
+  analytics_event_key TEXT,
   state TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('active','finished','uncertain')),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_account_operations_pending
   ON account_operation_claims(auth_id,state);
+CREATE INDEX IF NOT EXISTS idx_account_operations_analytics
+  ON account_operation_claims(analytics_event_key,state);
