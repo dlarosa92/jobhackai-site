@@ -5,7 +5,7 @@ import vm from 'node:vm';
 import test from 'node:test';
 const source = readFileSync(new URL('../../../../js/cookie-consent.js', import.meta.url), 'utf8');
 const GA = 'G-SQYSWPFM5X';
-function harness({host = 'app.jobhackai.io', consent = true, config, pendingServer = false, pendingPost = false, search = '', cookies = new Map(), store = new Map()} = {}) {
+function harness({host = 'app.jobhackai.io', consent = true, config, pendingServer = false, pendingPost = false, search = '', cookies = new Map(), store = new Map(), scopedCookies = null} = {}) {
   const scripts = [], insertedScripts = [], appendedElements = [], elements = new Map(), timers = [], requests = [], listeners = {};
   if (consent !== null) store.set('jha_cookie_consent_v1', JSON.stringify({version:1,analytics: consent}));
   function element(tag = 'div') {
@@ -25,8 +25,8 @@ function harness({host = 'app.jobhackai.io', consent = true, config, pendingServ
     getElementsByTagName(){return [element('script')];}
   };
   Object.defineProperty(document, 'cookie', {
-    get(){return [...cookies].map(([k,v])=>k+'='+v).join('; ');},
-    set(value){const [pair,...attrs]=value.split(';');const pos=pair.indexOf('=');const key=pair.slice(0,pos),val=pair.slice(pos+1);
+    get(){if(scopedCookies)return scopedCookies.read(host);return [...cookies].map(([k,v])=>k+'='+v).join('; ');},
+    set(value){if(scopedCookies){scopedCookies.write(host,value);return;}const [pair,...attrs]=value.split(';');const pos=pair.indexOf('=');const key=pair.slice(0,pos),val=pair.slice(pos+1);
       if(attrs.some(a=>a.trim()==='Max-Age=0'))cookies.delete(key);else cookies.set(key,val);}
   });
   let resolveServer;
@@ -73,7 +73,7 @@ test('QA uses only the verified development property and enables DebugView',asyn
   assert.equal(h.scripts.length,1);assert.ok(h.scripts[0].src.includes('G-VH888WWY3M'));
   assert.equal(h.ctx['ga-disable-'+GA],true);
   const config=h.ctx.dataLayer.find(a=>a[0]==='config');
-  assert.equal(config[2].debug_mode,true);assert.equal(config[2].cookie_domain,'qa.jobhackai.io');
+  assert.equal(config[2].debug_mode,true);assert.equal(config[2].cookie_domain,'jobhackai.io');assert.equal(config[2].cookie_prefix,'jha_qa');
 });
 test('an explicit separate test destination is supported; copied production IDs are blocked',async()=>{
   const blocked=harness({host:'qa.jobhackai.io',config:{GA_ID:GA,CLARITY_ID:'wskzma4clw'}});
@@ -386,4 +386,50 @@ test('privacy button works while an old pending grant is still being saved',asyn
   h.finishPost();await init;
   assert.equal(h.ctx.JHA.cookieConsent.hasAnalyticsConsent(),false);
   assert.equal(h.scripts.length,0);
+});
+
+test('QA marketing uses the QA API and tag while preserving production cookies',async()=>{
+  const cookies=new Map([['jha_client_id','7bbba230-b755-4d31-b475-e20cf6d00ed9'],['jha_campaign_prod','production-campaign']]);
+  const h=harness({host:'qa-marketing.jobhackai.io',cookies,search:'?utm_source=linkedin&utm_medium=organic_social&utm_campaign=qa_voice'});
+  await h.init();h.runTimers();
+  assert.equal(h.ctx.JHA.apiBase,'https://qa.jobhackai.io');
+  assert.equal(h.requests[0].url,'https://qa.jobhackai.io/api/cookie-consent');
+  assert.equal(cookies.get('jha_client_id'),'7bbba230-b755-4d31-b475-e20cf6d00ed9');
+  assert.equal(cookies.get('jha_campaign_prod'),'production-campaign');
+  assert.notEqual(cookies.get('jha_client_id_qa'),cookies.get('jha_client_id'));
+  assert.ok(cookies.has('jha_client_id_qa'));assert.ok(cookies.has('jha_campaign_qa_v2'));
+  const config=h.ctx.dataLayer.find(a=>a[0]==='config');
+  assert.equal(config[1],'G-VH888WWY3M');assert.equal(config[2].cookie_prefix,'jha_qa');
+  assert.deepEqual(Array.from(config[2].linker.domains),['qa.jobhackai.io','qa-marketing.jobhackai.io']);
+  assert.ok(!h.scripts.some(s=>s.src.includes(GA)));
+});
+test('QA app preserves an external campaign across a marketing handoff and internal tags',async()=>{
+  const cookies=new Map();
+  const marketing=harness({host:'qa-marketing.jobhackai.io',cookies,search:'?utm_source=linkedin&utm_medium=organic_social&utm_campaign=qa_voice&utm_content=article_01'});
+  await marketing.init();marketing.runTimers();
+  const original=cookies.get('jha_campaign_qa_v2'),identity=cookies.get('jha_client_id_qa');
+  const app=harness({host:'qa.jobhackai.io',cookies,search:'?utm_source=internal&utm_medium=internal&utm_campaign=wrong'});
+  app.ctx.document.referrer='https://qa-marketing.jobhackai.io/';
+  await app.init();app.runTimers();
+  assert.equal(cookies.get('jha_campaign_qa_v2'),original);assert.equal(cookies.get('jha_client_id_qa'),identity);
+  app.setConsent(false);app.runTimers();
+  assert.equal(cookies.has('jha_campaign_qa_v2'),false);
+});
+
+test('old QA host and domain campaigns are retired and cannot return after rejection',async()=>{
+  const old=encodeURIComponent(JSON.stringify({first:{at:Date.now()-1000,source:'old',medium:'email',campaign:'stale'},last:{at:Date.now()-1000,source:'old',medium:'email',campaign:'stale'}}));
+  const records=new Map([['qa.jobhackai.io|jha_campaign_qa',old],['jobhackai.io|jha_campaign_qa',old],['jobhackai.io|jha_campaign_prod','production']]);
+  const scopedCookies={
+    read(host){return [...records].filter(([k])=>{const domain=k.split('|')[0];return host===domain||host.endsWith('.'+domain);}).map(([k,v])=>k.split('|')[1]+'='+v).join('; ');},
+    write(host,value){const [pair,...attrs]=value.split(';');const pos=pair.indexOf('=');const domain=attrs.find(a=>a.trim().startsWith('Domain='))?.trim().slice(7).replace(/^\./,'')||host;
+      const key=domain+'|'+pair.slice(0,pos);if(attrs.some(a=>a.trim()==='Max-Age=0'))records.delete(key);else records.set(key,pair.slice(pos+1));}
+  };
+  const app=harness({host:'qa.jobhackai.io',scopedCookies});await app.init();app.runTimers();
+  assert.equal(records.has('qa.jobhackai.io|jha_campaign_qa'),false);assert.equal(records.has('jobhackai.io|jha_campaign_qa'),false);
+  const marketing=harness({host:'qa-marketing.jobhackai.io',scopedCookies,search:'?utm_source=linkedin&utm_medium=organic_social&utm_campaign=new_qa'});
+  await marketing.init();marketing.runTimers();
+  assert.ok(records.get('jobhackai.io|jha_campaign_qa_v2').includes('new_qa'));
+  app.setConsent(false);app.runTimers();app.setConsent(true);app.runTimers();
+  assert.equal(records.has('jobhackai.io|jha_campaign_qa_v2'),false);
+  assert.equal(records.get('jobhackai.io|jha_campaign_prod'),'production');
 });

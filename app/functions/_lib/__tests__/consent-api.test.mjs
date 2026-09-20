@@ -2,11 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
+import { analyticsClientIdentity } from '../analytics-client-id.js';
 const root = new URL('../../../../',import.meta.url);
 const clientId = '7bbba230-b755-4d31-b475-e20cf6d00ed9';
 function harness(path, {authFailure=false, userMissing=false, saveFailure=false, cleanupFailure=false, readFailure=false, stored=null}={}) {
   const writes=[],reads=[],revocations=[];
-  const ctx={Request,Response,Date,console:{error(){}},
+  const ctx={Request,Response,Date,analyticsClientIdentity,console:{error(){}},
     getBearer:r=>r.headers.get('Authorization')?.match(/^Bearer (.+)$/)?.[1],
     verifyFirebaseIdToken:async()=>{if(authFailure)throw Error('private token details');return {uid:'verified-user'};},
     getOrCreateUserByAuthId:async()=>userMissing?null:{id:42},
@@ -17,12 +18,12 @@ function harness(path, {authFailure=false, userMissing=false, saveFailure=false,
   vm.createContext(ctx);
   const source=readFileSync(new URL(path,root),'utf8').replace(/^import .*;\n/gm,'').replace('export async function onRequest','async function onRequest');
   vm.runInContext(source+'\nglobalThis.handler=onRequest;',ctx);
-  return {writes,reads,revocations,request:(body,headers={},method='POST')=>ctx.handler({env:{FIREBASE_PROJECT_ID:'qa'},request:new Request('https://qa.jobhackai.io/api/cookie-consent',{method,headers, ...(method==='POST'?{body:JSON.stringify(body)}:{})})})};
+  return {writes,reads,revocations,request:(body,headers={},method='POST')=>ctx.handler({env:{FIREBASE_PROJECT_ID:'qa',ENVIRONMENT:'qa'},request:new Request('https://qa.jobhackai.io/api/cookie-consent',{method,headers, ...(method==='POST'?{body:JSON.stringify(body)}:{})})})};
 }
 for(const path of ['app/functions/api/cookie-consent.js','functions/api/cookie-consent.js']) {
   test(path+': rejection removes verified account and browser context and surfaces cleanup failure',async()=>{
     const h=harness(path);
-    const headers={Authorization:'Bearer valid',Cookie:'jha_client_id='+clientId};
+    const headers={Authorization:'Bearer valid',Cookie:'jha_client_id_qa='+clientId};
     assert.equal((await h.request({consent:{version:1,analytics:false},userId:900},headers)).status,200);
     assert.equal(h.revocations[0].userId,42);assert.equal(h.revocations[0].clientId,clientId);
     const failed=harness(path,{cleanupFailure:true});
@@ -52,14 +53,14 @@ for(const path of ['app/functions/api/cookie-consent.js','functions/api/cookie-c
   test(path+': failed prior-consent lookup cannot overwrite a rejection or report an absent decision',async()=>{
     const h=harness(path,{readFailure:true});
     for(const method of ['GET','POST']){
-      const response=await h.request({clientId,consent:{version:1,analytics:true}},{Cookie:'jha_client_id='+clientId},method);
+      const response=await h.request({clientId,consent:{version:1,analytics:true}},{Cookie:'jha_client_id_qa='+clientId},method);
       assert.equal(response.status,503);
     }
     assert.equal(h.writes.length,0);assert.equal(h.revocations.length,0);
   });
   test(path+': invalid signed-in token never reads or writes anonymous consent',async()=>{
     const h=harness(path,{authFailure:true});
-    for(const method of ['GET','POST'])assert.equal((await h.request({clientId,consent:{version:1,analytics:false}},{Authorization:'Bearer stale',Cookie:'jha_client_id='+clientId},method)).status,401);
+    for(const method of ['GET','POST'])assert.equal((await h.request({clientId,consent:{version:1,analytics:false}},{Authorization:'Bearer stale',Cookie:'jha_client_id_qa='+clientId},method)).status,401);
     assert.equal(h.writes.length,0);assert.equal(h.reads.length,0);
   });
   test(path+': malformed auth is rejected even with a valid anonymous identifier',async()=>{
@@ -89,13 +90,13 @@ for(const path of ['app/functions/api/cookie-consent.js','functions/api/cookie-c
   test(path+': cookie identity is exact and conflicting or unbounded identifiers are rejected',async()=>{
     const h=harness(path);const consent={version:1,analytics:false};
     for(const value of ['x'.repeat(1000),{},123,''])assert.equal((await h.request({clientId:value,consent})).status,400);
-    assert.equal((await h.request({consent},{Cookie:'other_jha_client_id='+clientId})).status,400);
-    assert.equal((await h.request({clientId:'6bbba230-b755-4d31-b475-e20cf6d00ed9',consent},{Cookie:'jha_client_id='+clientId})).status,400);
+    assert.equal((await h.request({consent},{Cookie:'other_jha_client_id_qa='+clientId})).status,400);
+    assert.equal((await h.request({clientId:'6bbba230-b755-4d31-b475-e20cf6d00ed9',consent},{Cookie:'jha_client_id_qa='+clientId})).status,400);
     assert.equal(h.writes.length,0);
-    assert.equal((await h.request({consent},{Cookie:'other=a; jha_client_id='+clientId})).status,200);
+    assert.equal((await h.request({consent},{Cookie:'other=a; jha_client_id_qa='+clientId})).status,200);
   });
   test(path+': malformed persisted consent never becomes a grant',async()=>{
-    const h=harness(path,{stored:{version:1,analytics:'true'}});const response=await h.request(null,{Cookie:'jha_client_id='+clientId},'GET');assert.deepEqual(await response.json(),{ok:true,consent:null,resetConsent:true});
+    const h=harness(path,{stored:{version:1,analytics:'true'}});const response=await h.request(null,{Cookie:'jha_client_id_qa='+clientId},'GET');assert.deepEqual(await response.json(),{ok:true,consent:null,resetConsent:true});
   });
 }
 
@@ -113,3 +114,10 @@ for (const path of ['app/functions/_lib/db.js','functions/_lib/db.js']) {
     await assert.rejects(()=>ctx.readConsent({},null,clientId),/consent_read_unavailable/);
   });
 }
+
+for(const path of ['app/functions/api/cookie-consent.js','functions/api/cookie-consent.js'])test(path+': a body identifier cannot override conflicting browser cookies',async()=>{
+  const h=harness(path);
+  const headers={Cookie:'jha_client_id_qa='+clientId+'; jha_client_id_qa=6bbba230-b755-4d31-b475-e20cf6d00ed9'};
+  for(const method of ['GET','POST'])assert.equal((await h.request({clientId,consent:{version:1,analytics:true}},headers,method)).status,400);
+  assert.equal(h.writes.length,0);assert.equal(h.reads.length,0);assert.equal(h.revocations.length,0);
+});

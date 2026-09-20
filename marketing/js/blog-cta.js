@@ -11,7 +11,7 @@
   function appBase() {
     const host = (window.location.hostname || '').toLowerCase();
     if (['jobhackai.io', 'www.jobhackai.io', 'app.jobhackai.io'].includes(host)) return 'https://app.jobhackai.io';
-    if (host === 'qa.jobhackai.io' || host === 'develop.jobhackai-app-marketing-seo.pages.dev') return 'https://qa.jobhackai.io';
+    if (host === 'qa.jobhackai.io' || host === 'qa-marketing.jobhackai.io' || host === 'develop.jobhackai-app-marketing-seo.pages.dev') return 'https://qa.jobhackai.io';
     return 'https://dev.jobhackai.io';
   }
   function initialize() {

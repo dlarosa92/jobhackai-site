@@ -45,13 +45,13 @@ test('hidden pages wait for visibility and browsers without observation emit no 
   const unsupported=setup({observerAvailable:false,consent:true});unsupported.windowListeners['cookie-consent-granted']();assert.equal(unsupported.calls.length,0);
 });
 test('preview CTA destinations never open production billing',()=>{
-  for(const [host,base] of [['qa.jobhackai.io','qa'],['develop.jobhackai-app-marketing-seo.pages.dev','qa'],['dev0.jobhackai-app-marketing-seo.pages.dev','dev'],['localhost','dev']]){
+  for(const [host,base] of [['qa.jobhackai.io','qa'],['qa-marketing.jobhackai.io','qa'],['develop.jobhackai-app-marketing-seo.pages.dev','qa'],['dev0.jobhackai-app-marketing-seo.pages.dev','dev'],['localhost','dev']]){
     assert.ok(setup({host}).cta.innerHTML.includes(`https://${base}.jobhackai.io/pricing`),host);
   }
 });
 test('marketing preview navigation and footer use the matching nonproduction app',()=>{
   const components=readFileSync(new URL('../../../../marketing/js/component-loader.js',import.meta.url),'utf8');
-  for(const [host,base] of [['jobhackai.io','app'],['www.jobhackai.io','app'],['qa.jobhackai.io','qa'],['develop.jobhackai-app-marketing-seo.pages.dev','qa'],['dev0.jobhackai-app-marketing-seo.pages.dev','dev'],['localhost','dev']]){
+  for(const [host,base] of [['jobhackai.io','app'],['www.jobhackai.io','app'],['qa.jobhackai.io','qa'],['qa-marketing.jobhackai.io','qa'],['develop.jobhackai-app-marketing-seo.pages.dev','qa'],['dev0.jobhackai-app-marketing-seo.pages.dev','dev'],['localhost','dev']]){
     const link={getAttribute:()=>'/cookies',href:''};
     const window={location:{hostname:host}};
     const document={readyState:'complete',querySelectorAll:selector=>selector.includes('data-app-path')?[link]:[]};

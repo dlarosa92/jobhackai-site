@@ -3,7 +3,7 @@
     try {
       var hostname = (window.location && window.location.hostname ? window.location.hostname : '').toLowerCase();
       if (hostname === 'dev.jobhackai.io') return 'https://dev.jobhackai.io';
-      if (hostname === 'qa.jobhackai.io' || hostname === 'develop.jobhackai-app-marketing-seo.pages.dev') return 'https://qa.jobhackai.io';
+      if (hostname === 'qa.jobhackai.io' || hostname === 'qa-marketing.jobhackai.io' || hostname === 'develop.jobhackai-app-marketing-seo.pages.dev') return 'https://qa.jobhackai.io';
       if (!['jobhackai.io', 'www.jobhackai.io', 'app.jobhackai.io'].includes(hostname)) return 'https://dev.jobhackai.io';
     } catch (_) {}
     return 'https://app.jobhackai.io';
