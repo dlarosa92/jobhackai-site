@@ -107,5 +107,6 @@ test('authentication/checkout parameters never enter page URLs sent to GA',async
   assert.equal(params.page_location,'https://app.jobhackai.io/login?utm_source=linkedin&utm_campaign=voice_beta_2026_09');
   const config=h.ctx.dataLayer.find(a=>a[0]==='config')[2];
   assert.equal(config.page_referrer,'https://example.com/');
+  assert.equal('debug_mode' in config,false,'production must omit the debug parameter entirely');
   assert.ok(!JSON.stringify(h.ctx.dataLayer).includes('secret'));
 });

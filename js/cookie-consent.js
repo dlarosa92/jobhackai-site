@@ -11,7 +11,7 @@
   const CLIENT_ID_COOKIE = 'jha_client_id';
   const hostname = (window.location.hostname || '').toLowerCase();
   const productionHost = ['jobhackai.io', 'www.jobhackai.io', 'app.jobhackai.io'].includes(hostname);
-  const config = window.JHA_CONFIG || {};
+  const config = { ...(window.JHA_CONFIG || {}) };
   const PRODUCTION_GA_ID = 'G-SQYSWPFM5X';
   const PRODUCTION_CLARITY_ID = 'wskzma4clw';
   // Nonproduction is off by default. An explicit, separate test destination
@@ -358,7 +358,7 @@
     gtag('js', new Date());
     gtag('config', GA_MEASUREMENT_ID, {
       send_page_view: false,
-      debug_mode: !productionHost,
+      ...(!productionHost ? { debug_mode: true } : {}),
       page_location: analyticsUrl(window.location.href, true),
       page_referrer: document.referrer ? analyticsUrl(document.referrer) : '',
       cookie_domain: productionHost ? 'jobhackai.io' : hostname,
