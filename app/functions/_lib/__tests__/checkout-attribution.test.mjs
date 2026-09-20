@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { analyticsClientId } from '../analytics-client-id.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { sqliteD1 } from './sqlite-d1-helper.mjs';
@@ -15,7 +16,7 @@ function setup(t) {
   db.exec(migration);
   const env={DB:db,ENVIRONMENT:'qa'};
   const touch={at:Date.now()-1000,source:'linkedin',medium:'organic_social',campaign:'voice_beta_2026_09',asset:'intro_01'};
-  const input={request:new Request('https://qa.jobhackai.io/api/stripe-checkout',{headers:{Cookie:'jha_client_id='+clientId}}),
+  const input={request:new Request('https://qa.jobhackai.io/api/stripe-checkout',{headers:{Cookie:'jha_client_id_qa='+clientId}}),
     session:{id:'cs_test_one',status:'open',customer:'cus_owner'},uid:'owner',customerId:'cus_owner',
     analytics:{analyticsConsent:true,gaClientId:'1234.5678',gaSessionId:'9876',firstTouch:touch,lastTouch:touch}};
   return {db,env,input,save:(overrides={})=>saveCheckoutAttribution(env,{...input,...overrides}),
@@ -64,7 +65,7 @@ test('signed-out withdrawal erases browser contexts; account withdrawal erases a
   const h=setup(t);assert.equal(await h.save(),true);
   await h.db.prepare('INSERT INTO cookie_consents(user_id,consent_json) VALUES(43,?)').bind('{"version":1,"analytics":true}').run();
   assert.equal(await h.save({uid:'other',session:{...h.input.session,id:'cs_other_account'}}),true);
-  assert.equal(await h.save({session:{...h.input.session,id:'cs_other_browser'},request:new Request('https://qa.jobhackai.io/',{headers:{Cookie:'jha_client_id='+otherClient}})}),true);
+  assert.equal(await h.save({session:{...h.input.session,id:'cs_other_browser'},request:new Request('https://qa.jobhackai.io/',{headers:{Cookie:'jha_client_id_qa='+otherClient}})}),true);
   h.db.exec('CREATE TABLE financial_record(amount INTEGER); INSERT INTO financial_record VALUES(3900);');
   await revokeCheckoutAttribution(h.env,{clientId});
   assert.deepEqual((await h.rows()).map(r=>r.checkout_session_id),['cs_other_browser']);
@@ -83,4 +84,20 @@ test('a slightly fast device clock preserves attribution without storing future 
   const context=normalizeCheckoutAnalytics({analyticsConsent:true,firstTouch:touch,lastTouch:touch},now);
   assert.equal(context.first.at,now);assert.equal(context.last.at,now);
   assert.equal(normalizeCheckoutAnalytics({analyticsConsent:true,firstTouch:{...touch,at:now+360000}},now).first,null);
+});
+
+test('QA attribution never consumes a production or ambiguous browser cookie',async t=>{
+  const h=setup(t);
+  for(const cookie of ['jha_client_id='+clientId,'jha_client_id_qa='+clientId+'; jha_client_id_qa='+otherClient]){
+    assert.equal(await h.save({request:new Request('https://qa.jobhackai.io/api/stripe-checkout',{headers:{Cookie:cookie}})}),false);
+  }
+  assert.equal((await h.rows()).length,0);
+});
+
+test('server selects only the configured environment cookie without changing production identity',()=>{
+  const request=new Request('https://example.test/',{headers:{Cookie:'jha_client_id='+clientId+'; jha_client_id_qa='+otherClient}});
+  assert.equal(analyticsClientId(request,{ENVIRONMENT:'production'}),clientId);
+  assert.equal(analyticsClientId(request,{ENVIRONMENT:'qa'}),otherClient);
+  assert.equal(analyticsClientId(request,{ENVIRONMENT:'dev'}),null);
+  assert.equal(analyticsClientId(request,{ENVIRONMENT:'unknown'}),null);
 });

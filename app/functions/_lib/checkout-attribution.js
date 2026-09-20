@@ -1,3 +1,4 @@
+import { analyticsClientId } from './analytics-client-id.js';
 import { getDb } from './db.js';
 import { canonicalEnvironmentName } from './stripe-environment.js';
 
@@ -32,7 +33,7 @@ export function normalizeCheckoutAnalytics(value, now = Date.now()) {
 // Failed analytics storage does not prevent payment; it remains unattributed.
 export async function saveCheckoutAttribution(env, { request, session, uid, customerId, analytics }) {
   const now = Date.now(), context = normalizeCheckoutAnalytics(analytics, now);
-  const clientId = (request.headers.get('Cookie') || '').match(/(?:^|;\s*)jha_client_id=([^;]*)/)?.[1];
+  const clientId = analyticsClientId(request, env);
   const environment = canonicalEnvironmentName(env);
   if (!context || !environment || !CLIENT_ID.test(clientId || '') || session?.status !== 'open'
     || !/^cs_[a-z0-9_]+$/i.test(session?.id || '') || session.customer !== customerId) return false;
