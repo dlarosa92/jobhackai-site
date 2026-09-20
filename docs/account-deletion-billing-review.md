@@ -6,8 +6,10 @@ The handler now completes a strict billing scan and confirms cancellation before
 
 Cancellation is not transactional across Stripe subscriptions. If one succeeds and another fails, the response explicitly says some subscriptions may have been canceled and allows retry. Firebase failure likewise reports completed cancellation accurately. The confirmation email runs after KV/tombstone attempts and discloses cleanup failures instead of promising universal data removal.
 
-Validation: 20 focused tests exercise paging, duplicate customers, cross-account conflicts, service failures, partial cancellation/retry, handler ordering, and cleanup email outcomes. No live customer deletion or Stripe mutation was performed for this change.
+Validation: 23 focused tests exercise paging, duplicate customers, cross-account conflicts, service failures, partial cancellation/retry, handler ordering, and cleanup email outcomes. No live customer deletion or Stripe mutation was performed for this change.
 
 ## Remaining release gates
 
 This is a bounded billing-order fix, not a complete durable erasure workflow. Cleanup after Firebase removal still uses best-effort steps without an authenticated retry or persistent recovery job. A coordinated deletion lock is also needed to prevent concurrent checkout/webhook activity during deletion, including pending Checkout Sessions. The inactive-account cleanup worker has its own deletion flow and has not been made equivalent by this patch. Legacy customers without a verifiable UID require support review rather than destructive guessing. Old customers under an unrelated former email with neither stored mapping nor current email are not globally discoverable by this scan. Production deployment and real account-deletion validation remain held.
+
+Review follow-up: the existing Stripe environment/key mode guard now runs before all lookups. Any foreign active subscription blocks the entire deletion; unstamped nonproduction subscriptions also require support review. This preserves shared dev/QA Firebase access instead of merely skipping the foreign subscription and deleting its identity. Production legacy unstamped subscriptions retain support only with a verified live-mode key. Mode and stamp regression tests use the actual shared helpers.

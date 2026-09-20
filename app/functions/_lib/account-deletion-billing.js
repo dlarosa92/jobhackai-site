@@ -1,5 +1,6 @@
 import { stripe, kvCusKey } from './billing-utils.js';
 import { assertNoCrossUserStripeIds } from './stripe-identity.js';
+import { assertStripeKeyMatchesEnvironment, isForeignEnvironmentStamp, canonicalEnvironmentName, canonicalizeEnvironmentStamp } from './stripe-environment.js';
 
 // Never remove the identity on an incomplete billing scan. A bounded scan may
 // refuse an unusually large account; it must not treat truncation as success.
@@ -27,7 +28,7 @@ const knownStatuses = new Set(['active', 'trialing', 'past_due', 'unpaid', 'paus
 /** Verify every candidate before canceling anything, then confirm cancellation
  * before the caller removes Firebase access. Email alone is never ownership. */
 export async function cancelBillingBeforeDeletion(env, { uid, user, email }) {
-  if (!env.STRIPE_SECRET_KEY) throw new Error('Billing unavailable');
+  if (!assertStripeKeyMatchesEnvironment(env).ok) throw new Error('Billing environment configuration invalid');
   const mapped = new Set([user?.stripe_customer_id].filter(Boolean));
   // An unavailable cache might hide an older customer. Fail closed.
   const cached = await env.JOBHACKAI_KV?.get(kvCusKey(uid));
@@ -61,6 +62,15 @@ export async function cancelBillingBeforeDeletion(env, { uid, user, email }) {
       }
     }
     const live = subscriptions.filter(sub => !terminal.has(sub.status));
+    // Dev/QA may share a Stripe account and Firebase identity. Do not delete
+    // that identity or cancel billing when another environment owns access.
+    for (const sub of live) {
+      const stamp = sub.metadata?.environment;
+      if (isForeignEnvironmentStamp(env, stamp) ||
+          (canonicalEnvironmentName(env) !== 'prod' && !canonicalizeEnvironmentStamp(stamp))) {
+        throw new Error('Subscription environment ownership unverified');
+      }
+    }
     if (owner !== uid) {
       if (mapped.has(customer.id) || live.length) throw new Error('Billing ownership unverified');
       continue;
