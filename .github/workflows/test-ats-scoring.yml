@@ -94,6 +94,10 @@ jobs:
         working-directory: app/functions/_lib/__tests__
         run: node voice-client.test.mjs
 
+      - name: Run voice usage evidence tests
+        working-directory: app/functions/_lib/__tests__
+        run: node --test voice-usage.test.mjs
+
       - name: Run role selector helper tests
         working-directory: app/functions/_lib/__tests__
         run: node role-selector.test.mjs

@@ -9,6 +9,7 @@
 
 import { callOpenAI } from './openai-client.js';
 import { getDb } from './db.js';
+import { scorecardUsageEvidence } from './voice-usage.js';
 
 export const SCORECARD_SCHEMA = {
   name: 'voice_interview_scorecard',
@@ -193,7 +194,7 @@ export async function scoreVoiceTranscript({ role, seniority, transcript, jd = n
     : result.content;
 
   scorecard.moments = groundedMoments(scorecard.moments, transcript);
-  return { scorecard, usage: result.usage || null, model: result.model || null };
+  return { scorecard, usage: result.usage || null, model: result.model || null, fromCache: result.fromCache === true };
 }
 
 /**
@@ -235,7 +236,7 @@ export async function generateAndStoreScorecard(env, sessionId) {
       }
     } catch (_) { /* continuity is best-effort */ }
 
-    const { scorecard } = await scoreVoiceTranscript(
+    const { scorecard, usage, model, fromCache } = await scoreVoiceTranscript(
       {
         role: session.role,
         seniority: session.seniority,
@@ -247,8 +248,10 @@ export async function generateAndStoreScorecard(env, sessionId) {
     );
 
     await db.prepare(
-      `UPDATE voice_sessions SET scorecard_json = ?, updated_at = datetime('now') WHERE id = ?`
-    ).bind(JSON.stringify(scorecard), sessionId).run();
+      `UPDATE voice_sessions SET scorecard_json = ?,
+       usage_details_json = json_set(COALESCE(usage_details_json, '{}'), '$.scorecard', json(?)),
+       updated_at = datetime('now') WHERE id = ?`
+    ).bind(JSON.stringify(scorecard), JSON.stringify(scorecardUsageEvidence(model, usage, fromCache)), sessionId).run();
 
     if (!scorecard.tooShort) {
       console.log(`[VOICE-SCORECARD] Stored scorecard for session ${sessionId} (overall=${scorecard.overall})`);
