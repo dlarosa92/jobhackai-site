@@ -127,3 +127,16 @@ test('revoking and regranting reuse the same GA runtime and configuration',async
   assert.equal(h.ctx.dataLayer.filter(a=>a[0]==='config').length,1);
   assert.equal(h.events('page_view').length,1);
 });
+
+for (const tokenResult of ['reject', 'empty']) {
+  test('a signed-in token failure does not become anonymous consent: '+tokenResult, async () => {
+    const h=harness();
+    h.ctx.FirebaseAuthManager={getCurrentUser:()=>({getIdToken:async()=>{if(tokenResult==='reject')throw new Error('expired');return null;}})};
+    await h.init();
+    h.setConsent(false);
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(h.requests.length,0);
+    assert.equal(h.ctx.JHA.cookieConsent.hasAnalyticsConsent(),false);
+    assert.equal(h.ctx['ga-disable-'+GA],true);
+  });
+}

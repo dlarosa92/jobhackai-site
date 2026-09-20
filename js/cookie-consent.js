@@ -67,7 +67,8 @@
       if (window.FirebaseAuthManager?.getCurrentUser) {
         const user = window.FirebaseAuthManager.getCurrentUser();
         if (user) {
-          authToken = await user.getIdToken().catch(() => null);
+          authToken = await user.getIdToken();
+          if (!authToken) throw new Error('Consent authentication unavailable');
         }
       }
 
@@ -151,7 +152,8 @@
       if (window.FirebaseAuthManager?.getCurrentUser) {
         const user = window.FirebaseAuthManager.getCurrentUser();
         if (user) {
-          authToken = await user.getIdToken().catch(() => null);
+          authToken = await user.getIdToken();
+          if (!authToken) throw new Error('Consent authentication unavailable');
         }
       }
 

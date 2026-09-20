@@ -35,111 +35,65 @@ function json(body, status, origin, env) {
   });
 }
 
-export async function onRequest(context) {
-  const { request, env } = context;
-  const origin = request.headers.get('Origin') || '';
-
-  // Handle OPTIONS preflight
-  if (request.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders(origin, env) });
-  }
-
-  try {
-    // GET: Retrieve consent
-    if (request.method === 'GET') {
-      // Try to get auth token (optional for GET)
-      const token = getBearer(request);
-      let userId = null;
-      let clientId = null;
-
-      // Always extract client_id from cookie (for migration from anonymous to authenticated)
-      const cookieHeader = request.headers.get('Cookie') || '';
-      const clientIdMatch = cookieHeader.match(/jha_client_id=([^;]+)/);
-      clientId = clientIdMatch ? clientIdMatch[1] : null;
-
-      if (token) {
-        // Authenticated: get userId
-        try {
-          const { uid } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
-          const user = await getOrCreateUserByAuthId(env, uid);
-          userId = user?.id || null;
-        } catch (authError) {
-          // Auth failed, will use clientId only
-          userId = null;
-        }
-      }
-
-      // Query by userId first, fall back to clientId if not found
-      // This handles migration: user saved consent anonymously, then logged in
-      const consent = await getCookieConsent(env, userId, clientId);
-      return json({ ok: true, consent }, 200, origin, env);
-    }
-
-    // POST: Store consent
-    if (request.method === 'POST') {
-      const body = await request.json().catch(() => null);
-      if (!body || !body.consent) {
-        return json({ ok: false, error: 'Missing consent data' }, 400, origin, env);
-      }
-
-      const token = getBearer(request);
-      let userId = null;
-      let authId = null;
-      let clientId = body.clientId || null;
-
-      // If authenticated, get userId
-      if (token) {
-        try {
-          const { uid } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
-          authId = uid;
-          const user = await getOrCreateUserByAuthId(env, uid);
-          userId = user?.id || null;
-        } catch (authError) {
-          console.warn('[COOKIE-CONSENT] Auth failed, using clientId:', authError);
-          // Continue with clientId only
-        }
-      }
-
-      // If no userId and no clientId, generate one (shouldn't happen, but safety)
-      if (!userId && !clientId) {
-        return json({ ok: false, error: 'Missing identifier' }, 400, origin, env);
-      }
-
-      const success = await upsertCookieConsent(env, {
-        userId,
-        authId,
-        clientId,
-        consent: body.consent
-      });
-
-      if (success) {
-        return json({ ok: true }, 200, origin, env);
-      } else {
-        // Temporary: Include debug info in response to diagnose issue
-        const dbAvailable = !!(env?.JOBHACKAI_DB || env?.DB);
-        const debugInfo = {
-          hasDb: dbAvailable,
-          hasUserId: !!userId,
-          hasClientId: !!clientId,
-          dbBindingNames: Object.keys(env || {}).filter(k => k.includes('DB') || k.includes('D1'))
-        };
-        console.error('[COOKIE-CONSENT] Failed to save consent, debug info:', debugInfo);
-        return json({ ok: false, error: 'Failed to save consent', debug: debugInfo }, 500, origin, env);
-      }
-    }
-
-    return json({ ok: false, error: 'Method not allowed' }, 405, origin, env);
-  } catch (error) {
-    console.error('[COOKIE-CONSENT] Error:', error);
-    console.error('[COOKIE-CONSENT] Error stack:', error.stack);
-    // Include error details in response for debugging
-    const errorInfo = {
-      message: error.message,
-      name: error.name,
-      hasEnv: !!env,
-      dbBindings: env ? Object.keys(env).filter(k => k.includes('DB') || k.includes('D1')) : []
-    };
-    return json({ ok: false, error: 'Internal server error', debug: errorInfo }, 500, origin, env);
-  }
+// Invalid credentials must never silently turn an account preference into an
+// anonymous record. Only explicitly anonymous requests use the browser ID.
+const CLIENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+function validConsent(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) &&
+    value.version === 1 && typeof value.analytics === 'boolean';
 }
 
+export async function onRequest({ request, env }) {
+  const origin = request.headers.get('Origin') || '';
+  if (request.method === 'OPTIONS') return new Response(null, { headers: corsHeaders(origin, env) });
+  if (!['GET', 'POST'].includes(request.method)) return json({ok:false,error:'Method not allowed'},405,origin,env);
+
+  try {
+    const token = getBearer(request);
+    let authId = null;
+    if (request.headers.has('Authorization')) {
+      if (!token) return json({ok:false,error:'unauthorized'},401,origin,env);
+      try {
+        const identity = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
+        authId = identity?.uid;
+        if (!authId) return json({ok:false,error:'unauthorized'},401,origin,env);
+      } catch (_) {
+        return json({ok:false,error:'unauthorized'},401,origin,env);
+      }
+    }
+    let userId = null;
+    if (authId) {
+      const user = await getOrCreateUserByAuthId(env, authId);
+      userId = user?.id;
+      if (!userId) return json({ok:false,error:'Consent storage unavailable'},503,origin,env);
+    }
+    const cookieMatch = (request.headers.get('Cookie') || '').match(/(?:^|;\s*)jha_client_id=([^;]*)/);
+    const cookieClient = cookieMatch && CLIENT_ID.test(cookieMatch[1]) ? cookieMatch[1] : null;
+    if (request.method === 'GET') {
+      const consent = await getCookieConsent(env, userId, cookieClient);
+      // Old or malformed stored data is not an analytics grant.
+      return json({ok:true,consent:validConsent(consent) ? {
+        version:1,analytics:consent.analytics,updatedAt:consent.updatedAt
+      } : null},200,origin,env);
+    }
+
+    const body = await request.json().catch(() => null);
+    if (!validConsent(body?.consent)) return json({ok:false,error:'Invalid consent data'},400,origin,env);
+    if (body.clientId != null && (typeof body.clientId !== 'string' || !CLIENT_ID.test(body.clientId))) {
+      return json({ok:false,error:'Invalid client identifier'},400,origin,env);
+    }
+    if (cookieClient && body.clientId && cookieClient !== body.clientId) {
+      return json({ok:false,error:'Client identifier mismatch'},400,origin,env);
+    }
+    const clientId = cookieClient || body.clientId || null;
+    if (!userId && !clientId) return json({ok:false,error:'Missing identifier'},400,origin,env);
+    // Store only the supported decision, with the server receipt time. Never
+    // persist arbitrary caller fields or treat the string "false" as consent.
+    const consent = {version:1,analytics:body.consent.analytics,updatedAt:new Date().toISOString()};
+    const saved = await upsertCookieConsent(env, {userId,authId,clientId,consent});
+    return saved ? json({ok:true},200,origin,env) : json({ok:false,error:'Failed to save consent'},503,origin,env);
+  } catch (error) {
+    console.error('[COOKIE-CONSENT] Storage operation failed:', error?.name || 'Error');
+    return json({ok:false,error:'Consent storage unavailable'},503,origin,env);
+  }
+}
