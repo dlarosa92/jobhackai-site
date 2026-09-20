@@ -46,7 +46,7 @@
   };
 
   function currentPage() {
-    var path = (window.location.pathname || '').split('/').pop() || '';
+    var path = (window.location.pathname || '').replace(/\/+$/, '').split('/').pop() || '';
     return path.replace('.html', '');
   }
 
@@ -65,7 +65,7 @@
   var injected = false;
   var outputSeen = false;
 
-  async function voiceEnabled() {
+  async function getVoiceOffer() {
     try {
       var user = null;
       if (window.FirebaseAuthManager) {
@@ -76,7 +76,7 @@
           user = await window.FirebaseAuthManager.waitForAuthReady(4000);
         }
       }
-      if (!user || user._authPending) return false;
+      if (!user || user._authPending) return null;
       var token = await user.getIdToken();
       var data = null;
       if (window.PlanCache && typeof window.PlanCache.getPlan === 'function') {
@@ -86,13 +86,31 @@
         var res = await fetch('/api/plan/me', { headers: { Authorization: 'Bearer ' + token } });
         if (res.ok) data = await res.json();
       }
-      return !!(data && data.voice && data.voice.enabled);
+      var voice = data && data.voice;
+      if (!voice || !voice.enabled) return null;
+      if (voice.canStart && voice.mode === 'free') {
+        return { label: 'Start your free voice interview', href: 'voice-interview.html',
+          message: 'Your first voice interview includes a feedback preview. Paid plans unlock full reports and transcripts.' };
+      }
+      if (voice.canStart && (voice.mode === 'subscription' || voice.mode === 'pack')) {
+        return { label: 'Start a voice interview', href: 'voice-interview.html',
+          message: 'Practice for your target role and get a full scored report and transcript.' };
+      }
+      if (voice.reason === 'limit_reached') {
+        return { label: 'View your interview history', href: 'voice-interview.html#vi-history-list',
+          message: 'You have reached your subscription session limit for this UTC calendar month. Your previous reports are still available.' };
+      }
+      if (voice.reason === 'paywall') {
+        return { label: 'Explore voice interview plans', href: 'pricing.html',
+          message: 'Choose a plan for more voice practice, full scored reports, and transcripts.' };
+      }
+      return null;
     } catch (_) {
-      return false;
+      return null;
     }
   }
 
-  function buildCta(config) {
+  function buildCta(config, offer) {
     var box = document.createElement('div');
     box.className = 'jha-voice-cta';
     box.setAttribute('data-cta', 'voice-tool-' + config.tool);
@@ -105,8 +123,8 @@
       '.jha-voice-cta a:hover{background:var(--color-cta-green-hover)}' +
       '</style>' +
       '<h3>' + config.message + '</h3>' +
-      '<p>Run a realistic voice mock interview for your target role and get a scored report. Your first session is free.</p>' +
-      '<a href="voice-interview.html">Start your free voice interview</a>';
+      '<p>' + offer.message + '</p>' +
+      '<a href="' + offer.href + '">' + offer.label + '</a>';
     return box;
   }
 
@@ -114,7 +132,7 @@
     var config = PAGE_CONFIG[currentPage()];
     if (!config) return;
 
-    var enabledPromise = null;
+    var offerPromise = null;
 
     var interval = setInterval(async function () {
       if (injected) { clearInterval(interval); return; }
@@ -126,14 +144,14 @@
         track('tool_output_viewed', { tool: config.tool });
       }
 
-      if (!enabledPromise) enabledPromise = voiceEnabled();
-      var on = await enabledPromise;
-      if (!on) { clearInterval(interval); return; }
+      if (!offerPromise) offerPromise = getVoiceOffer();
+      var offer = await offerPromise;
+      if (!offer) { clearInterval(interval); return; }
 
       var anchor = document.querySelector(config.insertAfter) || watchEl;
       if (!anchor || anchor.parentNode === null) return;
       if (document.querySelector('.jha-voice-cta')) { injected = true; clearInterval(interval); return; }
-      anchor.parentNode.insertBefore(buildCta(config), anchor.nextSibling);
+      anchor.parentNode.insertBefore(buildCta(config, offer), anchor.nextSibling);
       injected = true;
       clearInterval(interval);
     }, 1500);
@@ -160,7 +178,7 @@
       '</style>' +
       '<div class="jha-gate-card">' +
       '<h2>This tool is free with a JobHackAI account</h2>' +
-      '<p>Sign up free to use it. Every account also includes 1 free voice mock interview with a scored report.</p>' +
+      '<p>Sign up free to use it. Every account also includes one lifetime free voice mock interview with a feedback preview. Paid plans unlock full reports and transcripts.</p>' +
       '<a class="jha-gate-btn" href="login.html?mode=signup" data-cta="preview-gate-signup">Sign up free</a>' +
       '<a class="jha-gate-login" href="login.html">Already have an account? Log in</a>' +
       '</div>';
@@ -181,6 +199,17 @@
   function init() {
     initPreviewGate();
     if (!window.__JHA_PREVIEW_MODE__) startCtaWatcher();
+    if (currentPage() === 'pricing') {
+      getVoiceOffer().then(function (offer) {
+        var button = document.querySelector('.vp-hero-cta');
+        var detail = document.querySelector('.vp-hero-sub');
+        if (!offer || !button || !detail) return;
+        // A customer already on pricing should jump to the offers, not reload.
+        button.href = offer.href === 'pricing.html' ? '#plans' : offer.href;
+        button.textContent = offer.label;
+        detail.textContent = offer.message;
+      });
+    }
   }
 
   if (document.readyState === 'loading') {

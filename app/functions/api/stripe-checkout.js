@@ -1,4 +1,5 @@
 import { packCheckoutAttemptKey } from '../_lib/checkout-attempt.js';
+import { checkoutCancelUrl } from '../_lib/checkout-return.js';
 import { saveCheckoutAttribution } from '../_lib/checkout-attribution.js';
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { isTrialEligible, getUserPlanData, getOrCreateUserByAuthId, getDb } from '../_lib/db.js';
@@ -308,7 +309,7 @@ export async function onRequest(context) {
       'line_items[0][price]': priceId,
       'line_items[0][quantity]': 1,
       success_url: (env.STRIPE_SUCCESS_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/dashboard.html?paid=1`),
-      cancel_url: (env.STRIPE_CANCEL_URL || `${env.FRONTEND_URL || 'https://dev.jobhackai.io'}/pricing`),
+      cancel_url: checkoutCancelUrl(env, plan),
       allow_promotion_codes: 'true',
       'metadata[firebaseUid]': uid,
       'metadata[plan]': plan
