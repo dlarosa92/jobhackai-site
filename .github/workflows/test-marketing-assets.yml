@@ -1,0 +1,29 @@
+name: Marketing assets and offers
+on:
+  pull_request:
+    branches: [dev0, develop, main]
+    paths:
+      - 'marketing/**'
+      - 'js/cookie-consent.js'
+      - 'js/blog-cta.js'
+      - 'app/functions/_lib/__tests__/blog-cta.test.mjs'
+      - '.github/workflows/test-marketing-assets.yml'
+  push:
+    branches: [dev0, develop, main]
+    paths:
+      - 'marketing/**'
+      - 'js/cookie-consent.js'
+      - 'js/blog-cta.js'
+      - '.github/workflows/test-marketing-assets.yml'
+permissions:
+  contents: read
+jobs:
+  marketing-integrity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: node marketing/scripts/sync-shared-assets.mjs --check
+      - run: node --test app/functions/_lib/__tests__/blog-cta.test.mjs app/functions/_lib/__tests__/analytics-consent.test.mjs
