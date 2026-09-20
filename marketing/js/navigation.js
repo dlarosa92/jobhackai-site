@@ -238,9 +238,9 @@ function scheduleUpdateNavigation(force, skipPendingCheck = false) {
 
 const APP_BASE_URL = window.getAppBaseUrl();
 const IS_DEV_OR_QA_HOST = APP_BASE_URL === 'https://dev.jobhackai.io' || APP_BASE_URL === 'https://qa.jobhackai.io';
-const VISITOR_HOME_HREF = IS_DEV_OR_QA_HOST ? 'index.html' : 'https://jobhackai.io/';
-const VISITOR_BLOG_HREF = IS_DEV_OR_QA_HOST ? 'index.html#blog' : 'https://jobhackai.io/blog';
-const VISITOR_FEATURES_HREF = IS_DEV_OR_QA_HOST ? 'features.html' : 'https://jobhackai.io/features';
+const VISITOR_HOME_HREF = IS_DEV_OR_QA_HOST ? '/index.html' : 'https://jobhackai.io/';
+const VISITOR_BLOG_HREF = IS_DEV_OR_QA_HOST ? '/blog.html' : 'https://jobhackai.io/blog';
+const VISITOR_FEATURES_HREF = IS_DEV_OR_QA_HOST ? '/features.html' : 'https://jobhackai.io/features';
 const VISITOR_PRICING_HREF = `${APP_BASE_URL}/pricing`;
 const VISITOR_LOGO_HREF = IS_DEV_OR_QA_HOST ? '/' : 'https://jobhackai.io/';
 
