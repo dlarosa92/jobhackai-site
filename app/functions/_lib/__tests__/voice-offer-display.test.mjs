@@ -30,6 +30,9 @@ async function render(fixture, page, delayedAuth = false) {
       if (!listeners.has(name)) listeners.set(name, []);
       listeners.get(name).push(fn);
     },
+    removeEventListener(name, fn) {
+      listeners.set(name, (listeners.get(name) || []).filter(value => value !== fn));
+    },
     querySelector: selector => selector === '.vp-hero-cta' ? button : selector === '.vp-hero-sub' ? detail :
       selector === '.jha-voice-cta' ? inserted[0] : anchor,
     createElement: () => ({ setAttribute() {}, innerHTML: '' })
@@ -45,16 +48,18 @@ async function render(fixture, page, delayedAuth = false) {
     setInterval: fn => { intervals.push(fn); return 1; }, clearInterval() {}
   };
   vm.runInNewContext(script, context);
-  // Two overlapping ticks must still insert a single CTA.
-  const ticks = Promise.all(intervals.flatMap(fn => [fn(), fn()]));
   if (delayedAuth) {
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(button.textContent, 'Start practicing');
     assert.equal(inserted.length, 0);
-    context.window.FirebaseAuthManager = manager;
-    for (const fn of listeners.get('firebase-auth-ready') || []) fn();
+    assert.equal(intervals.length, 0, 'no watcher while Firebase is unavailable');
+    if (delayedAuth !== 'never') {
+      context.window.FirebaseAuthManager = manager;
+      for (const fn of listeners.get('firebase-auth-ready') || []) fn();
+    }
   }
-  await ticks;
+  // Two overlapping ticks must still insert a single CTA.
+  await Promise.all(intervals.flatMap(fn => [fn(), fn()]));
   await new Promise(resolve => setImmediate(resolve));
   return { inserted, button, detail };
 }
@@ -101,6 +106,14 @@ test('cold signed-out load retains a neutral offer after auth resolves', async (
   const fixture = cases.find(value => value.name === 'signed out');
   const page = await render(fixture, 'pricing', true);
   const tool = await render(fixture, 'interview-questions.html', true);
+  assert.equal(page.button.textContent, 'Start practicing');
+  assert.equal(tool.inserted.length, 0);
+});
+
+test('a failed Firebase module leaves neutral offers without starting any watcher', async () => {
+  const fixture = cases.find(value => value.name === 'subscriber');
+  const page = await render(fixture, 'pricing', 'never');
+  const tool = await render(fixture, 'interview-questions.html', 'never');
   assert.equal(page.button.textContent, 'Start practicing');
   assert.equal(tool.inserted.length, 0);
 });

@@ -67,13 +67,6 @@
 
   async function getVoiceOffer() {
     try {
-      // This classic script can run before firebase-auth.js finishes its remote
-      // module imports. Keep the neutral offer until its public ready signal.
-      if (!window.FirebaseAuthManager) {
-        await new Promise(function (resolve) {
-          document.addEventListener('firebase-auth-ready', resolve, { once: true });
-        });
-      }
       var user = null;
       if (window.FirebaseAuthManager) {
         if (typeof window.FirebaseAuthManager.getCurrentUser === 'function') {
@@ -203,8 +196,11 @@
 
   // ---------- init ----------
 
-  function init() {
-    initPreviewGate();
+  var offersStarted = false;
+  function startPersonalizedOffers() {
+    if (offersStarted || !window.FirebaseAuthManager) return;
+    offersStarted = true;
+    document.removeEventListener('firebase-auth-ready', startPersonalizedOffers);
     if (!window.__JHA_PREVIEW_MODE__) startCtaWatcher();
     if (currentPage() === 'pricing') {
       getVoiceOffer().then(function (offer) {
@@ -217,6 +213,19 @@
         detail.textContent = offer.message;
       });
     }
+  }
+
+  function init() {
+    initPreviewGate();
+    // The Firebase module may still be loading. No polling or pending offer
+    // promise is needed until it signals readiness. If its imports fail, the
+    // neutral CTA remains usable and no tool watcher is started.
+    document.addEventListener('firebase-auth-ready', startPersonalizedOffers, { once: true });
+    var manager = window.FirebaseAuthManager;
+    var user = manager && typeof manager.getCurrentUser === 'function' ? manager.getCurrentUser() : null;
+    // Support navigation after auth has already resolved, when its event fired
+    // before this script. Pending restoration waits for the ready event above.
+    if (user && !user._authPending) startPersonalizedOffers();
   }
 
   if (document.readyState === 'loading') {
