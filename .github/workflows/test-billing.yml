@@ -98,3 +98,6 @@ jobs:
 
       - name: Account pack display
         run: node app/functions/_lib/__tests__/account-pack-display.test.mjs
+
+      - name: Collected payments and refunds (real SQLite)
+        run: node app/functions/_lib/__tests__/collected-revenue.test.mjs

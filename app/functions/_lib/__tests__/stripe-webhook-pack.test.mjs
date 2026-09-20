@@ -102,8 +102,7 @@ await test('pack purchase: credits + legacy log + ledger mark in one batch; neve
   assert.ok(/^UPDATE stripe_event_ledger\s+SET status = CASE WHEN .* THEN 'processed'/s.test(batch[batch.length - 1].replace(/\s+/g, ' ')), 'recipient-guarded ledger mark is the final statement of the same batch');
   assert.ok(!batch.some((sql) => /UPDATE users SET plan = \?/.test(sql)), 'no subscription-path plan write');
 
-  assert.strictEqual(purchases.length, 1, 'exactly one GA4 purchase, post-commit');
-  assert.ok(String(purchases[0].init.body).includes('"plan":"pack"'));
+  assert.strictEqual(purchases.length, 0, 'entitlement changes must not emit unconsented or estimated GA purchases');
   assert.ok(kv.__puts.includes(`evtl:dev:${event.id}`), 'environment-scoped fast-path marker written after commit');
   assert.ok(kv.__deletes.includes('planByUid:uid_pack'), 'billing caches invalidated post-commit');
 });
