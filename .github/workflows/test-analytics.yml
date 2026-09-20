@@ -4,6 +4,11 @@ on:
     branches: [main, develop, dev0]
     paths:
       - 'js/cookie-consent.js'
+      - 'app/functions/api/cookie-consent.js'
+      - 'app/functions/_lib/db.js'
+      - 'functions/_lib/db.js'
+      - 'functions/api/cookie-consent.js'
+      - 'app/functions/_lib/__tests__/consent-api.test.mjs'
       - 'app/functions/analytics-check.js'
       - 'app/functions/_lib/__tests__/analytics-diagnostic.test.mjs'
       - 'js/firebase-config.js'
@@ -14,6 +19,11 @@ on:
     branches: [main, develop, dev0]
     paths:
       - 'js/cookie-consent.js'
+      - 'app/functions/api/cookie-consent.js'
+      - 'app/functions/_lib/db.js'
+      - 'functions/_lib/db.js'
+      - 'functions/api/cookie-consent.js'
+      - 'app/functions/_lib/__tests__/consent-api.test.mjs'
       - 'app/functions/analytics-check.js'
       - 'app/functions/_lib/__tests__/analytics-diagnostic.test.mjs'
       - 'js/firebase-config.js'
@@ -28,4 +38,4 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - run: node --test app/functions/_lib/__tests__/analytics-consent.test.mjs app/functions/_lib/__tests__/analytics-diagnostic.test.mjs
+      - run: node --test app/functions/_lib/__tests__/analytics-consent.test.mjs app/functions/_lib/__tests__/analytics-diagnostic.test.mjs app/functions/_lib/__tests__/consent-api.test.mjs

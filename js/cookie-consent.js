@@ -9,6 +9,7 @@
 
   const CONSENT_KEY = 'jha_cookie_consent_v1';
   const CLIENT_ID_COOKIE = 'jha_client_id';
+  const VALID_CLIENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const hostname = (window.location.hostname || '').toLowerCase();
   const productionHost = ['jobhackai.io', 'www.jobhackai.io', 'app.jobhackai.io'].includes(hostname);
   const config = { ...(window.JHA_CONFIG || {}) };
@@ -67,7 +68,8 @@
       if (window.FirebaseAuthManager?.getCurrentUser) {
         const user = window.FirebaseAuthManager.getCurrentUser();
         if (user) {
-          authToken = await user.getIdToken().catch(() => null);
+          authToken = await user.getIdToken();
+          if (!authToken) throw new Error('Consent authentication unavailable');
         }
       }
 
@@ -84,7 +86,12 @@
 
       if (response.ok) {
         const data = await response.json();
-        if (data.ok && data.consent && revision === consentRevision) {
+        if (data.ok && (data.consent || data.resetConsent === true) && revision === consentRevision) {
+          if (data.resetConsent === true) {
+            // Invalid stored decisions cannot leave a stale local grant.
+            localStorage.removeItem(CONSENT_KEY);
+            return null;
+          }
           // Sync server consent to localStorage
           setConsentLocal(data.consent);
           return data.consent;
@@ -118,7 +125,7 @@
     const cookies = document.cookie.split(';');
     for (const cookie of cookies) {
       const [name, value] = cookie.trim().split('=');
-      if (name === CLIENT_ID_COOKIE && value) {
+      if (name === CLIENT_ID_COOKIE && VALID_CLIENT_ID.test(value || '')) {
         return value;
       }
     }
@@ -151,7 +158,8 @@
       if (window.FirebaseAuthManager?.getCurrentUser) {
         const user = window.FirebaseAuthManager.getCurrentUser();
         if (user) {
-          authToken = await user.getIdToken().catch(() => null);
+          authToken = await user.getIdToken();
+          if (!authToken) throw new Error('Consent authentication unavailable');
         }
       }
 
