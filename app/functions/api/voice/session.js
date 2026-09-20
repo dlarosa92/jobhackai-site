@@ -159,7 +159,7 @@ export async function onRequest(context) {
         return errorResponse('Session not found', 404, origin, env, requestId);
       }
       if (!['created', 'active'].includes(session.status)) {
-        return errorResponse('Session already ended', 409, origin, env, requestId);
+        return errorResponse('Session already ended', 409, origin, env, requestId, { reason: 'session_ended' });
       }
       // Guard against a null/missing started_at so a bad row yields a controlled
       // 'Session expired' (via the NaN check below) instead of throwing a 500.
@@ -168,9 +168,9 @@ export async function onRequest(context) {
         ? new Date(startedRaw + (startedRaw.endsWith('Z') ? '' : 'Z')).getTime()
         : NaN;
       if (!Number.isFinite(startedMs) || Date.now() - startedMs > RESUME_WINDOW_MS) {
-        await db.prepare(`UPDATE voice_sessions SET status = 'abandoned', updated_at = datetime('now') WHERE id = ?`)
+        await db.prepare(`UPDATE voice_sessions SET status = 'abandoned', updated_at = datetime('now') WHERE id = ? AND status IN ('created', 'active')`)
           .bind(session.id).run();
-        return errorResponse('Session expired', 409, origin, env, requestId);
+        return errorResponse('Session expired', 409, origin, env, requestId, { reason: 'session_expired' });
       }
 
       // The fresh realtime session has no memory of the dropped one, so the

@@ -1268,6 +1268,10 @@
       });
 
       if (!res.ok) {
+        if (res.status === 409 && res.data &&
+            (res.data.reason === 'session_expired' || res.data.reason === 'session_ended')) {
+          state.startRequestId = null;
+        }
         if (res.status === 403) {
           await loadEntitlement();
           show('vi-setup-view');

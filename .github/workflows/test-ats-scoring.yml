@@ -5,6 +5,7 @@ on:
     branches: [main, dev0]
     paths:
       - 'app/functions/_lib/**'
+      - 'app/functions/api/voice/**'
       - 'app/functions/dictionaries/**'
       # These are browser modules, but their suites live in _lib/__tests__ —
       # without these paths they could break untested.
@@ -18,6 +19,7 @@ on:
     branches: [main, dev0]
     paths:
       - 'app/functions/_lib/**'
+      - 'app/functions/api/voice/**'
       - 'app/functions/dictionaries/**'
       # These are browser modules, but their suites live in _lib/__tests__ —
       # without these paths they could break untested.

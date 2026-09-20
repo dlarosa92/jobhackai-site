@@ -411,6 +411,31 @@ test('a lost creation response retries the same session id', async () => {
   } finally { h.dispose(); }
 });
 
+for (const reason of ['session_expired', 'session_ended']) {
+  test('terminal reservation ' + reason + ' permits a new creation id', async () => {
+    let attempts = 0;
+    const h = createVoiceClientHarness({ routes: {
+      '/api/plan/me': () => PLAN_PAYLOAD,
+      '/api/voice/sessions': () => ({ sessions: [] }),
+      '/api/voice/session': () => {
+        attempts++;
+        if (attempts === 1) throw new Error('lost response');
+        if (attempts === 2) return { __status: 409, reason, error: reason };
+        return { sessionId: 'new', clientSecret: 'ek_test', model: 'test', maxMinutes: 20 };
+      },
+      'api.openai.com/v1/realtime/calls': () => ({ __text: 'v=0 answer' })
+    } });
+    try {
+      await h.ready(); h.el('vi-role').value = 'Engineer';
+      for (let n = 0; n < 3; n++) await h.click('vi-start-btn');
+      const starts = h.requests.filter(r => r.url === '/api/voice/session');
+      assert.equal(starts.length, 3);
+      assert.equal(starts[0].body.startRequestId, starts[1].body.startRequestId);
+      assert.notEqual(starts[1].body.startRequestId, starts[2].body.startRequestId);
+    } finally { h.dispose(); }
+  });
+}
+
 for (const t of pending) await t();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
