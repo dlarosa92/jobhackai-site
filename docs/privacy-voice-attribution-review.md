@@ -8,6 +8,7 @@ The 90-day content standard is preserved, with existing pinned LinkedIn, reused-
 
 - Six actual-worker/real-SQLite tests cover nonmutating audit, scoped expiration, preserved recent/pinned/reused data, reruns, existing partial stripping and failure paths.
 - Wrangler QA dry run verifies the existing QA D1/KV bindings and `RETENTION_MODE=audit`. No live record deletion was enabled or run.
+- Local desktop and 375px iframe review confirmed readable policy text, a contained consent dialog, and working save/reopen controls. This is not a native-device test.
 - Local browser cookie policy renders the new disclosure and its button opens Cookie Preferences after rejection. A static local server cannot persist consent to D1; the expected sync-pending notice was visible.
 - Clarity lifecycle/masking must ship with PR899. Real SDK0.8.70 synthetic receipt, stop and masking evidence is in `docs/consent-runtime-review.md`.
 
