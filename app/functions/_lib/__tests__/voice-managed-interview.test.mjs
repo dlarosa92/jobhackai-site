@@ -7,6 +7,7 @@ import { openManagedInterview, closeManagedInterview } from '../voice-managed-in
 import { beginDeletionAdmission, assertDeletionQuiescent } from '../account-deletion-admission.js';
 import { withAccountOperation } from '../account-operation-scope.js';
 import { getVoiceEntitlement } from '../voice-entitlements.js';
+import { deadlineBinding } from './voice-deadline-fixture.mjs';
 if (!globalThis.crypto) globalThis.crypto=webcrypto;
 const SDP='v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n';
 const FIRST='11111111-1111-4111-8111-111111111111';
@@ -17,6 +18,7 @@ function fixture(t) {
   for(const name of ['schema.sql','migrations/028_account_deletion_recovery.sql']) db.exec(readFileSync(new URL('../../../db/'+name,import.meta.url),'utf8'));
   db.exec("INSERT INTO users(id,auth_id,email) VALUES(1,'owner','owner@example.test'),(2,'other','other@example.test')");
   const env={DB:db,OPENAI_API_KEY:'sk-test-private-fixture',VOICE_INTERVIEW_ENABLED:'true',VOICE_MANAGED_CALLS_ENABLED:'true'};
+  env.VOICE_DEADLINES=deadlineBinding(db);
   const calls=[];const realFetch=globalThis.fetch;let handler=null;
   globalThis.fetch=async(url,init)=>{
     const call={url:String(url),init};calls.push(call);
@@ -40,6 +42,32 @@ test('SDP is returned only after the owned provider call and one free reservatio
   const result=await f.open();assert.equal(result.sdp,SDP);assert.equal(result.mode,'free');assert.equal(result.resumed,false);
   assert.equal((await f.user()).free_session_used,1);assert.equal((await f.sessions()).length,1);
   assert.equal((await f.controls()).current_attempt_id,result.attemptId);assert.equal(result.clientSecret,undefined);
+});
+
+for (const receipt of [null,{armed:false},{armed:true,sessionId:FIRST,deadlineAt:'wrong'}]) {
+  test('missing or unacknowledged deadline prevents provider creation and credit consumption: '+JSON.stringify(receipt),async t=>{
+    const f=fixture(t);
+    f.env.VOICE_DEADLINES=receipt===null?undefined:{getByName(){return {async arm(){return receipt;}}}};
+    await assert.rejects(f.open(),/voice_connection_deadline_unavailable/);
+    assert.equal(f.calls.length,0);assert.equal((await f.user()).free_session_used,0);assert.equal((await f.sessions()).length,0);
+  });
+}
+
+test('lost scheduling receipt keeps the same interview and retry does not reset its deadline',async t=>{
+  const f=fixture(t),binding=f.env.VOICE_DEADLINES;
+  f.env.VOICE_DEADLINES={getByName(id){return {async arm(request){
+    await binding.getByName(id).arm(request);throw Error('private transport diagnostic');
+  }}}};
+  await assert.rejects(f.open(),/voice_connection_deadline_unavailable/);const initial=await f.controls();
+  assert.equal(f.calls.length,0);f.env.VOICE_DEADLINES=binding;
+  const result=await f.open();assert.equal(result.deadlineAt,initial.deadline_at);assert.equal((await f.sessions()).length,1);
+});
+
+test('scheduler failure during reconnect leaves the previous provider connection alone',async t=>{
+  const f=fixture(t),first=await f.open();delete f.env.VOICE_DEADLINES;
+  await assert.rejects(f.open({replacesAttemptId:first.attemptId}),/voice_connection_deadline_unavailable/);
+  assert.equal(f.calls.length,1);assert.equal((await f.controls()).current_attempt_id,first.attemptId);
+  assert.equal((await f.user()).free_session_used,1);
 });
 
 for(const status of [400,503]) test('provider failure spends no credit and releases no answer: '+status,async t=>{

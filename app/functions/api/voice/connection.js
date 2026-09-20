@@ -81,6 +81,9 @@ export async function onRequest(context) {
       }
       if (['voice_connection_request_invalid','voice_connection_role_required'].includes(code)) return fail('Invalid connection request',400,{reason:code});
       if (['voice_connection_not_found','voice_connection_owner_missing'].includes(code)) return fail('Session not found',404);
+      // This prerequisite fails before provider creation/replacement. A known
+      // setup conflict must not leave a crashed-provider account claim behind.
+      if (code==='voice_connection_deadline_unavailable') return fail('Voice interviews are temporarily unavailable. Please try again later.',409,{reason:code});
       if (['voice_connection_paywall','voice_connection_limit_reached'].includes(code)) return fail('No interview sessions are available.',403,{reason:code,upgradeRequired:code==='voice_connection_paywall'});
       if (['voice_connection_ended','voice_connection_expired','voice_connection_pending','voice_connection_legacy_session','voice_connection_history_removed',
         'voice_connection_not_admitted','voice_call_not_admitted','voice_call_close_unconfirmed',

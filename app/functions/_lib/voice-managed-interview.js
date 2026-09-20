@@ -2,6 +2,7 @@ import { getDb } from './db.js';
 import { getVoiceEntitlement, reserveVoiceSession } from './voice-entitlements.js';
 import { interviewerInstructions, buildResumeContext } from './voice-interviewer.js';
 import { createManagedVoiceCall, closeManagedVoiceCall } from './voice-provider-calls.js';
+import { armVoiceDeadline } from './voice-deadline.js';
 
 export const MANAGED_INTERVIEW_MINUTES = 20;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -26,7 +27,7 @@ async function stillOpen(db, uid, sessionId, attemptId) {
     .bind(sessionId,uid,attemptId).first();
 }
 
-/** Server-only lifecycle used by the forthcoming SDP route. uid must come from
+/** Server-only lifecycle used by the authenticated SDP route. uid must come from
  * verified authentication. Never return this answer until this function has
  * committed the interview reservation and rechecked the saved close intent. */
 export async function openManagedInterview(env,{uid,sessionId,sdp,role,seniority,jd,firstName='',transcript,interviewStarted=false,replacesAttemptId=null}) {
@@ -67,6 +68,10 @@ export async function openManagedInterview(env,{uid,sessionId,sdp,role,seniority
       if (saved.closed_at) throw Error('voice_connection_ended');
     }
   }
+
+  // A successful provider call must never depend on a browser timer alone.
+  // Reconnect reaffirms the original alarm; it cannot buy another 20 minutes.
+  await armVoiceDeadline(env,{uid,sessionId,deadlineAt:saved.deadline_at});
 
   const previous=saved.current_attempt_id && await db.prepare(
     'SELECT id,state FROM voice_provider_calls WHERE id=? AND session_id=? AND auth_id=?'

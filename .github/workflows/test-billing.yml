@@ -16,6 +16,7 @@ on:
       - 'app/functions/_middleware.js'
       - 'shared/firebase-deletion-client.js'
       - 'workers/voice-followup-email/**'
+      - 'workers/voice-deadlines/**'
       - 'app/db/**'
       - 'app/scripts/**'
       - 'scripts/verify-billing-migrations.sh'
@@ -32,12 +33,31 @@ on:
       - 'app/functions/_middleware.js'
       - 'shared/firebase-deletion-client.js'
       - 'workers/voice-followup-email/**'
+      - 'workers/voice-deadlines/**'
       - 'app/db/**'
       - 'app/scripts/**'
       - 'scripts/verify-billing-migrations.sh'
       - '.github/workflows/test-billing.yml'
 
 jobs:
+  voice-deadlines:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: workers/voice-deadlines
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: workers/voice-deadlines/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck
+      - name: Real Durable Object RPC, alarms and local D1 with intercepted provider requests
+        run: npm test
+      - name: Build deadline Worker without deployment
+        run: npx wrangler deploy --dry-run --env qa --outdir /tmp/jobhackai-voice-deadlines
   billing-tests:
     runs-on: ubuntu-latest
     steps:

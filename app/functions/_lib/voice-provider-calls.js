@@ -21,7 +21,7 @@ function validSdp(value) {
   return typeof value === 'string' && value.startsWith('v=0') &&
     new TextEncoder().encode(value).length <= MAX_SDP_BYTES;
 }
-async function keyIdentity(env) {
+export async function voiceProviderKeyIdentity(env) {
   if (typeof env.OPENAI_API_KEY !== 'string' || !env.OPENAI_API_KEY.trim()) {
     throw Error('voice_call_configuration_unavailable');
   }
@@ -45,7 +45,7 @@ function providerCallId(location) {
 export async function createManagedVoiceCall(env, { uid, sessionId, sdp, instructions, guarded = false, expectedAttemptId = null }) {
   owner(uid,sessionId);
   if (!validSdp(sdp) || typeof instructions !== 'string' || !instructions.trim()) throw Error('voice_call_request_invalid');
-  const db = database(env), keySha = await keyIdentity(env);
+  const db = database(env), keySha = await voiceProviderKeyIdentity(env);
   const id = crypto.randomUUID(), execution = crypto.randomUUID();
   // Atomic with deletion admission, competing attempts and owner changes.
   // The row survives a removed history/user row; no FK cascade hides a call.
@@ -125,7 +125,7 @@ export async function closeManagedVoiceCall(env,{uid,attemptId}) {
   if (!before) throw Error('voice_call_not_found');
   if (before.state==='closed') return {closed:true,alreadyClosed:true};
   if (before.state!=='active' || !CALL_ID.test(before.provider_call_id || '')) throw Error('voice_call_close_unconfirmed');
-  if (await keyIdentity(env)!==before.provider_key_sha256) throw Error('voice_call_provider_changed');
+  if (await voiceProviderKeyIdentity(env)!==before.provider_key_sha256) throw Error('voice_call_provider_changed');
   const execution=crypto.randomUUID();
   const claimed=await db.prepare(`UPDATE voice_provider_calls SET state='closing',execution_token=?,
     updated_at=datetime('now') WHERE id=? AND auth_id=? AND state='active' AND provider_call_id=?

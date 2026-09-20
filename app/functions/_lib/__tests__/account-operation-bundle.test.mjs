@@ -5,6 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { deadlineBinding } from './voice-deadline-fixture.mjs';
 import { pathToFileURL } from 'node:url';
 import { sqliteD1 } from './sqlite-d1-helper.mjs';
 import { beginDeletionAdmission } from '../account-deletion-admission.js';
@@ -103,6 +104,7 @@ test('compiled managed voice route keeps its cutover gate, verifies JWT ownershi
   db.exec("INSERT INTO users(id,auth_id,email) VALUES(1,'owner','owner@example.test')");
   const env={DB:db,FIREBASE_PROJECT_ID:'fixture',ENVIRONMENT:'qa',VOICE_INTERVIEW_ENABLED:'true',OPENAI_API_KEY:'sk_fixture_only',
     FRONTEND_URL:'https://qa.jobhackai.io',ASSETS:{fetch:async()=>new Response('fixture asset')}};
+  env.VOICE_DEADLINES=deadlineBinding(db);
   const waits=[],calls=[],originalFetch=globalThis.fetch;
   t.after(()=>{globalThis.fetch=originalFetch;});
   const context={waitUntil(p){waits.push(p);void p.catch(()=>{});},passThroughOnException(){throw Error('fail open forbidden');}};
@@ -124,6 +126,12 @@ test('compiled managed voice route keeps its cutover gate, verifies JWT ownershi
   }),env,context);
   assert.equal((await run({action:'open',sdp:'v=0 offer',role:'Engineer'})).status,404);await flush();assert.equal(calls.length,0);
   env.VOICE_MANAGED_CALLS_ENABLED='true';
+  delete env.VOICE_DEADLINES;
+  const unavailable=await run({action:'open',sdp:'v=0 offer',role:'Engineer'});await flush();
+  assert.equal(unavailable.status,409);assert.equal((await unavailable.json()).reason,'voice_connection_deadline_unavailable');
+  assert.equal(calls.length,0,'missing scheduler must not create a provider call');
+  assert.equal((await db.prepare("SELECT free_session_used FROM users WHERE auth_id='owner'").first()).free_session_used,0);
+  env.VOICE_DEADLINES=deadlineBinding(db);
   const oldIssuer=await worker.fetch(new Request('https://qa.jobhackai.io/api/voice/session',{
     method:'POST',headers:{Authorization:'Bearer '+token},body:JSON.stringify({role:'Engineer',startRequestId:sessionId})
   }),env,context);
