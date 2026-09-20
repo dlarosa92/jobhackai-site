@@ -32,6 +32,9 @@ CREATE TABLE IF NOT EXISTS account_operation_claims (
   id TEXT PRIMARY KEY,
   auth_id TEXT NOT NULL,
   kind TEXT NOT NULL CHECK (kind IN ('billing','account')),
+  -- A crashed webhook can be matched to its durable event ledger without
+  -- retaining event payloads, email, credentials or interview content.
+  webhook_event_id TEXT,
   state TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('active','finished','uncertain')),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))

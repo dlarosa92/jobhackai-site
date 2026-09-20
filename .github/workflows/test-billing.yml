@@ -122,7 +122,7 @@ jobs:
         run: node --test app/functions/_lib/__tests__/account-deletion-billing.test.mjs
 
       - name: Durable deletion recovery (real SQLite)
-        run: node --test app/functions/_lib/__tests__/account-deletion-recovery.test.mjs app/functions/_lib/__tests__/account-deletion-admission.test.mjs app/functions/_lib/__tests__/account-operation-scope.test.mjs app/functions/_lib/__tests__/account-creation-fence.test.mjs
+        run: node --test app/functions/_lib/__tests__/account-deletion-recovery.test.mjs app/functions/_lib/__tests__/account-deletion-admission.test.mjs app/functions/_lib/__tests__/account-operation-scope.test.mjs app/functions/_lib/__tests__/account-creation-fence.test.mjs app/functions/_lib/__tests__/account-webhook-scope.test.mjs
 
   admission-bundle:
     runs-on: ubuntu-latest
