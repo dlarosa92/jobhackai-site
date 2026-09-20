@@ -1,7 +1,7 @@
 import { getBearer, verifyFirebaseIdToken, deleteFirebaseAuthUserAdmin } from '../../_lib/firebase-auth.js';
 import { getDb, writeDeletedTombstone } from '../../_lib/db.js';
-import { stripe, listSubscriptions, invalidateBillingCaches, kvCusKey } from '../../_lib/billing-utils.js';
-import { ENTITLED_SUBSCRIPTION_STATUSES } from '../../_lib/billing-ownership.js';
+import { invalidateBillingCaches } from '../../_lib/billing-utils.js';
+import { cancelBillingBeforeDeletion } from '../../_lib/account-deletion-billing.js';
 import { sendEmail } from '../../_lib/email.js';
 import { accountDeletedEmail } from '../../_lib/email-templates.js';
 
@@ -54,59 +54,21 @@ export async function onRequest(context) {
     const userId = user?.id || null;
     const userEmail = user?.email || email;
 
-    // Resolve Stripe customer ID using a 2-step fallback (D1 → KV → Stripe
-    // email search) so subscriptions are cancelled even when the users row
-    // has a stale or missing stripe_customer_id.
-    // Note: getUserPlanData is intentionally skipped here because it reads
-    // stripe_customer_id from the same users row already fetched above.
-    let customerId = user?.stripe_customer_id || null;
-    if (!customerId) {
-      try {
-        customerId = await env.JOBHACKAI_KV?.get(kvCusKey(uid)) || null;
-        if (customerId) console.log('[DELETE-USER] Found customer ID in KV:', customerId);
-      } catch (_) {}
-    }
-    if (!customerId && userEmail) {
-      try {
-        const searchRes = await stripe(env, `/customers?email=${encodeURIComponent(userEmail)}&limit=100`);
-        if (searchRes.ok) {
-          const searchData = await searchRes.json();
-          const customers = (searchData?.data || []).filter(c => c && c.deleted !== true);
-          const candidates = customers.filter(c => c?.metadata?.firebaseUid === uid);
-          if (candidates.length === 0 && customers.length > 0) {
-            console.warn('[DELETE-USER] Stripe email search found customers but none matched firebaseUid — skipping to avoid cancelling wrong subscription');
-          }
-          // Prefer candidate with active subscription
-          for (const candidate of candidates) {
-            const subsRes = await stripe(env, `/subscriptions?customer=${candidate.id}&status=all&limit=10`);
-            if (subsRes.ok) {
-              const subsData = await subsRes.json();
-              const hasActive = (subsData?.data || []).some(s =>
-                s && ENTITLED_SUBSCRIPTION_STATUSES.includes(s.status)
-              );
-              if (hasActive) {
-                customerId = candidate.id;
-                break;
-              }
-            }
-          }
-          if (!customerId && candidates.length > 0) {
-            customerId = candidates.sort((a, b) => (b.created || 0) - (a.created || 0))[0]?.id || null;
-          }
-          if (customerId) {
-            console.log('[DELETE-USER] Found customer ID via Stripe email search:', customerId);
-          }
-        }
-      } catch (searchErr) {
-        errors.push(`Stripe customer email search failed: ${searchErr.message}`);
-      }
+    // Confirm billing cancellation while the user can still sign in and retry.
+    // A partial cancellation is possible if a later Stripe call fails; never
+    // claim that nothing changed in that case, and never remove sign-in access.
+    try {
+      await cancelBillingBeforeDeletion(env, { uid, user, email });
+    } catch (billingError) {
+      console.error('[DELETE-USER] Billing preflight failed:', billingError.message);
+      return new Response(JSON.stringify({
+        ok: false,
+        error: 'We could not verify that all subscriptions were canceled. Your account remains available. Some subscriptions may already be canceled; check billing before retrying, or contact privacy@jobhackai.io.'
+      }), { status: 503, headers: corsHeaders(origin, env) });
     }
 
-    // 1. Delete Firebase Auth identity FIRST, before any data mutations.
-    //    If this fails we abort immediately — nothing has been touched yet,
-    //    so the caller can safely retry without data loss or orphaned state.
-    //    Uses the Firebase Admin API (service account) for reliability —
-    //    the client-side API (FIREBASE_WEB_API_KEY + idToken) is kept as fallback.
+    // Billing is settled before attempting Firebase identity removal.
+    // Existing post-identity cleanup remains best effort (see review notes).
     let firebaseAuthDeleted = false;
 
     // Approach A: Firebase Admin API via service account (preferred)
@@ -156,7 +118,7 @@ export async function onRequest(context) {
     if (!firebaseAuthDeleted) {
       return new Response(JSON.stringify({
         ok: false,
-        error: 'Firebase Auth identity could not be deleted. No data has been modified — you can safely retry.',
+        error: 'Your sign-in account could not be deleted. Subscription cancellation has completed; your stored account data remains available. You can retry deletion or contact privacy@jobhackai.io.',
         partialErrors: errors
       }), { status: 500, headers: corsHeaders(origin, env) });
     }
@@ -166,32 +128,6 @@ export async function onRequest(context) {
     // retry is impossible. All remaining steps are best-effort cleanup;
     // failures are collected as warnings but we always return 200 because
     // the account deletion (auth removal) has already succeeded.
-
-    // 2. Cancel Stripe subscription if active (best-effort)
-    if (customerId) {
-      try {
-        const subs = await listSubscriptions(env, customerId);
-        const activeSubs = subs.filter(s =>
-          s && ENTITLED_SUBSCRIPTION_STATUSES.includes(s.status)
-        );
-        for (const sub of activeSubs) {
-          try {
-            const cancelRes = await stripe(env, `/subscriptions/${sub.id}`, { method: 'DELETE' });
-            if (!cancelRes.ok) {
-              const errBody = await cancelRes.text().catch(() => '');
-              errors.push(`Failed to cancel subscription ${sub.id}: Stripe returned ${cancelRes.status}: ${errBody}`);
-              console.error('[DELETE-USER] Stripe cancellation failed:', sub.id, cancelRes.status, errBody);
-            } else {
-              console.log('[DELETE-USER] Cancelled subscription:', sub.id);
-            }
-          } catch (subErr) {
-            errors.push(`Failed to cancel subscription ${sub.id}: ${subErr.message}`);
-          }
-        }
-      } catch (stripeErr) {
-        errors.push(`Stripe cleanup error: ${stripeErr.message}`);
-      }
-    }
 
     // 3. Get resume sessions for KV cleanup before deleting
     let resumeSessions = [];
@@ -261,19 +197,6 @@ export async function onRequest(context) {
       console.error('[DELETE-USER] Critical: user record deletion failed:', userDelErr.message);
     }
 
-    // 6. Send account deletion email
-    if (userEmail) {
-      try {
-        const { subject, html } = accountDeletedEmail(userEmail);
-        const emailResult = await sendEmail(env, { to: userEmail, subject, html });
-        if (!emailResult.ok) {
-          errors.push(`Deletion email not delivered: ${emailResult.error || 'unknown'}`);
-        }
-      } catch (emailErr) {
-        errors.push(`Failed to send deletion email: ${emailErr.message}`);
-      }
-    }
-
     // 7. Clean up KV keys
     if (env.JOBHACKAI_KV) {
       try {
@@ -300,7 +223,7 @@ export async function onRequest(context) {
 
     if (!userDeleted && user) {
       // Only warn if a D1 row existed but couldn't be removed
-      errors.push('Failed to delete user record from database (will be cleaned up by retention worker)');
+      errors.push('User record cleanup needs support follow-up');
     }
 
     // Write tombstones so delayed Stripe webhooks don't recreate this user.
@@ -320,12 +243,25 @@ export async function onRequest(context) {
       }
     }
 
+    // Report the cleanup outcome only after KV and tombstone work finishes.
+    if (userEmail) {
+      try {
+        const { subject, html } = accountDeletedEmail(userEmail, { cleanupPending: errors.length > 0 });
+        const emailResult = await sendEmail(env, { to: userEmail, subject, html });
+        if (!emailResult.ok) {
+          errors.push(`Deletion email not delivered: ${emailResult.error || 'unknown'}`);
+        }
+      } catch (emailErr) {
+        errors.push(`Failed to send deletion email: ${emailErr.message}`);
+      }
+    }
+
     // Always return 200 after Firebase Auth is deleted — the user can no
     // longer authenticate, so the deletion succeeded from their perspective.
     // Any cleanup failures are surfaced as warnings for server-side monitoring.
     return new Response(JSON.stringify({
       ok: true,
-      message: 'Account deleted successfully',
+      message: errors.length ? 'Sign-in access removed; cleanup requires follow-up' : 'Account sign-in access removed',
       ...(errors.length > 0 ? { warnings: errors } : {})
     }), { status: 200, headers: corsHeaders(origin, env) });
 
