@@ -70,19 +70,20 @@ test('a cancellation HTTP failure or success without canceled status cannot pass
 });
 test('no billing credential fails before a lookup',async()=>{const h=setup();delete h.env.STRIPE_SECRET_KEY;await assert.rejects(h.run());assert.equal(h.calls.length,0);});
 
-function routeHarness({billingFails=false,firebaseFails=false,kvFails=false}={}) {
+function routeHarness({billingFails=false,firebaseFails=false,clientFallback=false,kvFails=false}={}) {
   const events=[];let emailOptions;
   const ctx={Request,Response,Date,console:{log(){},warn(){},error(){}},
     getBearer:()=> 'token',verifyFirebaseIdToken:async()=>({uid:'owner',payload:{email:'owner@example.test'}}),
     getDb:()=>({prepare:sql=>({bind:()=>({first:async()=>({id:1,email:'owner@example.test'}),all:async()=>({results:[]}),run:async()=>{events.push('db-cleanup');return {meta:{changes:1}};}})})}),
     cancelBillingBeforeDeletion:async()=>{events.push('billing');if(billingFails)throw Error('unavailable');},
-    deleteFirebaseAuthUserAdmin:async()=>{events.push('firebase');return {ok:!firebaseFails};},
+    deleteFirebaseAuthUserAdmin:async()=>{events.push('firebase');return {ok:!firebaseFails,error:firebaseFails?'fixture admin failure':undefined};},
+    fetch:async()=>{events.push('firebase-client');return new Response('',{status:200});},
     invalidateBillingCaches:async()=>{},writeDeletedTombstone:async()=>{events.push('tombstone');return true;},
     accountDeletedEmail:(_email,options)=>{emailOptions=options;return {subject:'fixture',html:'fixture'};},
     sendEmail:async()=>{events.push('email');return {ok:true};}
   };
   vm.createContext(ctx);vm.runInContext(strip(source('../../api/user/delete.js'))+'\nglobalThis.handler=onRequest;',ctx);
-  return {events,get emailOptions(){return emailOptions;},run:()=>ctx.handler({request:new Request('https://qa.jobhackai.io/api/user/delete',{method:'POST'}),env:{FIREBASE_SERVICE_ACCOUNT_JSON:'fixture',JOBHACKAI_KV:{delete:async()=>{events.push('kv');if(kvFails)throw Error('unavailable');},put:async()=>events.push('kv-tombstone')}}})};
+  return {events,get emailOptions(){return emailOptions;},run:()=>ctx.handler({request:new Request('https://qa.jobhackai.io/api/user/delete',{method:'POST'}),env:{FIREBASE_SERVICE_ACCOUNT_JSON:'fixture',...(clientFallback?{FIREBASE_WEB_API_KEY:'fixture'}:{}),JOBHACKAI_KV:{delete:async()=>{events.push('kv');if(kvFails)throw Error('unavailable');},put:async()=>events.push('kv-tombstone')}}})};
 }
 test('route preserves Firebase and data when billing fails',async()=>{
   const h=routeHarness({billingFails:true});const r=await h.run();assert.equal(r.status,503);assert.deepEqual(h.events,['billing']);assert.match((await r.json()).error,/Some subscriptions may already be canceled/);
@@ -128,4 +129,12 @@ test('production retains legacy unstamped support with a matching live key',asyn
   const h=setup({subscriptions:[{...sub('sub_1'),metadata:{}}]});
   h.env.ENVIRONMENT='PROD';h.env.STRIPE_SECRET_KEY='rk_live_fixture_only';
   assert.equal((await h.run()).canceledSubscriptions,1);
+});
+
+test('successful Firebase fallback clears recovered auth failure from cleanup status',async()=>{
+  const h=routeHarness({firebaseFails:true,clientFallback:true});
+  const response=await h.run(),body=await response.json();
+  assert.equal(response.status,200);assert.equal(body.warnings,undefined);
+  assert.equal(h.emailOptions.cleanupPending,false);assert.ok(h.events.includes('firebase-client'));
+  assert.equal(body.message,'Account sign-in access removed');
 });
