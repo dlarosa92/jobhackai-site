@@ -1,4 +1,5 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
+import { accountOperationEnv } from '../_lib/account-operation-scope.js';
 import { getUserPlanData, updateUserPlan, resetFeatureDailyUsage, resetUsageEvents } from '../_lib/db.js';
 import {
   stripe,
@@ -23,7 +24,8 @@ import { buildUpgradeCheckoutSessionBody, resolveCustomerByEmailOwnership, selec
  * Safely upgrades a user to a paid plan without creating duplicate subscriptions.
  */
 export async function onRequest(context) {
-  const { request, env } = context;
+  const { request } = context;
+  const env = accountOperationEnv(context);
   const origin = request.headers.get('Origin') || '';
 
   if (request.method === 'OPTIONS') {

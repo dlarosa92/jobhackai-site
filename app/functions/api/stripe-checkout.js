@@ -1,4 +1,5 @@
 import { packCheckoutAttemptKey } from '../_lib/checkout-attempt.js';
+import { queueAccountWork, accountOperationEnv } from '../_lib/account-operation-scope.js';
 import { checkoutCancelUrl } from '../_lib/checkout-return.js';
 import { saveCheckoutAttribution } from '../_lib/checkout-attribution.js';
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
@@ -18,7 +19,8 @@ import {
 import { assertStripeKeyMatchesEnvironment, redactId, environmentStampFields } from '../_lib/stripe-environment.js';
 import { resolveCustomerByEmailOwnership, ENTITLED_SUBSCRIPTION_STATUSES } from '../_lib/billing-ownership.js';
 export async function onRequest(context) {
-  const { request, env } = context;
+  const { request } = context;
+  const env = accountOperationEnv(context);
   const origin = request.headers.get('Origin') || '';
 
   if (request.method === 'OPTIONS') {
@@ -249,10 +251,9 @@ export async function onRequest(context) {
       if (wasNewUser && email) {
         const userName = email.split('@')[0];
         const { subject, html } = welcomeEmail(userName, env.FRONTEND_URL);
-        const emailPromise = sendEmail(env, { to: email, subject, html }).catch((err) => {
+        queueAccountWork(context, () => sendEmail(env, { to: email, subject, html }).catch((err) => {
           console.warn('[CHECKOUT] Failed to send welcome email (non-blocking):', err.message);
-        });
-        context.waitUntil(emailPromise);
+        }));
       }
     } catch (ensureErr) {
       console.warn('⚠️ [CHECKOUT] Failed to ensure user row in D1 (non-fatal):', ensureErr?.message || ensureErr);

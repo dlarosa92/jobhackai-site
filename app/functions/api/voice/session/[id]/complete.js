@@ -8,6 +8,7 @@
  */
 
 import { getBearer, verifyFirebaseIdToken } from '../../../../_lib/firebase-auth.js';
+import { queueAccountWork } from '../../../../_lib/account-operation-scope.js';
 import { getOrCreateUserByAuthId, getDb } from '../../../../_lib/db.js';
 import { voiceFeatureEnabled } from '../../../../_lib/voice-entitlements.js';
 import { normalizeEndReason, shouldGenerateScorecard } from '../../../../_lib/voice-interviewer.js';
@@ -59,7 +60,7 @@ export async function onRequest(context) {
       // Idempotent: keep the original completion, still ensure a scorecard
       // exists — except for a safety-ended session, which is never scored.
       if (shouldGenerateScorecard(session.end_reason)) {
-        context.waitUntil(generateAndStoreScorecard(env, sessionId));
+        queueAccountWork(context, () => generateAndStoreScorecard(env, sessionId));
       }
       return successResponse({ sessionId, status: 'completed', alreadyCompleted: true, endReason: session.end_reason || null }, 200, origin, env, requestId);
     }
@@ -117,7 +118,7 @@ export async function onRequest(context) {
         return errorResponse('Session not found', 404, origin, env, requestId);
       }
       if (shouldGenerateScorecard(saved.end_reason)) {
-        context.waitUntil(generateAndStoreScorecard(env, sessionId));
+        queueAccountWork(context, () => generateAndStoreScorecard(env, sessionId));
       }
       return successResponse({ sessionId, status: 'completed', alreadyCompleted: true, endReason: saved.end_reason || null }, 200, origin, env, requestId);
     }
@@ -131,7 +132,7 @@ export async function onRequest(context) {
     // Scorecard generation off the request path; client polls the session GET.
     // A safety-ended session is never scored (see shouldGenerateScorecard).
     if (shouldGenerateScorecard(endReason)) {
-      context.waitUntil(generateAndStoreScorecard(env, sessionId));
+      queueAccountWork(context, () => generateAndStoreScorecard(env, sessionId));
     } else {
       console.log(`[VOICE-SAFETY] session=${sessionId} scorecard suppressed (ended_for_safety)`);
     }

@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { sqliteD1 } from './sqlite-d1-helper.mjs';
 import { resolvePortalCustomer, PortalOwnershipError } from '../billing-portal-owner.js';
 import { stripe } from '../billing-utils.js';
+import { accountOperationEnv } from '../account-operation-scope.js';
 import { assertStripeKeyMatchesEnvironment } from '../stripe-environment.js';
 
 const realFetch = globalThis.fetch;
@@ -35,7 +36,7 @@ function setup(t, { mapped = 'cus_owner', customers = [customer()], subscription
   const env = { JOBHACKAI_DB: db, STRIPE_SECRET_KEY: 'sk_test_fixture', ENVIRONMENT: 'qa',
     FRONTEND_URL: 'https://qa.jobhackai.io', STRIPE_PORTAL_CONFIGURATION_ID_DEV: 'bpc_fixture',
     JOBHACKAI_KV: { get: async () => { throw Error('KV must not authorize portal access'); }, put: async () => { throw Error('No identity repair in portal'); } } };
-  const ctx = { Request, Response, URLSearchParams, stripe, resolvePortalCustomer, PortalOwnershipError, assertStripeKeyMatchesEnvironment,
+  const ctx = { Request, Response, URLSearchParams, stripe, accountOperationEnv, resolvePortalCustomer, PortalOwnershipError, assertStripeKeyMatchesEnvironment,
     console: Object.fromEntries(['log','error','warn'].map(k => [k, (...args) => logs.push(args)])),
     getBearer: r => r.headers.get('Authorization')?.replace(/^Bearer /, ''),
     verifyFirebaseIdToken: async token => { if (token !== 'valid') throw Error('private token detail'); return { uid: 'owner', payload: { email: 'owner@example.test' } }; } };

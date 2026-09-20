@@ -122,4 +122,22 @@ jobs:
         run: node --test app/functions/_lib/__tests__/account-deletion-billing.test.mjs
 
       - name: Durable deletion recovery (real SQLite)
-        run: node --test app/functions/_lib/__tests__/account-deletion-recovery.test.mjs app/functions/_lib/__tests__/account-deletion-admission.test.mjs
+        run: node --test app/functions/_lib/__tests__/account-deletion-recovery.test.mjs app/functions/_lib/__tests__/account-deletion-admission.test.mjs app/functions/_lib/__tests__/account-operation-scope.test.mjs
+
+  admission-bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install locked application dependencies for Pages bundling
+        run: npm ci --prefix app --ignore-scripts
+      - name: Build the candidate Pages Worker
+        run: |
+          npx --yes wrangler@4.135.0 pages functions build app/functions --outdir=/tmp/jobhackai-admission-worker
+          cp /tmp/jobhackai-admission-worker/index.js /tmp/jobhackai-admission-worker/index.mjs
+      - name: Verify actual middleware routing and JWT admission without live providers
+        env:
+          JOBHACKAI_FUNCTIONS_BUNDLE: /tmp/jobhackai-admission-worker/index.mjs
+        run: node --test app/functions/_lib/__tests__/account-operation-bundle.test.mjs
