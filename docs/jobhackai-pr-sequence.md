@@ -168,12 +168,14 @@ Brief sections 1 and 4.
 
 Brief section 4 (funnel tracking).
 
+**Release gate:** See [analytics-release-verification.md](analytics-release-verification.md). Production promotion requires observed end-to-end evidence; wiring or a green build is insufficient.
+
 **Scope:** GA4 events: `sign_up`, `tool_output_viewed`, `voice_session_start`, `voice_session_complete`, `paywall_view`, `begin_checkout`, `purchase`. Cross domain tag config in code to match Task 0 GA4 admin settings.
 
 **Acceptance criteria:**
 - [ ] Events visible in GA4 DebugView from QA *(all events wired client/server-side; pending env verify)*
 - [ ] A session crossing jobhackai.io → app.jobhackai.io keeps one session ID *(linker.domains configured in code + GA4 admin done in Task 0; pending env verify)*
-- [x] `purchase` event carries plan and value (server-side Measurement Protocol, incl. weekly/monthly/pack)
+- [ ] `purchase` reconciles to collected Stripe amounts and transaction IDs without duplicates; campaign/client/session join and current consent verified (existing payload code alone is insufficient)
 
 ---
 
