@@ -27,14 +27,18 @@ transcript and usage.
   Storage failures and creating/closing attempts remain observable. Active
   calls can be claimed only once. Unknown/404/timeout hangups retain the D1
   hold and a `review` object receipt, without repeating the provider mutation.
+  Review alarms check only D1 recovery receipts every five minutes. They never
+  contact the provider; unresolved or failed observations keep the hold.
 - Disabling `VOICE_DEADLINES_ENABLED` blocks new arms, **not** existing alarms.
   Do not delete this worker, namespace, binding or issuing key while calls or
   unresolved receipts remain. Key rotation must drain/reconcile old calls first.
 - Confirmed closure removes the object data. Pending objects store only the
   interview UUID, original deadline and operational status. They contain no
   UID, email, provider ID, API key, SDP, audio, transcript or report. Recovery
-  tooling must reconcile D1 uncertainty and clean up the corresponding object;
-  that operator flow remains unfinished.
+  tooling records verified D1 closure through the private
+  [voice recovery command](../../docs/voice-call-reconciliation.md); the next
+  review alarm removes object state when all call/legacy holds are resolved.
+  Actual provider evidence and disposable QA recovery remain unverified.
 - There is no public scheduling, hangup or inspection endpoint. The default
   Worker fetch handler returns 404. Alarm logs contain an interview UUID and
   coarse outcome only; provider/SQL exceptions are not logged.
@@ -58,7 +62,7 @@ transcript and usage.
    enable managed transport on the reviewed app revision. Verify real provider
    creation, one credit reservation, reconnect, End/expiry races, browser
    abandonment, no duplicate hangup, saved reports and actual usage costs.
-6. Human ending/naturalness acceptance, unknown/legacy recovery, operational
+6. Human ending/naturalness acceptance, live unknown/legacy recovery, operational
    monitoring and the broader billing/Analytics release gates remain open.
 
 ## Local verification

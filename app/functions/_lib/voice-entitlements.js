@@ -101,8 +101,9 @@ export async function getVoiceEntitlement(env, uid, {managed=false}={}) {
   let row;
   try {
     if (managed) {
-      await db.prepare(`SELECT c.session_id,c.current_attempt_id,c.reserved_at,c.legacy_unverified,p.id
-        FROM voice_interview_controls c LEFT JOIN voice_provider_calls p ON p.id=c.current_attempt_id LIMIT 0`).all();
+      await db.prepare(`SELECT c.session_id,c.current_attempt_id,c.reserved_at,c.legacy_unverified,p.id,r.resolution
+        FROM voice_interview_controls c LEFT JOIN voice_provider_calls p ON p.id=c.current_attempt_id
+        LEFT JOIN voice_closure_reconciliations r ON r.session_id=c.session_id LIMIT 0`).all();
     }
     row = await db.prepare(
       `SELECT id, plan, subscription_status, current_period_end,
@@ -111,7 +112,7 @@ export async function getVoiceEntitlement(env, uid, {managed=false}={}) {
     ).bind(uid).first();
   } catch (err) {
     if (isMissingColumnError(err)) {
-      console.warn('[VOICE-ENTITLEMENTS] Migration 020 not applied yet:', err?.message);
+      console.warn('[VOICE-ENTITLEMENTS] Required voice schema is not available');
       return { ...base, reason: 'not_migrated' };
     }
     throw err;

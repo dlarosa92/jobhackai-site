@@ -8,16 +8,19 @@ import { fileURLToPath } from 'node:url';
 import { assertTarget } from './lib/deletion-execution-reconcile-core.mjs';
 import * as jobs from './lib/deletion-execution-reconcile-core.mjs';
 import * as operations from './lib/account-operation-reconcile-core.mjs';
+import {calls as voiceCalls,legacy as voiceLegacy} from './lib/voice-closure-reconcile-core.mjs';
 function target(args) {
-  if(Boolean(args.job)===Boolean(args.operation))throw Error('reconciliation_one_target_required');
-  return args.operation?{core:operations,id:args.operation,key:'operationId',column:'operation_id'}:{core:jobs,id:args.job,key:'jobId',column:'job_id'};
+  const choices=[['job',jobs,'jobId','job_id'],['operation',operations,'operationId','operation_id'],
+    ['voice-call',voiceCalls,'voiceCallId','target_id'],['voice-legacy',voiceLegacy,'voiceLegacyId','target_id']].filter(([arg])=>Boolean(args[arg]));
+  if(choices.length!==1)throw Error('reconciliation_one_target_required');
+  const [arg,core,key,column]=choices[0];return {core,id:args[arg],key,column};
 }
 
 export function parseArgs(argv) {
   const result={apply:false};
   for(const arg of argv) {
     if(arg==='--apply') {if(result.apply)throw Error('reconciliation_duplicate_argument');result.apply=true;continue;}
-    const match=/^--(env|job|operation|report|review|receipt)=(.+)$/.exec(arg);
+    const match=/^--(env|job|operation|voice-call|voice-legacy|report|review|receipt)=(.+)$/.exec(arg);
     if(!match || Object.hasOwn(result,match[1]))throw Error('reconciliation_argument_invalid');
     result[match[1]]=match[2];
   }

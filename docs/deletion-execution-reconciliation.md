@@ -70,6 +70,6 @@ A matching receipt proves the atomic release committed, even if the recovery wor
 
 Real SQLite tests exercise stale snapshots, changed consent, new operations, replay, overlapping proposals, rollback, quoted identifiers, private reports, lost responses and receipt verification. A processor fixture starts with an already absent identity and a stopped execution, then verifies recovery without repeating Stripe mutations or identity deletion. Local D1 execution and live QA results are recorded in the release log. No test fixture is evidence that a real provider operation stopped.
 
-Unfinished operation-claim reconciliation, independent Firebase/Stripe writers, live voice-session coordination, actual scheduled QA resource bounds and deployed disposable-account verification remain separate release gates. Do not use this tool to clear those gates by bypassing claims.
+Actual operation-claim recovery evidence, independent Firebase/Stripe writers, live voice-session coordination, scheduled QA resource bounds and deployed disposable-account verification remain separate release gates. Do not bypass claims to clear those gates. The command also supports separate `--voice-call` and `--voice-legacy` targets under the [verified voice recovery workflow](voice-call-reconciliation.md); a job/operation receipt cannot substitute for provider-closure evidence.
 
 Database behavior reference: [Cloudflare D1 SQL statements](https://developers.cloudflare.com/d1/sql-api/sql-statements/).

@@ -3,6 +3,7 @@ import { applyD1Migrations, runInDurableObject, runDurableObjectAlarm } from 'cl
 import { beforeAll, beforeEach, afterEach, describe, it, expect, vi } from 'vitest';
 import { voiceProviderKeyIdentity } from '../../../app/functions/_lib/voice-provider-calls.js';
 import { openManagedInterview, closeManagedInterview } from '../../../app/functions/_lib/voice-managed-interview.js';
+import {calls as reconcileCalls,legacy as reconcileLegacy} from '../../../app/scripts/lib/voice-closure-reconcile-core.mjs';
 
 let sessionId: string;
 let stub: DurableObjectStub<import('../src/index').VoiceDeadline>;
@@ -21,6 +22,19 @@ const due = () => runInDurableObject(stub,async(_instance,ctx)=>{
   await ctx.storage.put('deadline',{...saved,deadlineMs:Date.now()-1});
   // runDurableObjectAlarm executes the actual handler without a 20-minute wait.
 });
+async function reconcile(old=false) {
+  const core=old?reconcileLegacy:reconcileCalls,current=await call(),id=old?sessionId:String(current!.id);
+  const row=await env.DB.prepare(core.inspectionSql(id)).first();
+  const now=Date.now()+1000,at=new Date(now).toISOString();
+  const report=core.inspectReport('qa',row,now);
+  report.resolution=old?'legacy_drained':'closed';
+  report.evidence={operatorRef:'fixture/operator',
+    invocation:{status:'terminated',executionToken:old?sessionId:row!.execution_token || row!.id,observedAt:at,reference:'fixture/invocation'},
+    providers:{status:report.resolution,pendingRequests:false,environment:'qa',projectRef:'fixture/project',observedAt:at,reference:'fixture/provider',
+      ...(old?{scope:'environment_legacy_calls',issuersDisabled:true,credentialsDrained:true,allInvocationsTerminal:true}:
+        {scope:'one_create_attempt',attemptId:id,providerKeySha256:row!.provider_key_sha256,providerCallId:row!.provider_call_id})}};
+  const plan=core.planReconciliation(report,row,'qa',now);await env.DB.prepare(plan.sql).run();return plan;
+}
 beforeAll(async()=>{
   await applyD1Migrations(env.DB,env.TEST_MIGRATIONS);
   keySha=await voiceProviderKeyIdentity(env);
@@ -71,13 +85,37 @@ describe('durable interview deadlines in the actual Workers runtime',()=>{
   it('a provider 404 retains uncertainty and alarm redelivery cannot repeat hangup',async()=>{
     await open();vi.mocked(fetch).mockImplementation(async(input)=>{requests.push(String(input));return new Response(null,{status:404});});
     await due();await runDurableObjectAlarm(stub);expect((await call())?.state).toBe('uncertain');
-    expect((await state()).saved).toMatchObject({status:'review'});expect((await state()).alarm).toBeNull();
+    expect((await state()).saved).toMatchObject({status:'review'});expect((await state()).alarm).toBeGreaterThan(Date.now());
     await runInDurableObject(stub,(instance)=>instance.alarm());expect(requests.filter(x=>x.endsWith('/hangup'))).toHaveLength(1);
   });
   it('a provider timeout is retained for review without automatic retry',async()=>{
     await open();vi.mocked(fetch).mockImplementation(async(input)=>{requests.push(String(input));throw Error('private provider body');});
     await due();await runDurableObjectAlarm(stub);expect((await call())?.state).toBe('uncertain');
     expect((await state()).saved).toMatchObject({status:'review'});expect(JSON.stringify(await state())).not.toContain('private');
+  });
+  it('review alarms observe a verified closure receipt and clean up without another provider request',async()=>{
+    await open();vi.mocked(fetch).mockImplementation(async(input)=>{requests.push(String(input));return new Response(null,{status:404});});
+    await due();await runDurableObjectAlarm(stub);expect((await state()).saved).toMatchObject({status:'review'});
+    await runDurableObjectAlarm(stub);expect((await state()).saved).toMatchObject({status:'review'});
+    const count=requests.length;await reconcile();await runDurableObjectAlarm(stub);
+    expect(requests).toHaveLength(count);expect(await state()).toEqual({saved:undefined,alarm:null});
+    await expect(open()).rejects.toThrow('voice_connection_ended');expect(requests).toHaveLength(count);
+  });
+  it('a call receipt cannot clear a separate legacy hold or its alarm until that hold is reviewed',async()=>{
+    await open();vi.mocked(fetch).mockImplementation(async(input)=>{requests.push(String(input));throw Error('fixture lost hangup');});
+    await env.DB.prepare('UPDATE voice_interview_controls SET legacy_unverified=1 WHERE session_id=?').bind(sessionId).run();
+    await due();await runDurableObjectAlarm(stub);await reconcile();await runDurableObjectAlarm(stub);
+    expect((await state()).saved).toMatchObject({status:'review'});expect((await control())?.legacy_unverified).toBe(1);
+    const count=requests.length;await reconcile(true);await runDurableObjectAlarm(stub);
+    expect(requests).toHaveLength(count);expect(await state()).toEqual({saved:undefined,alarm:null});
+  });
+  it('review cleanup still works after account cleanup removes the closed call and control rows',async()=>{
+    await open();vi.mocked(fetch).mockImplementation(async(input)=>{requests.push(String(input));throw Error('fixture lost hangup');});
+    await due();await runDurableObjectAlarm(stub);await reconcile();
+    await env.DB.prepare('DELETE FROM voice_provider_calls WHERE session_id=?').bind(sessionId).run();
+    await env.DB.prepare('DELETE FROM voice_interview_controls WHERE session_id=?').bind(sessionId).run();
+    const count=requests.length;await runDurableObjectAlarm(stub);expect(await state()).toEqual({saved:undefined,alarm:null});
+    await expect(open()).rejects.toThrow('voice_connection_ended');expect(requests).toHaveLength(count);
   });
   it('disabling new schedules does not disable an already armed hangup',async()=>{
     await open();await due();

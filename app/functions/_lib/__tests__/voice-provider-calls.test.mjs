@@ -115,10 +115,25 @@ test('definite create rejection permits a fresh attempt without pretending a cal
   f.setHandler(null);await f.create();assert.equal(f.calls.length,2);
 });
 
+test('definite provider rejection remains recoverable from a receipt log when its database write fails',async t=>{
+  const f=fixture(t),logs=[];t.mock.method(console,'log',(...entry)=>logs.push(entry));
+  f.db.exec("CREATE TRIGGER deny_rejection_receipt BEFORE UPDATE OF state ON voice_provider_calls WHEN NEW.state='closed' BEGIN SELECT RAISE(ABORT,'fixture storage failure'); END;");
+  f.setHandler(async()=>new Response('private rejection',{status:400,headers:{'x-request-id':'req_fixture_rejected'}}));
+  await assert.rejects(f.create(),/create_unconfirmed/);const row=await f.row();assert.equal(row.state,'uncertain');
+  const receipt=logs.find(([event])=>event==='[voice-call] provider_rejected')?.[1];
+  assert.deepEqual(receipt,{attempt:row.id,execution:row.execution_token,providerCallId:null,providerRequestId:'req_fixture_rejected',status:400});
+  assert.equal(JSON.stringify(logs).includes('private rejection'),false);assert.equal(JSON.stringify(logs).includes(f.env.OPENAI_API_KEY),false);
+});
+
 test('failed call-ID persistence never releases the answer or retries an unknown create',async t=>{
-  const f=fixture(t);f.db.exec("CREATE TRIGGER deny_call_save BEFORE UPDATE OF state ON voice_provider_calls WHEN NEW.state='active' BEGIN SELECT RAISE(ABORT,'fixture storage failure'); END;");
+  const f=fixture(t),logs=[];t.mock.method(console,'log',(...entry)=>logs.push(entry));
+  f.setHandler(async()=>new Response(SDP,{status:201,headers:{Location:'/v1/realtime/calls/rtc_recoverable','x-request-id':'req_fixture_create'}}));
+  f.db.exec("CREATE TRIGGER deny_call_save BEFORE UPDATE OF state ON voice_provider_calls WHEN NEW.state='active' BEGIN SELECT RAISE(ABORT,'fixture storage failure'); END;");
   await assert.rejects(f.create(),/create_unconfirmed/);assert.equal((await f.row()).state,'uncertain');assert.equal(f.calls.length,1);
   await assert.rejects(f.create(),/not_admitted/);assert.equal(f.calls.length,1);
+  const receipt=logs.find(([event])=>event==='[voice-call] provider_created')?.[1],row=await f.row();
+  assert.deepEqual(receipt,{attempt:row.id,execution:row.execution_token,providerCallId:'rtc_recoverable',providerRequestId:'req_fixture_create',status:201});
+  assert.equal(JSON.stringify(logs).includes(SDP),false);assert.equal(JSON.stringify(logs).includes(f.env.OPENAI_API_KEY),false);
 });
 
 test('malformed SDP after a recorded call triggers hangup of that exact owned call',async t=>{
@@ -129,13 +144,15 @@ test('malformed SDP after a recorded call triggers hangup of that exact owned ca
 
 for(const outcome of ['404','timeout','receipt_failure']) {
   test('unconfirmed hangup holds deletion without repeated provider calls: '+outcome,async t=>{
-    const f=fixture(t),created=await f.create();
+    const f=fixture(t),logs=[];t.mock.method(console,'log',(...entry)=>logs.push(entry));const created=await f.create();
     if(outcome==='receipt_failure')f.db.exec("CREATE TRIGGER deny_close_receipt BEFORE UPDATE OF state ON voice_provider_calls WHEN NEW.state='closed' BEGIN SELECT RAISE(ABORT,'fixture receipt failure'); END;");
-    f.setHandler(async()=>{if(outcome==='timeout')throw Error('private timeout');return new Response(null,{status:outcome==='404'?404:200});});
+    f.setHandler(async()=>{if(outcome==='timeout')throw Error('private timeout');return new Response(null,{status:outcome==='404'?404:200,headers:{'x-request-id':'req_fixture_close'}});});
     await assert.rejects(closeManagedVoiceCall(f.env,{uid:'owner',attemptId:created.attemptId}),/close_unconfirmed/);
     const row=await f.row();assert.equal(row.state,'uncertain');assert.ok(row.execution_token);assert.ok(row.provider_call_id);
     await f.intent();assert.deepEqual(await closeOneVoiceCallForDeletion(f.env,'owner'),{closed:false});
     await assert.rejects(assertDeletionQuiescent(f.env,'owner'),/deletion_voice_pending/);assert.equal(f.calls.length,2);
+    const receipts=logs.filter(([event])=>event==='[voice-call] provider_closed');assert.equal(receipts.length,outcome==='receipt_failure'?1:0);
+    if(outcome==='receipt_failure')assert.deepEqual(receipts[0][1],{attempt:row.id,execution:row.execution_token,providerCallId:row.provider_call_id,providerRequestId:'req_fixture_close',status:200});
   });
 }
 

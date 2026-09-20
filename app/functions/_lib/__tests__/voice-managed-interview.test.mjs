@@ -391,3 +391,9 @@ test('managed entitlement display fails closed when its control schema is missin
   assert.equal((await getVoiceEntitlement(f.env,'owner',{managed:true})).reason,'not_migrated');
   assert.equal(f.calls.length,0);
 });
+
+test('managed entitlement display requires the verified-closure receipt schema too',async t=>{
+  const f=fixture(t);f.db.exec('DROP TABLE voice_closure_reconciliations');
+  assert.equal((await getVoiceEntitlement(f.env,'owner',{managed:true})).reason,'not_migrated');
+  assert.equal((await getVoiceEntitlement(f.env,'owner')).canStart,true);
+});

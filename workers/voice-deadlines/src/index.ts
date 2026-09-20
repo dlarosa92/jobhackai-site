@@ -3,6 +3,7 @@ import { closeManagedVoiceCall, voiceProviderKeyIdentity } from '../../../app/fu
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const RETRY_MS = 60_000;
+const REVIEW_MS = 5 * 60_000;
 type Deadline = {sessionId: string; deadlineMs: number; status: 'armed' | 'waiting' | 'review'};
 type ArmRequest = {uid: string; sessionId: string; providerKeySha256: string};
 
@@ -30,8 +31,9 @@ export class VoiceDeadline extends DurableObject<Env> {
         await voiceProviderKeyIdentity(this.env) !== providerKeySha256) throw Error('voice_deadline_provider_mismatch');
     const control = await this.env.DB.prepare(`SELECT deadline_at,closed_at FROM voice_interview_controls
       WHERE session_id=? AND auth_id=? AND legacy_unverified=0
-        AND NOT EXISTS(SELECT 1 FROM account_deletion_admissions WHERE auth_id=?)`)
-      .bind(sessionId,uid,uid).first<{deadline_at: string; closed_at: string | null}>();
+        AND NOT EXISTS(SELECT 1 FROM account_deletion_admissions WHERE auth_id=?)
+        AND NOT EXISTS(SELECT 1 FROM voice_closure_reconciliations WHERE session_id=?)`)
+      .bind(sessionId,uid,uid,sessionId).first<{deadline_at: string; closed_at: string | null}>();
     if (!control || control.closed_at) throw Error('voice_deadline_not_open');
     const deadlineMs = Date.parse(control.deadline_at.replace(' ','T') + (/Z|[+-]\d\d:\d\d$/.test(control.deadline_at) ? '' : 'Z'));
     if (!Number.isFinite(deadlineMs) || deadlineMs <= Date.now() || deadlineMs > Date.now() + 20 * 60_000) {
@@ -52,7 +54,26 @@ export class VoiceDeadline extends DurableObject<Env> {
 
   async alarm() {
     const saved = await this.ctx.storage.get<Deadline>('deadline');
-    if (!saved || saved.status === 'review') return;
+    if (!saved) return;
+    if (saved.status === 'review') {
+      // Observe only: an unknown provider mutation must never be replayed by
+      // an alarm. The private operator command records verified closure in D1.
+      await this.ctx.storage.setAlarm(Date.now() + REVIEW_MS);
+      try {
+        const reconciled = await this.env.DB.prepare(`SELECT 1 FROM voice_closure_reconciliations r
+          WHERE r.session_id=?
+            AND NOT EXISTS(SELECT 1 FROM voice_provider_calls p WHERE p.session_id=r.session_id AND p.state<>'closed')
+            AND NOT EXISTS(SELECT 1 FROM voice_interview_controls c WHERE c.session_id=r.session_id
+              AND (c.closed_at IS NULL OR c.legacy_unverified=1 OR c.auth_id<>r.auth_id)) LIMIT 1`)
+          .bind(saved.sessionId).first();
+        if (reconciled) {
+          await this.ctx.storage.deleteAlarm();
+          await this.ctx.storage.deleteAll();
+          console.log('[voice-deadline]',{session:saved.sessionId,outcome:'reconciled'});
+        }
+      } catch { console.log('[voice-deadline]',{session:saved.sessionId,outcome:'retry_review_observation'}); }
+      return;
+    }
     if (Date.now() < saved.deadlineMs) {
       await this.ctx.storage.setAlarm(saved.deadlineMs);
       return;
@@ -75,7 +96,7 @@ export class VoiceDeadline extends DurableObject<Env> {
         WHERE session_id=? AND legacy_unverified=1`).bind(saved.sessionId).first();
       if (pending?.state === 'uncertain' || legacy) {
         await this.ctx.storage.put<Deadline>('deadline',{...saved,status:'review'});
-        await this.ctx.storage.deleteAlarm();
+        await this.ctx.storage.setAlarm(Date.now() + REVIEW_MS);
         console.log('[voice-deadline]',{session:saved.sessionId,outcome:'needs_review'});
       } else if (pending) {
         await this.ctx.storage.put<Deadline>('deadline',{...saved,status:'waiting'});

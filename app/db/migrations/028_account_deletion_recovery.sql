@@ -138,6 +138,35 @@ AFTER INSERT ON account_operation_reconciliations BEGIN
       AND NEW.purpose='inactivity' AND NEW.disposition='suppress_delivery';
 END;
 
+-- Operator-only verified voice closure. Retain the receipt independently of
+-- erased account/history rows; its session ID also fences reuse after erasure.
+CREATE TABLE IF NOT EXISTS voice_closure_reconciliations (
+  id TEXT PRIMARY KEY NOT NULL,
+  target_kind TEXT NOT NULL CHECK (target_kind IN ('voice_call','voice_legacy')),
+  target_id TEXT NOT NULL,
+  auth_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  state_before TEXT,
+  execution_before TEXT,
+  provider_call_before TEXT,
+  provider_key_sha256 TEXT,
+  resolved_provider_call_id TEXT,
+  resolution TEXT NOT NULL CHECK (resolution IN ('closed','not_created','legacy_drained')),
+  evidence_sha256 TEXT NOT NULL CHECK (length(evidence_sha256)=64),
+  operator_ref TEXT NOT NULL,
+  invocation_ref TEXT NOT NULL,
+  provider_ref TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(target_kind,target_id),
+  CHECK ((target_kind='voice_call' AND resolution IN ('closed','not_created')
+      AND state_before IN ('creating','active','closing','uncertain') AND provider_key_sha256 IS NOT NULL AND length(provider_key_sha256)=64
+      AND ((resolution='closed' AND resolved_provider_call_id IS NOT NULL)
+        OR (resolution='not_created' AND provider_call_before IS NULL AND resolved_provider_call_id IS NULL
+          AND execution_before IS NOT NULL AND state_before IN ('creating','uncertain'))))
+    OR (target_kind='voice_legacy' AND resolution='legacy_drained' AND target_id=session_id))
+);
+CREATE INDEX IF NOT EXISTS idx_voice_closure_session ON voice_closure_reconciliations(session_id);
+
 -- Operator-only recovery of a verified stopped deletion execution. The single
 -- INSERT and its trigger form one atomic operation, including the audit receipt.
 -- No job FK: a subsequently withdrawn inactivity job may be removed.
@@ -217,4 +246,25 @@ CREATE TRIGGER IF NOT EXISTS advance_managed_voice_attempt
 AFTER INSERT ON voice_provider_calls BEGIN
   UPDATE voice_interview_controls SET current_attempt_id=NEW.id,updated_at=datetime('now')
     WHERE session_id=NEW.session_id AND auth_id=NEW.auth_id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS reconcile_verified_voice_call
+AFTER INSERT ON voice_closure_reconciliations WHEN NEW.target_kind='voice_call' BEGIN
+  UPDATE voice_provider_calls SET state='closed',execution_token=NULL,
+    provider_call_id=COALESCE(provider_call_id,NEW.resolved_provider_call_id),
+    closed_at=datetime('now'),updated_at=datetime('now'),last_error_code='operator_verified_closed'
+    WHERE id=NEW.target_id AND auth_id=NEW.auth_id AND session_id=NEW.session_id
+      AND state=NEW.state_before AND execution_token IS NEW.execution_before
+      AND provider_call_id IS NEW.provider_call_before AND provider_key_sha256=NEW.provider_key_sha256;
+  SELECT CASE WHEN changes()<>1 THEN RAISE(ABORT,'voice_reconciliation_conflict') END;
+  UPDATE voice_interview_controls SET closed_at=COALESCE(closed_at,datetime('now')),updated_at=datetime('now')
+    WHERE session_id=NEW.session_id AND auth_id=NEW.auth_id AND current_attempt_id=NEW.target_id;
+  SELECT CASE WHEN changes()<>1 THEN RAISE(ABORT,'voice_reconciliation_control_conflict') END;
+END;
+CREATE TRIGGER IF NOT EXISTS reconcile_verified_legacy_voice
+AFTER INSERT ON voice_closure_reconciliations WHEN NEW.target_kind='voice_legacy' BEGIN
+  UPDATE voice_interview_controls SET legacy_unverified=0,updated_at=datetime('now')
+    WHERE session_id=NEW.session_id AND auth_id=NEW.auth_id AND closed_at IS NOT NULL AND legacy_unverified=1
+      AND NOT EXISTS(SELECT 1 FROM voice_provider_calls WHERE session_id=NEW.session_id AND state<>'closed');
+  SELECT CASE WHEN changes()<>1 THEN RAISE(ABORT,'voice_reconciliation_legacy_conflict') END;
 END;

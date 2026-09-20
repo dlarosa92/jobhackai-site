@@ -37,6 +37,11 @@ export async function openManagedInterview(env,{uid,sessionId,sdp,role,seniority
   }
   const db=getDb(env);
   if (!db) throw Error('voice_connection_storage_unavailable');
+  // Verified closure receipts outlive account/history erasure. They also
+  // prevent a reused client-supplied UUID from racing alarm cleanup.
+  if (await db.prepare('SELECT 1 FROM voice_closure_reconciliations WHERE session_id=? LIMIT 1').bind(sessionId).first()) {
+    throw Error('voice_connection_ended');
+  }
   const user=await db.prepare('SELECT id FROM users WHERE auth_id=?').bind(uid).first();
   if (!user) throw Error('voice_connection_owner_missing');
   const existing=await db.prepare('SELECT * FROM voice_sessions WHERE id=?').bind(sessionId).first();

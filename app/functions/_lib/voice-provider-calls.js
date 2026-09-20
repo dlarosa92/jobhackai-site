@@ -37,6 +37,13 @@ function providerCallId(location) {
     return url.pathname === '/v1/realtime/calls/' + id && CALL_ID.test(id) ? id : null;
   } catch { return null; }
 }
+function providerReceipt(event,response,{attempt,execution,callId}) {
+  const requestId=response.headers.get('x-request-id');
+  // These restricted invocation logs are evidence when provider success
+  // precedes a failed D1 write. No body, credential, SDP or content is logged.
+  console.log('[voice-call] '+event,{attempt,execution,providerCallId:callId,
+    providerRequestId:/^req_[A-Za-z0-9_-]{1,180}$/.test(requestId || '')?requestId:null,status:response.status});
+}
 
 /** Internal signalling only. The caller authenticates uid, checks entitlement
  * and reserves its interview before releasing the returned SDP to the client.
@@ -55,6 +62,7 @@ export async function createManagedVoiceCall(env, { uid, sessionId, sdp, instruc
       AND NOT EXISTS(SELECT 1 FROM account_deletion_admissions WHERE auth_id=?)
       AND NOT EXISTS(SELECT 1 FROM voice_provider_calls WHERE session_id=? AND state<>'closed')
       AND NOT EXISTS(SELECT 1 FROM voice_provider_calls WHERE session_id=? AND auth_id<>?)
+      AND NOT EXISTS(SELECT 1 FROM voice_closure_reconciliations WHERE session_id=?)
       AND NOT EXISTS(SELECT 1 FROM account_operation_claims WHERE auth_id=? AND kind='maintenance' AND state<>'finished')
       AND NOT EXISTS(SELECT 1 FROM voice_sessions s JOIN users u ON u.id=s.user_id
         WHERE s.id=? AND u.auth_id<>?)
@@ -63,7 +71,7 @@ export async function createManagedVoiceCall(env, { uid, sessionId, sdp, instruc
           AND julianday(c.deadline_at)>julianday('now') AND c.current_attempt_id IS ?)
         AND NOT EXISTS(SELECT 1 FROM voice_sessions WHERE id=? AND status NOT IN ('created','active'))` : ''}
       RETURNING *`)
-    .bind(id,uid,sessionId,keySha,execution,uid,uid,sessionId,sessionId,uid,uid,sessionId,uid,
+    .bind(id,uid,sessionId,keySha,execution,uid,uid,sessionId,sessionId,uid,sessionId,uid,sessionId,uid,
       ...(guarded ? [sessionId,uid,expectedAttemptId,sessionId] : [])).first();
   if (!row) throw Error('voice_call_not_admitted');
   console.log('[voice-call] creating',{attempt:id,execution});
@@ -81,6 +89,7 @@ export async function createManagedVoiceCall(env, { uid, sessionId, sdp, instruc
     });
     if (!response.ok) {
       const definite = DEFINITE_REJECTION.has(response.status);
+      if (definite) providerReceipt('provider_rejected',response,{attempt:id,execution,callId:null});
       await db.prepare(`UPDATE voice_provider_calls SET state=?,last_error_code=?,
         execution_token=CASE WHEN ? THEN NULL ELSE execution_token END,updated_at=datetime('now'),
         closed_at=CASE WHEN ? THEN datetime('now') ELSE NULL END
@@ -90,6 +99,7 @@ export async function createManagedVoiceCall(env, { uid, sessionId, sdp, instruc
     }
     const callId = providerCallId(response.headers.get('Location'));
     if (!callId) throw Error('voice_call_reference_unconfirmed');
+    providerReceipt('provider_created',response,{attempt:id,execution,callId});
     // Persist the authoritative provider ID before the SDP leaves the server.
     const saved = await db.prepare(`UPDATE voice_provider_calls SET state='active',provider_call_id=?,
       execution_token=NULL,updated_at=datetime('now') WHERE id=? AND execution_token=? AND state='creating'
@@ -139,6 +149,7 @@ export async function closeManagedVoiceCall(env,{uid,attemptId}) {
       redirect:'error',signal:AbortSignal.timeout(10000)
     });
     if (!response.ok) throw Error('voice_call_close_unconfirmed');
+    providerReceipt('provider_closed',response,{attempt:attemptId,execution,callId:before.provider_call_id});
     const saved=await db.prepare(`UPDATE voice_provider_calls SET state='closed',execution_token=NULL,
       closed_at=datetime('now'),updated_at=datetime('now'),last_error_code=NULL
       WHERE id=? AND auth_id=? AND state='closing' AND execution_token=? RETURNING id`)
