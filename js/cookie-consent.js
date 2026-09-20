@@ -8,6 +8,8 @@
   'use strict';
 
   const CONSENT_KEY = 'jha_cookie_consent_v1';
+  const PENDING_CONSENT_KEY = 'jha_cookie_consent_pending_v1';
+  let pendingConsentMemory = null;
   const CLIENT_ID_COOKIE = 'jha_client_id';
   const VALID_CLIENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const hostname = (window.location.hostname || '').toLowerCase();
@@ -39,6 +41,9 @@
   window.JHA.apiBase = API_BASE;
   // Cookie domain: use .jobhackai.io so the client_id cookie is shared across subdomains
   const COOKIE_DOMAIN = productionHost ? '; Domain=.jobhackai.io' : '';
+  const CAMPAIGN_COOKIE = 'jha_campaign_' + (productionHost ? 'prod' : hostname === 'qa.jobhackai.io' ? 'qa' : 'dev');
+  const CAMPAIGN_MAX_AGE = 90 * 24 * 60 * 60;
+  let consentSyncQueue = Promise.resolve(false);
 
   // Module-level variables for banner and GA loading guard
   let consentRevision = 0;
@@ -51,7 +56,8 @@
   function getConsent() {
     try {
       const stored = localStorage.getItem(CONSENT_KEY);
-      return stored ? JSON.parse(stored) : null;
+      const value = stored ? JSON.parse(stored) : null;
+      return value?.version === 1 && typeof value.analytics === 'boolean' ? value : null;
     } catch (e) {
       return null;
     }
@@ -59,6 +65,9 @@
 
   // Helper: Fetch consent from server (D1 source of truth)
   async function fetchConsentFromServer() {
+    // A failed local save must survive navigation; an older server grant must
+    // never overwrite a rejection still waiting to be delivered.
+    if (getPendingConsent()) return undefined;
     const revision = consentRevision;
     try {
       const clientId = getOrCreateClientId();
@@ -86,7 +95,7 @@
 
       if (response.ok) {
         const data = await response.json();
-        if (data.ok && (data.consent || data.resetConsent === true) && revision === consentRevision) {
+        if (data.ok && revision === consentRevision && !getPendingConsent()) {
           if (data.resetConsent === true) {
             // Invalid stored decisions revoke both the cached grant and any
             // events/identity queued while this server check was in flight.
@@ -98,14 +107,48 @@
             return null;
           }
           // Sync server consent to localStorage
-          setConsentLocal(data.consent);
-          return data.consent;
+          if (data.consent) {
+            setConsentLocal(data.consent);
+            if (data.consent.analytics !== true) {
+              preventGALoading();
+              window.dispatchEvent(new CustomEvent('cookie-consent-revoked'));
+            }
+          }
+          return data.consent || null;
         }
       }
     } catch (error) {
       console.warn('[COOKIE-CONSENT] Failed to fetch consent from server:', error);
     }
-    return null;
+    return undefined;
+  }
+
+  function getPendingConsent() {
+    try {
+      const value = JSON.parse(localStorage.getItem(PENDING_CONSENT_KEY));
+      if (value?.version === 1 && typeof value.analytics === 'boolean') return value;
+    } catch (_) { /* Keep the current decision even when browser storage fails. */ }
+    return pendingConsentMemory;
+  }
+
+  let syncNotice = null;
+  function showSyncStatus(saved) {
+    if (saved) {
+      if (syncNotice) syncNotice.remove();
+      syncNotice = null;
+      return;
+    }
+    if (!document.body || syncNotice) return;
+    syncNotice = document.createElement('div');
+    syncNotice.setAttribute('role', 'status');
+    syncNotice.style.cssText = 'position:fixed;bottom:16px;left:16px;right:16px;z-index:10002;padding:12px 16px;background:#fff;color:#111;border:1px solid #888;border-radius:8px;font:14px/1.5 system-ui;';
+    syncNotice.textContent = 'Your cookie choice is saved on this browser. Account sync is pending; we will retry when you reconnect or reload.';
+    document.body.appendChild(syncNotice);
+  }
+
+  function rememberPendingConsent(consent) {
+    pendingConsentMemory = consent;
+    try { localStorage.setItem(PENDING_CONSENT_KEY, JSON.stringify(consent)); } catch (_) {}
   }
 
   // Helper: Set consent in localStorage
@@ -154,7 +197,7 @@
   }
 
   // Helper: Sync consent to server (D1)
-  async function syncConsentToServer(consent) {
+  async function postConsentToServer(consent) {
     try {
       const clientId = getOrCreateClientId();
       
@@ -190,25 +233,119 @@
         return false;
       }
 
-      return true;
+      return (await response.json()).ok === true;
     } catch (error) {
       console.warn('[COOKIE-CONSENT] Server sync error:', error);
       return false; // Non-blocking
     }
   }
 
+  // Serialize this tab's writes so a slow grant cannot arrive after its newer
+  // rejection. Checkout waits for its own authenticated consent receipt.
+  function syncConsentToServer(consent) {
+    const revision = consentRevision;
+    consentSyncQueue = consentSyncQueue.catch(() => false).then(async () => {
+      if (revision !== consentRevision) return false;
+      const saved = await postConsentToServer(consent);
+      if (revision === consentRevision) {
+        if (saved) {
+          pendingConsentMemory = null;
+          try { localStorage.removeItem(PENDING_CONSENT_KEY); } catch (_) {}
+        } else {
+          rememberPendingConsent(consent);
+        }
+        showSyncStatus(saved);
+      }
+      return saved;
+    });
+    return consentSyncQueue;
+  }
+
+  function clearCampaign() {
+    document.cookie = `${CAMPAIGN_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax${COOKIE_DOMAIN}`;
+  }
+
+  function campaignTouch(value) {
+    if (!value || !Number.isSafeInteger(value.at) || value.at > Date.now() || value.at < Date.now() - CAMPAIGN_MAX_AGE * 1000) return null;
+    const result = { at: value.at };
+    for (const key of ['source', 'medium', 'campaign', 'asset', 'id']) {
+      if (value[key] != null) {
+        if (typeof value[key] !== 'string' || !/^[a-z0-9_.-]{1,100}$/i.test(value[key])) return null;
+        result[key] = value[key];
+      }
+    }
+    return result.source && result.medium && result.campaign ? result : null;
+  }
+
+  function readCampaign() {
+    if (!hasAnalyticsConsent()) return null;
+    try {
+      const raw = document.cookie.split(';').map(c => c.trim()).find(c => c.startsWith(CAMPAIGN_COOKIE + '='));
+      if (!raw) return null;
+      const value = JSON.parse(decodeURIComponent(raw.slice(CAMPAIGN_COOKIE.length + 1)));
+      const first = campaignTouch(value.first), last = campaignTouch(value.last);
+      return first || last ? { first, last } : null;
+    } catch (_) { return null; }
+  }
+
+  function captureCampaign() {
+    if (!hasAnalyticsConsent()) { clearCampaign(); return; }
+    try {
+      // Internal links must not replace the campaign that brought the visitor.
+      const referrer = document.referrer ? new URL(document.referrer).hostname.toLowerCase() : '';
+      if ((productionHost && ['jobhackai.io', 'www.jobhackai.io', 'app.jobhackai.io'].includes(referrer)) || referrer === hostname) return;
+      const params = new URL(window.location.href).searchParams;
+      const touch = campaignTouch({ at: Date.now(), source: params.get('utm_source'), medium: params.get('utm_medium'),
+        campaign: params.get('utm_campaign'), asset: params.get('utm_content'), id: params.get('utm_id') });
+      if (!touch) return; // Missing/unsafe tags remain unattributed; never infer from personal data.
+      const previous = readCampaign();
+      const value = { first: previous?.first || previous?.last || touch, last: touch };
+      document.cookie = `${CAMPAIGN_COOKIE}=${encodeURIComponent(JSON.stringify(value))}; Max-Age=${CAMPAIGN_MAX_AGE}; Path=/; SameSite=Lax${window.location.protocol === 'https:' ? '; Secure' : ''}${COOKIE_DOMAIN}`;
+    } catch (_) { /* Attribution must never interrupt the page. */ }
+  }
+
+  async function getCheckoutAnalyticsContext() {
+    if (!hasAnalyticsConsent()) return null;
+    const revision = consentRevision;
+    // Reconcile account-wide withdrawal before allowing a cached grant to be
+    // persisted at checkout. A deliberate unsaved choice is retried instead.
+    const receipt = getPendingConsent()
+      ? syncConsentToServer(getPendingConsent())
+      : fetchConsentFromServer();
+    const latest = await Promise.race([receipt, new Promise(resolve => window.setTimeout(() => resolve(undefined), 1500))]);
+    if (latest === undefined || latest === false || revision !== consentRevision || !hasAnalyticsConsent()) return null;
+    // Missing GA identifiers remain missing. Never invent a server/client ID.
+    const getGaValue = (field) => new Promise(resolve => {
+      let settled = false;
+      const finish = value => { if (!settled) { settled = true; resolve(value); } };
+      window.setTimeout(() => finish(null), 1200);
+      if (!GA_MEASUREMENT_ID || typeof window.gtag !== 'function') { finish(null); return; }
+      try { window.gtag('get', GA_MEASUREMENT_ID, field, finish); } catch (_) { finish(null); }
+    });
+    const sync = Promise.race([syncConsentToServer(getConsent()), new Promise(resolve => window.setTimeout(() => resolve(false), 1500))]);
+    const [saved, clientId, sessionId] = await Promise.all([sync, getGaValue('client_id'), getGaValue('session_id')]);
+    if (!saved || revision !== consentRevision || !hasAnalyticsConsent()) return null;
+    const campaign = readCampaign();
+    return { analyticsConsent: true,
+      ...(typeof clientId === 'string' && /^\d{1,20}\.\d{1,20}$/.test(clientId) ? { gaClientId: clientId } : {}),
+      ...(/^\d{1,20}$/.test(String(sessionId ?? '')) ? { gaSessionId: String(sessionId) } : {}),
+      firstTouch: campaign?.first || null, lastTouch: campaign?.last || null };
+  }
+
   // Helper: Set consent (local + server)
   function setConsent(consent) {
     consentRevision++;
     setConsentLocal(consent);
-    // Fire-and-forget: don't await server sync so the UI updates instantly
+    rememberPendingConsent(consent);
+    if (consent.analytics !== true) clearCampaign();
+    // Local blocking is immediate; failed delivery remains pending for retry.
     syncConsentToServer(consent);
   }
 
   // Helper: Check if analytics consent granted
   function hasAnalyticsConsent() {
     const consent = getConsent();
-    return consent && consent.analytics === true;
+    return consent && consent.version === 1 && consent.analytics === true;
   }
 
   // Stop and tear down Microsoft Clarity if it has already been injected.
@@ -233,6 +370,7 @@
 
   // Analytics Script Loading: Prevent if consent denied (covers GA + Clarity)
   function preventGALoading() {
+    clearCampaign();
     // Removing a script does not stop listeners that already ran. Google's
     // disable flag also blocks collection by the previously loaded tag.
     if (GA_MEASUREMENT_ID) window['ga-disable-' + GA_MEASUREMENT_ID] = true;
@@ -325,6 +463,7 @@
       preventGALoading();
       return;
     }
+    captureCampaign();
     if (!GA_MEASUREMENT_ID) {
       loadClarityScript();
       return;
@@ -587,7 +726,8 @@
     hasConsent,
     hasAnalyticsConsent,
     openPreferences: openPreferencesModal,
-    getConsent
+    getConsent,
+    getCheckoutAnalyticsContext
   };
 
   // Safe analytics wrapper. Two call shapes are supported so both legacy and
@@ -778,6 +918,11 @@
   async function init() {
     // Fetch consent from server (D1 source of truth) on page load
     // This ensures multi-device sync and makes D1 the actual source of truth
+    const pending = getPendingConsent();
+    if (pending) {
+      setConsentLocal(pending);
+      await syncConsentToServer(pending);
+    }
     const serverConsent = await fetchConsentFromServer();
     if (serverConsent) {
       // Server consent loaded, use it (already synced to localStorage by fetchConsentFromServer)
@@ -803,6 +948,10 @@
   }
 
   // Auto-init
+  if (window.addEventListener) window.addEventListener('online', () => {
+    const pending = getPendingConsent();
+    if (pending) syncConsentToServer(pending);
+  });
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {

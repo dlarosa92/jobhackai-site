@@ -268,13 +268,14 @@ async function routeAfterVerification() {
       const idToken = await user.getIdToken(true);
       console.log('🚀 Starting Stripe checkout for plan:', plan);
       
+      const analytics = await window.JHA?.cookieConsent?.getCheckoutAnalyticsContext?.();
       const res = await fetch('/api/stripe-checkout', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json', 
           ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) 
         },
-        body: JSON.stringify({ plan, startTrial: plan === 'trial', forceNew: plan === 'trial' })
+        body: JSON.stringify({ plan, startTrial: plan === 'trial', forceNew: plan === 'trial', ...(analytics ? { analytics } : {}) })
       });
       
       const data = await res.json();
