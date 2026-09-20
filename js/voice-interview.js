@@ -1,5 +1,6 @@
 // Voice Mock Interview client
-// WebRTC directly to OpenAI Realtime using a server-minted ephemeral secret.
+// WebRTC media goes directly to OpenAI. The server selects the signalling
+// transport; managed calls never expose a reusable provider credential.
 // The entitlement gate, consumption, and transcript/cost persistence all live
 // server-side; this file is the connection + UI state machine.
 (function () {
@@ -36,6 +37,11 @@
   var state = {
     sessionId: null,
     startRequestId: null, // retained across failed starts to recover without spending twice
+    managedTransport: false,
+    providerAttemptId: null,
+    closeRequest: null,
+    deadlineAtMs: null,
+    starting: false,
     model: null,
     pc: null,
     dc: null,
@@ -49,6 +55,8 @@
     usage: null,
     ending: false,
     pendingCompletion: null,
+    completionSaved: false,
+    reportPollingStarted: false,
     savingCompletion: false,
     connected: false,
     audioPlaying: false,       // interviewer's audio is mid-playback
@@ -121,6 +129,7 @@
       var res = await api('/api/plan/me', { method: 'GET' });
       var voice = res.data && res.data.voice;
       if (!voice || !voice.enabled) { show('vi-disabled-view'); return; }
+      state.managedTransport = voice.transport === 'managed';
 
       initHistory(voice);
 
@@ -1123,7 +1132,7 @@
     state.connectionAttempt = null;
   }
 
-  async function connectRealtime(clientSecret, model) {
+  async function connectRealtime(clientSecret, model, managedBody) {
     if (state.ending) return false;
     cancelConnectionAttempt();
     var attempt = { cancelled: false, controller: new AbortController() };
@@ -1213,23 +1222,58 @@
       await pc.setLocalDescription(offer);
       if (!current()) return false;
 
-      var sdpRes = await fetch(REALTIME_CALLS_URL + '?model=' + encodeURIComponent(model), {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + clientSecret, 'Content-Type': 'application/sdp' },
-        body: offer.sdp,
-        signal: attempt.controller.signal
-      });
-      if (!current()) return false;
-      if (!sdpRes.ok) {
-        var errText = await sdpRes.text().catch(function () { return ''; });
-        throw new Error('realtime_connect_failed: ' + sdpRes.status + ' ' + errText.slice(0, 200));
+      var answerSdp;
+      if (managedBody) {
+        var connection = await api('/api/voice/connection', {
+          method: 'POST',
+          body: JSON.stringify(Object.assign({}, managedBody, { action: 'open', sdp: offer.sdp })),
+          signal: attempt.controller.signal
+        });
+        if (!current()) return false;
+        if (!connection.ok) {
+          // After a lost answer the server can identify the existing owned
+          // attempt. Only the next explicit retry may replace it.
+          if (connection.data && connection.data.reason === 'voice_connection_conflict') {
+            state.providerAttemptId = connection.data.currentAttemptId || null;
+          }
+          var connectionError = new Error((connection.data && connection.data.error) || 'connection_failed');
+          connectionError.status = connection.status;
+          connectionError.reason = connection.data && connection.data.reason;
+          throw connectionError;
+        }
+        var details = connection.data || {};
+        if (details.sessionId !== managedBody.sessionId || typeof details.sdp !== 'string' ||
+            !details.sdp.startsWith('v=0') || typeof details.attemptId !== 'string') {
+          throw new Error('invalid_connection_response');
+        }
+        state.providerAttemptId = details.attemptId;
+        state.model = details.model;
+        state.maxMinutes = details.maxMinutes || 20;
+        var deadline = String(details.deadlineAt || '');
+        if (/^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/.test(deadline)) deadline = deadline.replace(' ', 'T') + 'Z';
+        state.deadlineAtMs = Date.parse(deadline);
+        if (!Number.isFinite(state.deadlineAtMs)) throw new Error('invalid_connection_deadline');
+        answerSdp = details.sdp;
+        attempt.result = details;
+      } else {
+        var sdpRes = await fetch(REALTIME_CALLS_URL + '?model=' + encodeURIComponent(model), {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + clientSecret, 'Content-Type': 'application/sdp' },
+          body: offer.sdp,
+          signal: attempt.controller.signal
+        });
+        if (!current()) return false;
+        if (!sdpRes.ok) {
+          var errText = await sdpRes.text().catch(function () { return ''; });
+          throw new Error('realtime_connect_failed: ' + sdpRes.status + ' ' + errText.slice(0, 200));
+        }
+        answerSdp = await sdpRes.text();
       }
-      var answerSdp = await sdpRes.text();
       if (!current()) return false;
       await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
       if (!current()) return false;
       completed = true;
-      return true;
+      return attempt.result || true;
     } catch (error) {
       if (!current()) return false;
       throw error;
@@ -1300,11 +1344,12 @@
   // ---------- timer ----------
 
   function startTimer(maxMinutes) {
-    state.startedAtMs = Date.now();
+    if (!state.startedAtMs || !state.managedTransport) state.startedAtMs = Date.now();
     var timerEl = $('vi-timer');
     state.timerInterval = setInterval(function () {
       var elapsed = Math.floor((Date.now() - state.startedAtMs) / 1000);
-      var remaining = maxMinutes * 60 - elapsed;
+      var remaining = state.managedTransport && Number.isFinite(state.deadlineAtMs)
+        ? Math.ceil((state.deadlineAtMs - Date.now()) / 1000) : maxMinutes * 60 - elapsed;
       if (timerEl) {
         var m = Math.floor(Math.abs(remaining) / 60);
         var s = Math.abs(remaining) % 60;
@@ -1322,10 +1367,12 @@
 
   async function startInterview() {
     if (state.pendingCompletion) { show('vi-done-view'); return; }
+    if (state.starting) return;
     var role = ($('vi-role') && $('vi-role').value || '').trim();
     var seniority = ($('vi-seniority') && $('vi-seniority').value || '').trim();
     var jd = ($('vi-jd') && $('vi-jd').value || '').trim();
     if (!role) { alert('Pick the role you are interviewing for.'); return; }
+    if (state.managedTransport) return startManagedInterview(role, seniority, jd);
 
     var startBtn = $('vi-start-btn');
     if (startBtn) { startBtn.disabled = true; startBtn.textContent = 'Starting...'; }
@@ -1403,6 +1450,63 @@
     }
   }
 
+  async function startManagedInterview(role, seniority, jd) {
+    state.starting = true;
+    var startBtn = $('vi-start-btn');
+    if (startBtn) { startBtn.disabled = true; startBtn.textContent = 'Starting...'; }
+    try {
+      if (!state.startRequestId) {
+        state.startRequestId = crypto.randomUUID();
+        state.providerAttemptId = null;
+        state.startedAtMs = null;
+        state.deadlineAtMs = null;
+      }
+      state.sessionId = state.startRequestId;
+      state.order = newTranscriptOrder();
+      state.usage = typeof window.createVoiceUsage === 'function' ? window.createVoiceUsage() : null;
+      state.ending = false;
+      state.closeRequest = null;
+      state.audioPlaying = false;
+      state.audioResponseId = '';
+      state.answeredCalls = null;
+      state.conduct = newConductGate();
+      state.conductEnd = null;
+      state.endCause = null;
+      state.lifecycle = newInterviewLifecycle();
+      state.lastAssistantResponseId = '';
+      clearTurnWait();
+      show('vi-live-view');
+      setStatus('Connecting...', 'vi-connecting');
+      historyLiveStart(role, seniority);
+      // Permission is obtained inside connectRealtime before any server
+      // setup or reservation. A single cancellable stream owns this attempt.
+      var result = await connectRealtime(null, null, {
+        sessionId: state.sessionId, role: role, seniority: seniority, jd: jd,
+        replacesAttemptId: state.providerAttemptId
+      });
+      if (!result || state.ending) return;
+      state.startRequestId = null;
+      track('voice_session_start', { mode: result.mode });
+      startTimer(state.maxMinutes);
+    } catch (error) {
+      if (state.ending) return;
+      if (['voice_connection_ended', 'voice_connection_expired', 'voice_connection_history_removed'].indexOf(error.reason) !== -1) {
+        state.startRequestId = null;
+        state.providerAttemptId = null;
+      }
+      teardownConnection();
+      historyLiveClear(false);
+      if (error.status === 403) await loadEntitlement();
+      show('vi-setup-view');
+      alert(error.reason === 'voice_connection_conflict'
+        ? 'The previous connection is still open. Retry to replace it without using another interview.'
+        : 'Could not connect the interview. Check your microphone and connection, then retry.');
+    } finally {
+      state.starting = false;
+      if (startBtn) { startBtn.disabled = false; startBtn.textContent = 'Start the interview'; }
+    }
+  }
+
   function offerReconnect() {
     // Nothing to reconnect to when the session is already closing — offering it
     // would be misleading, and taking it would be a way out of a conduct end.
@@ -1445,6 +1549,16 @@
       // converge — and early-resume instructions can only ever be minted
       // with the window closed, where no demotion is possible.
       var windowOpen = typeof lifecycle().isAwaitingOpening === 'function' && lifecycle().isAwaitingOpening();
+      if (state.managedTransport) {
+        setStatus('Reconnecting...', 'vi-connecting');
+        if (!await connectRealtime(null, null, {
+          sessionId: state.sessionId, replacesAttemptId: state.providerAttemptId,
+          transcript: getTranscript().slice(-20),
+          interviewStarted: lifecycle().is(PHASES.ACTIVE_INTERVIEW) && !windowOpen
+        }) || state.ending) return;
+        if (btn) { btn.style.display = 'none'; btn.disabled = false; btn.textContent = 'Reconnect'; }
+        return;
+      }
       var res = await api('/api/voice/session', {
         method: 'POST',
         body: JSON.stringify({
@@ -1489,11 +1603,14 @@
       console.warn('[VOICE] end requested (' + reason + ') while a session close was pending; deferring to it');
       return;
     }
+    var wasConnecting = !!state.connectionAttempt;
     state.ending = true;
     cancelConnectionAttempt();
     // Mark unsaved before the asynchronous transcript flush so closing the
     // tab during that interval receives the same warning as a failed save.
     state.pendingCompletion = { sessionId: state.sessionId };
+    state.completionSaved = false;
+    state.reportPollingStarted = false;
     // Terminal for every path — manual, time up, conduct, safety, connection
     // lost, or the natural close. COMPLETE is reachable from any phase, and
     // from here no late event can commit a turn, reopen the session, or start
@@ -1505,6 +1622,11 @@
     var durationSeconds = state.startedAtMs ? Math.round((Date.now() - state.startedAtMs) / 1000) : 0;
     stopMicrophone();
     stopRemotePlayback();
+    if (state.managedTransport && wasConnecting) {
+      // Send End before the transcript flush: a pending start may not reserve
+      // credit while the browser is waiting for its final transcript.
+      state.closeRequest = requestManagedClose();
+    }
 
     show('vi-done-view');
     var doneStatus = $('vi-done-status');
@@ -1521,6 +1643,14 @@
     // Let any transcript still in flight land before the channel closes; the
     // wait is bounded and a timeout just means we store what we already have.
     await flushPendingTranscript();
+    if (state.managedTransport) {
+      // A live call retains its channel through the final transcript flush.
+      // Ask the provider to hang up before closing our peer, so a browser-side
+      // disconnect does not race the authoritative hangup request.
+      if (!state.closeRequest) state.closeRequest = requestManagedClose();
+      await state.closeRequest;
+      state.closeRequest = null;
+    }
     teardownConnection();
 
     // Keep the exact payload in memory until acknowledged. A retry must not
@@ -1534,6 +1664,14 @@
     await saveCompletion();
   }
 
+  function requestManagedClose() {
+    var controller = new AbortController();
+    var timeout = setTimeout(function () { controller.abort(); }, 15000);
+    return api('/api/voice/connection', {
+      method: 'POST', body: JSON.stringify({ action: 'close', sessionId: state.sessionId }), signal: controller.signal
+    }).catch(function () { return null; }).finally(function () { clearTimeout(timeout); });
+  }
+
   async function saveCompletion() {
     if (!state.pendingCompletion || state.savingCompletion) return;
     state.savingCompletion = true;
@@ -1544,12 +1682,35 @@
     if (retryBtn) { retryBtn.disabled = true; retryBtn.style.display = 'none'; }
     if (saveStatus) saveStatus.textContent = 'Saving interview...';
     try {
+      if (state.closeRequest) { await state.closeRequest; state.closeRequest = null; }
       var saved = await api('/api/voice/session/' + encodeURIComponent(pending.sessionId) + '/complete', {
         method: 'POST', body: JSON.stringify(pending)
       });
       if (!saved.ok) throw new Error((saved.data && saved.data.error) || 'save_failed');
+      if (saved.status === 202 || (saved.data && saved.data.connectionClosed === false)) {
+        state.completionSaved = !!(saved.data && saved.data.saved);
+        if (saveStatus) saveStatus.textContent = state.completionSaved
+          ? 'Interview saved. Connection closure still needs confirmation. Keep this page open and retry finishing.'
+          : 'Connection closure is still pending. Keep this page open and retry finishing.';
+        if (!isSafetyEnd && $('vi-done-status')) $('vi-done-status').textContent = 'Finishing the interview...';
+        if (state.completionSaved && !isSafetyEnd && !state.reportPollingStarted) {
+          // The saved report is useful even if operational call closure still
+          // needs verification. Keep that pending status visible separately.
+          state.reportPollingStarted = true;
+          pollScorecard(0);
+        }
+        if (retryBtn) { retryBtn.textContent = 'Retry finishing'; retryBtn.style.display = ''; retryBtn.disabled = false; }
+        return;
+      }
       state.pendingCompletion = null;
+      state.startRequestId = null;
       if (saveStatus) saveStatus.textContent = '';
+      if (saved.data && saved.data.status === 'cancelled') {
+        state.providerAttemptId = null;
+        historyLiveClear(true);
+        if (!isSafetyEnd && $('vi-done-status')) $('vi-done-status').textContent = 'Interview stopped before it started. No interview credit was used.';
+        return;
+      }
       track('voice_session_complete', { duration_seconds: pending.durationSeconds, reason: pending.reason });
       if (isSafetyEnd) { historyLiveClear(true); return; }
       var doneStatus = $('vi-done-status');
@@ -1557,11 +1718,14 @@
       // A failed save removed the optimistic history row. Read the server's
       // acknowledged row after a successful retry while scoring continues.
       if (!historyState.liveRow && historyState.voice && historyState.voice.enabled) fetchHistory();
-      pollScorecard(0);
+      if (!state.reportPollingStarted) { state.reportPollingStarted = true; pollScorecard(0); }
     } catch (err) {
       console.error('[VOICE] complete failed:', err);
-      if (saveStatus) saveStatus.textContent = 'Your interview has not been saved. Keep this page open and retry saving.';
-      if (!isSafetyEnd && $('vi-done-status')) $('vi-done-status').textContent = 'Interview ended. Saving needs another attempt.';
+      if (saveStatus) saveStatus.textContent = state.completionSaved
+        ? 'Your interview is saved, but finishing still needs confirmation. Keep this page open and retry.'
+        : 'Your interview has not been saved. Keep this page open and retry saving.';
+      if (!isSafetyEnd && $('vi-done-status')) $('vi-done-status').textContent = state.completionSaved
+        ? 'Interview saved. Finishing needs another attempt.' : 'Interview ended. Saving needs another attempt.';
       if (retryBtn) { retryBtn.style.display = ''; retryBtn.disabled = false; }
       historyLiveClear(false);
     } finally { state.savingCompletion = false; }
@@ -2266,7 +2430,7 @@
     if (reconnectBtn) reconnectBtn.addEventListener('click', reconnect);
 
     window.addEventListener('beforeunload', function (e) {
-      if ((state.connected && !state.ending) || state.pendingCompletion) {
+      if (((state.connected || state.connectionAttempt) && !state.ending) || state.pendingCompletion) {
         e.preventDefault();
         e.returnValue = '';
       }

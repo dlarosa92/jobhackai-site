@@ -75,6 +75,7 @@ import { REVENUE_EVENTS, stageCollectedRevenue } from '../_lib/collected-revenue
 import { stageCheckoutAttribution } from '../_lib/payment-attribution.js';
 import { sendEmail } from '../_lib/email.js';
 import { subscriptionCancelledEmail, paymentFailedEmail } from '../_lib/email-templates.js';
+import { withWebhookAccountScope } from '../_lib/account-webhook-scope.js';
 
 // Collected revenue is recorded from fresh Stripe charge/refund objects in
 // collected-revenue.js. Entitlement changes are not proof of payment. GA4
@@ -189,9 +190,18 @@ export async function onRequest(context) {
   // claims leave KV untouched.
   try { await env.JOBHACKAI_KV?.put(lockKey, '1', { expirationTtl: 60 }); } catch (_) { /* no-op */ }
 
+  return withWebhookAccountScope(context, account => processClaimedEvent(
+    context, event, { respHeaders, seenKey, releaseLock }, account
+  ), { eventId: event.id });
+}
+
+async function processClaimedEvent(context, event, { respHeaders, seenKey, releaseLock }, account) {
+  const { env } = context;
+
   // ── Route the event. Handlers stage critical writes into ctx and queue
   // side effects; nothing is written until the atomic commit below.
   const ctx = {
+    account,                // resolved-owner admission through all account side effects
     statements: [],          // critical D1 writes — committed with the processed-mark
     requiredUserRows: new Set(), // auth_ids whose row must exist at commit (recipient guard)
     postCommit: [],          // awaited after commit (KV cache invalidation)
@@ -257,10 +267,10 @@ export async function onRequest(context) {
   // lose one of these, never duplicate it — KV repopulates on read; a lost
   // email event is the accepted, logged trade-off.
   for (const run of ctx.postCommit) {
-    try { await run(); } catch (e) { console.warn('[WEBHOOK] post-commit cache step failed (non-blocking):', e?.message || e); }
+    try { await run(); } catch (e) { account.uncertain(); console.warn('[WEBHOOK] post-commit cache step failed (non-blocking):', e?.message || e); }
   }
   for (const run of ctx.fireAndForget) {
-    try { context.waitUntil(run()); } catch (e) { console.warn('[WEBHOOK] post-commit telemetry step failed (non-blocking):', e?.message || e); }
+    try { account.background(run); } catch (e) { account.uncertain(); console.warn('[WEBHOOK] post-commit telemetry step failed (non-blocking):', e?.message || e); }
   }
   try { await env.JOBHACKAI_KV?.put(seenKey, '1', { expirationTtl: 86400 }); } catch (_) { /* no-op */ }
   await releaseLock();
@@ -490,6 +500,7 @@ async function handleCheckoutCompleted(env, event, ctx) {
   if (owner.conflict) return critical('owner_conflict');
   const { uid, email: customerEmail } = owner;
   if (!uid) return critical('unresolved_owner');
+  if (!(await ctx.account.admit(uid))) return noop('account_deletion_pending_or_deleted');
 
   // ── One-time payments (Interview Pack) never take the subscription path ──
   // The signed event payload already carries `mode`; the session re-fetch is
@@ -641,6 +652,7 @@ async function handleSubscriptionCreated(env, event, ctx) {
   if (owner.conflict) return critical('owner_conflict');
   const { uid, email: customerEmail } = owner;
   if (!uid) return critical('unresolved_owner');
+  if (!(await ctx.account.admit(uid))) return noop('account_deletion_pending_or_deleted');
 
   let effectivePlan = 'free';
   if (status === 'trialing' && originalPlan === 'trial') {
@@ -700,6 +712,7 @@ async function handleSubscriptionUpdated(env, event, ctx) {
   if (owner.conflict) return critical('owner_conflict');
   const { uid, email: customerEmail } = owner;
   if (!uid) return critical('unresolved_owner');
+  if (!(await ctx.account.admit(uid))) return noop('account_deletion_pending_or_deleted');
 
   const rowCheck = await ensureUserRow(env, uid, customerEmail, 'subscription.updated plan update');
   if (rowCheck.outcome) return rowCheck.outcome;
@@ -846,6 +859,7 @@ async function handleSubscriptionDeleted(env, event, ctx) {
   if (owner.conflict) return critical('owner_conflict');
   const uid = owner.uid;
   if (!uid) return critical('unresolved_owner');
+  if (!(await ctx.account.admit(uid))) return noop('account_deletion_pending_or_deleted');
   if (!(await userRowExists(env, uid))) {
     console.log(`⏭️ [WEBHOOK] subscription.deleted for uid=${redactId(uid)} with no users row here; nothing to downgrade`);
     return noop('user_row_missing');
@@ -999,6 +1013,7 @@ async function handleInvoicePaymentFailed(env, event, ctx) {
   if (owner.conflict) return critical('owner_conflict');
   const uid = owner.uid;
   if (!uid) return critical('unresolved_owner');
+  if (!(await ctx.account.admit(uid))) return noop('account_deletion_pending_or_deleted');
 
   // Skip deleted users — other handlers check this too
   const d1Tombstone = await isDeletedUser(env, uid);

@@ -3,15 +3,21 @@ on:
   pull_request:
     branches: [dev0, develop, main]
     paths:
+      - 'app/scripts/lib/*reconcile-core.mjs'
       - 'workers/retention-cleaner/**'
       - 'app/functions/_lib/dev-cutover.js'
+      - 'app/functions/_lib/account-deletion-admission.js'
+      - 'app/db/migrations/028_account_deletion_recovery.sql'
       - 'app/functions/_lib/__tests__/sqlite-d1-helper.mjs'
       - '.github/workflows/test-retention.yml'
   push:
     branches: [dev0, develop, main]
     paths:
+      - 'app/scripts/lib/*reconcile-core.mjs'
       - 'workers/retention-cleaner/**'
       - 'app/functions/_lib/dev-cutover.js'
+      - 'app/functions/_lib/account-deletion-admission.js'
+      - 'app/db/migrations/028_account_deletion_recovery.sql'
       - '.github/workflows/test-retention.yml'
 permissions:
   contents: read
@@ -24,4 +30,10 @@ jobs:
         with:
           node-version: '22'
       - run: node --test workers/retention-cleaner/tests/cleanup.test.mjs
-      - run: npx --yes wrangler@4.135.0 deploy --dry-run --env qa --config workers/retention-cleaner/wrangler.toml
+      - run: |
+          npx --yes wrangler@4.135.0 deploy --dry-run --env qa --config workers/retention-cleaner/wrangler.toml --outdir /tmp/jobhackai-retention-worker
+          cp /tmp/jobhackai-retention-worker/index.js /tmp/jobhackai-retention-worker/index.mjs
+      - name: Verify compiled retention with real schemas and intercepted KV
+        env:
+          JOBHACKAI_RETENTION_BUNDLE: /tmp/jobhackai-retention-worker/index.mjs
+        run: node --test --test-name-pattern='real repository schemas|reconciled stopped retention' workers/retention-cleaner/tests/cleanup.test.mjs

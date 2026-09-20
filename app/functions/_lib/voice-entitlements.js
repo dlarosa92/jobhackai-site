@@ -51,15 +51,25 @@ function isMissingColumnError(err) {
  * Count voice sessions started by this user in the current calendar month.
  * Abandoned sessions count too: they consumed a session slot at create time.
  */
-async function countSessionsThisMonth(db, userRowId) {
+function monthlyCountQuery(userRowId, managed) {
+  if (!managed) return {sql:`SELECT COUNT(*) AS n FROM voice_sessions
+    WHERE user_id=? AND strftime('%Y-%m',started_at)=strftime('%Y-%m','now')`,args:[userRowId]};
+  // Deleted history must not restore subscription allowance. UNION also
+  // counts retained legacy rows once, without duplicating managed receipts.
+  return {sql:`SELECT COUNT(*) AS n FROM (
+    SELECT id FROM voice_sessions WHERE user_id=? AND strftime('%Y-%m',started_at)=strftime('%Y-%m','now')
+    UNION SELECT session_id FROM voice_interview_controls
+      WHERE auth_id=(SELECT auth_id FROM users WHERE id=?)
+        AND strftime('%Y-%m',reserved_at)=strftime('%Y-%m','now'))`,args:[userRowId,userRowId]};
+}
+
+async function countSessionsThisMonth(db, userRowId, managed=false) {
   // Use strftime so the comparison matches the stored started_at format
   // (datetime('now') => 'YYYY-MM-DD HH:MM:SS'); comparing against an ISO 'T...Z'
   // boundary string was unreliable (space vs 'T') and dropped day-1 sessions.
   // SQLite 'now' is UTC, so this is a UTC calendar-month count.
-  const row = await db.prepare(
-    `SELECT COUNT(*) AS n FROM voice_sessions
-     WHERE user_id = ? AND strftime('%Y-%m', started_at) = strftime('%Y-%m', 'now')`
-  ).bind(userRowId).first();
+  const query=monthlyCountQuery(userRowId,managed);
+  const row = await db.prepare(query.sql).bind(...query.args).first();
   return Number(row?.n || 0);
 }
 
@@ -79,7 +89,7 @@ async function countSessionsThisMonth(db, userRowId) {
  *   hasEverPaid: boolean           // ever purchased (pack or subscription)
  * }>}
  */
-export async function getVoiceEntitlement(env, uid) {
+export async function getVoiceEntitlement(env, uid, {managed=false}={}) {
   const db = getDb(env);
   const base = {
     canStart: false, mode: null, reason: 'db_unavailable',
@@ -90,6 +100,11 @@ export async function getVoiceEntitlement(env, uid) {
 
   let row;
   try {
+    if (managed) {
+      await db.prepare(`SELECT c.session_id,c.current_attempt_id,c.reserved_at,c.legacy_unverified,p.id,r.resolution
+        FROM voice_interview_controls c LEFT JOIN voice_provider_calls p ON p.id=c.current_attempt_id
+        LEFT JOIN voice_closure_reconciliations r ON r.session_id=c.session_id LIMIT 0`).all();
+    }
     row = await db.prepare(
       `SELECT id, plan, subscription_status, current_period_end,
               voice_sessions_remaining, free_session_used, pack_expires_at, has_ever_paid
@@ -97,7 +112,7 @@ export async function getVoiceEntitlement(env, uid) {
     ).bind(uid).first();
   } catch (err) {
     if (isMissingColumnError(err)) {
-      console.warn('[VOICE-ENTITLEMENTS] Migration 020 not applied yet:', err?.message);
+      console.warn('[VOICE-ENTITLEMENTS] Required voice schema is not available');
       return { ...base, reason: 'not_migrated' };
     }
     throw err;
@@ -131,7 +146,7 @@ export async function getVoiceEntitlement(env, uid) {
     if (statusOk && periodOk) {
       let used = 0;
       try {
-        used = await countSessionsThisMonth(db, row.id);
+        used = await countSessionsThisMonth(db, row.id, managed);
       } catch (err) {
         if (!isMissingColumnError(err)) throw err;
       }
@@ -257,20 +272,48 @@ export async function refundVoiceSession(env, uid, mode) {
  * @returns {Promise<{inserted: boolean, reason: string|null}>}
  *   reason is 'limit_reached' when a subscription insert was blocked by the cap.
  */
-export async function createVoiceSessionRow(env, { sessionId, userRowId, role, seniority, jd, mode, model }) {
+function managedReservationGuard(session) {
+  if (!session.managedAttemptId) return { sql: '', args: [] };
+  return {
+    sql: `AND EXISTS(SELECT 1 FROM voice_interview_controls c
+      JOIN voice_provider_calls p ON p.id=c.current_attempt_id AND p.auth_id=c.auth_id AND p.session_id=c.session_id
+      JOIN users u ON u.auth_id=c.auth_id
+      WHERE c.session_id=? AND u.id=? AND p.id=? AND p.state='active'
+        AND c.closed_at IS NULL AND julianday(c.deadline_at)>julianday('now')
+        AND NOT EXISTS(SELECT 1 FROM account_deletion_admissions a WHERE a.auth_id=c.auth_id))`,
+    args: [session.sessionId, session.userRowId, session.managedAttemptId]
+  };
+}
+
+function managedReservationReceipt(db, session) {
+  if (!session.managedAttemptId) return [];
+  return [db.prepare(`UPDATE voice_interview_controls SET reserved_at=COALESCE(reserved_at,datetime('now'))
+    WHERE session_id=? AND current_attempt_id=? AND auth_id=(SELECT auth_id FROM users WHERE id=?)
+      AND EXISTS(SELECT 1 FROM voice_sessions WHERE id=? AND user_id=?)`)
+    .bind(session.sessionId,session.managedAttemptId,session.userRowId,session.sessionId,session.userRowId)];
+}
+
+export async function createVoiceSessionRow(env, session) {
+  const { sessionId, userRowId, role, seniority, jd, mode, model } = session;
+  const guard = managedReservationGuard(session);
   const db = getDb(env);
   if (!db) return { inserted: false, reason: 'db_unavailable' };
 
   if (mode === 'subscription') {
     const cap = fairUseCap(env);
-    const res = await db.prepare(
+    const count=monthlyCountQuery(userRowId,!!session.managedAttemptId);
+    const plans=[...SUBSCRIPTION_VOICE_PLANS],statuses=[...ACTIVE_SUB_STATUSES];
+    const paidGuard=session.managedAttemptId ? `AND EXISTS(SELECT 1 FROM users WHERE id=?
+      AND plan IN (${plans.map(()=>'?').join(',')}) AND subscription_status IN (${statuses.map(()=>'?').join(',')})
+      AND (current_period_end IS NULL OR current_period_end='' OR julianday(current_period_end,'+3 days')>julianday('now')))` : '';
+    const insert = db.prepare(
       `INSERT INTO voice_sessions (id, user_id, role, seniority, jd_excerpt, status, entitlement_mode, model)
        SELECT ?, ?, ?, ?, ?, 'created', ?, ?
-       WHERE (
-         SELECT COUNT(*) FROM voice_sessions
-         WHERE user_id = ? AND strftime('%Y-%m', started_at) = strftime('%Y-%m', 'now')
-       ) < ?`
-    ).bind(sessionId, userRowId, role, seniority, jd, mode, model, userRowId, cap).run();
+       WHERE (${count.sql}) < ? ${guard.sql} ${paidGuard}`
+    ).bind(sessionId, userRowId, role, seniority, jd, mode, model, ...count.args, cap, ...guard.args,
+      ...(session.managedAttemptId ? [userRowId,...plans,...statuses] : []));
+    const res = session.managedAttemptId
+      ? (await db.batch([insert,...managedReservationReceipt(db,session)]))[0] : await insert.run();
     const inserted = (res?.meta?.changes ?? 0) === 1;
     return { inserted, reason: inserted ? null : 'limit_reached' };
   }
@@ -282,8 +325,8 @@ export async function createVoiceSessionRow(env, { sessionId, userRowId, role, s
   return { inserted: true, reason: null };
 }
 
-/** Reserve the credit and its recovery row in one D1 transaction. Mint the
- * provider token BEFORE this call: provider failures must never spend credit.
+/** Reserve the credit and its recovery row in one D1 transaction. Complete
+ * provider setup BEFORE this call: provider failures must never spend credit.
  * A failed insert/update rolls back both statements, including duplicate ids.
  */
 export async function reserveVoiceSession(env, session) {
@@ -291,6 +334,7 @@ export async function reserveVoiceSession(env, session) {
   const db = getDb(env);
   if (!db) return { inserted: false, reason: 'db_unavailable' };
   const { sessionId, userRowId, role, seniority, jd, mode, model } = session;
+  const guard = managedReservationGuard(session);
   if (!['free', 'pack'].includes(mode)) return { inserted: false, reason: 'paywall' };
   const eligible = mode === 'free'
     ? 'free_session_used = 0'
@@ -302,11 +346,12 @@ export async function reserveVoiceSession(env, session) {
     db.prepare(`INSERT INTO voice_sessions
       (id, user_id, role, seniority, jd_excerpt, status, entitlement_mode, model)
       SELECT ?, id, ?, ?, ?, 'created', ?, ? FROM users
-      WHERE id = ? AND ${eligible}`)
-      .bind(sessionId, role, seniority, jd, mode, model, userRowId),
+      WHERE id = ? AND ${eligible} ${guard.sql}`)
+      .bind(sessionId, role, seniority, jd, mode, model, userRowId, ...guard.args),
     db.prepare(`UPDATE users SET ${change}, updated_at = datetime('now')
-      WHERE id = ? AND ${eligible} AND EXISTS (SELECT 1 FROM voice_sessions WHERE id = ? AND user_id = ?)`)
-      .bind(userRowId, sessionId, userRowId)
+      WHERE id = ? AND ${eligible} AND EXISTS (SELECT 1 FROM voice_sessions WHERE id = ? AND user_id = ?) ${guard.sql}`)
+      .bind(userRowId, sessionId, userRowId, ...guard.args),
+    ...managedReservationReceipt(db,session)
   ]);
   const inserted = (results[0]?.meta?.changes ?? 0) === 1;
   return { inserted, reason: inserted ? null : 'paywall' };

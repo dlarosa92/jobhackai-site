@@ -6,6 +6,7 @@
 import { updateUserPlan, getUserPlanData } from './db.js';
 import { assertNoCrossUserStripeIds } from './stripe-identity.js';
 import { redactId } from './stripe-environment.js';
+import { observeBillingWrite } from './account-operation-scope.js';
 
 /**
  * KV key for storing customer ID by Firebase UID
@@ -226,7 +227,13 @@ export function stripe(env, path, init = {}) {
   const fetchOptions = { ...init, headers };
   if (signal) fetchOptions.signal = signal;
 
-  const fetchPromise = fetch(url, fetchOptions);
+  let fetchPromise;
+  try {
+    fetchPromise = observeBillingWrite(env, init.method, () => fetch(url, fetchOptions));
+  } catch (error) {
+    if (timeoutId) clearTimeout(timeoutId);
+    throw error;
+  }
   if (timeoutId) {
     return fetchPromise.finally(() => { if (timeoutId) clearTimeout(timeoutId); });
   }

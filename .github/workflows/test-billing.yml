@@ -14,6 +14,9 @@ on:
       - 'app/functions/pricing.js'
       - 'app/functions/_lib/**'
       - 'app/functions/_middleware.js'
+      - 'shared/firebase-deletion-client.js'
+      - 'workers/voice-followup-email/**'
+      - 'workers/voice-deadlines/**'
       - 'app/db/**'
       - 'app/scripts/**'
       - 'scripts/verify-billing-migrations.sh'
@@ -28,12 +31,33 @@ on:
       - 'app/functions/pricing.js'
       - 'app/functions/_lib/**'
       - 'app/functions/_middleware.js'
+      - 'shared/firebase-deletion-client.js'
+      - 'workers/voice-followup-email/**'
+      - 'workers/voice-deadlines/**'
       - 'app/db/**'
       - 'app/scripts/**'
       - 'scripts/verify-billing-migrations.sh'
       - '.github/workflows/test-billing.yml'
 
 jobs:
+  voice-deadlines:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: workers/voice-deadlines
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: workers/voice-deadlines/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck
+      - name: Real Durable Object RPC, alarms and local D1 with intercepted provider requests
+        run: npm test
+      - name: Build deadline Worker without deployment
+        run: npx wrangler deploy --dry-run --env qa --outdir /tmp/jobhackai-voice-deadlines
   billing-tests:
     runs-on: ubuntu-latest
     steps:
@@ -120,3 +144,41 @@ jobs:
 
       - name: Account deletion billing safety
         run: node --test app/functions/_lib/__tests__/account-deletion-billing.test.mjs
+
+      - name: Durable deletion recovery (real SQLite)
+        run: node --test app/functions/_lib/__tests__/account-deletion-recovery.test.mjs app/functions/_lib/__tests__/account-deletion-admission.test.mjs app/functions/_lib/__tests__/account-operation-scope.test.mjs app/functions/_lib/__tests__/account-creation-fence.test.mjs app/functions/_lib/__tests__/account-webhook-scope.test.mjs
+
+      - name: Recoverable deletion request, Firebase reconciliation and pending UI
+        run: node --test app/functions/_lib/__tests__/account-deletion-process.test.mjs app/functions/_lib/__tests__/account-inactivity-policy.test.mjs app/functions/_lib/__tests__/deletion-execution-reconcile.test.mjs app/functions/_lib/__tests__/account-operation-reconcile.test.mjs
+
+      - name: Voice follow-up deletion coordination and ambiguous delivery
+        run: node --test app/functions/_lib/__tests__/voice-followup-deletion.test.mjs
+
+      - name: Managed voice call ownership and deletion coordination
+        run: node --test app/functions/_lib/__tests__/voice-provider-calls.test.mjs app/functions/_lib/__tests__/voice-managed-interview.test.mjs app/functions/_lib/__tests__/voice-closure-reconcile.test.mjs
+
+  admission-bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install locked application dependencies for Pages bundling
+        run: npm ci --prefix app --ignore-scripts
+      - name: Build the candidate Pages Worker
+        run: |
+          npx --yes wrangler@4.135.0 pages functions build app/functions --outdir=/tmp/jobhackai-admission-worker
+          cp /tmp/jobhackai-admission-worker/index.js /tmp/jobhackai-admission-worker/index.mjs
+      - name: Verify actual middleware routing and JWT admission without live providers
+        env:
+          JOBHACKAI_FUNCTIONS_BUNDLE: /tmp/jobhackai-admission-worker/index.mjs
+        run: node --test app/functions/_lib/__tests__/account-operation-bundle.test.mjs
+      - name: Build the follow-up Worker without deploying or sending email
+        run: |
+          npx --yes wrangler@4.135.0 deploy --dry-run --config workers/voice-followup-email/wrangler.toml --env qa --outdir /tmp/jobhackai-followup-worker
+          cp /tmp/jobhackai-followup-worker/index.js /tmp/jobhackai-followup-worker/index.mjs
+      - name: Verify compiled follow-up Worker with SQLite and intercepted provider traffic
+        env:
+          JOBHACKAI_FOLLOWUP_BUNDLE: /tmp/jobhackai-followup-worker/index.mjs
+        run: node --test app/functions/_lib/__tests__/voice-followup-bundle.test.mjs

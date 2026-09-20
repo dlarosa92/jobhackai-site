@@ -25,6 +25,8 @@ export function createFakeD1(seed = {}) {
   const tables = {
     users: (seed.users || []).map((u, i) => ({ id: u.id ?? i + 1, ...u })),
     deleted_auth_ids: seed.deleted_auth_ids || [],
+    account_deletion_admissions: seed.account_deletion_admissions || [],
+    account_operation_claims: seed.account_operation_claims || [],
     feature_daily_usage: seed.feature_daily_usage || [],
     usage_events: seed.usage_events || [],
     stripe_event_ledger: seed.stripe_event_ledger || [],
@@ -96,6 +98,26 @@ export function createFakeD1(seed = {}) {
     maybeInjectFailure(sql);
     state.executedSql.push(sql);
     const s = sql.replace(/\s+/g, ' ').trim();
+
+    // Webhook admission. Race semantics are exercised separately against
+    // real SQLite; this adapter keeps the established billing fixtures useful.
+    if (s.startsWith('INSERT INTO account_operation_claims')) {
+      if (state.tables.account_deletion_admissions.some(row => row.auth_id === binds[4])) {
+        return { first: null, results: [], changes: 0 };
+      }
+      state.writes++;
+      state.tables.account_operation_claims.push({ id: binds[0], auth_id: binds[1], kind: binds[2], webhook_event_id: binds[3], state: 'active' });
+      return { first: null, results: [], changes: 1 };
+    }
+    if (s.startsWith('UPDATE account_operation_claims SET state=')) {
+      const row = state.tables.account_operation_claims.find(row => row.id === binds[1] && row.auth_id === binds[2] && row.state === 'active');
+      if (row) { state.writes++; row.state = binds[0]; }
+      return { first: null, results: [], changes: row ? 1 : 0 };
+    }
+    if (s.startsWith('SELECT state FROM account_operation_claims')) {
+      const row = state.tables.account_operation_claims.find(row => row.id === binds[0] && row.auth_id === binds[1]);
+      return { first: row ? { state: row.state } : null, results: row ? [{ state: row.state }] : [] };
+    }
 
     // ── stripe_event_ledger: atomic claim ──
     if (s.startsWith('INSERT INTO stripe_event_ledger') && s.includes('ON CONFLICT(event_id) DO UPDATE')) {
@@ -250,6 +272,10 @@ export function createFakeD1(seed = {}) {
 
     // ── users insert (getOrCreateUserByAuthId) ──
     if (s.startsWith('INSERT INTO users (auth_id, email')) {
+      if (s.includes('account_deletion_admissions') && (
+        state.tables.account_deletion_admissions.some(row => row.auth_id === binds[2]) ||
+        state.tables.deleted_auth_ids.some(row => row.auth_id === binds[3])
+      )) return { first: null, results: [], changes: 0 };
       state.writes++;
       const row = {
         id: state.tables.users.reduce((m, u) => Math.max(m, u.id), 0) + 1,

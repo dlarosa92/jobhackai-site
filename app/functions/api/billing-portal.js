@@ -1,4 +1,5 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
+import { accountOperationEnv } from '../_lib/account-operation-scope.js';
 import { stripe } from '../_lib/billing-utils.js';
 import { assertStripeKeyMatchesEnvironment } from '../_lib/stripe-environment.js';
 import { resolvePortalCustomer, PortalOwnershipError } from '../_lib/billing-portal-owner.js';
@@ -9,7 +10,8 @@ import { resolvePortalCustomer, PortalOwnershipError } from '../_lib/billing-por
  * Response: { ok: true, url } or { ok: false, error }
  */
 export async function onRequest(context) {
-  const { request, env } = context;
+  const { request } = context;
+  const env = accountOperationEnv(context);
   const origin = request.headers.get('Origin') || '';
 
   if (request.method === 'OPTIONS') {

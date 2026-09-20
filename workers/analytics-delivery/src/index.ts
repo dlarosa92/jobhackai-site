@@ -1,9 +1,11 @@
 // No HTTP trigger, production binding, payload logging or generated browser IDs.
 // D1 is the durable outbox. A timeout after collection is uncertain, not retryable.
+import { admitAccountOperation, settleAccountOperation } from '../../../app/functions/_lib/account-deletion-admission.js';
 const DAY = 86400000;
 const MAX_AGE = 72 * 3600; // Measurement Protocol timestamp limit, seconds.
 const LEASE = 120000;
 type Row = {
+  auth_id: string;
   event_key: string; event_name: 'purchase' | 'refund'; event_at: number;
   charge_id: string; refund_id: string | null; checkout_session_id: string;
   attempts: number; state: string; amount_captured: number; currency: string;
@@ -19,7 +21,10 @@ type Requester = (url: string, init: RequestInit) => Promise<Response>;
 const consent = `EXISTS (SELECT 1 FROM cookie_consents c WHERE c.user_id=a.user_id AND
   CASE WHEN json_valid(c.consent_json) THEN json_extract(c.consent_json,'$.version')=1 AND json_type(c.consent_json,'$.analytics')='true' ELSE 0 END)
   AND NOT EXISTS (SELECT 1 FROM cookie_consents c WHERE c.client_id=a.client_id AND
-  CASE WHEN json_valid(c.consent_json) THEN COALESCE(json_extract(c.consent_json,'$.version')=1 AND json_type(c.consent_json,'$.analytics')='true',0)=0 ELSE 1 END)`;
+  CASE WHEN json_valid(c.consent_json) THEN COALESCE(json_extract(c.consent_json,'$.version')=1 AND json_type(c.consent_json,'$.analytics')='true',0)=0 ELSE 1 END)
+  AND EXISTS (SELECT 1 FROM users u WHERE u.id=a.user_id
+    AND NOT EXISTS (SELECT 1 FROM account_deletion_admissions d WHERE d.auth_id=u.auth_id)
+    AND NOT EXISTS (SELECT 1 FROM deleted_auth_ids d WHERE d.auth_id=u.auth_id))`;
 
 export async function retain(db: D1Database, now: number) {
   // Expired consent context and its joins/outbox are erased; financial rows stay.
@@ -71,11 +76,12 @@ export async function enqueue(db: D1Database, environment: string, now: number) 
 }
 
 async function eligible(db: D1Database, key: string, env: Env, now: number) {
-  return db.prepare(`SELECT d.*,p.amount_captured,p.currency,m.captured_minor,m.value_minor,m.tax_minor,m.item_id,
+  return db.prepare(`SELECT d.*,u.auth_id,p.amount_captured,p.currency,m.captured_minor,m.value_minor,m.tax_minor,m.item_id,
       r.amount refund_amount,r.status refund_status,a.ga_client_id,a.ga_session_id,a.first_touch_json,a.last_touch_json
     FROM analytics_delivery d JOIN stripe_collected_payments p ON p.charge_id=d.charge_id
     JOIN stripe_payment_attributions l ON l.charge_id=p.charge_id AND l.checkout_session_id=d.checkout_session_id
     JOIN checkout_attributions a ON a.checkout_session_id=d.checkout_session_id
+    JOIN users u ON u.id=a.user_id
     LEFT JOIN stripe_payment_analytics_values m ON m.charge_id=p.charge_id
     LEFT JOIN stripe_payment_refunds r ON r.refund_id=d.refund_id AND r.charge_id=d.charge_id
     WHERE d.event_key=?1 AND p.environment=?2 AND a.environment=?2 AND p.livemode=0
@@ -173,28 +179,57 @@ export async function deliver(env: Env, options: {now?:()=>number; request?:Requ
     }
     const data=payload(row,clock(),env.DEBUG_EVENTS==='true');
     if(typeof data==='string'){await finish(db,key,lease,'ineligible',data,clock());continue;}
-    const query=new URLSearchParams({measurement_id:env.GA4_MEASUREMENT_ID,api_secret:env.GA4_API_SECRET});
+    let operation;
     try {
-      const checked=await request('https://www.google-analytics.com/debug/mp/collect?'+query,
-        {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...data,validation_behavior:'ENFORCE_RECOMMENDATIONS'}),signal:AbortSignal.timeout(8000)});
-      if(!await validateResponse(checked)){await finish(db,key,lease,'pending','validation_not_confirmed',clock(),checked.status);continue;}
-    } catch {await finish(db,key,lease,'pending','validation_network_failure',clock());continue;}
-    // Consent, money, refunds and context may have changed during validation.
-    const fresh=await eligible(db,key,env,clock());
-    const freshData=fresh?payload(fresh,clock(),env.DEBUG_EVENTS==='true'):null;
-    if(!freshData || typeof freshData==='string' || JSON.stringify(freshData)!==JSON.stringify(data)) {
-      await finish(db,key,lease,'ineligible','context_changed_during_validation',clock());continue;
+      operation=await admitAccountOperation(env,row.auth_id,'account',{analyticsEventKey:key});
+    } catch(error) {
+      const reason=error instanceof Error ? error.message : '';
+      if(reason==='account_deletion_pending' || reason==='analytics_delivery_suppressed' || reason==='analytics_delivery_unresolved' || reason==='account_operation_busy') {
+        await finish(db,key,lease,['account_deletion_pending','analytics_delivery_suppressed'].includes(reason)?'ineligible':'pending',reason,clock());
+        continue;
+      }
+      throw error; // Missing schema/binding must not reach a provider.
     }
-    const sending=await db.prepare(`UPDATE analytics_delivery SET state='sending',updated_at=?
-      WHERE event_key=? AND state='validating' AND lease_until=? AND lease_until>?`).bind(clock(),key,lease,clock()).run();
-    if(!sending.meta.changes) continue;
+    let uncertain=false;
     try {
-      const sent=await request('https://www.google-analytics.com/mp/collect?'+query,
-        {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data),signal:AbortSignal.timeout(8000)});
-      await sent.body?.cancel();
-      await finish(db,key,lease,sent.ok?'accepted_unverified':sent.status>=400&&sent.status<500?'rejected':'uncertain',
-        sent.ok?'http_accepted_receipt_unverified':'collection_http_error',clock(),sent.status);
-    } catch {await finish(db,key,lease,'uncertain','collection_network_outcome_unknown',clock());}
+      // Candidate selection precedes admission. Recheck ownership and all
+      // consent/context conditions before disclosing even to the debug endpoint.
+      const admitted=await eligible(db,key,env,clock());
+      const admittedData=admitted?payload(admitted,clock(),env.DEBUG_EVENTS==='true'):null;
+      if(!admitted || admitted.auth_id!==row.auth_id || JSON.stringify(admittedData)!==JSON.stringify(data)) {
+        await finish(db,key,lease,'ineligible','context_changed_before_validation',clock());continue;
+      }
+      const query=new URLSearchParams({measurement_id:env.GA4_MEASUREMENT_ID,api_secret:env.GA4_API_SECRET});
+      try {
+        const checked=await request('https://www.google-analytics.com/debug/mp/collect?'+query,
+          {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...data,validation_behavior:'ENFORCE_RECOMMENDATIONS'}),signal:AbortSignal.timeout(8000)});
+        if(!await validateResponse(checked)){await finish(db,key,lease,'pending','validation_not_confirmed',clock(),checked.status);continue;}
+      } catch {await finish(db,key,lease,'pending','validation_network_failure',clock());continue;}
+      // Consent, money, refunds and context may have changed during validation.
+      const fresh=await eligible(db,key,env,clock());
+      const freshData=fresh?payload(fresh,clock(),env.DEBUG_EVENTS==='true'):null;
+      if(!freshData || fresh?.auth_id!==row.auth_id || typeof freshData==='string' || JSON.stringify(freshData)!==JSON.stringify(data)) {
+        await finish(db,key,lease,'ineligible','context_changed_during_validation',clock());continue;
+      }
+      const sending=await db.prepare(`UPDATE analytics_delivery SET state='sending',updated_at=?
+        WHERE event_key=? AND state='validating' AND lease_until=? AND lease_until>?`).bind(clock(),key,lease,clock()).run();
+      if(!sending.meta.changes) continue;
+      try {
+        const sent=await request('https://www.google-analytics.com/mp/collect?'+query,
+          {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data),signal:AbortSignal.timeout(8000)});
+        await sent.body?.cancel();
+        uncertain=!sent.ok && !(sent.status>=400 && sent.status<500 && ![408,429].includes(sent.status));
+        await finish(db,key,lease,sent.ok?'accepted_unverified':uncertain?'uncertain':'rejected',
+          sent.ok?'http_accepted_receipt_unverified':'collection_http_error',clock(),sent.status);
+      } catch {uncertain=true;await finish(db,key,lease,'uncertain','collection_network_outcome_unknown',clock());}
+    } catch(error) {
+      uncertain=true;
+      throw error;
+    } finally {
+      // Includes final outbox writes. A crash/failed settlement leaves active
+      // admission; an uncertain collection is never treated as a finished send.
+      await settleAccountOperation(env,operation,uncertain?'uncertain':'finished');
+    }
   }
   const states=await db.prepare('SELECT state,COUNT(*) count FROM analytics_delivery GROUP BY state').all<{state:string;count:number}>();
   return {enabled:true,processed,states:states.results};
