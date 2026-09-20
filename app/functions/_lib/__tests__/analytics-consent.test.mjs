@@ -140,6 +140,67 @@ test('revoking and regranting reuse the same GA runtime and configuration',async
   assert.equal(h.events('page_view').length,1);
 });
 
+test('Clarity receives analytics-only consent before loading, never advertising consent',async()=>{
+  const h=harness({config:{GA_ID:'',CLARITY_ID:'test-project'}});await h.init();
+  assert.equal(h.insertedScripts.length,1);
+  const command=h.ctx.clarity.q[0];
+  assert.equal(command[0],'consentv2');assert.equal(command[1].analytics_Storage,'granted');assert.equal(command[1].ad_Storage,'denied');
+});
+test('withdrawal stops loaded Clarity without calling its restart-triggering denial API',async()=>{
+  const h=harness({config:{GA_ID:'',CLARITY_ID:'test-project'}});await h.init();
+  const calls=[];let active=true;let restarts=0;
+  // Mirror the relevant SDK lifecycle: denial while active schedules a
+  // restart; stop replaces the dispatcher with a queue.
+  h.ctx.clarity=(...args)=>{
+    calls.push(args);
+    if(args[0]==='consentv2' && args[1].analytics_Storage==='denied' && active) restarts++;
+    if(args[0]==='stop') {
+      active=false;
+      h.ctx.clarity=function(...entry){(h.ctx.clarity.q ||= []).push(entry);};
+    }
+  };
+  h.cookies.set('_clck','test-user');h.cookies.set('_clsk','test-session');
+  h.setConsent(false);
+  assert.deepEqual(calls,[['stop']]);assert.equal(active,false);assert.equal(restarts,0);
+  assert.equal(h.cookies.has('_clck'),false);assert.equal(h.cookies.has('_clsk'),false);
+  h.setConsent(true);h.ctx.JHA.clarityIdentifySafe('must-not-queue');
+  assert.equal(active,false);assert.equal(h.ctx.clarity.q?.length||0,0);
+  assert.equal(h.insertedScripts.length,1);
+});
+test('withdrawal then regrant during download preserves the stop and drops old identity',async()=>{
+  const h=harness({config:{GA_ID:'',CLARITY_ID:'test-project'}});await h.init();
+  h.ctx.JHA.clarityIdentifySafe('old-identity');h.setConsent(false);h.setConsent(true);
+  assert.deepEqual(Array.from(h.ctx.clarity.q,call=>call[0]),['stop']);
+  h.ctx.JHA.clarityIdentifySafe('new-identity');
+  assert.ok(!h.ctx.clarity.q.some(call=>call[0]==='identify'));
+  const calls=[];h.ctx.clarity=(...args)=>calls.push(args);h.scripts[0].onload();
+  assert.deepEqual(calls,[['stop']]);assert.equal(h.insertedScripts.length,1);
+});
+test('failed Clarity tag retries after a new grant without restoring stale identity',async()=>{
+  const h=harness({config:{GA_ID:'',CLARITY_ID:'test-project'}});await h.init();
+  h.ctx.JHA.clarityIdentifySafe('old-identity');const failed=h.scripts[0];failed.onerror();
+  h.setConsent(false);h.setConsent(true);
+  assert.equal(h.scripts.length,1);assert.notEqual(h.scripts[0],failed);
+  assert.equal(h.insertedScripts.length,2);
+  assert.deepEqual(Array.from(h.ctx.clarity.q,call=>call[0]),['consentv2']);
+  assert.equal(h.ctx.clarity.q[0][1].analytics_Storage,'granted');
+  assert.equal(h.ctx.clarity.q[0][1].ad_Storage,'denied');
+});
+test('a failed tag cannot replace a runtime that has already taken over',async()=>{
+  const h=harness({config:{GA_ID:'',CLARITY_ID:'test-project'}});await h.init();
+  const calls=[];const runtime=(...args)=>calls.push(args);h.ctx.clarity=runtime;
+  h.scripts[0].onerror();h.setConsent(false);h.setConsent(true);
+  assert.equal(h.ctx.clarity,runtime);assert.equal(h.insertedScripts.length,1);
+  assert.deepEqual(calls,[['stop']]);
+});
+test('private tool and account pages explicitly mask their rendered contents',()=>{
+  for(const name of ['voice-interview','mock-interview','cover-letter-generator','interview-questions','linkedin-optimizer','resume-feedback-pro','account-setting','dashboard','dashboard-trial','free-account-onboarding']) {
+    const html=readFileSync(new URL('../../../../'+name+'.html',import.meta.url),'utf8');
+    assert.match(html,/<body\b[^>]*data-clarity-mask="true"/,name);
+    assert.doesNotMatch(html,/data-clarity-unmask\s*=\s*["']true["']/i,name);
+  }
+});
+
 for (const tokenResult of ['reject', 'empty']) {
   test('a signed-in token failure does not become anonymous consent: '+tokenResult, async () => {
     const h=harness();
