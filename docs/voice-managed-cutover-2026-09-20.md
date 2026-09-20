@@ -62,15 +62,65 @@ Pages projects returned 1,631 and306 deployments respectively, without page
 errors. Of these, 69dev and28QA successful deployments retain both an enabled
 voice setting and an OpenAI secret binding. These counts include each current
 canonical deployment. They are possible old issuers based on configuration,
-not proof of current reachability or active provider calls. Preview-environment
-deployments were not exhaustively inventoried. No deployment was deleted and
-no key, Access policy, app flag or binding was changed.
+not proof of current reachability or active provider calls. The complete preview
+histories subsequently returned 2,092 dev and 3,143 QA deployments with no page
+errors and no OpenAI secret bindings. No deployment was deleted and no key,
+app flag or binding was changed.
+
+### Legacy deployment endpoint restriction applied
+
+The signed-in Cloudflare dashboard showed one existing Access application:
+`b0203e46-2049-4269-805f-f88670289553`, covering
+`*.jobhackai-app-dev.pages.dev`, with its owner-only Allow policy. There was no
+QA application. The OAuth account application-list endpoint incorrectly gave
+an empty inventory relative to the dashboard; organization and zone Access
+reads returned authorization errors. Do not use that empty list as absence
+proof or overwrite the existing application.
+
+A separate, reversible self-hosted application was created through the
+dashboard: **JobHackAI legacy voice issuer block - dev and QA**, ID
+`a3d6ae55-fb0d-4f83-81d3-f335b0567c42`. Its only policy is **Block legacy voice
+token issuance**, ID `ceb7e94d-e7b2-487d-8de5-1a50892d8d77`, action Block,
+Include Everyone, with no Allow, Bypass or Service Auth exception. The saved
+destinations are exactly:
+
+- `*.jobhackai-app-qa.pages.dev/api/voice/session`
+- `*.jobhackai-app-dev.pages.dev/api/voice/session`
+
+First, the policy was piloted on the obsolete QA deployment `6e547e4f`.
+Its endpoint changed from application JSON405 to a302 redirect to
+`jobhack.cloudflareaccess.com`; its login page stayed200. After expanding
+to the two wildcard paths, independent anonymous GET checks of all97
+identified candidate deployment URLs returned the same Access redirect,
+with zero exceptions. Requests used the consistent User-Agent
+`JobHackAI release verification` and did not follow redirects or invoke a
+provider. Evidence: `legacy-issuer-access-verification.json` in the private
+staging evidence directory. The dashboard was reopened and both destinations
+and the policy were re-read after saving.
+
+This is saved-policy and anonymous edge-routing evidence, not authenticated
+denial or proof of credential drain. The owner policy tester returned
+`access.api.error.invalid_user_id` and evaluated zero policies; its accompanying
+"Access denied" heading is not a valid acceptance result. An authenticated
+denial check remains outstanding. The more specific path application is
+intended to override the existing broad development Allow application.
+
+The custom domains `dev.jobhackai.io` and `qa.jobhackai.io`, and the root
+`jobhackai-app-{dev,qa}.pages.dev` hosts, still return application JSON405 for
+GET on the old endpoint. Their current voice flow remains available pending
+the managed deployment. They must be disabled/switched as part of the actual
+cutover, and previously issued credentials/in-flight calls still need drain
+evidence. The restriction does not target `/api/voice/connection`, other site
+paths, or any production hostname. Rollback is removal of only the new
+application after checking the need to restore these old endpoints; preserve
+the pre-existing development Access application. Do not remove the shared
+policy if it has acquired another application attachment.
 
 Switching only the custom-domain deployment does not establish that earlier
 immutable URLs or already-issued credentials are drained. Finish the old-issuer
-inventory, choose and verify a scoped disable/drain procedure, then install the
-worker and app in development before QA. Do not revoke an old key without
-establishing its environment/production dependencies. Actual invocation/provider
+authenticated restriction check and canonical-host disable/drain procedure,
+then install the worker and app in development before QA. Do not revoke an old
+key without establishing its environment/production dependencies. Actual invocation/provider
 evidence, abandoned-browser expiry, recovery, one-time entitlement use, report
 quality, human ending acceptance and measured cost remain required.
 
@@ -83,4 +133,6 @@ release still require the final concrete approval.
 References checked September20:
 [Cloudflare deployed secrets](https://developers.cloudflare.com/workers/configuration/secrets/),
 [Pages deployment inventory](https://developers.cloudflare.com/api/resources/pages/subresources/projects/subresources/deployments/methods/list/),
-[immutable preview URLs and access controls](https://developers.cloudflare.com/pages/configuration/preview-deployments/).
+[immutable preview URLs and access controls](https://developers.cloudflare.com/pages/configuration/preview-deployments/),
+[Access policy actions](https://developers.cloudflare.com/cloudflare-one/access-controls/policies/),
+[specific path precedence](https://developers.cloudflare.com/cloudflare-one/access-controls/policies/app-paths/).
