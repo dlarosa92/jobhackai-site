@@ -2295,7 +2295,8 @@
       let featuresHtml = '<div class="dashboard-features">';
       // Always render ATS Scoring first
       const atsFeature = features.find(f => f.key === 'ats');
-      const otherFeatures = features.filter(f => f.key !== 'ats');
+      // Preserve the legacy Premium benefit without advertising a retired upgrade.
+      const otherFeatures = features.filter(f => f.key !== 'ats' && (f.key !== 'priorityReview' || user.plan === 'premium'));
       const orderedFeatures = [atsFeature, ...otherFeatures];
       for (const feature of orderedFeatures) {
         const isUnlocked = unlocked.includes(feature.key);

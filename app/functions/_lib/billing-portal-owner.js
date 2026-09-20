@@ -33,12 +33,13 @@ async function listAll(env, path) {
 const terminal = new Set(['canceled', 'incomplete_expired']);
 const statuses = new Set(['active', 'trialing', 'past_due', 'unpaid', 'paused', 'incomplete', ...terminal]);
 
-export async function resolvePortalCustomer(env, { uid, email }) {
+// Return the checked snapshot so status display does not re-fetch unchecked data.
+export async function resolveBillingAccount(env, { uid, email }, { allowMappedLegacySubscription = false } = {}) {
   const db = getDb(env);
   if (!db) throw new Error('Billing database unavailable');
   // D1 is authoritative. A stale KV customer cannot override this mapping.
   // This path deliberately does not adopt, stamp, cache, or repair identities.
-  const user = await db.prepare('SELECT stripe_customer_id, email FROM users WHERE auth_id = ?').bind(uid).first();
+  const user = await db.prepare('SELECT stripe_customer_id, stripe_subscription_id, email FROM users WHERE auth_id = ?').bind(uid).first();
   if (!user) return null;
   let customer;
   if (user.stripe_customer_id) {
@@ -74,17 +75,26 @@ export async function resolvePortalCustomer(env, { uid, email }) {
   }
   // Dev and QA currently share a Stripe account. A full customer portal can
   // change every subscription, so reject mixed or unproven active ownership.
-  for (const sub of await listAll(env, `/subscriptions?customer=${encodeURIComponent(customer.id)}&status=all`)) {
+  const subscriptions = await listAll(env, `/subscriptions?customer=${encodeURIComponent(customer.id)}&status=all`);
+  for (const sub of subscriptions) {
     const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id;
     if (!sub.id || customerId !== customer.id || !statuses.has(sub.status) ||
         (sub.metadata?.firebaseUid && sub.metadata.firebaseUid !== uid) ||
         !(await assertNoCrossUserStripeIds(env, { uid, stripeSubscriptionId: sub.id })).ok) {
       throw new PortalOwnershipError();
     }
+    // Display-only legacy exception: this environment's D1 mapping and the
+    // subscription UID must independently identify the same subscription.
+    // Explicit foreign stamps are never overridden; portal calls stay strict.
+    const mappedLegacyRead = allowMappedLegacySubscription && sub.id === user.stripe_subscription_id && sub.metadata?.firebaseUid === uid;
     if (!terminal.has(sub.status) && (isForeignEnvironmentStamp(env, sub.metadata?.environment) ||
-        (canonicalEnvironmentName(env) !== 'prod' && !canonicalizeEnvironmentStamp(sub.metadata?.environment)))) {
+        (canonicalEnvironmentName(env) !== 'prod' && !canonicalizeEnvironmentStamp(sub.metadata?.environment) && !mappedLegacyRead))) {
       throw new PortalOwnershipError();
     }
   }
-  return customer.id;
+  return { customer, subscriptions };
+}
+
+export async function resolvePortalCustomer(env, identity) {
+  return (await resolveBillingAccount(env, identity))?.customer.id || null;
 }
