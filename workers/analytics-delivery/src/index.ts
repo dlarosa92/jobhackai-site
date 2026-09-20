@@ -49,6 +49,15 @@ export async function enqueue(db: D1Database, environment: string, now: number) 
       WHERE p.environment=?2 AND a.environment=?2 AND p.livemode=0 AND r.status='succeeded'
         AND r.refund_created_at>=?3 AND a.expires_at>?1 AND ${consent}
       ON CONFLICT(event_key) DO NOTHING`).bind(now,environment,earliest),
+    // A partial capture can become a fully allocated payment after the first
+    // scan. This row has never reached collection; restore only this safe case.
+    db.prepare(`UPDATE analytics_delivery SET state='pending',last_reason='financial_breakdown_ready',next_attempt_at=?1,updated_at=?1
+      WHERE state='ineligible' AND last_reason='financial_breakdown_missing' AND EXISTS (
+        SELECT 1 FROM stripe_collected_payments p JOIN stripe_payment_analytics_values m ON m.charge_id=p.charge_id
+        WHERE p.charge_id=analytics_delivery.charge_id AND p.environment=?2 AND p.livemode=0
+          AND p.currency='usd' AND m.currency=p.currency AND m.captured_minor=p.amount_captured
+          AND m.value_minor>=0 AND m.tax_minor>=0 AND m.value_minor+m.tax_minor=p.amount_captured
+          AND m.item_id IN ('jobhackai_subscription','jobhackai_one_time'))`).bind(now,environment),
     db.prepare(`UPDATE analytics_delivery SET state='pending',lease_until=NULL,last_reason='validation_lease_expired',updated_at=?
       WHERE state='validating' AND lease_until<=?`).bind(now,now),
     db.prepare(`UPDATE analytics_delivery SET state='uncertain',lease_until=NULL,last_reason='collection_lease_expired',updated_at=?

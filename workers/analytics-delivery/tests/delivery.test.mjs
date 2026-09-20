@@ -137,3 +137,13 @@ test('crashed validation can retry safely; events aging beyond 72 hours expire',
   const aged=setup(t);await enqueue(aged.db,'qa',NOW);await aged.run({now:()=>NOW+73*3600000});
   assert.equal(aged.calls.length,0);
 });
+
+test('a later complete capture requeues only a previously undelivered missing breakdown',async t=>{
+  const f=setup(t);f.db.exec("UPDATE stripe_collected_payments SET amount_captured=1950; DELETE FROM stripe_payment_analytics_values");
+  await f.run();assert.equal((await f.rows())[0].last_reason,'financial_breakdown_missing');assert.equal(f.calls.length,0);
+  f.db.exec("UPDATE stripe_collected_payments SET amount_captured=3900; INSERT INTO stripe_payment_analytics_values VALUES('ch_test',3900,3900,0,'usd','jobhackai_one_time')");
+  await f.run();await f.run();
+  assert.equal(f.calls.filter(c=>!c.url.includes('/debug/')).length,1);
+  assert.equal(f.calls[1].body.events[0].params.value,39);
+  assert.equal((await f.rows())[0].state,'accepted_unverified');
+});
