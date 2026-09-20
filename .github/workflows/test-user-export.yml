@@ -1,0 +1,27 @@
+name: Account data export
+on:
+  pull_request:
+    branches: [dev0, develop, main]
+    paths:
+      - 'app/functions/api/user/export.js'
+      - 'app/functions/_lib/__tests__/user-export.test.mjs'
+      - 'app/functions/_lib/__tests__/sqlite-d1-helper.mjs'
+      - 'app/db/migrations/**'
+      - '.github/workflows/test-user-export.yml'
+  push:
+    branches: [dev0, develop, main]
+    paths:
+      - 'app/functions/api/user/export.js'
+      - 'app/functions/_lib/__tests__/user-export.test.mjs'
+      - '.github/workflows/test-user-export.yml'
+permissions:
+  contents: read
+jobs:
+  export-privacy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test app/functions/_lib/__tests__/user-export.test.mjs
