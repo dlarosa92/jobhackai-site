@@ -6,7 +6,7 @@ import test from 'node:test';
 const source = readFileSync(new URL('../../../../js/cookie-consent.js', import.meta.url), 'utf8');
 const GA = 'G-SQYSWPFM5X';
 function harness({host = 'app.jobhackai.io', consent = true, config, pendingServer = false, search = '', cookies = new Map(), store = new Map()} = {}) {
-  const scripts = [], insertedScripts = [], elements = new Map(), timers = [], requests = [], listeners = {};
+  const scripts = [], insertedScripts = [], appendedElements = [], elements = new Map(), timers = [], requests = [], listeners = {};
   if (consent !== null) store.set('jha_cookie_consent_v1', JSON.stringify({version:1,analytics: consent}));
   function element(tag = 'div') {
     return { tagName: tag, style: {}, innerHTML: '', classList: {add(){},remove(){},contains(){return false;}},
@@ -18,7 +18,7 @@ function harness({host = 'app.jobhackai.io', consent = true, config, pendingServ
   const document = {
     readyState: 'loading', title: 'JobHackAI', referrer: 'https://example.com/?email=private@example.com', cookie: '',
     createElement: element, getElementById: node,
-    head: {appendChild(e){scripts.push(e);insertedScripts.push(e);}}, body: {style:{},appendChild(){}},
+    head: {appendChild(e){scripts.push(e);insertedScripts.push(e);}}, body: {style:{},appendChild(e){appendedElements.push(e);}},
     addEventListener(type,fn){listeners[type]=fn;},
     querySelector(selector){ return this.querySelectorAll(selector)[0] || null; },
     querySelectorAll(selector){const needle=selector.match(/src\*="([^"]+)"/)?.[1]; return needle ? scripts.filter(s => (s.src||'').includes(needle)) : [];},
@@ -40,13 +40,21 @@ function harness({host = 'app.jobhackai.io', consent = true, config, pendingServ
   };
   ctx.window=ctx;
   vm.createContext(ctx); vm.runInContext(source,ctx);
-  return {ctx, scripts, insertedScripts, requests, node, cookies, store,
+  return {ctx, scripts, insertedScripts, appendedElements, requests, node, cookies, store,
     init:()=>listeners.DOMContentLoaded(),
     finishServer:analytics=>resolveServer({ok:true,json:async()=>({ok:true,consent:analytics===null?null:{version:1,analytics}, ...(analytics===null?{resetConsent:true}:{})})}),
     runTimers(){while(timers.length)timers.shift()();},
     events:name=>(ctx.dataLayer||[]).filter(a=>a[0]==='event'&&a[1]===name),
     setConsent(analytics){ctx.JHA.cookieConsent.openPreferences();node('jha-toggle-analytics').checked=analytics;node('jha-save-preferences').onclick();}
   };
+}
+for (const [host, policy] of [['jobhackai.io','https://app.jobhackai.io/cookies'],['app.jobhackai.io','/cookies'],['qa.jobhackai.io','https://qa.jobhackai.io/cookies'],['develop.jobhackai-app-marketing-seo.pages.dev','https://qa.jobhackai.io/cookies'],['abc.pages.dev','https://dev.jobhackai.io/cookies']]) {
+  test(host+' cookie policy link uses the matching app without changing consent API routing', async()=>{
+    const h=harness({host,consent:null}); await h.init();
+    const banner=h.appendedElements.find(e=>e.id==='jha-cookie-banner');
+    assert.ok(banner.innerHTML.includes(`href="${policy}"`));
+    if(host!=='jobhackai.io') assert.equal(h.requests[0].url,'/api/cookie-consent');
+  });
 }
 for (const host of ['dev.jobhackai.io','localhost','127.0.0.1','abc.pages.dev','notjobhackai.io']) {
   test(host+' never defaults to production analytics or production consent writes',async()=>{

@@ -37,6 +37,11 @@
   // Only the production marketing domains send consent to the production app.
   // Previews and local development must never write production consent records.
   const API_BASE = ['jobhackai.io', 'www.jobhackai.io'].includes(hostname) ? 'https://app.jobhackai.io' : '';
+  // Marketing previews have no local policy page. Policy navigation is
+  // separate from API routing so preview consent never writes to production.
+  const POLICY_BASE = productionHost ? API_BASE
+    : ['qa.jobhackai.io', 'develop.jobhackai-app-marketing-seo.pages.dev'].includes(hostname)
+      ? 'https://qa.jobhackai.io' : 'https://dev.jobhackai.io';
   window.JHA = window.JHA || {};
   window.JHA.apiBase = API_BASE;
   // Cookie domain: use .jobhackai.io so the client_id cookie is shared across subdomains
@@ -141,7 +146,7 @@
     if (!document.body || syncNotice) return;
     syncNotice = document.createElement('div');
     syncNotice.setAttribute('role', 'status');
-    syncNotice.style.cssText = 'position:fixed;bottom:16px;left:16px;right:16px;z-index:10002;padding:12px 16px;background:#fff;color:#111;border:1px solid #888;border-radius:8px;font:14px/1.5 system-ui;';
+    syncNotice.style.cssText = 'position:relative;margin:16px;padding:12px 16px;background:#fff;color:#111;border:1px solid #888;border-radius:8px;font:14px/1.5 system-ui;';
     syncNotice.textContent = 'Your cookie choice is saved on this browser. Account sync is pending; we will retry when you reconnect or reload.';
     document.body.appendChild(syncNotice);
   }
@@ -575,7 +580,7 @@
     bannerElement.setAttribute('aria-label', 'Cookie preferences');
     bannerElement.innerHTML = `
       <div class="jha-cookie-inner">
-        <p>We use cookies to improve your experience. <a href="${API_BASE}/cookies.html">Learn more</a></p>
+        <p>We use cookies to improve your experience. <a href="${POLICY_BASE}/cookies">Learn more</a></p>
         <div class="jha-cookie-actions">
           <button id="jha-accept-all" class="jha-btn-accept">Accept Analytics</button>
           <button id="jha-reject-all" class="jha-btn-reject">Reject Analytics</button>
@@ -637,7 +642,7 @@
             <div class="jha-cookie-category-header">
               <h3>Analytics Cookies</h3>
               <label class="jha-toggle">
-                <input type="checkbox" id="jha-toggle-analytics" ${hasAnalyticsConsent() ? 'checked' : ''}>
+                <input type="checkbox" id="jha-toggle-analytics" aria-label="Allow analytics cookies" ${hasAnalyticsConsent() ? 'checked' : ''}>
                 <span class="jha-toggle-slider"></span>
               </label>
             </div>

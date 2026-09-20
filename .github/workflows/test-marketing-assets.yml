@@ -6,6 +6,7 @@ on:
       - 'marketing/**'
       - 'js/cookie-consent.js'
       - 'js/blog-cta.js'
+      - 'css/main.css'
       - 'app/functions/_lib/__tests__/blog-cta.test.mjs'
       - '.github/workflows/test-marketing-assets.yml'
   push:
@@ -14,6 +15,7 @@ on:
       - 'marketing/**'
       - 'js/cookie-consent.js'
       - 'js/blog-cta.js'
+      - 'css/main.css'
       - '.github/workflows/test-marketing-assets.yml'
 permissions:
   contents: read
@@ -27,3 +29,4 @@ jobs:
           node-version: '20'
       - run: node marketing/scripts/sync-shared-assets.mjs --check
       - run: node --test app/functions/_lib/__tests__/blog-cta.test.mjs app/functions/_lib/__tests__/analytics-consent.test.mjs
+      - run: node --test marketing/tests/directory-consent.test.mjs
