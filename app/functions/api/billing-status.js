@@ -2,12 +2,12 @@ import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { getUserPlanData } from '../_lib/db.js';
 import { stripe, pickBestSubscription, priceIdToPlan } from '../_lib/billing-utils.js';
 import { redactId } from '../_lib/stripe-environment.js';
-import { selectUidOwnedCustomers, readSubscriptionPeriod } from '../_lib/stripe-identity.js';
+import { selectUidOwnedCustomers, readSubscriptionPeriod, readSubscriptionCancellation } from '../_lib/stripe-identity.js';
 
 /**
  * GET /api/billing-status
  * Returns the current billing status from Stripe for the authenticated user
- * Response: { ok: true, plan, status, trialEndsAt, currentPeriodEnd, hasPaymentMethod }
+ * Response: { ok: true, plan, status, trialEndsAt, currentPeriodEnd, cancelAt, hasPaymentMethod }
  */
 export async function onRequest(context) {
   const { request, env } = context;
@@ -50,7 +50,7 @@ export async function onRequest(context) {
         const cachedData = JSON.parse(cached);
         const cacheAge = Date.now() - cachedData.timestamp;
         // Cache valid for 5 minutes (300000 ms)
-        if (cacheAge < 300000) {
+        if (cacheAge < 300000 && Object.prototype.hasOwnProperty.call(cachedData.data || {}, 'cancelAt')) {
           console.log('✅ [BILLING-STATUS] Cache hit', { cacheAge: Math.round(cacheAge / 1000) + 's' });
           return json({ ...cachedData.data, _cached: true }, 200, origin, env);
         }
@@ -143,6 +143,7 @@ export async function onRequest(context) {
             status: 'none',
             trialEndsAt: null,
             currentPeriodEnd: null,
+            cancelAt: null,
             hasPaymentMethod: false
           }, 200, origin, env);
         }
@@ -157,6 +158,7 @@ export async function onRequest(context) {
           status: 'none',
           trialEndsAt: null,
           currentPeriodEnd: null,
+        cancelAt: null,
           hasPaymentMethod: false
         }, 200, origin, env);
       }
@@ -188,6 +190,7 @@ export async function onRequest(context) {
         status: 'none',
         trialEndsAt: null,
         currentPeriodEnd: null,
+        cancelAt: null,
         hasPaymentMethod: false
       }, 200, origin, env);
     }
@@ -224,6 +227,7 @@ export async function onRequest(context) {
       status: bestSub.status,
       trialEndsAt: bestSub.trial_end ? bestSub.trial_end * 1000 : null,
       currentPeriodEnd: periodEndIso ? Date.parse(periodEndIso) : null,
+      cancelAt: readSubscriptionCancellation(bestSub, periodEndIso),
       hasPaymentMethod: hasPaymentMethod
     };
 
