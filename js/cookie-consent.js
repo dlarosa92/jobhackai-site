@@ -953,6 +953,10 @@
 
   // Initialize
   async function init() {
+    // Privacy controls must work even while account reconciliation is slow
+    // or unavailable. Opening/saving the modal applies the local choice now.
+    setupAccountSettingsButton();
+
     // Fetch consent from server (D1 source of truth) on page load
     // This ensures multi-device sync and makes D1 the actual source of truth
     const pending = getPendingConsent();
@@ -975,9 +979,6 @@
 
     // Show banner if no consent
     createBanner();
-
-    // Setup Account Settings button
-    setupAccountSettingsButton();
 
     // Wire site-wide tracking that doesn't need module loading.
     installCtaTracker();

@@ -6,6 +6,7 @@ The 90-day content standard is preserved, with existing pinned LinkedIn, reused-
 
 ## Evidence
 
+- A review finding exposed a network-dependent preference button. The shared consent script now attaches its handler before pending writes or server reads. Fifty-nine consent/blog/directory tests pass, including stalled reads/writes and late-grant rejection races.
 - Six actual-worker/real-SQLite tests cover nonmutating audit, scoped expiration, preserved recent/pinned/reused data, reruns, existing partial stripping and failure paths.
 - Wrangler QA dry run verifies the existing QA D1/KV bindings and `RETENTION_MODE=audit`. No live record deletion was enabled or run.
 - Local desktop and 375px iframe review confirmed readable policy text, a contained consent dialog, and working save/reopen controls. This is not a native-device test.
