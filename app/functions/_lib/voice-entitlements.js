@@ -282,6 +282,36 @@ export async function createVoiceSessionRow(env, { sessionId, userRowId, role, s
   return { inserted: true, reason: null };
 }
 
+/** Reserve the credit and its recovery row in one D1 transaction. Mint the
+ * provider token BEFORE this call: provider failures must never spend credit.
+ * A failed insert/update rolls back both statements, including duplicate ids.
+ */
+export async function reserveVoiceSession(env, session) {
+  if (session.mode === 'subscription') return createVoiceSessionRow(env, session);
+  const db = getDb(env);
+  if (!db) return { inserted: false, reason: 'db_unavailable' };
+  const { sessionId, userRowId, role, seniority, jd, mode, model } = session;
+  if (!['free', 'pack'].includes(mode)) return { inserted: false, reason: 'paywall' };
+  const eligible = mode === 'free'
+    ? 'free_session_used = 0'
+    : "voice_sessions_remaining > 0 AND (pack_expires_at IS NULL OR julianday(pack_expires_at) > julianday('now'))";
+  const change = mode === 'free'
+    ? 'free_session_used = 1'
+    : 'voice_sessions_remaining = voice_sessions_remaining - 1';
+  const results = await db.batch([
+    db.prepare(`INSERT INTO voice_sessions
+      (id, user_id, role, seniority, jd_excerpt, status, entitlement_mode, model)
+      SELECT ?, id, ?, ?, ?, 'created', ?, ? FROM users
+      WHERE id = ? AND ${eligible}`)
+      .bind(sessionId, role, seniority, jd, mode, model, userRowId),
+    db.prepare(`UPDATE users SET ${change}, updated_at = datetime('now')
+      WHERE id = ? AND ${eligible} AND EXISTS (SELECT 1 FROM voice_sessions WHERE id = ? AND user_id = ?)`)
+      .bind(userRowId, sessionId, userRowId)
+  ]);
+  const inserted = (results[0]?.meta?.changes ?? 0) === 1;
+  return { inserted, reason: inserted ? null : 'paywall' };
+}
+
 // Pack-grant SQL shared by grantPackCredits (standalone, legacy path) and
 // buildPackGrantStatements (webhook batch) so the two can never drift.
 // A new purchase refreshes the expiry for the whole balance; subscriptions

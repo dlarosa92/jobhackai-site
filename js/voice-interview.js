@@ -35,6 +35,7 @@
 
   var state = {
     sessionId: null,
+    startRequestId: null, // retained across failed starts to recover without spending twice
     model: null,
     pc: null,
     dc: null,
@@ -1260,12 +1261,17 @@
     }
 
     try {
+      if (!state.startRequestId) state.startRequestId = crypto.randomUUID();
       var res = await api('/api/voice/session', {
         method: 'POST',
-        body: JSON.stringify({ role: role, seniority: seniority, jd: jd })
+        body: JSON.stringify({ role: role, seniority: seniority, jd: jd, startRequestId: state.startRequestId })
       });
 
       if (!res.ok) {
+        if (res.status === 409 && res.data &&
+            (res.data.reason === 'session_expired' || res.data.reason === 'session_ended')) {
+          state.startRequestId = null;
+        }
         if (res.status === 403) {
           await loadEntitlement();
           show('vi-setup-view');
@@ -1304,6 +1310,7 @@
       historyLiveStart(role, seniority);
 
       await connectRealtime(res.data.clientSecret, state.model);
+      state.startRequestId = null;
       startTimer(state.maxMinutes);
     } catch (err) {
       console.error('[VOICE] start failed:', err);

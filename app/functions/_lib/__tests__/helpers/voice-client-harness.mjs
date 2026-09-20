@@ -1,3 +1,4 @@
+import { webcrypto } from 'node:crypto';
 /**
  * Test harness for js/voice-interview.js.
  *
@@ -187,6 +188,7 @@ export function createVoiceClientHarness(options = {}) {
   };
 
   const win = {
+    crypto: webcrypto,
     location: { search, href: 'https://app.jobhackai.io/voice-interview.html' + search, pathname: '/voice-interview.html' },
     navigator: { mediaDevices: { getUserMedia: async () => micStream() } },
     FirebaseAuthManager: {

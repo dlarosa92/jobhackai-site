@@ -18,9 +18,7 @@ import { getBearer, verifyFirebaseIdToken } from '../../_lib/firebase-auth.js';
 import { getOrCreateUserByAuthId, getDb } from '../../_lib/db.js';
 import {
   getVoiceEntitlement,
-  consumeVoiceSession,
-  refundVoiceSession,
-  createVoiceSessionRow,
+  reserveVoiceSession,
   voiceFeatureEnabled
 } from '../../_lib/voice-entitlements.js';
 import { errorResponse, successResponse, generateRequestId } from '../../_lib/error-handler.js';
@@ -63,8 +61,7 @@ async function mintClientSecret(env, { model, instructions }) {
 // Best-effort per-user lock to avoid two concurrent session starts doing
 // duplicate work (entitlement read + token mint). This is an OPTIMIZATION, not
 // the safety guard: credit integrity is enforced by the atomic conditional
-// UPDATEs in consumeVoiceSession (free: `WHERE free_session_used = 0`, pack:
-// `WHERE voice_sessions_remaining > 0`), which cannot double-spend even when
+// writes in reserveVoiceSession, which cannot double-spend even when
 // this lock is absent. KV is not bound in every environment (see wrangler.toml),
 // so the no-KV path must stay non-blocking; we log it rather than silently
 // pretend a real lock was taken.
@@ -135,18 +132,34 @@ export async function onRequest(context) {
     const d1User = await getOrCreateUserByAuthId(env, uid, email);
     if (!d1User?.id) return errorResponse('Failed to resolve user record', 500, origin, env, requestId);
 
+    // A client retry keeps its creation id even if the first HTTP response was
+    // lost. Resolve it before the entitlement check, since its credit is spent.
+    const startRequestId = body.startRequestId ? String(body.startRequestId) : null;
+    if (startRequestId && !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(startRequestId)) {
+      return errorResponse('Invalid session request id', 400, origin, env, requestId);
+    }
+    let resumeId = body.resumeSessionId;
+    if (!resumeId && startRequestId) {
+      const existing = await db.prepare('SELECT id, user_id FROM voice_sessions WHERE id = ?')
+        .bind(startRequestId).first();
+      if (existing) {
+        if (existing.user_id !== d1User.id) return errorResponse('Session not found', 404, origin, env, requestId);
+        resumeId = existing.id;
+      }
+    }
+
     // ---- Resume path: reattach to an existing session, never re-consume ----
-    if (body.resumeSessionId) {
+    if (resumeId) {
       const session = await db.prepare(
         `SELECT id, user_id, role, seniority, jd_excerpt, status, started_at
          FROM voice_sessions WHERE id = ?`
-      ).bind(String(body.resumeSessionId)).first();
+      ).bind(String(resumeId)).first();
 
       if (!session || session.user_id !== d1User.id) {
         return errorResponse('Session not found', 404, origin, env, requestId);
       }
       if (!['created', 'active'].includes(session.status)) {
-        return errorResponse('Session already ended', 409, origin, env, requestId);
+        return errorResponse('Session already ended', 409, origin, env, requestId, { reason: 'session_ended' });
       }
       // Guard against a null/missing started_at so a bad row yields a controlled
       // 'Session expired' (via the NaN check below) instead of throwing a 500.
@@ -155,9 +168,9 @@ export async function onRequest(context) {
         ? new Date(startedRaw + (startedRaw.endsWith('Z') ? '' : 'Z')).getTime()
         : NaN;
       if (!Number.isFinite(startedMs) || Date.now() - startedMs > RESUME_WINDOW_MS) {
-        await db.prepare(`UPDATE voice_sessions SET status = 'abandoned', updated_at = datetime('now') WHERE id = ?`)
+        await db.prepare(`UPDATE voice_sessions SET status = 'abandoned', updated_at = datetime('now') WHERE id = ? AND status IN ('created', 'active')`)
           .bind(session.id).run();
-        return errorResponse('Session expired', 409, origin, env, requestId);
+        return errorResponse('Session expired', 409, origin, env, requestId, { reason: 'session_expired' });
       }
 
       // The fresh realtime session has no memory of the dropped one, so the
@@ -211,7 +224,7 @@ export async function onRequest(context) {
     if (!role) return errorResponse('Role is required', 400, origin, env, requestId);
 
     // Advisory per-user lock (best effort). The authoritative anti-double-spend
-    // guard is the atomic conditional UPDATE in consumeVoiceSession below, which
+    // guard is the atomic reservation transaction below, which
     // holds even if this lock no-ops because KV is unbound. The lock just avoids
     // a redundant token mint when two requests race.
     const lockKey = `voiceSessionLock:${uid}`;
@@ -242,64 +255,33 @@ export async function onRequest(context) {
         });
       }
 
-      const consumed = await consumeVoiceSession(env, uid, ent.mode);
-      if (!consumed) {
+      // Provider setup has no D1 side effects. Only commit a credit after it
+      // succeeds, together with the row that makes retries resumable.
+      const minted = await mintClientSecret(env, {
+        model,
+        instructions: interviewerInstructions({ role, seniority, jd, maxMinutes: MAX_SESSION_MINUTES, firstName })
+      });
+      if (!minted) return errorResponse('Could not start the voice session. Please try again.', 502, origin, env, requestId);
+
+      const sessionId = startRequestId || crypto.randomUUID();
+      const reserved = await reserveVoiceSession(env, {
+        sessionId, userRowId: d1User.id, role, seniority: seniority || null,
+        jd: jd || null, mode: ent.mode, model
+      });
+      if (!reserved.inserted) {
+        if (reserved.reason === 'limit_reached') {
+          return errorResponse("You have reached this month's session limit. It resets at the start of next month.",
+            403, origin, env, requestId, { reason: 'limit_reached' });
+        }
         return errorResponse('Could not reserve a session. Please try again.', 409, origin, env, requestId);
       }
-
-      // After a successful consume the pack credit / free-taste flag is spent.
-      // Every failure path from here, whether a controlled return or a thrown
-      // error (e.g. mintClientSecret throwing on a network fault), must roll the
-      // consumption back and remove any orphaned session row. A single finally
-      // handles all of them, so there is exactly one refund site (no double
-      // refunds) and no way to burn a credit on a 500.
-      const sessionId = crypto.randomUUID();
-      let committed = false;
-      try {
-        // For subscription mode this insert enforces the fair-use cap atomically
-        // (single conditional INSERT), closing the race where concurrent starts
-        // each read the same sub-cap count and all proceed.
-        const insertResult = await createVoiceSessionRow(env, {
-          sessionId, userRowId: d1User.id, role, seniority: seniority || null,
-          jd: jd || null, mode: ent.mode, model
-        });
-        if (!insertResult.inserted) {
-          // Only subscription mode reaches here (blocked by the cap); subscription
-          // consume is a no-op, so the rollback below is harmless.
-          return errorResponse(
-            'You have reached this month\'s session limit. It resets at the start of next month.',
-            403, origin, env, requestId, { reason: 'limit_reached' }
-          );
-        }
-
-        const minted = await mintClientSecret(env, {
-          model,
-          instructions: interviewerInstructions({ role, seniority, jd, maxMinutes: MAX_SESSION_MINUTES, firstName })
-        });
-        if (!minted) {
-          return errorResponse('Could not start the voice session. Please try again.', 502, origin, env, requestId);
-        }
-
-        committed = true;
-        console.log(`[VOICE-SESSION] Created session ${sessionId} for uid=${uid} mode=${ent.mode} model=${model}`);
-        return successResponse({
-          sessionId,
-          clientSecret: minted.value,
-          expiresAt: minted.expiresAt,
-          model,
-          mode: ent.mode,
-          sessionsRemaining: ent.mode === 'pack' ? Math.max(0, ent.sessionsRemaining - 1) : null,
-          maxMinutes: MAX_SESSION_MINUTES
-        }, 200, origin, env, requestId);
-      } finally {
-        if (!committed) {
-          // Refund the consumption and delete any row created before the failure.
-          // refundVoiceSession swallows its own errors and the DELETE is
-          // catch-guarded, so this never masks the original error.
-          await refundVoiceSession(env, uid, ent.mode);
-          await db.prepare(`DELETE FROM voice_sessions WHERE id = ?`).bind(sessionId).run().catch(() => {});
-        }
-      }
+      console.log(`[VOICE-SESSION] Created session ${sessionId} for uid=${uid} mode=${ent.mode} model=${model}`);
+      return successResponse({
+        sessionId, clientSecret: minted.value, expiresAt: minted.expiresAt, model,
+        mode: ent.mode,
+        sessionsRemaining: ent.mode === 'pack' ? Math.max(0, ent.sessionsRemaining - 1) : null,
+        maxMinutes: MAX_SESSION_MINUTES
+      }, 200, origin, env, requestId);
     } finally {
       await releaseKvLock(env, lockKey, lock.token);
     }

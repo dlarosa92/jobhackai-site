@@ -5,6 +5,7 @@ on:
     branches: [main, dev0]
     paths:
       - 'app/functions/_lib/**'
+      - 'app/functions/api/voice/**'
       - 'app/functions/dictionaries/**'
       # These are browser modules, but their suites live in _lib/__tests__ —
       # without these paths they could break untested.
@@ -18,6 +19,7 @@ on:
     branches: [main, dev0]
     paths:
       - 'app/functions/_lib/**'
+      - 'app/functions/api/voice/**'
       - 'app/functions/dictionaries/**'
       # These are browser modules, but their suites live in _lib/__tests__ —
       # without these paths they could break untested.
@@ -95,6 +97,10 @@ jobs:
       - name: Run voice entitlement tests
         working-directory: app/functions/_lib/__tests__
         run: node voice-entitlements.test.mjs
+
+      - name: Run voice reservation and completion race tests
+        working-directory: app/functions/_lib/__tests__
+        run: node voice-reservation.test.mjs
 
       - name: Run voice history tests
         working-directory: app/functions/_lib/__tests__
