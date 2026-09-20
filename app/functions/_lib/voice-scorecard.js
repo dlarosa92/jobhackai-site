@@ -247,11 +247,15 @@ export async function generateAndStoreScorecard(env, sessionId) {
       env
     );
 
+    const usageEvidence = scorecard.tooShort
+      ? { source: 'local_no_request', reason: 'transcript_too_short', providerRequestMade: false }
+      : scorecardUsageEvidence(model, usage, fromCache);
+
     await db.prepare(
       `UPDATE voice_sessions SET scorecard_json = ?,
        usage_details_json = json_set(COALESCE(usage_details_json, '{}'), '$.scorecard', json(?)),
        updated_at = datetime('now') WHERE id = ?`
-    ).bind(JSON.stringify(scorecard), JSON.stringify(scorecardUsageEvidence(model, usage, fromCache)), sessionId).run();
+    ).bind(JSON.stringify(scorecard), JSON.stringify(usageEvidence), sessionId).run();
 
     if (!scorecard.tooShort) {
       console.log(`[VOICE-SCORECARD] Stored scorecard for session ${sessionId} (overall=${scorecard.overall})`);
