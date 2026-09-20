@@ -10,10 +10,12 @@
   const CONSENT_KEY = 'jha_cookie_consent_v1';
   const PENDING_CONSENT_KEY = 'jha_cookie_consent_pending_v1';
   let pendingConsentMemory = null;
-  const CLIENT_ID_COOKIE = 'jha_client_id';
   const VALID_CLIENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const hostname = (window.location.hostname || '').toLowerCase();
   const productionHost = ['jobhackai.io', 'www.jobhackai.io', 'app.jobhackai.io'].includes(hostname);
+  const qaHosts = ['qa.jobhackai.io', 'qa-marketing.jobhackai.io'];
+  const qaHost = qaHosts.includes(hostname);
+  const CLIENT_ID_COOKIE = productionHost ? 'jha_client_id' : qaHost ? 'jha_client_id_qa' : 'jha_client_id_dev';
   const config = { ...(window.JHA_CONFIG || {}) };
   const PRODUCTION_GA_ID = 'G-SQYSWPFM5X';
   const PRODUCTION_CLARITY_ID = 'wskzma4clw';
@@ -26,7 +28,7 @@
   }
   // Verified existing development property (502443078), stream 12184859894.
   // Only QA opts in; dev, previews and localhost remain off by default.
-  if (hostname === 'qa.jobhackai.io' && !Object.prototype.hasOwnProperty.call(config, 'GA_ID')) {
+  if (qaHost && !Object.prototype.hasOwnProperty.call(config, 'GA_ID')) {
     config.GA_ID = 'G-VH888WWY3M';
   }
   const GA_MEASUREMENT_ID = destination('GA_ID', PRODUCTION_GA_ID);
@@ -36,17 +38,17 @@
 
   // Only the production marketing domains send consent to the production app.
   // Previews and local development must never write production consent records.
-  const API_BASE = ['jobhackai.io', 'www.jobhackai.io'].includes(hostname) ? 'https://app.jobhackai.io' : '';
+  const API_BASE = ['jobhackai.io', 'www.jobhackai.io'].includes(hostname) ? 'https://app.jobhackai.io' : hostname === 'qa-marketing.jobhackai.io' ? 'https://qa.jobhackai.io' : '';
   // Marketing previews have no local policy page. Policy navigation is
   // separate from API routing so preview consent never writes to production.
   const POLICY_BASE = productionHost ? API_BASE
-    : ['qa.jobhackai.io', 'develop.jobhackai-app-marketing-seo.pages.dev'].includes(hostname)
+    : (qaHost || hostname === 'develop.jobhackai-app-marketing-seo.pages.dev')
       ? 'https://qa.jobhackai.io' : 'https://dev.jobhackai.io';
   window.JHA = window.JHA || {};
   window.JHA.apiBase = API_BASE;
   // Cookie domain: use .jobhackai.io so the client_id cookie is shared across subdomains
-  const COOKIE_DOMAIN = productionHost ? '; Domain=.jobhackai.io' : '';
-  const CAMPAIGN_COOKIE = 'jha_campaign_' + (productionHost ? 'prod' : hostname === 'qa.jobhackai.io' ? 'qa' : 'dev');
+  const COOKIE_DOMAIN = (productionHost || qaHost) ? '; Domain=.jobhackai.io' : '';
+  const CAMPAIGN_COOKIE = 'jha_campaign_' + (productionHost ? 'prod' : qaHost ? 'qa' : 'dev');
   const CAMPAIGN_MAX_AGE = 90 * 24 * 60 * 60;
   let consentSyncQueue = Promise.resolve(false);
 
@@ -298,7 +300,7 @@
     try {
       // Internal links must not replace the campaign that brought the visitor.
       const referrer = document.referrer ? new URL(document.referrer).hostname.toLowerCase() : '';
-      if ((productionHost && ['jobhackai.io', 'www.jobhackai.io', 'app.jobhackai.io'].includes(referrer)) || referrer === hostname) return;
+      if ((productionHost && ['jobhackai.io', 'www.jobhackai.io', 'app.jobhackai.io'].includes(referrer)) || (qaHost && qaHosts.includes(referrer)) || referrer === hostname) return;
       const params = new URL(window.location.href).searchParams;
       const touch = campaignTouch({ at: Date.now(), source: params.get('utm_source'), medium: params.get('utm_medium'),
         campaign: params.get('utm_campaign'), asset: params.get('utm_content'), id: params.get('utm_id') });
@@ -546,12 +548,13 @@
       ...(!productionHost ? { debug_mode: true } : {}),
       page_location: analyticsUrl(window.location.href, true),
       page_referrer: document.referrer ? analyticsUrl(document.referrer) : '',
-      cookie_domain: productionHost ? 'jobhackai.io' : hostname,
+      cookie_domain: (productionHost || qaHost) ? 'jobhackai.io' : hostname,
+      ...(qaHost ? { cookie_prefix: 'jha_qa' } : {}),
       allow_google_signals: false,
       allow_ad_personalization_signals: false,
       // Cross-domain measurement: one session across the marketing site and
       // the app (GA4 admin side configured in runbook Task 0).
-      linker: { domains: ['jobhackai.io', 'app.jobhackai.io'] }
+      linker: { domains: qaHost ? qaHosts : productionHost ? ['jobhackai.io', 'app.jobhackai.io'] : [hostname] }
     });
 
     // Load Microsoft Clarity alongside GA (consent-gated).

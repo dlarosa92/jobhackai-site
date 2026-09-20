@@ -73,7 +73,7 @@ test('QA uses only the verified development property and enables DebugView',asyn
   assert.equal(h.scripts.length,1);assert.ok(h.scripts[0].src.includes('G-VH888WWY3M'));
   assert.equal(h.ctx['ga-disable-'+GA],true);
   const config=h.ctx.dataLayer.find(a=>a[0]==='config');
-  assert.equal(config[2].debug_mode,true);assert.equal(config[2].cookie_domain,'qa.jobhackai.io');
+  assert.equal(config[2].debug_mode,true);assert.equal(config[2].cookie_domain,'jobhackai.io');assert.equal(config[2].cookie_prefix,'jha_qa');
 });
 test('an explicit separate test destination is supported; copied production IDs are blocked',async()=>{
   const blocked=harness({host:'qa.jobhackai.io',config:{GA_ID:GA,CLARITY_ID:'wskzma4clw'}});
@@ -386,4 +386,32 @@ test('privacy button works while an old pending grant is still being saved',asyn
   h.finishPost();await init;
   assert.equal(h.ctx.JHA.cookieConsent.hasAnalyticsConsent(),false);
   assert.equal(h.scripts.length,0);
+});
+
+test('QA marketing uses the QA API and tag while preserving production cookies',async()=>{
+  const cookies=new Map([['jha_client_id','7bbba230-b755-4d31-b475-e20cf6d00ed9'],['jha_campaign_prod','production-campaign']]);
+  const h=harness({host:'qa-marketing.jobhackai.io',cookies,search:'?utm_source=linkedin&utm_medium=organic_social&utm_campaign=qa_voice'});
+  await h.init();h.runTimers();
+  assert.equal(h.ctx.JHA.apiBase,'https://qa.jobhackai.io');
+  assert.equal(h.requests[0].url,'https://qa.jobhackai.io/api/cookie-consent');
+  assert.equal(cookies.get('jha_client_id'),'7bbba230-b755-4d31-b475-e20cf6d00ed9');
+  assert.equal(cookies.get('jha_campaign_prod'),'production-campaign');
+  assert.notEqual(cookies.get('jha_client_id_qa'),cookies.get('jha_client_id'));
+  assert.ok(cookies.has('jha_client_id_qa'));assert.ok(cookies.has('jha_campaign_qa'));
+  const config=h.ctx.dataLayer.find(a=>a[0]==='config');
+  assert.equal(config[1],'G-VH888WWY3M');assert.equal(config[2].cookie_prefix,'jha_qa');
+  assert.deepEqual(Array.from(config[2].linker.domains),['qa.jobhackai.io','qa-marketing.jobhackai.io']);
+  assert.ok(!h.scripts.some(s=>s.src.includes(GA)));
+});
+test('QA app preserves an external campaign across a marketing handoff and internal tags',async()=>{
+  const cookies=new Map();
+  const marketing=harness({host:'qa-marketing.jobhackai.io',cookies,search:'?utm_source=linkedin&utm_medium=organic_social&utm_campaign=qa_voice&utm_content=article_01'});
+  await marketing.init();marketing.runTimers();
+  const original=cookies.get('jha_campaign_qa'),identity=cookies.get('jha_client_id_qa');
+  const app=harness({host:'qa.jobhackai.io',cookies,search:'?utm_source=internal&utm_medium=internal&utm_campaign=wrong'});
+  app.ctx.document.referrer='https://qa-marketing.jobhackai.io/';
+  await app.init();app.runTimers();
+  assert.equal(cookies.get('jha_campaign_qa'),original);assert.equal(cookies.get('jha_client_id_qa'),identity);
+  app.setConsent(false);app.runTimers();
+  assert.equal(cookies.has('jha_campaign_qa'),false);
 });
