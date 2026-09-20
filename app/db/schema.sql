@@ -246,7 +246,8 @@ CREATE TABLE IF NOT EXISTS voice_sessions (
   model TEXT,
   input_tokens INTEGER,
   output_tokens INTEGER,
-  cost_usd REAL,                                -- computed per-session model cost
+  cost_usd REAL,                                -- historical incomplete client estimate, not billed cost
+  usage_details_json TEXT,                     -- bounded observed usage; never billing authority
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now')),
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE

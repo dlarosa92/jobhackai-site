@@ -8,7 +8,7 @@ function setup(t) {
   const db = sqliteD1(); t.after(() => db.close());
   db.exec(`CREATE TABLE users(id INTEGER PRIMARY KEY,auth_id TEXT,email TEXT,plan TEXT,created_at TEXT,updated_at TEXT,last_login_at TEXT,last_activity_at TEXT);
     INSERT INTO users VALUES(1,'owner','owner@example.test','free',NULL,NULL,NULL,NULL),(2,'other','other@example.test','monthly',NULL,NULL,NULL,NULL);`);
-  for (const name of ['020_add_voice_entitlements.sql','021_add_voice_end_reason.sql','024_collected_payments.sql','025_checkout_attribution.sql','026_payment_campaign_links.sql','027_analytics_delivery.sql']) {
+  for (const name of ['020_add_voice_entitlements.sql','021_add_voice_end_reason.sql','024_collected_payments.sql','025_checkout_attribution.sql','026_payment_campaign_links.sql','027_analytics_delivery.sql','029_voice_usage_evidence.sql']) {
     db.exec(readFileSync(new URL('../../../db/migrations/'+name,import.meta.url),'utf8'));
   }
   db.exec(`INSERT INTO voice_sessions(id,user_id,status,entitlement_mode,transcript_json,scorecard_json,jd_excerpt,started_at)
@@ -44,7 +44,7 @@ test('verified owner exports voice and attribution data despite paywall or age; 
   assert.equal(result.checkoutAttributions.length,1);assert.equal(result.checkoutAttributions[0].ga_client_id,'own-ga');
   assert.equal(result.analyticsDelivery.length,1);assert.equal(result.analyticsDelivery[0].state,'accepted_unverified');
   const text=JSON.stringify(result);assert.ok(!text.includes('private other'));assert.ok(!text.includes('other-client'));assert.ok(!text.includes('other-ga'));
-  assert.equal(result.voiceSessions[0].cost_usd,undefined);assert.equal(result.checkoutAttributions[0].stripe_customer_id,undefined);
+  assert.equal(result.voiceSessions[0].usage_details_json,undefined);assert.equal(result.voiceSessions[0].cost_usd,undefined);assert.equal(result.checkoutAttributions[0].stripe_customer_id,undefined);
   assert.equal(result.analyticsDelivery[0].event_key,undefined);
 });
 test('missing or invalid authentication reads no account data',async t=>{

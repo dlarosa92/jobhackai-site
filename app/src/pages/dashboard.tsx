@@ -1089,7 +1089,7 @@ export default function Dashboard() {
         )}
 
         <div className="dashboard-features">
-          {features.map((feature) => {
+          {features.filter(feature => feature.key !== 'priorityReview' || user.plan === 'premium').map((feature) => {
             const isUnlocked = unlocked.includes(feature.key);
             const isIncluded = feature.included && isUnlocked;
             

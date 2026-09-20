@@ -162,6 +162,20 @@ async function liveInterviewWithOneAnswer(harnessOptions = {}) {
   return h;
 }
 
+test('usage keeps one response per ID and includes the ending transcription without its words', async () => {
+  const h = await liveInterviewWithOneAnswer();
+  try {
+    h.event({ type: 'response.done', response: { id: 'r2', usage: { input_tokens: 200, output_tokens: 90 } } });
+    h.event({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'stop-usage', transcript: "I'll end the interview", usage: { type: 'tokens', input_tokens: 15, output_tokens: 5, input_token_details: { audio_tokens: 15, text_tokens: 0 } } });
+    await h.settle();
+    const usage = h.completeBodies()[0].usageEvidence;
+    assert.equal(usage.events.filter(e => e.id === 'r2').length, 1);
+    assert.equal(usage.events.find(e => e.id === 'stop-usage').usage.input_tokens, 15);
+    assert.ok(!JSON.stringify(usage).includes("I'll end"));
+    assert.equal(usage.source, 'client_reported');
+  } finally { h.dispose(); }
+});
+
 test('an explicit spoken end request ends the session through the normal manual-end path', async () => {
   const h = await liveInterviewWithOneAnswer();
   try {

@@ -2,8 +2,8 @@
  * POST /api/voice/session/:id/complete
  *
  * Ends a voice session: persists the transcript, duration, and token usage
- * (client-reported from the Realtime data channel), computes the per-session
- * model cost for unit economics tracking, and kicks off scorecard generation
+ * (client-reported from the Realtime data channel), retains bounded evidence
+ * for cost reconciliation, and kicks off scorecard generation
  * in the background. Idempotent: completing twice keeps the first transcript.
  */
 
@@ -14,13 +14,9 @@ import { normalizeEndReason, shouldGenerateScorecard } from '../../../../_lib/vo
 import { generateAndStoreScorecard } from '../../../../_lib/voice-scorecard.js';
 import { errorResponse, successResponse, generateRequestId } from '../../../../_lib/error-handler.js';
 
-const MAX_TRANSCRIPT_BYTES = 300 * 1024;
+import { normalizeVoiceUsage, responseTokenTotals } from '../../../../_lib/voice-usage.js';
 
-// Default $/1M token rates for cost logging (gpt-realtime-mini audio rates).
-// Override per environment when the model or OpenAI pricing changes:
-// VOICE_COST_IN_PER_M / VOICE_COST_OUT_PER_M.
-const DEFAULT_COST_IN_PER_M = 10;
-const DEFAULT_COST_OUT_PER_M = 20;
+const MAX_TRANSCRIPT_BYTES = 300 * 1024;
 
 export async function onRequest(context) {
   const { request, env, params } = context;
@@ -86,14 +82,11 @@ export async function onRequest(context) {
     const durationSeconds = Number.isFinite(Number(body.durationSeconds))
       ? Math.max(0, Math.min(3600, Math.round(Number(body.durationSeconds))))
       : null;
-    const inputTokens = Number.isFinite(Number(body.inputTokens)) ? Math.max(0, Math.round(Number(body.inputTokens))) : null;
-    const outputTokens = Number.isFinite(Number(body.outputTokens)) ? Math.max(0, Math.round(Number(body.outputTokens))) : null;
-
-    const inRate = Number(env.VOICE_COST_IN_PER_M) || DEFAULT_COST_IN_PER_M;
-    const outRate = Number(env.VOICE_COST_OUT_PER_M) || DEFAULT_COST_OUT_PER_M;
-    const costUsd = (inputTokens != null && outputTokens != null)
-      ? Number(((inputTokens * inRate + outputTokens * outRate) / 1e6).toFixed(4))
-      : null;
+    const usageEvidence = normalizeVoiceUsage(body.usageEvidence);
+    const { input: inputTokens, output: outputTokens } = responseTokenTotals(usageEvidence);
+    // A client report is incomplete evidence, not provider billing. Do not
+    // apply audio rates to text/cache tokens or invent zero for absent usage.
+    const costUsd = null;
 
     // Why the session ended, clamped to the allowlist. A conduct termination
     // is otherwise indistinguishable from a normal one, which makes it
@@ -110,9 +103,10 @@ export async function onRequest(context) {
          input_tokens = ?,
          output_tokens = ?,
          cost_usd = ?,
+         usage_details_json = ?,
          updated_at = datetime('now')
        WHERE id = ? AND status != 'completed'`
-    ).bind(endReason, durationSeconds, transcriptJson, inputTokens, outputTokens, costUsd, sessionId).run();
+    ).bind(endReason, durationSeconds, transcriptJson, inputTokens, outputTokens, costUsd, JSON.stringify({ version: 1, realtime: usageEvidence }), sessionId).run();
 
     if ((completion?.meta?.changes ?? 0) !== 1) {
       // Another completion won after our SELECT. Never replace its transcript
@@ -128,7 +122,7 @@ export async function onRequest(context) {
       return successResponse({ sessionId, status: 'completed', alreadyCompleted: true, endReason: saved.end_reason || null }, 200, origin, env, requestId);
     }
 
-    // Unit economics log line (client-reported usage; see runbook brief §2)
+    // Observed client usage only; provider reconciliation remains required.
     console.log(`[VOICE-COST] session=${sessionId} uid=${uid} duration=${durationSeconds}s in=${inputTokens} out=${outputTokens} cost_usd=${costUsd} end=${endReason || 'unknown'}`);
     if (endReason === 'ended_by_interviewer' || endReason === 'ended_by_interviewer_unwarned') {
       console.warn(`[VOICE-CONDUCT] session=${sessionId} uid=${uid} end=${endReason}`);
