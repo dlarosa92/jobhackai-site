@@ -63,7 +63,7 @@ const ga4Purchases = (stub) => stub.calls.filter((c) => c.url.includes('google-a
   assert.strictEqual(db.__state.tables.feature_daily_usage.filter((r) => r.feature === 'interview_questions').length, 0, 'interview usage reset once');
   assert.strictEqual(db.__state.tables.feature_daily_usage.filter((r) => r.feature === 'other_feature').length, 1, 'unrelated usage untouched');
   assert.strictEqual(db.__state.tables.usage_events.length, 0, 'resume feedback usage reset once');
-  assert.strictEqual(ga4Purchases(stub).length, 1, 'exactly one GA4 purchase (post-commit)');
+  assert.strictEqual(ga4Purchases(stub).length, 0, 'entitlement changes must not emit unconsented or estimated GA purchases');
   assert.strictEqual(db.ledgerRow(event.id)?.status, 'processed');
 
   // The resets and plan write commit in ONE batch together with the
@@ -81,7 +81,7 @@ const ga4Purchases = (stub) => stub.calls.filter((c) => c.url.includes('google-a
   const res2 = await postWebhook(onRequest, env, event);
   assert.strictEqual(res2.status, 200);
   assert.strictEqual(db.__state.writes, writesBefore, 'replay performs zero writes');
-  assert.strictEqual(ga4Purchases(stub).length, 1, 'no second GA4 purchase');
+  assert.strictEqual(ga4Purchases(stub).length, 0, 'entitlement changes must not emit unconsented or estimated GA purchases');
   assert.strictEqual(db.ledgerRow(event.id)?.attempt_count, 1);
 
   // ── (c) replay with KV wiped: the durable ledger still blocks ──
@@ -89,7 +89,7 @@ const ga4Purchases = (stub) => stub.calls.filter((c) => c.url.includes('google-a
   const res3 = await postWebhook(onRequest, env, event);
   assert.strictEqual(res3.status, 200);
   assert.strictEqual(db.__state.writes, writesBefore, 'KV loss cannot enable reprocessing');
-  assert.strictEqual(ga4Purchases(stub).length, 1);
+  assert.strictEqual(ga4Purchases(stub).length, 0, 'entitlement changes must not emit unconsented or estimated GA purchases');
   stub.restore();
 }
 
@@ -162,7 +162,7 @@ const ga4Purchases = (stub) => stub.calls.filter((c) => c.url.includes('google-a
   assert.strictEqual(res2.status, 200, 'Stripe retry re-claims and completes');
   assert.strictEqual(db.usersByAuthId('uid_T').plan, 'essential');
   assert.strictEqual(db.__state.tables.usage_events.length, 0, 'resets applied exactly once');
-  assert.strictEqual(ga4Purchases(stub).length, 1, 'GA4 fired exactly once, after the successful commit');
+  assert.strictEqual(ga4Purchases(stub).length, 0, 'entitlement changes must not emit unconsented or estimated GA purchases');
   assert.strictEqual(db.ledgerRow(event.id)?.status, 'processed');
   assert.strictEqual(db.ledgerRow(event.id)?.attempt_count, 2);
 }

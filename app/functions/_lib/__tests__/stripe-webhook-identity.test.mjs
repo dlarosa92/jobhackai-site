@@ -118,7 +118,7 @@ const cusStub = (uid, id = 'cus_A') =>
   assert.strictEqual(row.current_period_start, startIso);
   assert.strictEqual(row.current_period_end, endIso);
   assert.strictEqual(row.has_ever_paid, 1);
-  assert.strictEqual(ga4Purchases.length, 1, 'exactly one GA4 purchase, sent post-commit');
+  assert.strictEqual(ga4Purchases.length, 0, 'entitlement changes must not emit unconsented or estimated GA purchases');
   assert.strictEqual(db.ledgerRow(event.id)?.status, 'processed');
 }
 
