@@ -982,8 +982,8 @@
             html += `<div style="font-size:1.1rem;font-weight:600;color:#232B36;">${planNames[plan] || plan} Plan</div>`;
             html += `<div style="color:#6B7280;font-size:0.98rem;margin-top:0.2rem;">${planPrices[plan] || ''}</div>`;
             
-            // Show next renewal date for active subscriptions
-            if (data.currentPeriodEnd && data.status === 'active') {
+            // A scheduled cancellation ends access; it is not an upcoming renewal.
+            if (data.currentPeriodEnd && data.status === 'active' && !planMeta?.cancelAt) {
               const renewDate = new Date(data.currentPeriodEnd).toLocaleDateString('en-US', { 
                 year: 'numeric', month: 'long', day: 'numeric' 
               });
