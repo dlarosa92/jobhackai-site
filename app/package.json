@@ -59,7 +59,7 @@
     "test:ui:serve": "node tests/ui/fixture-server.cjs",
     "test:voice:reservation": "node functions/_lib/__tests__/voice-reservation.test.mjs",
     "test:billing:account-pack": "node functions/_lib/__tests__/account-pack-display.test.mjs",
-    "test:billing:revenue": "node functions/_lib/__tests__/collected-revenue.test.mjs"
+    "test:billing:revenue": "node functions/_lib/__tests__/collected-revenue.test.mjs && node --test functions/_lib/__tests__/payment-attribution.test.mjs"
   },
   "dependencies": {
     "firebase": "^10.7.0",

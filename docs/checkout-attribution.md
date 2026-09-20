@@ -16,6 +16,12 @@ Apply `app/db/migrations/025_checkout_attribution.sql` to the correct environmen
 
 Local tests cover actual SQLite insertion, immutable retries, verified identity, absent/invalid grants, anonymous rejection, blocked GA, expiry, withdrawal, browser navigation and consent races. Candidate app and Functions builds are required. Live tagged signup/checkout/D1 evidence is still required after candidate deployment.
 
+## Collected payments and campaigns
+
+Apply migration `026_payment_campaign_links.sql` after 024 and 025 and before the new webhook handler. Missing migration fails the entire financial webhook batch and leaves the event retryable. A charge links only through its exact Checkout Session, or through the exact subscription recorded by the verified checkout callback, with matching customer and environment. Ambiguous contexts remain unattributed. The checkout context must predate the charge and still be eligible under both account and browser consent. Checkout and charge callbacks may arrive in either order; subsequent subscription payments follow the same subscription context until expiry or withdrawal.
+
+`stripe_campaign_revenue` provides one row per captured charge, including unattributed charges, with first and last touches and successful refunds subtracted once. Amounts are integer currency minor units, before fees, taxes, and disputes. A consented checkout can still have absent campaign tags; do not label it as a known marketing channel. Withdrawal deletes marketing links through foreign-key cascades while keeping financial records. Reports also recheck consent and expiry. Regrant purges stale context before replacing a previous rejection, so failed cleanup cannot revive old marketing history.
+
 ## Remaining integration
 
-This change saves checkout context; it does not yet join collected payment rows to campaigns, deliver GA purchases/refunds, or verify GA receipt. Subscription linkage, a consent-checked durable delivery queue, and an actual retention cleanup job are follow-up requirements before claiming end-to-end marketing revenue attribution. `expires_at` is currently an eligibility boundary, not proof that stored rows have been deleted on schedule. Missing attribution must remain visible instead of being assigned to a guessed channel.
+The database join does not deliver GA purchases/refunds or verify GA receipt. A consent-checked durable delivery queue and an actual retention cleanup job remain required before claiming end-to-end marketing revenue attribution. `expires_at` is currently an eligibility boundary, not proof that stored rows have been deleted on schedule. Missing attribution must remain visible instead of being assigned to a guessed channel.

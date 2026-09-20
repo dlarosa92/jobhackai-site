@@ -101,3 +101,6 @@ jobs:
 
       - name: Collected payments and refunds (real SQLite)
         run: node app/functions/_lib/__tests__/collected-revenue.test.mjs
+
+      - name: Consent-owned payment attribution (real SQLite)
+        run: node --test app/functions/_lib/__tests__/payment-attribution.test.mjs
