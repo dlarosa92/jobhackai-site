@@ -46,15 +46,27 @@ export async function createFirebaseDeletionClient(saJson, expectedProjectId) {
       return body;
     } catch (_) { throw new Error('identity_request_unconfirmed'); }
   }
+  async function lookup(uid) {
+    const body = await request('lookup',uid);
+    if (body.users === undefined && Object.keys(body).some(key => key !== 'kind')) throw new Error('identity_response_invalid');
+    const users = body.users === undefined ? [] : body.users;
+    if (!Array.isArray(users) || users.length>1 || users.some(user => user?.localId !== uid || user.tenantId)) {
+      throw new Error('identity_response_invalid');
+    }
+    return users[0] ?? null;
+  }
   return {
     async exists(uid) {
-      const body = await request('lookup',uid);
-      if (body.users === undefined && Object.keys(body).some(key => key !== 'kind')) throw new Error('identity_response_invalid');
-      const users = body.users ?? [];
-      if (!Array.isArray(users) || users.length>1 || users.some(user => user?.localId !== uid || user.tenantId)) {
-        throw new Error('identity_response_invalid');
-      }
-      return users.length===1;
+      return (await lookup(uid)) !== null;
+    },
+    async activity(uid) {
+      // Google UserInfo uses epoch milliseconds for lastLoginAt, but RFC3339
+      // for lastRefreshAt. Token refresh can reveal a returning user even when
+      // an application activity update was blocked or failed. Never cache this
+      // lookup or expose the rest of the account (which may contain hashes).
+      const user = await lookup(uid);
+      if (!user) return null;
+      return { lastLoginAt: loginTime(user.lastLoginAt), lastRefreshAt: refreshTime(user.lastRefreshAt) };
     },
     async remove(uid) {
       // Even a nominal success is followed by a fresh lookup by the processor.
@@ -62,4 +74,25 @@ export async function createFirebaseDeletionClient(saJson, expectedProjectId) {
       await request('delete',uid);
     }
   };
+}
+
+function loginTime(value) {
+  if (value === undefined) return null;
+  if (typeof value !== 'string' || !/^(0|[1-9][0-9]*)$/.test(value)) throw new Error('identity_activity_invalid');
+  const milliseconds = Number(value);
+  if (!Number.isSafeInteger(milliseconds) || !Number.isFinite(new Date(milliseconds).getTime())) throw new Error('identity_activity_invalid');
+  return milliseconds;
+}
+
+function refreshTime(value) {
+  if (value === undefined) return null;
+  if (typeof value !== 'string') throw new Error('identity_activity_invalid');
+  const match = /^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):([0-5]\d):([0-5]\d)(?:\.\d{1,9})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/.exec(value);
+  const milliseconds = Date.parse(value);
+  // Date.parse normalizes some invalid dates (e.g. February 30); do not let
+  // malformed evidence become authorization to delete a dormant account.
+  const calendar = match && new Date(`${match[1]}-${match[2]}-${match[3]}T00:00:00Z`);
+  if (!match || !Number.isFinite(milliseconds) || !Number.isFinite(calendar.getTime()) ||
+      calendar.toISOString().slice(0,10) !== value.slice(0,10)) throw new Error('identity_activity_invalid');
+  return milliseconds;
 }

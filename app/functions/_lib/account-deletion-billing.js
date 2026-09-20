@@ -115,9 +115,7 @@ async function assertNoOtherBillingObligations(env, customer) {
   }
 }
 
-/** Verify every candidate before canceling anything, then confirm cancellation
- * before the caller removes Firebase access. Email alone is never ownership. */
-export async function cancelBillingBeforeDeletion(env, { uid, user, email }) {
+async function inspectDeletionBilling(env, { uid, user, email }, { allowCancellation }) {
   if (!assertStripeKeyMatchesEnvironment(env).ok) throw new Error('Billing environment configuration invalid');
   const mapped = new Set([user?.stripe_customer_id].filter(Boolean));
   // An unavailable cache might hide an older customer. Fail closed.
@@ -148,16 +146,32 @@ export async function cancelBillingBeforeDeletion(env, { uid, user, email }) {
       continue; // Another explicitly owned account sharing an email.
     }
     const live = await inspectSubscriptions(env, customer, uid);
-    const sessions = await inspectCheckouts(env, customer, uid, { allowOpen: true });
+    const sessions = await inspectCheckouts(env, customer, uid, { allowOpen: allowCancellation });
     await assertNoOtherBillingObligations(env, customer);
     if (owner !== uid) {
       if (mapped.has(customer.id) || live.length) throw new Error('Billing ownership unverified');
       continue;
     }
     if (!(await assertNoCrossUserStripeIds(env, { uid, stripeCustomerId: customer.id })).ok) throw new Error('Billing ownership conflict');
+    if (!allowCancellation && live.length) throw new Error('Subscription prevents inactivity deletion');
     ownedCustomers.push(customer);
     for (const session of sessions) openCheckouts.set(session.id, session);
   }
+  return { ownedCustomers, openCheckouts };
+}
+
+/** Read-only eligibility check for inactivity cleanup. Dormancy never authorizes
+ * cancellation or Checkout expiration. The caller must coordinate account work
+ * and recheck activity before identity removal; this scan is not a lock. */
+export async function assertInactiveBillingClear(env, input) {
+  const { ownedCustomers } = await inspectDeletionBilling(env, input, { allowCancellation: false });
+  return { checkedCustomers: ownedCustomers.length };
+}
+
+/** Verify every candidate before canceling anything, then confirm cancellation
+ * before the caller removes Firebase access. Email alone is never ownership. */
+export async function cancelBillingBeforeDeletion(env, { uid, user, email }) {
+  const { ownedCustomers, openCheckouts } = await inspectDeletionBilling(env, { uid, user, email }, { allowCancellation: true });
   // Every candidate is validated before the first external mutation.
   for (const session of openCheckouts.values()) {
     const res = await stripe(env, `/checkout/sessions/${encodeURIComponent(session.id)}/expire`, { method: 'POST' });

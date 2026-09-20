@@ -36,11 +36,73 @@ function setup({ customers=[customer('cus_1')], subscriptions=[sub('sub_1')], se
       return Response.json(customers.find(c=>path.endsWith('/'+c.id))||{}, {status:customers.some(c=>path.endsWith('/'+c.id))?200:404});
     }
   };
-  vm.createContext(ctx);vm.runInContext(strip(source('../account-deletion-billing.js'))+'\nglobalThis.guard=cancelBillingBeforeDeletion;',ctx);
+  vm.createContext(ctx);vm.runInContext(strip(source('../account-deletion-billing.js'))+'\nglobalThis.guard=cancelBillingBeforeDeletion;globalThis.inactiveGuard=assertInactiveBillingClear;',ctx);
   const env={STRIPE_SECRET_KEY:'sk_test_fixture_only',ENVIRONMENT:'qa',JOBHACKAI_KV:{get:async()=>{if(kvFailure)throw Error('cache unavailable');return null;}}};
   const input={uid:'owner',email:'owner@example.test',user:{stripe_customer_id:mapped,email:'owner@example.test'}};
-  return {calls,ctx,env,input,run:()=>ctx.guard(env,input)};
+  return {calls,ctx,env,input,run:()=>ctx.guard(env,input),runInactive:()=>ctx.inactiveGuard(env,input)};
 }
+
+for (const status of ['active','trialing','past_due','unpaid','paused','incomplete']) {
+  test(`inactivity cannot cancel a ${status} subscription`,async()=>{
+    const subscriptions=[sub('sub_1','cus_1',status)];
+    const h=setup({subscriptions});
+    await assert.rejects(h.runInactive(),/Subscription prevents inactivity deletion/);
+    assert.equal(subscriptions[0].status,status);
+    assert.ok(h.calls.every(call=>call.method==='GET'));
+  });
+}
+test('inactivity leaves an open checkout and its pending payment untouched',async()=>{
+  const sessions=[{...checkout(),payment_intent:'pi_1'}];
+  const payments=[payment('pi_1','requires_payment_method')];
+  const h=setup({subscriptions:[],sessions,payments});
+  await assert.rejects(h.runInactive(),/Checkout remains open/);
+  assert.equal(sessions[0].status,'open');
+  assert.equal(payments[0].status,'requires_payment_method');
+  assert.ok(h.calls.every(call=>call.method==='GET'));
+});
+test('inactivity permits settled history without changing provider records',async()=>{
+  const h=setup({subscriptions:[sub('sub_old','cus_1','canceled'),sub('sub_expired','cus_1','incomplete_expired')],
+    sessions:[{...checkout(),status:'complete',payment_status:'paid'}],payments:[payment()],
+    invoices:[{id:'in_paid',customer:'cus_1',status:'paid'}],
+    schedules:[{id:'sched_old',customer:'cus_1',status:'completed'}]});
+  assert.equal((await h.runInactive()).checkedCustomers,1);
+  assert.ok(h.calls.every(call=>call.method==='GET'));
+});
+test('inactivity checks later customer pages and cannot miss another paid subscription',async()=>{
+  const h=setup({subscriptions:[sub('sub_paid','cus_2')],override:path=>{
+    const u=new URL('https://x.test'+path);
+    if(u.pathname==='/customers') return Response.json({data:[customer(u.searchParams.has('starting_after')?'cus_2':'cus_1')],has_more:!u.searchParams.has('starting_after')});
+  }});
+  await assert.rejects(h.runInactive(),/Subscription prevents inactivity deletion/);
+  assert.ok(h.calls.some(call=>call.path.includes('starting_after=cus_1')));
+  assert.ok(h.calls.every(call=>call.method==='GET'));
+});
+test('inactivity fails closed on obligations, configuration, ownership, or unavailable evidence',async()=>{
+  const scenarios=[
+    {payments:[payment('pi_pending','processing')]},
+    {invoices:[{id:'in_open',customer:'cus_1',status:'open'}]},
+    {schedules:[{id:'sched_future',customer:'cus_1',status:'not_started'}]},
+    {customers:[customer('cus_1','other')]},
+    {conflict:true},
+    {kvFailure:true},
+    {override:path=>path.startsWith('/subscriptions?')?new Response('',{status:503}):null},
+  ];
+  for (const options of scenarios) {
+    const h=setup({subscriptions:[],...options});
+    await assert.rejects(h.runInactive());
+    assert.ok(h.calls.every(call=>call.method==='GET'));
+  }
+  for (const key of [undefined,'sk_live_fixture']) {
+    const h=setup({subscriptions:[]});h.env.STRIPE_SECRET_KEY=key;
+    await assert.rejects(h.runInactive());assert.equal(h.calls.length,0);
+  }
+});
+test('inactivity can clear an account with no customer only after a successful lookup',async()=>{
+  const h=setup({customers:[],subscriptions:[],mapped:null});
+  assert.equal((await h.runInactive()).checkedCustomers,0);
+  assert.ok(h.calls.some(call=>call.path.startsWith('/customers?')));
+  assert.ok(h.calls.every(call=>call.method==='GET'));
+});
 test('all owned duplicate customers and nonterminal statuses are canceled', async()=>{
   const statuses=['active','trialing','past_due','unpaid','paused','incomplete','canceled','incomplete_expired'];
   const subscriptions=statuses.map((status,i)=>sub('sub_'+i,i%2?'cus_2':'cus_1',status));

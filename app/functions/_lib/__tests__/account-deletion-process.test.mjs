@@ -189,11 +189,40 @@ test('Firebase client pins project and UID, rejects foreign/tenant responses and
   const call=f.stub.calls.find(x=>x.url.includes('accounts:lookup'));
   assert.equal(call.url,'https://identitytoolkit.googleapis.com/v1/projects/fixture-project/accounts:lookup');
   assert.deepEqual(JSON.parse(call.init.body),{localId:['owner']});
-  for(const reply of [{users:[{localId:'other'}]},{users:[{localId:'owner',tenantId:'foreign'}]},{users:'bad'},{unexpected:true}]) {
+  for(const reply of [{users:[{localId:'other'}]},{users:[{localId:'owner',tenantId:'foreign'}]},{users:'bad'},{users:null},{unexpected:true}]) {
     f.fixture.lookupReply=reply;await assert.rejects(client.exists('owner'),/identity_response_invalid/);
   }
   f.fixture.lookupReply=null;f.fixture.lookupFails=true;
   await assert.rejects(client.exists('owner'),error=>error.message==='identity_request_unconfirmed');
+});
+
+test('Firebase activity reads fresh login and refresh times without exposing account data',async t=>{
+  const f=setup(t),client=await createFirebaseDeletionClient(credentials,'fixture-project');
+  f.fixture.lookupReply={users:[{localId:'owner',lastLoginAt:'1690000000123',
+    lastRefreshAt:'2026-09-20T15:01:23.045123456Z',passwordHash:'private-hash',email:'private@example.test'}]};
+  assert.deepEqual(await client.activity('owner'),{lastLoginAt:1690000000123,lastRefreshAt:Date.parse('2026-09-20T15:01:23.045Z')});
+  f.fixture.lookupReply={users:[{localId:'owner',lastLoginAt:'1789900000000',lastRefreshAt:'2026-09-20T10:01:23-05:00'}]};
+  assert.deepEqual(await client.activity('owner'),{lastLoginAt:1789900000000,lastRefreshAt:Date.parse('2026-09-20T15:01:23Z')});
+  assert.equal(f.events.filter(event=>event==='lookup').length,2);
+  assert.equal(f.events.filter(event=>event==='identity-delete'||event.startsWith('stripe:')).length,0);
+});
+test('Firebase activity distinguishes missing identity, missing timestamps, and malformed evidence',async t=>{
+  const f=setup(t),client=await createFirebaseDeletionClient(credentials,'fixture-project');
+  f.fixture.exists=false;assert.equal(await client.activity('owner'),null);
+  f.fixture.exists=true;assert.deepEqual(await client.activity('owner'),{lastLoginAt:null,lastRefreshAt:null});
+  for(const field of ['lastLoginAt','lastRefreshAt']) {
+    const invalid=field==='lastLoginAt'?[null,1690000000123,'-1','1.5','1e12','9007199254740992','8640000000000001']:
+      [null,1690000000123,'yesterday','2026-09-20','2026-02-30T01:02:03Z','2026-09-20T24:00:00Z','2026-09-20T10:00:00+99:00'];
+    for(const value of invalid) {
+      f.fixture.lookupReply={users:[{localId:'owner',[field]:value}]};
+      await assert.rejects(client.activity('owner'),error=>error.message==='identity_activity_invalid');
+    }
+  }
+  for(const reply of [{users:null},{users:[{localId:'other'}]},{users:[{localId:'owner',tenantId:'foreign'}]}]) {
+    f.fixture.lookupReply=reply;await assert.rejects(client.activity('owner'),/identity_response_invalid/);
+  }
+  f.fixture.lookupReply=null;f.fixture.lookupFails=true;
+  await assert.rejects(client.activity('owner'),error=>error.message==='identity_request_unconfirmed');
 });
 
 test('actual request handler uses only verified UID, returns 202 for pending and hides failures',async t=>{
