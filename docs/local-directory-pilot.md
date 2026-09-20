@@ -24,9 +24,9 @@ All pages currently carry `noindex, nofollow`; there are no homepage navigation 
 
 ## Measurement contract and remaining integration
 
-Directory JS uses only the existing site's consent-owned helper when it is available. It never creates its own identifier, storage or third-party tracker. The prototype does not yet include the shared consent loader, so **it currently sends no Analytics events**. Connecting and testing that loader against the exact candidate deployment is required before launch. Do not report tracking as operational merely because these event hooks exist.
+Directory pages load the site's shared consent controls and use only their event helper. They never create an independent identifier, storage or third-party tracker. The footer lets visitors reopen preferences. Generated shared dialog styles avoid importing unrelated homepage layout rules. Previews keep Analytics disabled by default; consent acceptance does not opt a preview into production measurement. Actual event receipt against the exact candidate deployment still needs verification before launch.
 
-- `directory_listing_view`: individual provider page viewed with consent; `listing_id` is the public slug.
+- `directory_listing_view`: individual provider page visible with consent, once per document; hidden tabs wait for visibility. `listing_id` is the public slug.
 - `directory_contact_click`: outbound provider website click. This measures intent, not a quote request, booking or sale.
 - `directory_interest_click`: email composer link clicked, classified as listing request or correction. Submission/receipt must be reconciled with the actual inbox separately.
 - Every event includes `business_line=local_directory`, `directory_category=mobile_detailing`, `directory_market=nky_cincinnati`. External campaign IDs must be distinct from `voice_beta_2026_09`; internal directory links must not overwrite campaign attribution.
@@ -40,6 +40,8 @@ Do not claim visibility into a provider's sales from outbound clicks. Provider-c
 - Provider link opens the intended detail page with source, check date, separate package scopes and outbound provider link.
 - Get listed opens the intended instructions page with the correct prefilled `mailto:` destination; no email was sent.
 - Desktop layout and the hub/Get listed at 375px iframe viewports visually inspected in Chrome. At that width, Provider brings both returns Pearl's, adding Boat shows the explicit empty state, and Reset restores six listings. These checks cover responsive layout and filter interactions; native mobile-device and keyboard/assistive-technology checks remain pending.
+- Shared consent controls were added and browser-tested on a provider page: reject, reopen preferences, accept, save and reopen with the selected choice. The local preview injected no Google/Clarity script after acceptance. Its missing local consent API is reported as pending account sync; no production consent API is used. This is not GA receipt evidence.
+- 51 focused tests pass across directory consent, shared analytics consent and blog destinations. Directory tests cover no event before consent, no replay of earlier contact clicks, one listing view after consent plus visibility, no duplicate after revocation/regrant, and email clicks remaining interest rather than submitted leads.
 
 ## Research and launch gates
 

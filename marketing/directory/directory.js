@@ -1,5 +1,5 @@
 // No independent tracker or storage. Uses the site's consent owner when
-// present. Preview pages intentionally collect nothing without that owner.
+// present. The shared consent owner keeps preview analytics off by default.
 (function () {
   'use strict';
   function track(name, values) {
@@ -32,13 +32,14 @@
   }
   var viewed = false;
   function listingView() {
-    if (!viewed && document.body.dataset.listing && window.JHA?.cookieConsent?.hasAnalyticsConsent?.() === true && typeof window.JHA?.gtagSafe === 'function') {
+    if (!viewed && document.visibilityState === 'visible' && document.body.dataset.listing && window.JHA?.cookieConsent?.hasAnalyticsConsent?.() === true && typeof window.JHA?.gtagSafe === 'function') {
       viewed = true;
       track('directory_listing_view', { listing_id: document.body.dataset.listing });
     }
   }
   listingView();
   window.addEventListener('cookie-consent-granted', listingView);
+  document.addEventListener('visibilitychange', listingView);
   document.addEventListener('click', function (event) {
     var link = event.target.closest('a');
     if (!link) return;

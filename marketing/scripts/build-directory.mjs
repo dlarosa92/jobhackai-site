@@ -23,10 +23,12 @@ const mail = (subject, body) => `mailto:support@jobhackai.io?subject=${encodeURI
 const shell = (title, description, body, listing = '') => `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(title)} | JobHackAI Local</title><meta name="description" content="${esc(description)}">
-<meta name="robots" content="noindex, nofollow"><link rel="stylesheet" href="/directory/directory.css">
+<meta name="robots" content="noindex, nofollow"><link rel="stylesheet" href="/css/tokens.css"><link rel="stylesheet" href="/directory/directory.css"><link rel="stylesheet" href="/css/cookie-consent.css">
+<script src="/js/cookie-consent.js?v=20260920-marketing-2" defer></script>
+<script src="/js/component-loader.js?v=20260920-marketing-2" defer></script>
 </head><body data-listing="${esc(listing)}"><a class="skip" href="#main">Skip to content</a>
 <header><a class="brand" href="/directory">JobHackAI <span>LOCAL</span></a><nav aria-label="Directory"><a href="/directory">Find a detailer</a><a href="/directory/get-listed">Get listed</a></nav></header>
-<main id="main">${body}</main><footer><p>A local directory experiment from <a href="/">JobHackAI</a>. No paid placements.</p><p><a href="https://app.jobhackai.io/privacy">Privacy</a> · <a href="https://app.jobhackai.io/cookies">Cookies</a> · <a href="/directory/get-listed">Suggest a correction</a></p></footer>
+<main id="main">${body}</main><footer><p>A local directory experiment from <a href="/">JobHackAI</a>. No paid placements.</p><p><a href="https://app.jobhackai.io/privacy">Privacy</a> · <a href="https://app.jobhackai.io/cookies">Cookies</a> · <a href="/directory/get-listed">Suggest a correction</a></p><button type="button" id="open-cookie-preferences">Cookie preferences</button></footer>
 <script src="/directory/directory.js" defer></script></body></html>`;
 const cards = data.listings.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(l => `<article class="listing" data-region="${esc(l.regions.join('|'))}" data-service="${esc(l.services.join('|'))}" data-utilities="${esc(l.waterPower)}"><div><span class="eyebrow">Mobile service</span><h2><a href="${path(l)}">${esc(l.name)}</a></h2><p>${esc(l.regions.join(' · '))}</p></div><div class="price">${price(l.interiorPrice)}</div><p>${esc(l.waterPowerNote)}</p><a class="more" href="${path(l)}">See packages &amp; booking details <span aria-hidden="true">→</span></a></article>`).join('\n');
 writeFileSync(join(out, 'index.html'), shell('Mobile detailing in Northern Kentucky & Cincinnati', 'Compare local mobile detailers by package scope, starting prices, and water and power requirements.', `
