@@ -99,7 +99,7 @@ export async function onRequest(context) {
       // content still held for this verified account, including expired rows.
       read('SELECT id, role, seniority, jd_excerpt, status, entitlement_mode, started_at, ended_at, duration_seconds, transcript_json, scorecard_json, end_reason, created_at, updated_at FROM voice_sessions WHERE user_id = ? ORDER BY started_at, id', userId),
       read('SELECT checkout_session_id, client_id, ga_client_id, ga_session_id, first_touch_json, last_touch_json, captured_at, expires_at FROM checkout_attributions WHERE user_id = ? ORDER BY captured_at, checkout_session_id', userId),
-      read('SELECT d.event_name, d.event_at, d.state, d.accepted_at, d.verified_at, d.created_at, d.updated_at FROM analytics_delivery d INNER JOIN checkout_attributions a ON a.checkout_session_id = d.checkout_session_id WHERE a.user_id = ? ORDER BY d.event_at, d.event_key', userId)
+      read('SELECT d.checkout_session_id, d.event_name, d.event_at, d.state, d.accepted_at, d.verified_at, d.created_at, d.updated_at FROM analytics_delivery d INNER JOIN checkout_attributions a ON a.checkout_session_id = d.checkout_session_id WHERE a.user_id = ? ORDER BY d.event_at, d.event_key', userId)
     ]);
 
     const cookieConsent = cookieConsentRows.length > 0 ? cookieConsentRows[0] : null;

@@ -51,6 +51,17 @@ test('missing or invalid authentication reads no account data',async t=>{
   const h=setup(t);for(const token of [null,'invalid'])assert.equal((await h.request(token)).status,401);
   assert.equal(h.queries,0);
 });
+test('delivery rows preserve the checkout relationship when one owner has multiple campaigns',async t=>{
+  const h=setup(t);
+  h.db.exec(`INSERT INTO checkout_attributions(checkout_session_id,user_id,client_id,stripe_customer_id,environment,first_touch_json,captured_at,expires_at)
+    VALUES('second-checkout',1,'second-client','own-customer','qa','{"campaign":"second-campaign"}',1,2);
+    INSERT INTO analytics_delivery(event_key,charge_id,checkout_session_id,event_name,event_at,state,created_at,updated_at)
+    VALUES('second-key','own-charge','second-checkout','purchase',1,'accepted_unverified',1,1);`);
+  const result=await (await h.request()).json();
+  assert.equal(result.analyticsDelivery.length,2);
+  const campaigns=result.analyticsDelivery.map(delivery=>JSON.parse(result.checkoutAttributions.find(context=>context.checkout_session_id===delivery.checkout_session_id).first_touch_json).campaign);
+  assert.deepEqual(campaigns,['own-campaign','second-campaign']);
+});
 test('missing schema is disclosed instead of presented as an empty verified export',async t=>{
   const h=setup(t);h.db.exec('DROP TABLE voice_sessions');
   const result=await (await h.request()).json();
