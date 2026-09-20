@@ -99,7 +99,7 @@ await test('customer.subscription.created weekly → plan weekly, item-shape per
   assert.strictEqual(db.ledgerRow(event.id)?.status, 'processed');
 });
 
-await test('checkout.session.completed monthly → plan monthly with a $34 GA4 purchase; legacy premium still maps', async () => {
+await test('checkout.session.completed monthly → plan monthly without an inferred GA4 purchase; legacy premium still maps', async () => {
   const db = createFakeD1({ users: [user()] });
   const env = devEnv({ DB: db, JOBHACKAI_KV: createFakeKV() });
   const session = { id: 'cs_m1', mode: 'subscription', status: 'complete', payment_status: 'paid', customer: 'cus_V', metadata: { plan: 'monthly', firebaseUid: 'uid_V' }, customer_details: { email: 'v@example.com' } };
@@ -113,9 +113,7 @@ await test('checkout.session.completed monthly → plan monthly with a $34 GA4 p
   stub.restore();
   assert.strictEqual(res.status, 200);
   assert.strictEqual(db.usersByAuthId('uid_V').plan, 'monthly');
-  assert.strictEqual(purchases.length, 1);
-  assert.ok(String(purchases[0].init.body).includes('"value":34'), 'purchase value from amount_total');
-  assert.ok(String(purchases[0].init.body).includes('"plan":"monthly"'));
+  assert.strictEqual(purchases.length, 0, 'entitlement changes must not emit unconsented or estimated GA purchases');
 
   const db2 = createFakeD1({ users: [user()] });
   const env2 = devEnv({ DB: db2, JOBHACKAI_KV: createFakeKV() });
