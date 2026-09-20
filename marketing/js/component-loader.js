@@ -26,6 +26,17 @@
       if (!appPath) continue;
       link.href = appBaseUrl + appPath;
     }
+
+    // Keep marketing navigation on the QA site as well as app CTAs. Otherwise
+    // an inline footer can send a test visitor into production analytics.
+    var hostname = (window.location.hostname || '').toLowerCase();
+    if (hostname === 'qa-marketing.jobhackai.io' || hostname === 'develop.jobhackai-app-marketing-seo.pages.dev') {
+      var marketingLinks = scope.querySelectorAll('a[href^="https://jobhackai.io/"], a[href^="https://www.jobhackai.io/"]');
+      for (var j = 0; j < marketingLinks.length; j += 1) {
+        var marketingDestination = new URL(marketingLinks[j].getAttribute('href'));
+        marketingLinks[j].href = marketingDestination.pathname + marketingDestination.search + marketingDestination.hash;
+      }
+    }
   }
 
   async function loadComponent(target) {
