@@ -5,7 +5,7 @@ import vm from 'node:vm';
 import test from 'node:test';
 const source = readFileSync(new URL('../../../../js/cookie-consent.js', import.meta.url), 'utf8');
 const GA = 'G-SQYSWPFM5X';
-function harness({host = 'app.jobhackai.io', consent = true, config, pendingServer = false, pendingPost = false, search = '', cookies = new Map(), store = new Map(), scopedCookies = null} = {}) {
+function harness({host = 'app.jobhackai.io', consent = true, config, pendingServer = false, pendingPost = false, search = '', cookies = new Map(), store = new Map(), scopedCookies = null, footerPreferences = false} = {}) {
   const scripts = [], insertedScripts = [], appendedElements = [], elements = new Map(), timers = [], requests = [], listeners = {};
   if (consent !== null) store.set('jha_cookie_consent_v1', JSON.stringify({version:1,analytics: consent}));
   function element(tag = 'div') {
@@ -17,10 +17,10 @@ function harness({host = 'app.jobhackai.io', consent = true, config, pendingServ
   const node = id => { if(!elements.has(id)) elements.set(id, element()); return elements.get(id); };
   const document = {
     readyState: 'loading', title: 'JobHackAI', referrer: 'https://example.com/?email=private@example.com', cookie: '',
-    createElement: element, getElementById: node,
+    createElement: element, getElementById: id => footerPreferences && id === 'open-cookie-preferences' ? (elements.get(id) || null) : node(id),
     head: {appendChild(e){scripts.push(e);insertedScripts.push(e);}}, body: {style:{},appendChild(e){appendedElements.push(e);}},
     addEventListener(type,fn){listeners[type]=fn;},
-    querySelector(selector){ return this.querySelectorAll(selector)[0] || null; },
+    querySelector(selector){ if(footerPreferences && selector === 'footer') return {appendChild(e){appendedElements.push(e);elements.set(e.id,e);}}; return this.querySelectorAll(selector)[0] || null; },
     querySelectorAll(selector){const needle=selector.match(/src\*="([^"]+)"/)?.[1]; return needle ? scripts.filter(s => (s.src||'').includes(needle)) : [];},
     getElementsByTagName(){return [element('script')];}
   };
@@ -432,4 +432,19 @@ test('old QA host and domain campaigns are retired and cannot return after rejec
   app.setConsent(false);app.runTimers();app.setConsent(true);app.runTimers();
   assert.equal(records.has('jobhackai.io|jha_campaign_qa_v2'),false);
   assert.equal(records.get('jobhackai.io|jha_campaign_prod'),'production');
+});
+
+test('marketing footer reopens its own consent controls after a prior rejection', async()=>{
+  const h=harness({host:'qa-marketing.jobhackai.io',consent:false,footerPreferences:true,search:'?utm_source=linkedin&utm_medium=organic_social&utm_campaign=qa_voice'});
+  await h.init();h.runTimers();
+  const button=h.node('open-cookie-preferences');
+  assert.equal(button.tagName,'button');assert.equal(button.type,'button');
+  assert.equal(button.textContent,'Cookie Preferences');assert.equal(h.scripts.length,0);
+  button.events.click();assert.equal(h.node('jha-toggle-analytics').checked,false);
+  h.node('jha-toggle-analytics').checked=true;h.node('jha-save-preferences').onclick();h.runTimers();
+  assert.equal(h.ctx.JHA.cookieConsent.hasAnalyticsConsent(),true);
+  assert.ok(h.cookies.has('jha_campaign_qa_v2'));
+  assert.ok(h.scripts.some(s=>s.src.includes('G-VH888WWY3M')));
+  button.events.click();h.node('jha-toggle-analytics').checked=false;h.node('jha-save-preferences').onclick();
+  assert.equal(h.cookies.has('jha_campaign_qa_v2'),false);
 });
