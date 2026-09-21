@@ -18,6 +18,6 @@ Browser review found one inline footer Blog link still targeting production afte
 
 Cloudflare documents this [custom branch alias flow](https://developers.cloudflare.com/pages/how-to/custom-branch-aliases/). The dashboard may require a different sequence than the documentation; inspect the actual offered fields and verify branch routing afterward. An unproxied record routes to production and is not acceptable for this QA host.
 
-Server purchase/refund/renewal receipt still requires the pending owner-entered QA Measurement Protocol secret. Authenticated checkout and natural voice acceptance still need the existing QA sign-in/retest gates. No production collection, release, public post, or prospect contact is authorized by this setup.
+September21 update: the QA secret is configured and QA-only delivery is enabled. Both test sessions were signed in. Actual purchase and refund receipts, deployed revisions and remaining campaign checks are recorded in [launch acceptance](launch-acceptance-2026-09-21.md). Natural voice acceptance remains pending after the Workers redirect fix. No production collection, release, public post, or prospect contact is authorized by this setup.
 
 Review follow-up: the former QA campaign cookie is explicitly expired at both host and parent-domain scope before using the new v2 name. A scoped-cookie regression covers rejection/re-consent without stale campaign resurrection. Consent GET and POST now reject ambiguous selected-environment cookies rather than allowing a body identifier to override them.
