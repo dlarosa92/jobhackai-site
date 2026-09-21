@@ -1498,9 +1498,19 @@
       historyLiveClear(false);
       if (error.status === 403) await loadEntitlement();
       show('vi-setup-view');
-      alert(error.reason === 'voice_connection_conflict'
-        ? 'The previous connection is still open. Retry to replace it without using another interview.'
-        : 'Could not connect the interview. Check your microphone and connection, then retry.');
+      var connectionMessage;
+      if (error.reason === 'voice_connection_conflict') {
+        connectionMessage = 'The previous connection is still open. Retry to replace it without using another interview.';
+      } else if (['voice_connection_unconfirmed', 'voice_connection_pending', 'voice_call_close_unconfirmed'].indexOf(error.reason) !== -1) {
+        connectionMessage = 'We could not confirm the interview connection. Please wait while we check it. Contact support if this continues.';
+      } else if (error.reason === 'voice_connection_deadline_unavailable' || error.reason === 'voice_call_create_rejected') {
+        connectionMessage = 'Voice interviews are temporarily unavailable. Please try again later.';
+      } else if (error.name === 'NotAllowedError' || error.name === 'NotFoundError') {
+        connectionMessage = 'We could not access your microphone. Check your browser microphone permissions and selected device, then retry.';
+      } else {
+        connectionMessage = 'Could not connect the interview. Please try again later or contact support.';
+      }
+      alert(connectionMessage);
     } finally {
       state.starting = false;
       if (startBtn) { startBtn.disabled = false; startBtn.textContent = 'Start the interview'; }

@@ -75,7 +75,7 @@ export async function createManagedVoiceCall(env, { uid, sessionId, sdp, instruc
       ...(guarded ? [sessionId,uid,expectedAttemptId,sessionId] : [])).first();
   if (!row) throw Error('voice_call_not_admitted');
   console.log('[voice-call] creating',{attempt:id,execution});
-  let active = false;
+  let active = false, phase = 'prepare', failureCode = null;
   try {
     const form = new FormData();
     form.set('sdp',sdp);
@@ -83,33 +83,49 @@ export async function createManagedVoiceCall(env, { uid, sessionId, sdp, instruc
       model:env.OPENAI_MODEL_VOICE || 'gpt-realtime-mini', instructions,
       voice:env.VOICE_INTERVIEW_VOICE || 'marin'
     })));
+    phase = 'dispatch';
+    // Workers rejects redirect:'error' before dispatch. Manual prevents
+    // forwarding the bearer credential; any 3xx remains an uncertain result.
     const response = await fetch(CALLS_URL,{
       method:'POST',headers:{Authorization:`Bearer ${env.OPENAI_API_KEY}`,'X-Client-Request-Id':id},
-      body:form,redirect:'error',signal:AbortSignal.timeout(10000)
+      body:form,redirect:'manual',signal:AbortSignal.timeout(10000)
     });
+    phase = 'response';
     if (!response.ok) {
+      failureCode = 'create_http_' + response.status;
       const definite = DEFINITE_REJECTION.has(response.status);
-      if (definite) providerReceipt('provider_rejected',response,{attempt:id,execution,callId:null});
+      providerReceipt(definite ? 'provider_rejected' : 'provider_response_unconfirmed',response,{attempt:id,execution,callId:null});
       await db.prepare(`UPDATE voice_provider_calls SET state=?,last_error_code=?,
         execution_token=CASE WHEN ? THEN NULL ELSE execution_token END,updated_at=datetime('now'),
         closed_at=CASE WHEN ? THEN datetime('now') ELSE NULL END
         WHERE id=? AND execution_token=? AND state='creating'`)
-        .bind(definite?'closed':'uncertain',definite?'create_rejected':'create_unconfirmed',definite?1:0,definite?1:0,id,execution).run();
+        .bind(definite?'closed':'uncertain',definite?'create_rejected':failureCode,definite?1:0,definite?1:0,id,execution).run();
       throw Error(definite?'voice_call_create_rejected':'voice_call_create_unconfirmed');
     }
     const callId = providerCallId(response.headers.get('Location'));
-    if (!callId) throw Error('voice_call_reference_unconfirmed');
+    if (!callId) {
+      failureCode = response.headers.has('Location') ? 'create_reference_invalid' : 'create_reference_missing';
+      providerReceipt('provider_reference_unconfirmed',response,{attempt:id,execution,callId:null});
+      throw Error('voice_call_reference_unconfirmed');
+    }
     providerReceipt('provider_created',response,{attempt:id,execution,callId});
     // Persist the authoritative provider ID before the SDP leaves the server.
+    phase = 'persist';
     const saved = await db.prepare(`UPDATE voice_provider_calls SET state='active',provider_call_id=?,
       execution_token=NULL,updated_at=datetime('now') WHERE id=? AND execution_token=? AND state='creating'
       RETURNING id`).bind(callId,id,execution).first();
     if (!saved) throw Error('voice_call_record_unconfirmed');
     active = true;
+    phase = 'answer';
     const answer = await response.text();
     if (!validSdp(answer)) throw Error('voice_call_answer_invalid');
     return { attemptId:id, sdp:answer };
   } catch (error) {
+    // Fixed categories only: raw messages, response bodies and Location headers
+    // may contain credentials or connection content. Unknowns stay on hold.
+    const diagnostic = failureCode || ({prepare:'create_prepare_failed',dispatch:'create_transport_unconfirmed',
+      response:'create_response_unconfirmed',persist:'create_receipt_unconfirmed',answer:'create_answer_unconfirmed'})[phase];
+    console.log('[voice-call] create_failed',{attempt:id,execution,phase,diagnostic});
     if (active) {
       // A malformed/lost answer is never handed to the browser. Terminate only
       // this durably owned call, not a client-provided or guessed call ID.
@@ -117,9 +133,9 @@ export async function createManagedVoiceCall(env, { uid, sessionId, sdp, instruc
     } else {
       // A crash or unknown create result remains visible for reconciliation.
       // No automatic lease expiry guesses that a provider call did not exist.
-      await db.prepare(`UPDATE voice_provider_calls SET state='uncertain',last_error_code='create_unconfirmed',
+      await db.prepare(`UPDATE voice_provider_calls SET state='uncertain',last_error_code=?,
         updated_at=datetime('now') WHERE id=? AND execution_token=? AND state='creating'`)
-        .bind(id,execution).run().catch(()=>{});
+        .bind(diagnostic,id,execution).run().catch(()=>{});
     }
     // Provider bodies and exception text can contain private connection data.
     throw Error(error?.message === 'voice_call_create_rejected' ? error.message : 'voice_call_create_unconfirmed');
@@ -146,7 +162,7 @@ export async function closeManagedVoiceCall(env,{uid,attemptId}) {
   try {
     const response=await fetch(CALLS_URL+'/'+encodeURIComponent(before.provider_call_id)+'/hangup',{
       method:'POST',headers:{Authorization:`Bearer ${env.OPENAI_API_KEY}`,'X-Client-Request-Id':execution},
-      redirect:'error',signal:AbortSignal.timeout(10000)
+      redirect:'manual',signal:AbortSignal.timeout(10000)
     });
     if (!response.ok) throw Error('voice_call_close_unconfirmed');
     providerReceipt('provider_closed',response,{attempt:attemptId,execution,callId:before.provider_call_id});

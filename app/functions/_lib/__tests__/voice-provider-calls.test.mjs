@@ -30,7 +30,7 @@ test('provider call ID is durably owned before SDP returns; no reusable secret l
   const f=fixture(t);let observed;
   f.setHandler(async({url,init})=>{
     observed=await f.row();assert.equal(observed.state,'creating');assert.ok(observed.execution_token);
-    assert.equal(url,'https://api.openai.com/v1/realtime/calls');assert.equal(init.redirect,'error');assert.ok(init.signal);
+    assert.equal(url,'https://api.openai.com/v1/realtime/calls');assert.equal(init.redirect,'manual');assert.ok(init.signal);
     assert.equal(init.body.get('sdp'),SDP);
     const config=JSON.parse(init.body.get('session'));assert.equal(config.model,'gpt-realtime-mini');assert.equal(config.audio.output.voice,'marin');
     assert.equal(config.instructions,'Fixture interview instructions');
@@ -167,3 +167,30 @@ test('each deletion retry closes at most one provider call',async t=>{
   assert.deepEqual(await closeOneVoiceCallForDeletion(f.env,'owner'),{closed:true});assert.equal(f.calls.length,4);
   await assertDeletionQuiescent(f.env,'owner');
 });
+
+for (const [scenario, expected] of [
+  ['rate_limit','create_http_429'], ['server_error','create_http_503'],
+  ['missing_reference','create_reference_missing'], ['invalid_reference','create_reference_invalid'],
+  ['network','create_transport_unconfirmed']
+]) {
+  test('private failure diagnosis survives without weakening the hold: '+scenario, async t=>{
+    const f=fixture(t),logs=[];t.mock.method(console,'log',(...entry)=>logs.push(entry));
+    f.setHandler(async()=>{
+      if(scenario==='network')throw Error('SECRET diagnostic '+f.env.OPENAI_API_KEY);
+      const status=scenario==='rate_limit'?429:scenario==='server_error'?503:201;
+      return new Response('SECRET provider body',{status,headers:{
+        'x-request-id':'req_safe_diagnostic',
+        ...(scenario==='invalid_reference'?{Location:'https://foreign.test/SECRET-location'}:{})
+      }});
+    });
+    await assert.rejects(f.create(),{message:'voice_call_create_unconfirmed'});
+    const row=await f.row();assert.equal(row.last_error_code,expected);assert.equal(row.state,'uncertain');
+    assert.ok(row.execution_token);assert.equal(row.provider_call_id,null);
+    await assert.rejects(f.create(),/not_admitted/);assert.equal(f.calls.length,1);
+    const diagnostic=logs.find(([event])=>event==='[voice-call] create_failed')?.[1];
+    assert.equal(diagnostic.diagnostic,expected);
+    const receipt=logs.find(([event])=>/provider_(response|reference)_unconfirmed/.test(event))?.[1];
+    if(scenario!=='network')assert.equal(receipt.providerRequestId,'req_safe_diagnostic');
+    assert.doesNotMatch(JSON.stringify(logs),/SECRET|sk-test|UDP\/TLS/);
+  });
+}
