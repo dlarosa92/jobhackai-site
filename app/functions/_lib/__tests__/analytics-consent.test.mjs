@@ -33,6 +33,7 @@ function harness({host = 'app.jobhackai.io', consent = true, config, pendingServ
   const server = new Promise(r => {resolveServer=r;});
   let resolvePost;const post = new Promise(r => {resolvePost=r;});
   const ctx = { document, location: { hostname:host, protocol:'https:', href:'https://'+host+'/login'+search, pathname:'/login', search },
+    __REAL_AUTH_READY: !accountAuthPage,
     JHA_CONFIG: config, URL, CustomEvent: class {constructor(type){this.type=type;}}, HTMLScriptElement: class {},
     localStorage:{getItem:k=>store.get(k)??null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)},
     setTimeout:fn=>{timers.push(fn);return timers.length;}, performance:{now:()=>0},

@@ -41,7 +41,8 @@
   const API_BASE = ['jobhackai.io', 'www.jobhackai.io'].includes(hostname) ? 'https://app.jobhackai.io' : hostname === 'qa-marketing.jobhackai.io' ? 'https://qa.jobhackai.io' : '';
   // A deferred consent script can run before Firebase restores a signed-in
   // account. Do not treat that temporary absence as an anonymous visitor.
-  const accountAuthPage = !API_BASE && !!document.querySelector('script[type="module"][src*="firebase-auth.js"]');
+  const accountAuthPage = !API_BASE && (['app.jobhackai.io', 'dev.jobhackai.io', 'qa.jobhackai.io'].includes(hostname) ||
+    !!document.querySelector('script[type="module"][src*="firebase-auth.js"]'));
   let accountConsentReady = !accountAuthPage;
   const consentIdentityReady = () => !accountAuthPage || window.__REAL_AUTH_READY === true;
   // Marketing previews have no local policy page. Policy navigation is
