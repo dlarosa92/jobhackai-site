@@ -36,7 +36,24 @@ credential drain. Old immutable issuers have the recorded Access restriction;
 authenticated denial, prior credential/provider closure evidence and any
 reconciliation remain open. Do not erase, relabel or release those holds based
 on time elapsed or empty managed ledgers. Production acceptance still needs the
-complete cutover evidence. No microphone or provider call was started here.
+complete cutover evidence.
+
+At 03:01:03 UTC the owner-authorized development microphone test failed before
+connection. D1 records one `uncertain` provider-create attempt with
+`create_unconfirmed`, no saved provider ID, and an unresolved execution token.
+No new voice_session reservation was created. Do not infer rejection or closure
+from the missing provider trace, elapsed time, or a generic browser alert.
+No further voice start was attempted. New development arms were paused by
+worker version `e5a54a56-c91d-49bc-a208-70fff9666cd0`; existing deadline alarms
+remain available for handling and review. Read-only verification at 03:10 UTC
+confirms both staging workers disabled, dev one unresolved call, QA zero.
+
+The OpenAI Realtime logs page has no saved session trace for this attempt.
+Cloudflare Pages exposes a prospective log stream; none was attached when the
+failure happened. Exact provider response/terminal invocation evidence is not
+yet recovered. A separate diagnostics patch adds fixed failure categories and
+safe response metadata without exposing bodies, SDP, credentials or raw errors;
+it does not retroactively diagnose or reconcile this incident.
 
 ## Analytics repair
 
@@ -72,11 +89,21 @@ main target on all eight generated pages. Local candidate browser verification
 now reports activeElement MAIN#main after Enter; three existing consent tests
 pass. No new tracking or publication behavior was added.
 
-The QA login tab was observed on the production login URL during this run and
-returned to QA. Both development and QA currently require the owner's login;
-one combined sign-in request is pending. No login credentials were read. The
-private Analytics secret request is CLOSED; do not repeat it. Human voice ending
-acceptance will be requested only when the authenticated setup is ready.
+Both development and QA authentication were verified after the owner signed in.
+No new login is currently requested; preserve the tabs. The private Analytics
+secret request is CLOSED; do not repeat it. The first voice attempt failed as
+recorded above, so spoken-ending acceptance remains untested on this transport.
+
+Marblism Brain confirmed saving "Directory pilot — NKY and Cincinnati — bounded
+launch brief". It includes the experiment limits, campaign ID, agent draft
+assignments, owner decision delivery and trust-first editorial requirements.
+Saving shared instructions is not agent acknowledgment, publication, or completed
+campaign work. All public release and outreach switches remain held.
+
+QA analytics consent was explicitly enabled through Cookie Preferences before
+revisiting the tagged QA blog. The rewritten practice-options link stayed on QA
+and opened the $39 Interview Pack Stripe Sandbox checkout. Payment and actual
+Google receipt are still pending; opening checkout is not a purchase.
 
 Remaining release evidence includes actual managed call creation/end/reconnect/
 deadline behavior, saved report and entitlements, complete usage reconciliation,
