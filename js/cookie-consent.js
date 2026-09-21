@@ -39,6 +39,11 @@
   // Only the production marketing domains send consent to the production app.
   // Previews and local development must never write production consent records.
   const API_BASE = ['jobhackai.io', 'www.jobhackai.io'].includes(hostname) ? 'https://app.jobhackai.io' : hostname === 'qa-marketing.jobhackai.io' ? 'https://qa.jobhackai.io' : '';
+  // A deferred consent script can run before Firebase restores a signed-in
+  // account. Do not treat that temporary absence as an anonymous visitor.
+  const accountAuthPage = !API_BASE && !!document.querySelector('script[type="module"][src*="firebase-auth.js"]');
+  let accountConsentReady = !accountAuthPage;
+  const consentIdentityReady = () => !accountAuthPage || window.__REAL_AUTH_READY === true;
   // Marketing previews have no local policy page. Policy navigation is
   // separate from API routing so preview consent never writes to production.
   const POLICY_BASE = productionHost ? API_BASE
@@ -72,6 +77,7 @@
 
   // Helper: Fetch consent from server (D1 source of truth)
   async function fetchConsentFromServer() {
+    if (!consentIdentityReady()) return undefined;
     // A failed local save must survive navigation; an older server grant must
     // never overwrite a rejection still waiting to be delivered.
     if (getPendingConsent()) return undefined;
@@ -103,6 +109,7 @@
       if (response.ok) {
         const data = await response.json();
         if (data.ok && revision === consentRevision && !getPendingConsent()) {
+          accountConsentReady = true;
           if (data.resetConsent === true) {
             // Invalid stored decisions revoke both the cached grant and any
             // events/identity queued while this server check was in flight.
@@ -205,6 +212,7 @@
 
   // Helper: Sync consent to server (D1)
   async function postConsentToServer(consent) {
+    if (!consentIdentityReady()) return false;
     try {
       const clientId = getOrCreateClientId();
       
@@ -256,8 +264,10 @@
       const saved = await postConsentToServer(consent);
       if (revision === consentRevision) {
         if (saved) {
+          accountConsentReady = true;
           pendingConsentMemory = null;
           try { localStorage.removeItem(PENDING_CONSENT_KEY); } catch (_) {}
+          if (consent.analytics === true) loadGAScript();
         } else {
           rememberPendingConsent(consent);
         }
@@ -362,7 +372,7 @@
   // Helper: Check if analytics consent granted
   function hasAnalyticsConsent() {
     const consent = getConsent();
-    return consent && consent.version === 1 && consent.analytics === true;
+    return consentIdentityReady() && accountConsentReady && consent && consent.version === 1 && consent.analytics === true;
   }
 
   let clarityStopped = false;
@@ -974,11 +984,23 @@
   }
 
   // Initialize
+  let controlsInitialized = false;
+  let consentInitialized = false;
   async function init() {
     retireLegacyQACampaign();
     // Privacy controls must work even while account reconciliation is slow
     // or unavailable. Opening/saving the modal applies the local choice now.
-    setupAccountSettingsButton();
+    if (!controlsInitialized) {
+      setupAccountSettingsButton();
+      controlsInitialized = true;
+    }
+    if (!consentIdentityReady()) {
+      preventGALoading();
+      createBanner();
+      return;
+    }
+    if (consentInitialized) return;
+    consentInitialized = true;
 
     // Fetch consent from server (D1 source of truth) on page load
     // This ensures multi-device sync and makes D1 the actual source of truth
@@ -1009,6 +1031,9 @@
   }
 
   // Auto-init
+  document.addEventListener('firebase-auth-ready', () => {
+    if (accountAuthPage && consentIdentityReady()) return init();
+  });
   if (window.addEventListener) window.addEventListener('online', () => {
     const pending = getPendingConsent();
     if (pending) syncConsentToServer(pending);
