@@ -5,7 +5,7 @@ import vm from 'node:vm';
 import test from 'node:test';
 const source = readFileSync(new URL('../../../../js/cookie-consent.js', import.meta.url), 'utf8');
 const GA = 'G-SQYSWPFM5X';
-function harness({host = 'app.jobhackai.io', consent = true, config, pendingServer = false, pendingPost = false, search = '', cookies = new Map(), store = new Map(), scopedCookies = null, footerPreferences = false} = {}) {
+function harness({host = 'app.jobhackai.io', consent = true, config, pendingServer = false, pendingPost = false, search = '', cookies = new Map(), store = new Map(), scopedCookies = null, footerPreferences = false, accountAuthPage = false} = {}) {
   const scripts = [], insertedScripts = [], appendedElements = [], elements = new Map(), timers = [], requests = [], listeners = {};
   if (consent !== null) store.set('jha_cookie_consent_v1', JSON.stringify({version:1,analytics: consent}));
   function element(tag = 'div') {
@@ -20,7 +20,7 @@ function harness({host = 'app.jobhackai.io', consent = true, config, pendingServ
     createElement: element, getElementById: id => footerPreferences && id === 'open-cookie-preferences' ? (elements.get(id) || null) : node(id),
     head: {appendChild(e){scripts.push(e);insertedScripts.push(e);}}, body: {style:{},appendChild(e){appendedElements.push(e);}},
     addEventListener(type,fn){listeners[type]=fn;},
-    querySelector(selector){ if(footerPreferences && selector === 'footer') return {appendChild(e){appendedElements.push(e);elements.set(e.id,e);}}; return this.querySelectorAll(selector)[0] || null; },
+    querySelector(selector){ if(accountAuthPage && selector === 'script[type="module"][src*="firebase-auth.js"]')return {}; if(footerPreferences && selector === 'footer') return {appendChild(e){appendedElements.push(e);elements.set(e.id,e);}}; return this.querySelectorAll(selector)[0] || null; },
     querySelectorAll(selector){const needle=selector.match(/src\*="([^"]+)"/)?.[1]; return needle ? scripts.filter(s => (s.src||'').includes(needle)) : [];},
     getElementsByTagName(){return [element('script')];}
   };
@@ -33,6 +33,7 @@ function harness({host = 'app.jobhackai.io', consent = true, config, pendingServ
   const server = new Promise(r => {resolveServer=r;});
   let resolvePost;const post = new Promise(r => {resolvePost=r;});
   const ctx = { document, location: { hostname:host, protocol:'https:', href:'https://'+host+'/login'+search, pathname:'/login', search },
+    __REAL_AUTH_READY: !accountAuthPage,
     JHA_CONFIG: config, URL, CustomEvent: class {constructor(type){this.type=type;}}, HTMLScriptElement: class {},
     localStorage:{getItem:k=>store.get(k)??null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)},
     setTimeout:fn=>{timers.push(fn);return timers.length;}, performance:{now:()=>0},
@@ -43,6 +44,7 @@ function harness({host = 'app.jobhackai.io', consent = true, config, pendingServ
   vm.createContext(ctx); vm.runInContext(source,ctx);
   return {ctx, scripts, insertedScripts, appendedElements, requests, node, cookies, store,
     init:()=>listeners.DOMContentLoaded(),
+    authReady(user){ctx.__REAL_AUTH_READY=true;ctx.FirebaseAuthManager={getCurrentUser:()=>user};return listeners['firebase-auth-ready']?.();},
     finishPost:()=>resolvePost({ok:true,json:async()=>({ok:true})}),
     finishServer:analytics=>resolveServer({ok:true,json:async()=>({ok:true,consent:analytics===null?null:{version:1,analytics}, ...(analytics===null?{resetConsent:true}:{})})}),
     runTimers(){while(timers.length)timers.shift()();},
@@ -50,6 +52,40 @@ function harness({host = 'app.jobhackai.io', consent = true, config, pendingServ
     setConsent(analytics){ctx.JHA.cookieConsent.openPreferences();node('jha-toggle-analytics').checked=analytics;node('jha-save-preferences').onclick();}
   };
 }
+test('account pages wait for restored authentication and the server consent decision',async()=>{
+  const h=harness({accountAuthPage:true,consent:true,pendingServer:true});
+  const startup=h.init();await Promise.resolve();await Promise.resolve();h.runTimers();
+  assert.equal(h.requests.length,0);assert.equal(h.scripts.length,0);
+  await startup;
+  assert.equal(h.ctx.JHA.cookieConsent.hasAnalyticsConsent(),false);
+  const resume=h.authReady({getIdToken:async()=>'fixture-auth-token'});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(h.requests[0].options.headers.Authorization,'Bearer fixture-auth-token');
+  assert.equal(h.scripts.length,0);
+  h.finishServer(false);await resume;h.runTimers();
+  assert.equal(h.scripts.length,0);assert.equal(h.ctx.JHA.cookieConsent.hasAnalyticsConsent(),false);
+});
+for(const analytics of [false,true])test('early account-page choice stays pending until identity is ready: '+analytics,async()=>{
+  const h=harness({accountAuthPage:true,consent:true});await h.init();
+  h.setConsent(analytics);await Promise.resolve();await Promise.resolve();
+  assert.equal(h.requests.length,0);assert.equal(h.scripts.length,0);
+  await h.authReady({getIdToken:async()=>'fixture-auth-token'});h.runTimers();
+  assert.ok(h.requests.some(r=>r.options.method==='POST'&&r.options.headers.Authorization==='Bearer fixture-auth-token'));
+  assert.equal(h.store.has('jha_cookie_consent_pending_v1'),false);
+  assert.equal(h.ctx.JHA.cookieConsent.hasAnalyticsConsent(),analytics);
+});
+test('an unavailable authenticated consent read cannot load a cached browser grant',async()=>{
+  const h=harness({accountAuthPage:true,consent:true});await h.init();
+  h.ctx.fetch=async()=>({ok:false,status:503});
+  await h.authReady({getIdToken:async()=>'fixture-auth-token'});h.runTimers();
+  assert.equal(h.scripts.length,0);assert.equal(h.ctx.JHA.cookieConsent.hasAnalyticsConsent(),false);
+});
+test('confirmed signed-out account pages can use browser consent without a token',async()=>{
+  const h=harness({host:'qa.jobhackai.io',accountAuthPage:true,consent:true});await h.init();
+  await h.authReady(null);h.runTimers();
+  assert.equal(h.requests[0].options.headers.Authorization,undefined);
+  assert.equal(h.scripts.length,1);
+});
 for (const [host, policy] of [['jobhackai.io','https://app.jobhackai.io/cookies'],['app.jobhackai.io','/cookies'],['qa.jobhackai.io','https://qa.jobhackai.io/cookies'],['develop.jobhackai-app-marketing-seo.pages.dev','https://qa.jobhackai.io/cookies'],['abc.pages.dev','https://dev.jobhackai.io/cookies']]) {
   test(host+' cookie policy link uses the matching app without changing consent API routing', async()=>{
     const h=harness({host,consent:null}); await h.init();

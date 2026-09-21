@@ -151,6 +151,30 @@ pass. Either account or current-browser rejection blocks collection; an explicit
 signed-in grant updates both. All 29 Workers tests and 98 consent, diagnostic,
 API and attribution checks pass. Verify both directions after QA promotion.
 
+PR935 and PR937 deployed to DEV; PR936 promoted them to QA at `daf52eb`.
+Live directory withdrawal followed by authenticated app navigation now loads
+zero Google tags and displays Analytics unchecked. A separate startup race was
+also reproduced: an app page can read anonymous consent before Firebase restores
+the account, so a browser grant can precede an account rejection. The follow-up
+waits for real auth readiness and a consent receipt before loading Analytics.
+Early choices remain local/pending until they can be saved with the correct
+identity; preference controls remain usable. Two regressions reproduced the old
+race, and 106 consent/API/attribution/directory checks pass with the repair.
+This startup repair still needs deployment and live retesting.
+
+Google independently received `directory_listing_view` at04:04:08UTC and
+`directory_contact_click` at04:04:22UTC with `business_line=local_directory`,
+`directory_category=mobile_detailing`, `directory_market=nky_cincinnati`, and
+`listing_id=precision-gloss`. The contact event's method is `provider_website`.
+No message or quote request was sent; these are QA view/intent receipts.
+
+The QA property had zero custom definitions. Fourteen Event-scoped dimensions
+were added and independently verified in its table: `jha_first_`/`jha_last_`
+source, medium, campaign and asset, plus business_line, directory_category,
+directory_market, listing_id, contact_method and interest_type. No customer or
+transaction identifiers were registered as custom dimensions. Processed reports
+remain unverified; registering dimensions does not establish historical backfill.
+
 ## Directory and owner steps
 
 The [bounded experiment](directory-experiment-scorecard.md) fixes category,
