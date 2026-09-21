@@ -8,6 +8,17 @@ beforeAll(()=>applyD1Migrations(env.DB,env.TEST_MIGRATIONS));
 const decision=(analytics:boolean)=>({version:1,analytics,updatedAt:new Date().toISOString()});
 async function owner(){const uid=crypto.randomUUID();const row=await env.DB.prepare('INSERT INTO users(auth_id,email) VALUES(?,?) RETURNING id').bind(uid,uid+'@example.test').first<{id:number}>();return row!.id;}
 for(const [name,save,read] of [['app',upsertCookieConsent,getCookieConsent],['root',rootSave,rootRead]] as const){
+  it(`${name}: anonymous marketing withdrawal overrides an older account grant`,async()=>{
+    const userId=await owner(),clientId=crypto.randomUUID();
+    expect(await save(env,{userId,clientId,consent:decision(true)})).toBe(true);
+    expect(await save(env,{clientId,consent:decision(false)})).toBe(true);
+    expect(await read(env,userId,clientId)).toMatchObject({analytics:false});
+    expect(await read(env,userId,null)).toMatchObject({analytics:true});
+    expect(await save(env,{userId,clientId,consent:decision(true)})).toBe(true);
+    expect(await read(env,userId,clientId)).toMatchObject({analytics:true});
+    expect(await save(env,{userId,consent:decision(false)})).toBe(true);
+    expect(await read(env,userId,clientId)).toMatchObject({analytics:false});
+  });
   it(`${name}: account withdrawal remains readable by anonymous marketing on the same browser`,async()=>{
     const userId=await owner(),clientId=crypto.randomUUID();
     expect(await save(env,{clientId,consent:decision(true)})).toBe(true);

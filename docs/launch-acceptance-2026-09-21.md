@@ -144,6 +144,13 @@ explicitly opted out through its own controls while the repair is promoted.
 Repeat authenticated withdrawal and a fresh anonymous marketing navigation on
 the deployed fix before closing this gate. Do not claim it already passes live.
 
+The reverse route also needs rejection precedence: an anonymous marketing
+withdrawal must override an older account grant when the visitor returns to
+the app. Both app/root lookup regressions failed before this follow-up and now
+pass. Either account or current-browser rejection blocks collection; an explicit
+signed-in grant updates both. All 29 Workers tests and 98 consent, diagnostic,
+API and attribution checks pass. Verify both directions after QA promotion.
+
 ## Directory and owner steps
 
 The [bounded experiment](directory-experiment-scorecard.md) fixes category,
