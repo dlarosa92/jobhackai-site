@@ -1,3 +1,4 @@
+import { saveCookieConsent } from './consent-storage.js';
 /**
  * D1 Database Helper for JobHackAI
  * 
@@ -2327,124 +2328,8 @@ export async function markUpgradePopupAsSeen(env, authId) {
  * @param {Object} params.consent - Consent object {version, analytics, updatedAt}
  * @returns {Promise<boolean>} Success
  */
-export async function upsertCookieConsent(env, { userId, authId, clientId, consent }) {
-  const db = getDb(env);
-  if (!db) {
-    console.warn('[DB] D1 binding not available');
-    console.warn('[DB] Available env keys:', Object.keys(env || {}).filter(k => k.includes('DB') || k.includes('D1')));
-    return false;
-  }
-
-  console.log('[DB] upsertCookieConsent called:', { hasUserId: !!userId, hasClientId: !!clientId, hasDb: !!db });
-
-  try {
-    if (!userId && !clientId) {
-      console.warn('[DB] No userId or clientId provided for cookie consent');
-      return false;
-    }
-
-    const consentStr = typeof consent === 'string' ? consent : JSON.stringify(consent);
-    const now = new Date().toISOString();
-
-    // Use SELECT → INSERT/UPDATE pattern for compatibility with D1 partial indexes.
-    // NOTE: This pattern is NOT atomic by itself. Concurrent requests can still race:
-    // two requests may SELECT and see no row, then both try to INSERT. To mitigate
-    // that, we catch UNIQUE constraint failures on INSERT and retry as an UPDATE.
-    // This provides a robust fallback for D1 environments that don't accept
-    // partial UNIQUE indexes as ON CONFLICT targets.
-    if (userId) {
-      // For authenticated users: upsert by user_id (prefer user_id over client_id)
-      const existing = await db.prepare(
-        'SELECT id FROM cookie_consents WHERE user_id = ?'
-      ).bind(userId).first();
-
-      if (existing) {
-        // Update existing
-        await db.prepare(
-          'UPDATE cookie_consents SET consent_json = ?, updated_at = ? WHERE user_id = ?'
-        ).bind(consentStr, now, userId).run();
-      } else {
-        // Insert new; on UNIQUE violation (race), fall back to UPDATE
-        try {
-          await db.prepare(
-            `INSERT INTO cookie_consents (user_id, client_id, consent_json, created_at, updated_at)
-             VALUES (?, NULL, ?, ?, ?)`
-          ).bind(userId, consentStr, now, now).run();
-        } catch (err) {
-          // D1/SQLite returns an error when UNIQUE constraint is violated.
-          // Perform an UPDATE as a fallback if it's a UNIQUE constraint error,
-          // otherwise rethrow.
-          const msg = err && err.message ? String(err.message) : '';
-          if (msg.includes('UNIQUE constraint failed') || msg.includes('ON CONFLICT clause')) {
-            await db.prepare(
-              'UPDATE cookie_consents SET consent_json = ?, updated_at = ? WHERE user_id = ?'
-            ).bind(consentStr, now, userId).run();
-          } else {
-            throw err;
-          }
-        }
-      }
-      // After successful upsert, clean up any orphaned client_id record
-      if (clientId) {
-        try {
-          await db.prepare('DELETE FROM cookie_consents WHERE client_id = ? AND user_id IS NULL').bind(clientId).run();
-        } catch (e) {
-          // Ignore if delete fails (non-critical, just cleanup)
-          console.warn('[DB] Failed to delete client_id record during migration:', e);
-        }
-      }
-      console.log('[DB] Upserted cookie consent (user):', { userId });
-    } else if (clientId) {
-      // For anonymous users: upsert by client_id
-      const existingClient = await db.prepare(
-        'SELECT id FROM cookie_consents WHERE client_id = ?'
-      ).bind(clientId).first();
-      if (existingClient) {
-        await db.prepare(
-          'UPDATE cookie_consents SET consent_json = ?, updated_at = ? WHERE client_id = ?'
-        ).bind(consentStr, now, clientId).run();
-      } else {
-        try {
-          await db.prepare(
-            `INSERT INTO cookie_consents (user_id, client_id, consent_json, created_at, updated_at)
-             VALUES (NULL, ?, ?, ?, ?)`
-          ).bind(clientId, consentStr, now, now).run();
-        } catch (err) {
-          const msg = err && err.message ? String(err.message) : '';
-          if (msg.includes('UNIQUE constraint failed') || msg.includes('ON CONFLICT clause')) {
-            await db.prepare(
-              'UPDATE cookie_consents SET consent_json = ?, updated_at = ? WHERE client_id = ?'
-            ).bind(consentStr, now, clientId).run();
-          } else {
-            throw err;
-          }
-        }
-      }
-      console.log('[DB] Upserted cookie consent (client):', { clientId });
-    }
-
-    return true;
-  } catch (error) {
-    console.error('[DB] Error in upsertCookieConsent:', error);
-    console.error('[DB] Error details:', {
-      message: error.message,
-      stack: error.stack,
-      userId: userId || null,
-      clientId: clientId || null,
-      consentPreview: (() => {
-        if (typeof consent === 'string') return consent.substring(0, 100);
-        if (consent === undefined) return 'undefined';
-        if (consent === null) return 'null';
-        try {
-          const str = JSON.stringify(consent);
-          return str ? str.substring(0, 100) : 'empty';
-        } catch {
-          return 'unstringifiable';
-        }
-      })()
-    });
-    return false;
-  }
+export async function upsertCookieConsent(env, options) {
+  return saveCookieConsent(getDb(env), options);
 }
 
 /**
@@ -2459,37 +2344,26 @@ export async function getCookieConsent(env, userId, clientId) {
   if (!db) throw new Error('consent_read_unavailable');
 
   try {
-    let row = null;
-    
-    // Prefer userId over clientId, but fall back to clientId if userId query returns nothing
-    // This handles migration: user saved consent anonymously (client_id), then logged in (user_id)
-    if (userId) {
-      row = await db.prepare(
-        'SELECT consent_json FROM cookie_consents WHERE user_id = ?'
-      ).bind(userId).first();
-      
-      // If no user_id record found, fall back to client_id (for migration scenario)
-      if (!row && clientId) {
-        row = await db.prepare(
-          'SELECT consent_json FROM cookie_consents WHERE client_id = ?'
-        ).bind(clientId).first();
-      }
-    } else if (clientId) {
-      row = await db.prepare(
-        'SELECT consent_json FROM cookie_consents WHERE client_id = ?'
-      ).bind(clientId).first();
-    }
+    const rows = [];
+    if (userId) rows.push(await db.prepare(
+      'SELECT consent_json FROM cookie_consents WHERE user_id = ?'
+    ).bind(userId).first());
+    if (clientId) rows.push(await db.prepare(
+      'SELECT consent_json FROM cookie_consents WHERE client_id = ?'
+    ).bind(clientId).first());
 
-    if (!row) return null;
-    // Distinguish an invalid stored decision from an absent record. The API
-    // uses this non-grant to clear stale client grants without clearing a
-    // valid local decision during anonymous-to-account initialization.
-    try {
-      return JSON.parse(row.consent_json) ?? { version: 0, analytics: false };
-    } catch (_) {
+    const decisions = rows.filter(Boolean).map(row => {
+      try {
+        const value = JSON.parse(row.consent_json);
+        if (value?.version === 1 && typeof value.analytics === 'boolean') return value;
+      } catch (_) { /* A corrupt decision cannot authorize collection. */ }
       return { version: 0, analytics: false };
-    }
-  } catch (error) {
+    });
+    // An account grant cannot override a withdrawal on this browser, and an
+    // anonymous grant cannot override an account withdrawal. An explicit
+    // signed-in grant updates both records atomically in saveCookieConsent.
+    return decisions.find(value => value.analytics !== true) || decisions[0] || null;
+  } catch (_) {
     console.error('[DB] Consent lookup failed');
     throw new Error('consent_read_unavailable');
   }
