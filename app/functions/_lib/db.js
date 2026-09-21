@@ -2344,37 +2344,26 @@ export async function getCookieConsent(env, userId, clientId) {
   if (!db) throw new Error('consent_read_unavailable');
 
   try {
-    let row = null;
-    
-    // Prefer userId over clientId, but fall back to clientId if userId query returns nothing
-    // This handles migration: user saved consent anonymously (client_id), then logged in (user_id)
-    if (userId) {
-      row = await db.prepare(
-        'SELECT consent_json FROM cookie_consents WHERE user_id = ?'
-      ).bind(userId).first();
-      
-      // If no user_id record found, fall back to client_id (for migration scenario)
-      if (!row && clientId) {
-        row = await db.prepare(
-          'SELECT consent_json FROM cookie_consents WHERE client_id = ?'
-        ).bind(clientId).first();
-      }
-    } else if (clientId) {
-      row = await db.prepare(
-        'SELECT consent_json FROM cookie_consents WHERE client_id = ?'
-      ).bind(clientId).first();
-    }
+    const rows = [];
+    if (userId) rows.push(await db.prepare(
+      'SELECT consent_json FROM cookie_consents WHERE user_id = ?'
+    ).bind(userId).first());
+    if (clientId) rows.push(await db.prepare(
+      'SELECT consent_json FROM cookie_consents WHERE client_id = ?'
+    ).bind(clientId).first());
 
-    if (!row) return null;
-    // Distinguish an invalid stored decision from an absent record. The API
-    // uses this non-grant to clear stale client grants without clearing a
-    // valid local decision during anonymous-to-account initialization.
-    try {
-      return JSON.parse(row.consent_json) ?? { version: 0, analytics: false };
-    } catch (_) {
+    const decisions = rows.filter(Boolean).map(row => {
+      try {
+        const value = JSON.parse(row.consent_json);
+        if (value?.version === 1 && typeof value.analytics === 'boolean') return value;
+      } catch (_) { /* A corrupt decision cannot authorize collection. */ }
       return { version: 0, analytics: false };
-    }
-  } catch (error) {
+    });
+    // An account grant cannot override a withdrawal on this browser, and an
+    // anonymous grant cannot override an account withdrawal. An explicit
+    // signed-in grant updates both records atomically in saveCookieConsent.
+    return decisions.find(value => value.analytics !== true) || decisions[0] || null;
+  } catch (_) {
     console.error('[DB] Consent lookup failed');
     throw new Error('consent_read_unavailable');
   }
