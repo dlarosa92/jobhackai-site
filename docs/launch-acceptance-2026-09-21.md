@@ -7,13 +7,17 @@ experiment on September 20 Eastern; routine staging work continues.
 
 ## Deployed application
 
-PR913 and the no-code ancestry repair PR929 merged to development; PR928 merged
-to QA. The repair retained the exact application tree already tested on dev.
+PR913 and ancestry repair PR929 merged to development; PR928 merged to QA.
+PR930–933 subsequently merged to development. PR934 promoted the same fixes to
+QA after all checks passed; the canonical QA deployment is verified below.
 
 | Target | Revision | Successful canonical deployment |
 | --- | --- | --- |
-| Development | ee9707d753ee01f43f8ad879cd3357628ffc912f | 848907d1-3c92-4ed0-9167-2619b42d92b0 |
-| QA | e704c8c857c699beff73073211a9d26dd491fa70 | 3001659a-feb4-41ce-b63b-181e46fddaad |
+| Development | 398746a15c442efa3328643b2d14f73a2364508b | c794f2a3-932d-4f64-aa7f-7c8ec484c7c4 |
+| QA | 3c72be5109c87b3f02dcb1799817279729f7a251 | df2feee3-e40e-40d2-98d0-04aae8ca3f1f |
+
+QA marketing deployment1be566f3-bcee-4c40-b99c-c1cd54643b63 also succeeded
+at3c72be5 on03:39UTC.
 
 Both have the matching isolated D1 and Durable Object bindings, RPC enabled and
 managed transport true. Anonymous POST to the old `/api/voice/session` returns
@@ -53,7 +57,18 @@ Cloudflare Pages exposes a prospective log stream; none was attached when the
 failure happened. Exact provider response/terminal invocation evidence is not
 yet recovered. A separate diagnostics patch adds fixed failure categories and
 safe response metadata without exposing bodies, SDP, credentials or raw errors;
-it does not retroactively diagnose or reconcile this incident.
+it does not retroactively establish provider or terminal invocation receipts.
+
+PR933 identifies a concrete runtime failure: native Workers Request rejects
+`redirect:error` before dispatch. Both create and hangup used that unsupported
+option. The same option existed in account-deletion confirmation delivery. All
+three now use manual redirects; 3xx responses stay uncertain and are not followed.
+A native Workers regression failed against the previous implementation; all 23
+runtime tests and 91 focused Node checks pass after the fix. Development app at
+`398746a` and deadline worker `68e76176-34eb-40b4-a4a7-30a8a47b34c3` are deployed,
+with new arms still paused. QA deadline worker `241a124f-b20d-40c8-8201-b5dd31684263`
+also contains the fix and remains paused. The original unknown row is retained for review.
+No credit was reserved for it. This code finding does not invent an old receipt.
 
 ## Analytics repair
 
@@ -68,13 +83,66 @@ saving to disk or putting it in chat. The temporary browser-runtime variable was
 cleared. Cloudflare confirmed encrypted storage; secret-update worker version
 `4b327db8-e3ff-40e7-9c7f-7af4f6b462eb` kept delivery false.
 
-QA Sandbox delivery was then enabled from the reviewed worker source, version
-`c4cfacab-0966-4505-b9ef-7109732fe244`, five-minute cron. No production destination
-or development delivery was enabled. Initial read-only QA queries show zero
-checkout attribution contexts and zero linked payments; therefore existing
-Sandbox payments cannot prove campaign revenue receipt. A fresh tagged checkout
-with consent, then actual Google purchase/refund receipt, remains required.
-No synthetic client IDs, fabricated purchases or timestamp changes were used.
+QA Sandbox delivery was enabled from the reviewed worker source, version
+`c4cfacab-0966-4505-b9ef-7109732fe244`, on a five-minute cron. No production
+or development delivery was enabled. The following are real Stripe Sandbox
+transactions and actual Google DebugView observations, not business revenue.
+
+| Test | Stripe charge | Capture | Succeeded refund | Net before fees |
+| --- | --- | --- | --- | --- |
+| Initial purchase, no campaign context | `ch_3UHxfAApMPhcB1Y617iL36nQ` | $39 | $39 | $0 |
+| Tagged article through checkout | `ch_3UHy6SApMPhcB1Y618ne114q` | $39 | $10 | $29 |
+
+The initial checkout at 03:13 UTC had actual GA client/session identifiers but
+NULL first/last campaign touches. Google independently showed its purchase with
+matching transaction ID, USD and value 39. Its full refund at 03:38 UTC,
+`re_3UHxfAApMPhcB1Y61fUmpBYU`, was recorded once as succeeded in QA D1. Google
+subsequently showed the matching transaction/refund IDs, USD and value 39.
+
+After QA promotion, a fresh externally tagged article visit loaded exactly the
+QA Google tag before its CTA opened QA pricing and Sandbox checkout. The new
+checkout retained both first and last touches:
+
+- Source: `linkedin`; medium: `organic_social`.
+- Campaign: `qa_cross_site_20260921_0340`; asset: `qa_pack_04`.
+- Actual GA client and session identifiers; no synthetic identity.
+
+The second $39 purchase completed at 03:41:18 UTC and joined that exact context.
+A $10 partial refund at 03:44 UTC, `re_3UHy6SApMPhcB1Y61ZaTWYvw`, succeeded in
+Stripe and D1, leaving $29 net collection before fees. At 03:45:53 UTC Google
+received both events. Expanded DebugView parameters independently verified:
+
+- Purchase: exact charge ID, USD, value 39, and both first/last source, medium,
+  campaign and asset values listed above.
+- Refund: exact charge and refund IDs, USD, value 10, and matching first/last
+  campaign and asset values.
+
+All four deliveries had one attempt and HTTP 204, followed by independently
+observed Google receipts. Their recorded state was `accepted_unverified`; it
+was not manually relabeled. These checks prove the consented campaign context
+reached collected money and its partial refund in the QA property. Processed
+GA native attribution/report totals and production measurement remain open.
+The earlier missing tags were not backfilled; their exact cause is unproven.
+No fabricated purchase, timestamp change or guessed campaign was used.
+
+## Cross-site withdrawal follow-up
+
+The real QA withdrawal removed both test checkout contexts and their delivery
+rows while preserving the two captures and succeeded refunds. However, a fresh
+marketing page still loaded Google and displayed Analytics enabled. Investigation
+found that authenticated consent writes deleted the anonymous browser record.
+Marketing has no authenticated token; its next GET therefore returned no decision
+and the host reused an older cached grant. This is a release blocker.
+
+The fix atomically saves separate account and current-browser decisions in D1.
+Old combined identity rows are separated without modifying another account's
+preference. A browser-write failure rolls back the account write too. Four
+regressions failed on the original implementation in actual Workers/D1 and pass
+after the repair; all 27 runtime tests and 89 consent/API/attribution checks pass.
+Both app and root consent handlers use the same storage helper. QA marketing was
+explicitly opted out through its own controls while the repair is promoted.
+Repeat authenticated withdrawal and a fresh anonymous marketing navigation on
+the deployed fix before closing this gate. Do not claim it already passes live.
 
 ## Directory and owner steps
 
@@ -90,23 +158,34 @@ now reports activeElement MAIN#main after Enter; three existing consent tests
 pass. No new tracking or publication behavior was added.
 
 Both development and QA authentication were verified after the owner signed in.
-No new login is currently requested; preserve the tabs. The private Analytics
+No new login is currently requested; preserve the tabs. A fresh availability
+question for the corrected voice test is pending; do not start the microphone
+unattended or repeatedly ask for the same answer. The private Analytics
 secret request is CLOSED; do not repeat it. The first voice attempt failed as
 recorded above, so spoken-ending acceptance remains untested on this transport.
 
 Marblism Brain confirmed saving "Directory pilot — NKY and Cincinnati — bounded
 launch brief". It includes the experiment limits, campaign ID, agent draft
 assignments, owner decision delivery and trust-first editorial requirements.
-Saving shared instructions is not agent acknowledgment, publication, or completed
-campaign work. All public release and outreach switches remain held.
+The controlling campaign register was also saved and reopened at 03:30 UTC with
+current staging, secret, purchase and voice findings, superseding stale PR913
+status. Saving shared instructions is not agent acknowledgment, publication, or
+completed campaign work. All public release and outreach switches remain held.
 
 QA analytics consent was explicitly enabled through Cookie Preferences before
 revisiting the tagged QA blog. The rewritten practice-options link stayed on QA
-and opened the $39 Interview Pack Stripe Sandbox checkout. Payment and actual
-Google receipt are still pending; opening checkout is not a purchase.
+and opened the $39 Interview Pack Stripe Sandbox checkout. Payment and actual Google
+receipt were verified as described above. A second tagged checkout was opened
+but left unpaid; its campaign touches are also NULL. QA marketing was observed
+with no Google tag while the app had consent. PR932 adds on-page footer cookie
+preferences, so a visitor can change the marketing host preference directly.
+All 52 consent tests and local browser grant/withdraw controls pass. The fresh
+post-promotion tagged handoff and collected purchase succeeded as recorded above.
+Do not backfill missing tags on the earlier purchases.
 
 Remaining release evidence includes actual managed call creation/end/reconnect/
 deadline behavior, saved report and entitlements, complete usage reconciliation,
-fresh checkout and Google receipt, disposable-account privacy/lifecycle checks,
+processed campaign revenue reports and consent-withdrawal delivery checks,
+disposable-account privacy/lifecycle checks,
 directory inbox receipt and production-specific rollout verification. Do not
 call these completed because local tests or configuration checks passed.
