@@ -84,9 +84,11 @@ export async function createManagedVoiceCall(env, { uid, sessionId, sdp, instruc
       voice:env.VOICE_INTERVIEW_VOICE || 'marin'
     })));
     phase = 'dispatch';
+    // Workers rejects redirect:'error' before dispatch. Manual prevents
+    // forwarding the bearer credential; any 3xx remains an uncertain result.
     const response = await fetch(CALLS_URL,{
       method:'POST',headers:{Authorization:`Bearer ${env.OPENAI_API_KEY}`,'X-Client-Request-Id':id},
-      body:form,redirect:'error',signal:AbortSignal.timeout(10000)
+      body:form,redirect:'manual',signal:AbortSignal.timeout(10000)
     });
     phase = 'response';
     if (!response.ok) {
@@ -160,7 +162,7 @@ export async function closeManagedVoiceCall(env,{uid,attemptId}) {
   try {
     const response=await fetch(CALLS_URL+'/'+encodeURIComponent(before.provider_call_id)+'/hangup',{
       method:'POST',headers:{Authorization:`Bearer ${env.OPENAI_API_KEY}`,'X-Client-Request-Id':execution},
-      redirect:'error',signal:AbortSignal.timeout(10000)
+      redirect:'manual',signal:AbortSignal.timeout(10000)
     });
     if (!response.ok) throw Error('voice_call_close_unconfirmed');
     providerReceipt('provider_closed',response,{attempt:attemptId,execution,callId:before.provider_call_id});

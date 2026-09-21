@@ -72,7 +72,7 @@ export async function deliverDeletionNotifications(env) {
         <p>If you have questions, contact privacy@jobhackai.io with this reference.</p>
         <p><a href="${frontend}/privacy">Privacy policy</a></p><p>JobHackAI</p></div>`};
     try {
-      const response=await fetch('https://api.resend.com/emails',{method:'POST',redirect:'error',signal:AbortSignal.timeout(10000),
+      const response=await fetch('https://api.resend.com/emails',{method:'POST',redirect:'manual',signal:AbortSignal.timeout(10000),
         headers:{Authorization:`Bearer ${env.RESEND_API_KEY}`,'Content-Type':'application/json',
           'Idempotency-Key':`account-deletion/${notice.job_id}`},body:JSON.stringify(body)});
       if(!response.ok) {outcome=rejected.has(response.status)?'rejected':'uncertain';await response.body?.cancel();}
