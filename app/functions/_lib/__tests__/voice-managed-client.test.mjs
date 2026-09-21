@@ -174,3 +174,15 @@ test('an acknowledged report remains available while call closure is separately 
   assert.match(f.h.el('vi-save-status').textContent,/Connection closure still needs confirmation/);
   assert.equal(f.h.el('vi-save-retry').style.display,'');
 });
+
+for(const reason of ['voice_connection_unconfirmed','voice_connection_pending','voice_call_close_unconfirmed','voice_connection_deadline_unavailable','voice_call_create_rejected']) {
+  test('server-side start failure does not blame the microphone: '+reason, async t=>{
+    const stream=mic();
+    const f=fixture(t,{getUserMedia:async()=>stream,routes:{'/api/voice/connection':()=>({__status:reason==='voice_connection_unconfirmed'?502:409,reason,error:'Connection unavailable'})}});
+    await f.start();
+    const alerts=f.h.logs.filter(entry=>entry[0]==='alert');assert.equal(alerts.length,1);
+    assert.doesNotMatch(String(alerts[0][1]),/microphone|connection, then retry/i);
+    assert.equal(stream.track.enabled,false);assert.equal(f.opens().length,1);
+    assert.equal(f.h.el('vi-setup-view').style.display,'');
+  });
+}

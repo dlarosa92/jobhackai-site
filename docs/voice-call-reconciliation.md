@@ -1,15 +1,22 @@
 # Verified voice-call recovery
 
-**Staging update, September 20:** migration028 is applied and verified in dev
-and QA, but not production. No live recovery has been applied. The draft app
-remains undeployed; deadline workers are installed disabled, with saved Pages
-bindings awaiting redeployment. See the
-[cutover record](voice-managed-cutover-2026-09-20.md).
+**Staging update, September 21:** migration028 and the managed application are
+now deployed to dev and QA; production is unchanged. The first owner-authorized
+development test failed at 03:01:03 UTC. Its single provider attempt remains
+uncertain with no saved call ID. No new voice-session credit was reserved.
+Development new-call arms were paused again; QA remains disabled. Existing alarms
+and unresolved holds were preserved. No live recovery has been applied.
 
-Draft, not deployed. Migration028 contains the receipt tables and atomic
-guards. This is an internal operator workflow. There is no public recovery
-endpoint, automatic timeout release or automatic repeat of an uncertain
-provider request. Production application is refused by the command.
+The diagnostics follow-up records fixed failure phases and HTTP status for future
+attempts, plus safe request references in restricted logs. It cannot recover the
+missing evidence for the original attempt. Missing provider traces and an elapsed
+deadline do not establish non-creation or closure. Capture the prospective Pages
+log stream before the next authorized test; never replay the unresolved create.
+
+Migration028 contains receipt tables and atomic guards for this internal operator
+workflow. There is no public recovery endpoint, automatic timeout release or
+automatic repeat of an uncertain provider request. Production application is
+refused by the command.
 
 ## What constitutes evidence
 
