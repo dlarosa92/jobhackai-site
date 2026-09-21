@@ -761,12 +761,21 @@
     }
   }
 
-  // Setup Account Settings button handler
+  // Keep preferences on the page whose consent the visitor is changing.
+  // A policy link to the app cannot edit a marketing host's cached decision.
   function setupAccountSettingsButton() {
-    const button = document.getElementById('open-cookie-preferences');
-    if (button) {
-      button.addEventListener('click', openPreferencesModal);
+    let button = document.getElementById('open-cookie-preferences');
+    if (!button) {
+      const footer = document.querySelector('footer');
+      if (!footer) return;
+      button = document.createElement('button');
+      button.id = 'open-cookie-preferences';
+      button.type = 'button';
+      button.textContent = 'Cookie Preferences';
+      button.style.cssText = 'background:none;border:0;color:inherit;font:inherit;padding:8px;cursor:pointer;text-decoration:underline;';
+      footer.appendChild(button);
     }
+    button.addEventListener('click', openPreferencesModal);
   }
 
   // Expose API for other modules
