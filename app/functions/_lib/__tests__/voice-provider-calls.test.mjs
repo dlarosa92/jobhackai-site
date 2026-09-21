@@ -30,7 +30,7 @@ test('provider call ID is durably owned before SDP returns; no reusable secret l
   const f=fixture(t);let observed;
   f.setHandler(async({url,init})=>{
     observed=await f.row();assert.equal(observed.state,'creating');assert.ok(observed.execution_token);
-    assert.equal(url,'https://api.openai.com/v1/realtime/calls');assert.equal(init.redirect,'error');assert.ok(init.signal);
+    assert.equal(url,'https://api.openai.com/v1/realtime/calls');assert.equal(init.redirect,'manual');assert.ok(init.signal);
     assert.equal(init.body.get('sdp'),SDP);
     const config=JSON.parse(init.body.get('session'));assert.equal(config.model,'gpt-realtime-mini');assert.equal(config.audio.output.voice,'marin');
     assert.equal(config.instructions,'Fixture interview instructions');

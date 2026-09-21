@@ -13,6 +13,15 @@ missing evidence for the original attempt. Missing provider traces and an elapse
 deadline do not establish non-creation or closure. Capture the prospective Pages
 log stream before the next authorized test; never replay the unresolved create.
 
+**Runtime defect identified:** native Workers `Request` rejects `redirect:'error'`
+before dispatch (reproduced with compatibility dates 2024-11-08 and 2026-09-20).
+Both provider create and hangup used that option. They now use `manual`, which
+never follows the provider's redirect and preserves uncertain holds for 3xx.
+The same unsupported option in deletion notifications is corrected. The actual
+Workers regression constructs native requests before returning network fixtures;
+it failed on the previous code and passes after the change. This finding does
+not fabricate an invocation receipt or clear the original uncertain ledger row.
+
 Migration028 contains receipt tables and atomic guards for this internal operator
 workflow. There is no public recovery endpoint, automatic timeout release or
 automatic repeat of an uncertain provider request. Production application is

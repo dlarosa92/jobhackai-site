@@ -1,6 +1,7 @@
 import { env, exports } from 'cloudflare:workers';
 import { applyD1Migrations, runInDurableObject, runDurableObjectAlarm } from 'cloudflare:test';
 import { beforeAll, beforeEach, afterEach, describe, it, expect, vi } from 'vitest';
+import { deliverDeletionNotifications } from '../../../app/functions/_lib/account-deletion-notifications.js';
 import { voiceProviderKeyIdentity } from '../../../app/functions/_lib/voice-provider-calls.js';
 import { openManagedInterview, closeManagedInterview } from '../../../app/functions/_lib/voice-managed-interview.js';
 import {calls as reconcileCalls,legacy as reconcileLegacy} from '../../../app/scripts/lib/voice-closure-reconcile-core.mjs';
@@ -42,8 +43,12 @@ beforeAll(async()=>{
 beforeEach(async()=>{
   sessionId=crypto.randomUUID();stub=env.VOICE_DEADLINES.getByName(sessionId);requests=[];
   await env.DB.prepare("INSERT INTO users(auth_id,email) VALUES('owner','owner@example.test') ON CONFLICT(auth_id) DO UPDATE SET free_session_used=0,voice_sessions_remaining=0").run();
-  vi.spyOn(globalThis,'fetch').mockImplementation(async(input)=>{
-    const url=String(input instanceof Request?input.url:input);requests.push(url);
+  vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{
+    // Construct a native Workers request before returning the network fixture.
+    // A plain fetch spy hid unsupported redirect settings during live cutover.
+    const request=new Request(input,init);
+    expect(request.redirect).toBe('manual');
+    const url=request.url;requests.push(url);
     if(url.endsWith('/hangup'))return new Response(null,{status:200});
     if(url==='https://api.openai.com/v1/realtime/calls')return new Response('v=0 answer',{status:201,headers:{Location:'/v1/realtime/calls/rtc_'+crypto.randomUUID()}});
     throw Error('Unexpected external request: '+url);
@@ -66,6 +71,26 @@ describe('durable interview deadlines in the actual Workers runtime',()=>{
     expect(requests.filter(x=>x.endsWith('/hangup'))).toHaveLength(1);
     expect(await state()).toEqual({saved:undefined,alarm:null});
     expect(await runDurableObjectAlarm(stub)).toBe(false);
+  });
+  it('does not follow a provider create redirect or reserve a session',async()=>{
+    vi.mocked(fetch).mockImplementation(async(input,init)=>{
+      const request=new Request(input,init);expect(request.redirect).toBe('manual');requests.push(request.url);
+      return new Response(null,{status:307,headers:{Location:'https://example.invalid/redirect'}});
+    });
+    await expect(open()).rejects.toThrow('voice_call_create_unconfirmed');
+    expect(requests).toEqual(['https://api.openai.com/v1/realtime/calls']);
+    expect(await call()).toMatchObject({state:'uncertain',last_error_code:'create_http_307',provider_call_id:null});
+    expect((await env.DB.prepare('SELECT COUNT(*) AS n FROM voice_sessions WHERE id=?').bind(sessionId).first())?.n).toBe(0);
+  });
+  it('does not follow a hangup redirect or record a false closure',async()=>{
+    await open();
+    vi.mocked(fetch).mockImplementation(async(input,init)=>{
+      const request=new Request(input,init);expect(request.redirect).toBe('manual');requests.push(request.url);
+      return new Response(null,{status:302,headers:{Location:'https://example.invalid/redirect'}});
+    });
+    await closeManagedInterview(appEnv,{uid:'owner',sessionId}).catch(()=>{});
+    expect(requests).toHaveLength(2);expect(requests[1]).toMatch(/\/hangup$/);
+    expect(await call()).toMatchObject({state:'uncertain',last_error_code:'close_unconfirmed',closed_at:null});
   });
   it('a reconnect preserves the original alarm and deadline and only the replacement closes at expiry',async()=>{
     const first=await open(),initial=await state();
@@ -211,4 +236,24 @@ describe('durable interview deadlines in the actual Workers runtime',()=>{
   it('provides no public scheduling or inspection endpoint',async()=>{
     expect((await exports.default.fetch('https://fixture.test/arm',{method:'POST',body:'{}'})).status).toBe(404);
   });
+});
+
+// The completion outbox uses the same Workers fetch runtime and must not fail
+// before dispatch either. These fixtures never send real email.
+for (const status of [200,307]) it(`completion email handles native request and provider status ${status}`,async()=>{
+  const jobId=crypto.randomUUID(),uid='notification-'+jobId;
+  await env.DB.prepare("INSERT INTO account_deletion_jobs(id,auth_id,phase,kv_keys_json) VALUES(?,?,'complete','[]')").bind(jobId,uid).run();
+  await env.DB.prepare("INSERT INTO account_deletion_admissions(id,auth_id,origin,state) VALUES(?,?,'user_request','complete')").bind(jobId,uid).run();
+  await env.DB.prepare('INSERT INTO account_deletion_notifications(job_id,email) VALUES(?,?)').bind(jobId,'owner@example.test').run();
+  vi.mocked(fetch).mockImplementation(async(input,init)=>{
+    const request=new Request(input,init);expect(request.redirect).toBe('manual');requests.push(request.url);
+    return status===200?Response.json({id:'fixture_mail_receipt'}):new Response(null,{status,headers:{Location:'https://example.invalid/redirect'}});
+  });
+  const settings={...env,ENVIRONMENT:'qa',INACTIVITY_MODE:'execute',INACTIVITY_TEST_UID:uid,
+    FRONTEND_URL:'https://qa.jobhackai.io',RESEND_API_KEY:'fixture_only'};
+  const result=await deliverDeletionNotifications(settings);
+  expect(requests).toEqual(['https://api.resend.com/emails']);
+  const row=await env.DB.prepare('SELECT state,email,execution_token FROM account_deletion_notifications WHERE job_id=?').bind(jobId).first();
+  if(status===200){expect(result.accepted).toBe(1);expect(row).toMatchObject({state:'sent',email:null,execution_token:null});}
+  else {expect(result.uncertain).toBe(1);expect(row?.state).toBe('needs_review');expect(row?.execution_token).toBeTruthy();}
 });
