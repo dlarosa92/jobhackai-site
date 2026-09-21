@@ -8,7 +8,7 @@ const directory = mkdtempSync(join(tmpdir(),'jobhackai-deadline-schema-'));
 let migrations;
 try {
   copyFileSync(new URL('../../app/db/schema.sql',import.meta.url),join(directory,'000_schema.sql'));
-  for (const name of ['008_add_cookie_consents.sql','024_collected_payments.sql','025_checkout_attribution.sql','026_payment_campaign_links.sql','027_analytics_delivery.sql','028_account_deletion_recovery.sql']) {
+  for (const name of ['008_add_cookie_consents.sql','024_collected_payments.sql','025_checkout_attribution.sql','026_payment_campaign_links.sql','027_analytics_delivery.sql','028_account_deletion_recovery.sql','030_directory_requests.sql']) {
     copyFileSync(new URL('../../app/db/migrations/'+name,import.meta.url),join(directory,name));
   }
   migrations = await readD1Migrations(directory);
