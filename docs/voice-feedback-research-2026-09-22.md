@@ -95,3 +95,20 @@ The live evaluation runner currently exits before any request because no local
 OPENAI_API_KEY is available. Its absence is not a model-quality pass; the encrypted
 Cloudflare key has not been extracted. Revised coaching is not yet accepted for
 production. Existing public release and marketing holds remain in force.
+
+Local verification: 16 transcript-harness tests, 50 interviewer tests, 38 client
+regressions, 4 new coaching evidence/rendering tests, 15 history tests, 10 usage
+tests, 61 lifecycle tests, 18 managed-client tests and 57 consent tests passed.
+The shared footer was visually reviewed in Chrome using the actual app footer
+markup, styles and consent script at 1200px, 1024px and 375px iframe widths.
+The preferences button stays with the footer links and wraps within the mobile
+layout. This fixture review is not a full mobile journey acceptance test.
+
+QA transport observation: the owner's second reconnect attempt did include a
+real Wi-Fi interruption. QA showed Connection lost and exposed Reconnect. Clicking
+Reconnect failed while closing the prior call; D1 retains an uncertain provider
+attempt with close_unconfirmed. The session itself completed as connection_lost.
+The provider dashboard had no saved realtime traces in the available project.
+No authoritative closure receipt is available, no replacement was knowingly
+started, and no uncertain request was retried. Treat this as a release blocker,
+not a successful reconnect. Earlier normal spoken endings remain successful.
