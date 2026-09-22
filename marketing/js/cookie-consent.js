@@ -784,7 +784,8 @@
       button.type = 'button';
       button.textContent = 'Cookie Preferences';
       button.style.cssText = 'background:none;border:0;color:inherit;font:inherit;padding:8px;cursor:pointer;text-decoration:underline;';
-      footer.appendChild(button);
+      const links = footer.querySelector('.footer-links');
+      (links || footer.querySelector('.footer-container') || footer).appendChild(button);
     }
     button.addEventListener('click', openPreferencesModal);
   }

@@ -1646,7 +1646,7 @@
       // whatever happens to the save below.
       renderSafetyEnd(null);
     } else {
-      if (doneStatus) doneStatus.textContent = 'We\'re reviewing your conversation using our S + A = O formula and interview rubric. This usually takes a few seconds.';
+      if (doneStatus) doneStatus.textContent = 'We\'re reviewing your conversation against your role and the evidence in your answers. This usually takes a few seconds.';
       historyLiveScoring();
     }
 
@@ -1795,18 +1795,12 @@
     return div.innerHTML;
   }
 
-  // One row of the S + A = O balance block: green fill at the actual share,
-  // a dark goal tick at the 5/10/85 target, and a colored note. Over-goal is
-  // a warning, Outcome under-goal is the real error, on/near goal is success.
-  function saoBalanceRow(label, actual, goal, isOutcome) {
+  // Approximate content distribution; never a measured speaking-time target.
+  function saoBalanceRow(label, actual) {
     actual = Math.max(0, Math.min(100, Math.round(Number(actual) || 0)));
-    var noteClass = 'vi-sao-bal-note--ok';
-    if (isOutcome && actual < goal - 5) noteClass = 'vi-sao-bal-note--under';
-    else if (!isOutcome && actual > goal + 5) noteClass = 'vi-sao-bal-note--over';
     return '<div class="vi-sao-bal-row"><span class="vi-sao-bal-label">' + label + '</span>' +
-      '<span class="vi-sao-bal-track"><span class="vi-sao-bal-fill" style="width:' + actual + '%"></span>' +
-      '<span class="vi-sao-bal-goal" style="left:' + goal + '%"></span></span>' +
-      '<span class="vi-sao-bal-note ' + noteClass + '">' + actual + '% · goal ≈ ' + goal + '%</span></div>';
+      '<span class="vi-sao-bal-track"><span class="vi-sao-bal-fill" style="width:' + actual + '%"></span></span>' +
+      '<span class="vi-sao-bal-note">≈ ' + actual + '% of answer content</span></div>';
   }
 
   function savedLine(data) {
@@ -1860,12 +1854,16 @@
     html += '<h2 class="vi-sc-title">Your interview report</h2>';
     if (!data.expired) html += savedLine(data);
 
-    if (data.fullAccess) {
-      html += '<div class="vi-sc-overall"><div class="vi-sc-score">' + escapeHtml(sc.overall) + '</div><div class="vi-sc-overall-label">Overall</div></div>';
+    if (data.fullAccess && sc.tooShort) {
+      html += '<p class="vi-sc-block">Not enough candidate speech to score this session.</p>';
+    }
+    if (data.fullAccess && !sc.tooShort) {
+      if (sc.assessmentScope) html += '<p class="vi-sc-block">' + escapeHtml(sc.assessmentScope) + '</p>';
+      html += '<div class="vi-sc-overall"><div class="vi-sc-score">' + escapeHtml(sc.overall) + '</div><div class="vi-sc-overall-label">' + (sc.methodologyVersion === 2 ? 'Practice sample' : 'Overall') + '</div></div>';
       // Session-over-session delta; downward trends are muted, not error-red —
       // practice is never punished (same rule as the history progress strip).
       var prevOverall = previousOverall(data.sessionId);
-      if (prevOverall != null && sc.overall != null && isFinite(Number(sc.overall))) {
+      if (sc.methodologyVersion !== 2 && prevOverall != null && sc.overall != null && isFinite(Number(sc.overall))) {
         var scDelta = Math.round(Number(sc.overall)) - prevOverall;
         html += '<p class="vi-sc-delta' + (scDelta < 0 ? ' vi-sc-delta--down' : '') + '">' +
           (scDelta >= 0 ? '▲ +' : '▼ −') + Math.abs(scDelta) + ' vs your last session</p>';
@@ -1873,7 +1871,7 @@
       if (sc.dimensions) {
         html += '<div class="vi-sc-dims">';
         html += dimensionRow('Communication', sc.dimensions.communication);
-        html += dimensionRow('S + A = O structure', sc.dimensions.structure);
+        html += dimensionRow('Answer structure', sc.dimensions.structure);
         html += dimensionRow('Content depth', sc.dimensions.contentDepth);
         html += dimensionRow('Role fit', sc.dimensions.roleFit);
         html += '</div>';
@@ -1881,11 +1879,11 @@
       // Additive scorecard fields: old sessions have no saoBalance, so the
       // whole balance block hides gracefully when it is absent.
       if (sc.saoBalance) {
-        html += '<div class="vi-sc-block"><h3>How you balanced Situation, Action, and Outcome</h3>';
+        html += '<div class="vi-sc-block"><h3>Answer content</h3><p>Approximate content breakdown. There is no ideal percentage for every answer.</p>';
         html += '<div class="vi-sao-bal">';
-        html += saoBalanceRow('Situation', sc.saoBalance.situation, 5, false);
-        html += saoBalanceRow('Action', sc.saoBalance.action, 10, false);
-        html += saoBalanceRow('Outcome', sc.saoBalance.outcome, 85, true);
+        html += saoBalanceRow('Situation', sc.saoBalance.situation);
+        html += saoBalanceRow('Action', sc.saoBalance.action);
+        html += saoBalanceRow('Outcome', sc.saoBalance.outcome);
         html += '</div></div>';
         if (sc.saoCoaching && sc.saoCoaching.length) {
           html += '<div class="vi-sc-block vi-sc-improve"><h3>Next time, focus on</h3><ul class="vi-sc-coach">';
@@ -1903,6 +1901,16 @@
     }
 
     if (data.fullAccess) {
+      if (sc.competencies && sc.competencies.length) {
+        html += '<div class="vi-sc-block"><h3>Feedback for your role</h3>';
+        sc.competencies.forEach(function (c) {
+          var label = { demonstrated: 'Demonstrated in this sample', needs_practice: 'Needs practice', not_assessed: 'Not assessed' }[c.status] || 'Not assessed';
+          html += '<h4>' + escapeHtml(c.name) + ' · ' + label + '</h4>';
+          if (c.quote) html += '<p class="vi-sc-quote">' + escapeHtml(c.quote) + '</p>';
+          html += '<p>' + escapeHtml(c.feedback) + '</p>';
+        });
+        html += '</div>';
+      }
       if (sc.moments && sc.moments.length) {
         html += '<div class="vi-sc-block"><h3>Moments from your interview</h3>';
         sc.moments.forEach(function (m) {
@@ -1936,7 +1944,7 @@
         : 'Unlock every score, the moment by moment feedback, and your transcript. Then keep practicing until the answers are automatic.';
       html += '<div class="vi-sc-locked">';
       html += '<div class="vi-sc-blur" aria-hidden="true">';
-      html += '<div class="vi-sc-overall"><div class="vi-sc-score">??</div><div class="vi-sc-overall-label">Overall</div></div>';
+      html += '<div class="vi-sc-overall"><div class="vi-sc-score">??</div><div class="vi-sc-overall-label">' + (sc.methodologyVersion === 2 ? 'Practice sample' : 'Overall') + '</div></div>';
       html += '<div class="vi-sc-dims">' + dimensionRow('Communication', 70) + dimensionRow('Structure', 55) + dimensionRow('Content depth', 62) + dimensionRow('Role fit', 75) + '</div>';
       html += '<p>The full report includes your scores, specific moments from your answers, a summary, and the complete transcript.</p>';
       html += '</div>';
@@ -2129,9 +2137,13 @@
     var voice = historyState.voice || {};
     var paid = !!(voice.unlimited || (voice.mode === 'pack' && voice.sessionsRemaining > 0));
 
-    // Chronological order (list is newest first), last 3 scored sessions
+    // Compare only scores produced by the same rubric, role and level.
+    var latest = historyState.items.find(function (item) { return item.overall != null; });
+    // Chronological order (list is newest first), last 3 comparable sessions
     var scored = historyState.items.filter(function (item) {
-      return item.overall != null && isFinite(Number(item.overall));
+      return item.overall != null && isFinite(Number(item.overall)) && latest &&
+        (item.methodologyVersion || 1) === (latest.methodologyVersion || 1) &&
+        item.role === latest.role && item.seniority === latest.seniority;
     }).slice(0, 3).reverse();
 
     if (paid && scored.length >= 2) {

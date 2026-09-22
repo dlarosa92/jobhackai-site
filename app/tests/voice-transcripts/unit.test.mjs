@@ -60,7 +60,7 @@ export async function testScoreVoiceTranscriptTooShortPath() {
     transcript: [{ speaker: 'user', text: 'Hello? Is this on?' }]
   }, {});
   assert.strictEqual(result.scorecard.tooShort, true);
-  assert.strictEqual(result.scorecard.overall, 0);
+  assert.strictEqual(result.scorecard.overall, null);
   assert.strictEqual(result.usage, null);
   assert.ok(MIN_SCOREABLE_CHARS === 200);
 }
@@ -68,7 +68,7 @@ export async function testScoreVoiceTranscriptTooShortPath() {
 export async function testScoreVoiceTranscriptContextBlocks() {
   const transcript = [
     { speaker: 'assistant', text: 'Tell me about a time you had to deliver a project under a very tight deadline for the team.' },
-    { speaker: 'user', text: 'Two weeks before our holiday sale, load testing showed our checkout service timing out at peak traffic. I profiled it, fixed an N+1 query, and P95 dropped from 2.1 seconds to 180 milliseconds.' }
+    { speaker: 'user', text: 'Two weeks before our holiday sale, load testing showed our checkout service timing out at peak traffic. I profiled it, fixed an N+1 query, and P95 dropped from 2.1 seconds to 180 milliseconds. We verified the change under the same load before deploying.' }
   ];
   const env = { OPENAI_API_KEY: 'sk-test' };
   let captured;
@@ -85,7 +85,9 @@ export async function testScoreVoiceTranscriptContextBlocks() {
     await scoreVoiceTranscript({ role: 'Software Engineer', seniority: 'Senior', transcript }, env);
     const baseMsg = captured.messages[1].content;
     const baseSys = captured.messages[0].content;
-    assert.ok(baseMsg.startsWith('Target role: Senior Software Engineer\n\nTranscript:\n'));
+    assert.ok(baseMsg.includes('Senior Software Engineer'));
+    assert.ok(baseMsg.includes('Starting competency areas:'));
+    assert.ok(baseMsg.includes('Transcript:'));
     assert.ok(!baseMsg.includes('Job description excerpt'));
     assert.ok(!baseMsg.includes('Previous session focus'));
 
@@ -113,7 +115,7 @@ export async function testMomentGrounding() {
   const transcript = [
     { speaker: 'assistant', text: 'Can you share a specific example of a particular parcel?' },
     { speaker: 'user', text: 'I reduced processing from six weeks to one hour. It improved our turnaround.' },
-    { speaker: 'user', text: 'We measured the results against our targets.' }
+    { speaker: 'user', text: 'We measured the results against our targets. I compared the processing times over the following month and reviewed exceptions with the operations team before rolling it out further.' }
   ];
   const moments = [
     { quote: 'Can you share a specific example of a particular parcel?', comment: 'Wrong speaker.' },
