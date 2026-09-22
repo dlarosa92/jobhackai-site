@@ -1,0 +1,24 @@
+name: Directory request intake
+on:
+  pull_request:
+    branches: [dev0, develop, main]
+    paths: ['app/functions/**/directory-*.js', 'app/functions/_lib/__tests__/directory-*.mjs', 'app/db/migrations/030_directory_requests.sql', 'marketing/directory/**', 'marketing/scripts/build-directory.mjs', '.github/workflows/test-directory-requests.yml']
+  push:
+    branches: [dev0]
+    paths: ['app/functions/**/directory-*.js', 'app/db/migrations/030_directory_requests.sql', 'marketing/directory/**']
+permissions:
+  contents: read
+jobs:
+  intake:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test app/functions/_lib/__tests__/directory-requests.test.mjs marketing/tests/directory-consent.test.mjs marketing/tests/directory-request-form.test.mjs
+      - run: node marketing/scripts/build-directory.mjs && git diff --exit-code marketing/directory
+      - run: npm ci --ignore-scripts
+        working-directory: workers/voice-deadlines
+      - run: npx vitest run tests/directory-requests.test.ts
+        working-directory: workers/voice-deadlines

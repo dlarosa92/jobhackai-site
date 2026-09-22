@@ -16,7 +16,7 @@ On September 20 an hourly Codex thread heartbeat, `jobhackai-decisions`, was cre
 
 Mobile detailing is the working category for the prototype, not a validated commercial conclusion. Six providers publish useful comparison information. The directory emphasizes differences in package scope and water/power requirements rather than unsupported rankings or a cheapest-first list. Each listing links to its first-party source and records the check date in `marketing/data/directory/mobile-detailing.json`. Published starting prices are not quotes or like-for-like comparisons.
 
-The hub is `/directory`, provider pages are `/directory/mobile-detailing/<slug>`, and `/directory/get-listed` opens a prefilled email to the site's existing support address. An email click is explicitly not a submitted lead. No outgoing message has been sent in testing. Listings are alphabetical, unpaid and have no fabricated reviews or service-quality endorsements.
+The hub is `/directory`, provider pages are `/directory/mobile-detailing/<slug>`, and `/directory/get-listed` has an owner-authorized development form for private D1 intake and support-inbox notification. QA retains the email-only version until separate sign-off. See [development intake](directory-request-development.md). An email click is explicitly not a submitted lead. No outgoing message has been sent in testing. Listings are alphabetical, unpaid and have no fabricated reviews or service-quality endorsements.
 
 Run `node marketing/scripts/build-directory.mjs` after changing the source data. It generates the checked-in HTML. Cloudflare Pages resolves extensionless provider URLs from `.html` files, as with the existing blog. No new platform or authentication is needed.
 
@@ -28,7 +28,8 @@ Directory pages load the site's shared consent controls and use only their event
 
 - `directory_listing_view`: individual provider page visible with consent, once per document; hidden tabs wait for visibility. `listing_id` is the public slug.
 - `directory_contact_click`: outbound provider website click. This measures intent, not a quote request, booking or sale.
-- `directory_interest_click`: email composer link clicked, classified as listing request or correction. Submission/receipt must be reconciled with the actual inbox separately.
+- `directory_request_saved`: a new form request durably saved, with Analytics consent; no personal fields or request identifier. This is not inbox receipt, a verified business or revenue.
+- `directory_interest_click`: remaining email composer links clicked, classified as listing request or correction. Submission/receipt must be reconciled with the actual inbox separately.
 - Every event includes `business_line=local_directory`, `directory_category=mobile_detailing`, `directory_market=nky_cincinnati`. External campaign IDs must be distinct from `voice_beta_2026_09`; internal directory links must not overwrite campaign attribution.
 
 Do not claim visibility into a provider's sales from outbound clicks. Provider-confirmed bookings and any future paid placement invoices need their own evidence and accounting.
