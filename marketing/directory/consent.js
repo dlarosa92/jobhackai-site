@@ -18,7 +18,7 @@
   const CLIENT_ID_COOKIE = productionHost ? 'jha_client_id' : qaHost ? 'jha_client_id_qa' : 'jha_client_id_dev';
   const config = { ...(window.JHA_CONFIG || {}) };
   const PRODUCTION_GA_ID = 'G-SQYSWPFM5X';
-  const PRODUCTION_CLARITY_ID = ''; 
+  const PRODUCTION_CLARITY_ID = '';
   // Nonproduction is off by default. An explicit, separate test destination
   // is allowed; accidentally copying production's ID must still fail closed.
   function destination(key, productionId) {
@@ -85,7 +85,7 @@
     const revision = consentRevision;
     try {
       const clientId = getOrCreateClientId();
-      
+
       // Get auth token if user is logged in
       let authToken = null;
       if (window.FirebaseAuthManager?.getCurrentUser) {
@@ -216,7 +216,7 @@
     if (!consentIdentityReady()) return false;
     try {
       const clientId = getOrCreateClientId();
-      
+
       // Get auth token if user is logged in
       let authToken = null;
       if (window.FirebaseAuthManager?.getCurrentUser) {
@@ -734,7 +734,7 @@
     };
 
     modal.querySelector('.jha-cookie-modal-backdrop').onclick = closeModal;
-    
+
     // ESC key handler (persistent, doesn't remove itself)
     escHandler = function(e) {
       if (e.key === 'Escape' && modal && modal.classList.contains('active')) {
@@ -751,13 +751,13 @@
     if (!modal) {
       modal = createModal();
     }
-    
+
     // Sync checkbox state to current consent (fixes stale state issue)
     const analyticsCheckbox = document.getElementById('jha-toggle-analytics');
     if (analyticsCheckbox) {
       analyticsCheckbox.checked = hasAnalyticsConsent();
     }
-    
+
     modal.classList.add('active');
     if (analyticsCheckbox) {
       analyticsCheckbox.focus();

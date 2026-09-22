@@ -337,26 +337,26 @@
   #jha-cookie-banner {
     padding: var(--space-sm);
   }
-  
+
   .jha-cookie-inner {
     gap: var(--space-xs);
   }
-  
+
   .jha-cookie-actions {
     flex-direction: column;
   }
-  
+
   .jha-cookie-actions button {
     width: 100%;
     min-width: auto;
   }
-  
+
   .jha-cookie-modal-content {
     padding: var(--space-md);
     margin: var(--space-sm);
     max-height: calc(100vh - 2rem);
   }
-  
+
   .jha-cookie-modal-header h2 {
     font-size: var(--font-size-lg);
   }
@@ -369,7 +369,7 @@
   .jha-cookie-modal-content {
     animation: none;
   }
-  
+
   .jha-toggle-slider,
   .jha-toggle-slider:before {
     transition: none;
