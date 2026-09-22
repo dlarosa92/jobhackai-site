@@ -1,11 +1,11 @@
-import {DIRECTORY_ORIGINS,directoryEnabled,readSmallJson,saveDirectoryRequest,notifyDirectoryRequest} from '../_lib/directory-requests.js';
+import {directoryOriginAllowed,directoryEnabled,readSmallJson,saveDirectoryRequest,notifyDirectoryRequest} from '../_lib/directory-requests.js';
 export async function onRequest(context) {
   const {request,env} = context;
   const origin = request.headers.get('Origin');
   const headers = {'Content-Type':'application/json','Cache-Control':'no-store','Vary':'Origin','X-Content-Type-Options':'nosniff'};
   const reply = (body,status) => new Response(JSON.stringify(body),{status,headers});
   if (!directoryEnabled(env)) return reply({ok:false,error:'not_available'},404);
-  if (!DIRECTORY_ORIGINS.has(origin)) return reply({ok:false,error:'origin_not_allowed'},403);
+  if (!directoryOriginAllowed(env,origin)) return reply({ok:false,error:'origin_not_allowed'},403);
   Object.assign(headers,{'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Methods':'POST, OPTIONS','Access-Control-Allow-Headers':'Content-Type'});
   if (request.method==='OPTIONS') return new Response(null,{status:204,headers});
   if (request.method!=='POST') return reply({ok:false,error:'method_not_allowed'},405);
