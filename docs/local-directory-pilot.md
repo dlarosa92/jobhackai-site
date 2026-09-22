@@ -1,0 +1,51 @@
+# Northern Kentucky and Cincinnati directory pilot
+
+Owner-confirmed outcome: a directory website experiment on existing JobHackAI infrastructure, with one researched category, public browsing, individual provider pages, a Get listed entry point and measurable contact interest. Voice and career-product campaigns remain separate. Production and public promotion remain held.
+
+## Operating model: self-service and written communication
+
+The owner wants to operate without customer calls, meetings or personal sales conversations. Design onboarding, listing corrections, billing, cancellation and support around company-branded forms and email. Routine requests may be handled by agents using approved facts and policies; uncertain claims, complaints, refunds and exceptions go to an asynchronous owner review queue. Do not promise zero owner work or pretend an AI agent is a named human employee.
+
+The pilot directs consumers to providers for service booking, quotes and fulfillment. JobHackAI is not scheduling appointments or guaranteeing a provider's work. Any later paid placement offer should describe the actual placement and reporting clearly; do not promise a quantity or quality of leads until it has evidence and an explicit delivery definition. No mandatory phone field or book-a-call onboarding step is required. Inbox receipt and resolution need verification before claiming the support workflow is automated.
+
+The owner further requires proactive approval delivery: a concise notification with the exact prepared action, recommendation, reason and consequence, plus Approve / Change / Decline or a direct reply. Routine authorized work must not become an approval queue. Do not require the owner to browse multiple dashboards, repeat context or find a hidden request. Silence is never approval; suppress duplicate alerts for unchanged pending decisions.
+
+On September 20 an hourly Codex thread heartbeat, `jobhackai-decisions`, was created as an interim route for new actionable decisions. It stays quiet when nothing changes and preserves existing release holds. Marblism's observed account notification page offered only receptionist call-summary and call-limit alerts, not general agent approval notifications. Customer-inbox ingestion, event-driven alerts, operating-system popup receipt and action acknowledgment still need end-to-end verification; an active schedule alone does not prove those capabilities.
+
+## Current prototype
+
+Mobile detailing is the working category for the prototype, not a validated commercial conclusion. Six providers publish useful comparison information. The directory emphasizes differences in package scope and water/power requirements rather than unsupported rankings or a cheapest-first list. Each listing links to its first-party source and records the check date in `marketing/data/directory/mobile-detailing.json`. Published starting prices are not quotes or like-for-like comparisons.
+
+The hub is `/directory`, provider pages are `/directory/mobile-detailing/<slug>`, and `/directory/get-listed` has an owner-authorized development form for private D1 intake and support-inbox notification. QA retains the email-only version until separate sign-off. See [development intake](directory-request-development.md). An email click is explicitly not a submitted lead. No outgoing message has been sent in testing. Listings are alphabetical, unpaid and have no fabricated reviews or service-quality endorsements.
+
+Run `node marketing/scripts/build-directory.mjs` after changing the source data. It generates the checked-in HTML. Cloudflare Pages resolves extensionless provider URLs from `.html` files, as with the existing blog. No new platform or authentication is needed.
+
+All pages currently carry `noindex, nofollow`; there are no homepage navigation or sitemap changes. This is a preview for category, content and interaction validation. The production launch review must explicitly change the indexing state and add approved discovery links.
+
+## Measurement contract and remaining integration
+
+Directory pages load the site's shared consent controls and use only their event helper. They never create an independent identifier, storage or third-party tracker. The footer lets visitors reopen preferences. Generated shared dialog styles avoid importing unrelated homepage layout rules. Previews keep Analytics disabled by default; consent acceptance does not opt a preview into production measurement. Actual event receipt against the exact candidate deployment still needs verification before launch.
+
+- `directory_listing_view`: individual provider page visible with consent, once per document; hidden tabs wait for visibility. `listing_id` is the public slug.
+- `directory_contact_click`: outbound provider website click. This measures intent, not a quote request, booking or sale.
+- `directory_request_saved`: a new form request durably saved, with Analytics consent; no personal fields or request identifier. This is not inbox receipt, a verified business or revenue.
+- `directory_interest_click`: remaining email composer links clicked, classified as listing request or correction. Submission/receipt must be reconciled with the actual inbox separately.
+- Every event includes `business_line=local_directory`, `directory_category=mobile_detailing`, `directory_market=nky_cincinnati`. External campaign IDs must be distinct from `voice_beta_2026_09`; internal directory links must not overwrite campaign attribution.
+
+Do not claim visibility into a provider's sales from outbound clicks. Provider-confirmed bookings and any future paid placement invoices need their own evidence and accounting.
+
+## Observed local browser checks, September 20, 2026
+
+- Hub renders six listings without sign-in; water/power filter narrows to the one provider whose reviewed source says both are supplied.
+- Combining that filter with Boat returns the explicit empty state. Reset restores all six.
+- Provider link opens the intended detail page with source, check date, separate package scopes and outbound provider link.
+- Get listed opens the intended instructions page with the correct prefilled `mailto:` destination; no email was sent.
+- Desktop layout and the hub/Get listed at 375px iframe viewports visually inspected in Chrome. At that width, Provider brings both returns Pearl's, adding Boat shows the explicit empty state, and Reset restores six listings. These checks cover responsive layout and filter interactions; native mobile-device and keyboard/assistive-technology checks remain pending.
+- Shared consent controls were added and browser-tested on a provider page: reject, reopen preferences, accept, save and reopen with the selected choice. The local preview injected no Google/Clarity script after acceptance. Its missing local consent API is reported as pending account sync; no production consent API is used. This is not GA receipt evidence.
+- 51 focused tests pass across directory consent, shared analytics consent and blog destinations. Directory tests cover no event before consent, no replay of earlier contact clicks, one listing view after consent plus visibility, no duplicate after revocation/regrant, and email clicks remaining interest rather than submitted leads.
+
+## Research and launch gates
+
+The [category comparison](local-directory-category-research.md) now records a first-party evidence check against junk removal and keeps mobile detailing as the bounded first experiment. Search volume, ranking difficulty, traffic and provider willingness to pay remain unmeasured. Confirm remaining provider-specific unknowns with public first-party information where possible. Do not contact providers or publish implied partnerships under the current hold.
+
+Before promoting: settle the first category, finish mobile/accessibility QA, connect and observe consent-aware event delivery, verify support intake and truthful lead reporting, and make the release and indexing changes reviewable. Traffic, leads, customers and revenue currently remain unavailable, not zero or forecast results.
