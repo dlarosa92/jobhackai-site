@@ -194,3 +194,34 @@ for (const [scenario, expected] of [
     assert.doesNotMatch(JSON.stringify(logs),/SECRET|sk-test|UDP\/TLS/);
   });
 }
+
+for (const [scenario, expected] of [
+  ['404','close_http_404'],['429','close_http_429'],['503','close_http_503'],
+  ['timeout','close_timeout'],['abort','close_aborted'],
+  ['network','close_transport_unconfirmed'],['receipt','close_receipt_unconfirmed']
+]) {
+  test('close diagnosis persists without releasing or replaying the uncertain call: '+scenario,async t=>{
+    const f=fixture(t),logs=[];t.mock.method(console,'log',(...entry)=>logs.push(entry));
+    const created=await f.create();
+    if(scenario==='receipt')f.db.exec("CREATE TRIGGER reject_closed BEFORE UPDATE OF state ON voice_provider_calls WHEN NEW.state='closed' BEGIN SELECT RAISE(ABORT,'SECRET storage detail'); END;");
+    f.setHandler(async()=>{
+      if(['timeout','abort','network'].includes(scenario)) {
+        const error=Error('SECRET '+f.env.OPENAI_API_KEY);
+        error.name=scenario==='timeout'?'TimeoutError':scenario==='abort'?'AbortError':'Error';
+        throw error;
+      }
+      return new Response('SECRET provider body',{status:scenario==='receipt'?200:Number(scenario),headers:{'x-request-id':'req_close_test'}});
+    });
+    await assert.rejects(closeManagedVoiceCall(f.env,{uid:'owner',attemptId:created.attemptId}),{message:'voice_call_close_unconfirmed'});
+    const row=await f.row();assert.equal(row.state,'uncertain');assert.equal(row.last_error_code,expected);
+    assert.equal(row.closed_at,null);assert.ok(row.execution_token);assert.ok(row.provider_call_id);
+    await assert.rejects(closeManagedVoiceCall(f.env,{uid:'owner',attemptId:created.attemptId}),/close_unconfirmed/);
+    assert.equal(f.calls.length,2);
+    assert.equal(logs.find(([event])=>event==='[voice-call] close_failed')[1].diagnostic,expected);
+    if(/^\d/.test(scenario)) {
+      const receipt=logs.find(([event])=>event==='[voice-call] provider_close_unconfirmed')[1];
+      assert.equal(receipt.status,Number(scenario));assert.equal(receipt.providerRequestId,'req_close_test');
+    }
+    assert.doesNotMatch(JSON.stringify(logs),/SECRET|sk-test|UDP\/TLS/);
+  });
+}
