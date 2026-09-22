@@ -18,7 +18,9 @@
   const CLIENT_ID_COOKIE = productionHost ? 'jha_client_id' : qaHost ? 'jha_client_id_qa' : 'jha_client_id_dev';
   const config = { ...(window.JHA_CONFIG || {}) };
   const PRODUCTION_GA_ID = 'G-SQYSWPFM5X';
-  const PRODUCTION_CLARITY_ID = '';
+  const PRODUCTION_CLARITY_ID = 'wskzma4clw';
+  // Directory intake has no session replay; leave shared application defaults untouched.
+  if (!Object.prototype.hasOwnProperty.call(config, 'CLARITY_ID')) config.CLARITY_ID = '';
   // Nonproduction is off by default. An explicit, separate test destination
   // is allowed; accidentally copying production's ID must still fail closed.
   function destination(key, productionId) {
