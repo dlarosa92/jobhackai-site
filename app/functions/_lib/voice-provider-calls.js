@@ -159,23 +159,36 @@ export async function closeManagedVoiceCall(env,{uid,attemptId}) {
     .bind(execution,attemptId,uid,before.provider_call_id,before.provider_key_sha256).first();
   if (!claimed) throw Error('voice_call_close_unconfirmed');
   console.log('[voice-call] closing',{attempt:attemptId,execution});
+  let phase='dispatch',failureCode=null;
   try {
     const response=await fetch(CALLS_URL+'/'+encodeURIComponent(before.provider_call_id)+'/hangup',{
       method:'POST',headers:{Authorization:`Bearer ${env.OPENAI_API_KEY}`,'X-Client-Request-Id':execution},
       redirect:'manual',signal:AbortSignal.timeout(10000)
     });
-    if (!response.ok) throw Error('voice_call_close_unconfirmed');
+    phase='response';
+    if (!response.ok) {
+      failureCode='close_http_'+response.status;
+      providerReceipt('provider_close_unconfirmed',response,{attempt:attemptId,execution,callId:before.provider_call_id});
+      throw Error('voice_call_close_unconfirmed');
+    }
     providerReceipt('provider_closed',response,{attempt:attemptId,execution,callId:before.provider_call_id});
+    phase='persist';
     const saved=await db.prepare(`UPDATE voice_provider_calls SET state='closed',execution_token=NULL,
       closed_at=datetime('now'),updated_at=datetime('now'),last_error_code=NULL
       WHERE id=? AND auth_id=? AND state='closing' AND execution_token=? RETURNING id`)
       .bind(attemptId,uid,execution).first();
     if (!saved) throw Error('voice_call_close_unconfirmed');
     return {closed:true,alreadyClosed:false};
-  } catch {
-    await db.prepare(`UPDATE voice_provider_calls SET state='uncertain',last_error_code='close_unconfirmed',
+  } catch (error) {
+    // Persist only fixed categories/statuses, never provider bodies or exception text.
+    // This survives loss of the operator's live log stream during a Wi-Fi test.
+    const diagnostic=failureCode || (phase==='persist' ? 'close_receipt_unconfirmed'
+      : error?.name==='TimeoutError' ? 'close_timeout'
+      : error?.name==='AbortError' ? 'close_aborted' : 'close_transport_unconfirmed');
+    console.log('[voice-call] close_failed',{attempt:attemptId,execution,phase,diagnostic});
+    await db.prepare(`UPDATE voice_provider_calls SET state='uncertain',last_error_code=?,
       updated_at=datetime('now') WHERE id=? AND auth_id=? AND execution_token=? AND state='closing'`)
-      .bind(attemptId,uid,execution).run().catch(()=>{});
+      .bind(diagnostic,attemptId,uid,execution).run().catch(()=>{});
     throw Error('voice_call_close_unconfirmed');
   }
 }
