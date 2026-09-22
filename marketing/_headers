@@ -1,0 +1,9 @@
+https://:preview.jobhackai-app-marketing-seo.pages.dev/*
+  X-Robots-Tag: noindex, nofollow
+
+https://qa-marketing.jobhackai.io/*
+  X-Robots-Tag: noindex, nofollow
+
+/directory/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
