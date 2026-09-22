@@ -46,6 +46,8 @@
     pc: null,
     dc: null,
     micStream: null,
+    reconnecting: false,
+    retiringConnection: null, // retained until managed replacement or End finishes
     connectionAttempt: null,   // cancellable setup; late async results never reopen an ended interview
     audioEl: null,
     startedAtMs: null,
@@ -1201,6 +1203,7 @@
         var s = pc.connectionState;
         if (s === 'connected') {
           state.connected = true;
+          hideReconnect();
           // Truthful per phase: nothing is being scored yet during the audio
           // check, so the status must not claim the interview is running.
           if (lifecycle().is(PHASES.ACTIVE_INTERVIEW)) {
@@ -1308,7 +1311,15 @@
     state.micStream = null;
   }
 
+  function releaseRetiringConnection(connection) {
+    if (!connection) return;
+    try { if (connection.dc) connection.dc.close(); } catch (_) {}
+    try { if (connection.pc) connection.pc.close(); } catch (_) {}
+    if (state.retiringConnection === connection) state.retiringConnection = null;
+  }
+
   function teardownConnection() {
+    releaseRetiringConnection(state.retiringConnection);
     cancelConnectionAttempt();
     stopRemotePlayback();
     try { if (state.dc) state.dc.close(); } catch (_) {}
@@ -1517,6 +1528,11 @@
     }
   }
 
+  function hideReconnect() {
+    var btn = $('vi-reconnect-btn');
+    if (btn) { btn.style.display = 'none'; btn.disabled = false; btn.textContent = 'Reconnect'; }
+  }
+
   function offerReconnect() {
     // Nothing to reconnect to when the session is already closing — offering it
     // would be misleading, and taking it would be a way out of a conduct end.
@@ -1526,7 +1542,7 @@
   }
 
   async function reconnect() {
-    if (state.ending) return;
+    if (state.ending || state.reconnecting) return;
     // A pending conduct or safety close survives the connection dropping. Its
     // gate is waiting on events from a link that no longer exists, so letting it
     // run on into a fresh session would kill that session with a stale reason.
@@ -1538,10 +1554,31 @@
       finishConductEnd('connection_lost');
       return;
     }
+    // A brief network outage may recover without replacing the provider call.
+    // A stale button click must not tear down that recovered connection.
+    if (state.pc && state.pc.connectionState === 'connected' && state.dc && state.dc.readyState === 'open') {
+      hideReconnect();
+      return;
+    }
+    state.reconnecting = true;
+    var retiring = null;
     var btn = $('vi-reconnect-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Reconnecting...'; }
     try {
-      teardownConnection();
+      if (state.managedTransport) {
+        // The server closes the old call before admitting a replacement. Keep
+        // its transport alive until that exchange returns, just as End does.
+        // Stop audio immediately and detach ownership so stale events cannot
+        // act on the replacement. End can still release the retained peer.
+        cancelConnectionAttempt();
+        stopMicrophone();
+        stopRemotePlayback();
+        retiring = { pc: state.pc, dc: state.dc };
+        state.retiringConnection = retiring;
+        state.pc = null; state.dc = null; state.connected = false;
+      } else {
+        teardownConnection();
+      }
       // Send the local transcript tail so the fresh realtime session resumes
       // the conversation instead of restarting the interview from scratch.
       // The tail alone cannot distinguish "still in the audio check" from
@@ -1587,6 +1624,9 @@
       console.error('[VOICE] reconnect failed:', err);
       setStatus('Could not reconnect. Ending the session.', 'vi-error');
       endInterview('connection_lost');
+    } finally {
+      releaseRetiringConnection(retiring);
+      state.reconnecting = false;
     }
   }
 

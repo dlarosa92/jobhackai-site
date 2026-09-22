@@ -186,3 +186,58 @@ for(const reason of ['voice_connection_unconfirmed','voice_connection_pending','
     assert.equal(f.h.el('vi-setup-view').style.display,'');
   });
 }
+
+test('managed replacement retains the old transport until the server finishes closing its call',async t=>{
+  const response=deferred();let count=0,body;
+  const f=fixture(t,{routes:{'/api/voice/connection':(url,init)=>{
+    const data=JSON.parse(init.body);if(data.action==='close')return {connectionClosed:true};
+    if(++count===1)return f.answer(data);body=data;return response.promise;
+  }}});
+  await live(f);const oldPc=f.h.peerConnection(),oldDc=f.h.dataChannel();
+  const replacing=f.h.click('vi-reconnect-btn');await f.h.settle();
+  assert.notEqual(oldPc.connectionState,'closed','do not hang up the browser before server closure');
+  assert.notEqual(oldDc.readyState,'closed');assert.ok(oldPc.tracks.every(t=>!t.enabled));
+  oldPc.connectionState='connected';oldPc.onconnectionstatechange();
+  assert.equal(f.h.el('vi-status').textContent,'Reconnecting...','retiring peer cannot overwrite replacement status');
+  await f.h.click('vi-reconnect-btn');assert.equal(f.opens().length,2,'duplicate click does not race another replacement');
+  response.resolve(f.answer(body));await replacing;
+  assert.equal(oldPc.connectionState,'closed');assert.equal(oldDc.readyState,'closed');
+  assert.notEqual(f.h.peerConnection(),oldPc);assert.equal(f.opens()[1].body.sessionId,f.opens()[0].body.sessionId);
+});
+
+test('a peer that recovers by itself hides Reconnect and cannot be replaced by a stale click',async t=>{
+  const f=fixture(t);await live(f);const pc=f.h.peerConnection();
+  pc.connectionState='disconnected';pc.onconnectionstatechange();
+  assert.equal(f.h.el('vi-reconnect-btn').style.display,'');
+  pc.connectionState='connected';pc.onconnectionstatechange();
+  assert.equal(f.h.el('vi-reconnect-btn').style.display,'none');
+  await f.h.click('vi-reconnect-btn');assert.equal(f.opens().length,1);
+  assert.equal(f.h.peerConnection(),pc);assert.notEqual(pc.connectionState,'closed');
+});
+
+test('End releases the retained peer even if replacement microphone permission never finishes',async t=>{
+  const permission=deferred(),lateMic=mic();let requests=0;
+  const f=fixture(t,{getUserMedia:()=>++requests===1?Promise.resolve(mic()):permission.promise});
+  await live(f);const oldPc=f.h.peerConnection(),oldDc=f.h.dataChannel();
+  const replacing=f.h.click('vi-reconnect-btn');await f.h.settle();
+  assert.notEqual(oldPc.connectionState,'closed');
+  await f.h.click('vi-end-btn');assert.equal(oldPc.connectionState,'closed');assert.equal(oldDc.readyState,'closed');
+  permission.resolve(lateMic);await replacing;
+  assert.equal(lateMic.track.enabled,false);assert.equal(f.opens().length,1);assert.equal(f.closes().length,1);
+});
+
+test('unconfirmed replacement closure cleans up both browser transports without another automatic attempt',async t=>{
+  const response=deferred();let count=0;
+  const f=fixture(t,{routes:{'/api/voice/connection':(url,init)=>{
+    const body=JSON.parse(init.body);if(body.action==='close')return {connectionClosed:false};
+    return ++count===1?f.answer(body):response.promise;
+  },'/api/voice/session/':()=>({__status:202,status:'completed',saved:true,connectionClosed:false})}});
+  await live(f);const oldPc=f.h.peerConnection();
+  const replacing=f.h.click('vi-reconnect-btn');await f.h.settle();const newPc=f.h.peerConnection();
+  assert.notEqual(oldPc.connectionState,'closed');
+  response.resolve({__status:409,error:'Connection unavailable',reason:'voice_call_close_unconfirmed'});
+  await replacing;await f.h.settle(20);
+  assert.equal(oldPc.connectionState,'closed');assert.equal(newPc.connectionState,'closed');
+  assert.ok(newPc.tracks.every(t=>!t.enabled));assert.equal(f.opens().length,2);
+  assert.match(f.h.el('vi-save-status').textContent,/needs confirmation/);
+});
