@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {sqliteD1} from './sqlite-d1-helper.mjs';
-import {saveDirectoryRequest,notifyDirectoryRequest} from '../directory-requests.js';
+import {saveDirectoryRequest,notifyDirectoryRequest,directoryEnabled,directoryOriginAllowed} from '../directory-requests.js';
 import {onRequest} from '../../api/directory-requests.js';
 const input=()=>({submission_key:crypto.randomUUID(),business_name:'Synthetic Dev Detailer',website:'https://example.com',service_area:'Covington',service_details:'Development test. Mobile interior service. No business outreach.',contact_email:'owner@example.com',company_fax:''});
 function setup(t) {
@@ -78,4 +78,20 @@ test('crash after provider acceptance can recover within key window; stale fifth
 test('overlapping notification workers claim only one send',async t=>{
  const f=setup(t);const {body:{request_id:id}}=await f.save();let n=0;
  const send=async()=>{n++;return Response.json({id:'one'});};await Promise.all([notifyDirectoryRequest(f.env,id,send),notifyDirectoryRequest(f.env,id,send)]);assert.equal(n,1);
+});
+
+test('environment routing rejects cross-environment origins and mismatched frontend',()=>{
+ const pairs=[['dev','https://dev.jobhackai.io','https://dev0.jobhackai-app-marketing-seo.pages.dev'],['qa','https://qa.jobhackai.io','https://qa-marketing.jobhackai.io'],['PROD','https://app.jobhackai.io','https://jobhackai.io']];
+ for(const [ENVIRONMENT,FRONTEND_URL,origin] of pairs){
+ const env={ENVIRONMENT,FRONTEND_URL};assert.equal(directoryEnabled(env),true);assert.equal(directoryOriginAllowed(env,origin),true);
+ for(const other of pairs.filter(x=>x[0]!==ENVIRONMENT))assert.equal(directoryOriginAllowed(env,other[2]),false);
+ assert.equal(directoryEnabled({...env,FRONTEND_URL:'https://wrong.example'}),false);
+ }
+});
+test('QA and production notifications stay private and have separate idempotency namespaces',async t=>{
+ for(const [ENVIRONMENT,FRONTEND_URL,label,key] of [['qa','https://qa.jobhackai.io','[QA TEST]','qa'],['PROD','https://app.jobhackai.io','[JobHackAI Local]','production']]){
+ const f=setup(t),env={...f.env,ENVIRONMENT,FRONTEND_URL};const saved=await saveDirectoryRequest(env,input(),'192.0.2.1');
+ await notifyDirectoryRequest(env,saved.body.request_id,async(url,init)=>{const body=JSON.parse(init.body);assert.ok(body.subject.startsWith(label));assert.deepEqual(body.to,['support@jobhackai.io']);assert.equal(init.headers['Idempotency-Key'],`directory-request/${key}/${saved.body.request_id}`);return Response.json({id:'receipt'});});
+ assert.equal((await f.row()).notification_status,'accepted');
+ }
 });
