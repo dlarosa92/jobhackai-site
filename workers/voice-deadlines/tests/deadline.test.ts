@@ -90,7 +90,7 @@ describe('durable interview deadlines in the actual Workers runtime',()=>{
     });
     await closeManagedInterview(appEnv,{uid:'owner',sessionId}).catch(()=>{});
     expect(requests).toHaveLength(2);expect(requests[1]).toMatch(/\/hangup$/);
-    expect(await call()).toMatchObject({state:'uncertain',last_error_code:'close_unconfirmed',closed_at:null});
+    expect(await call()).toMatchObject({state:'uncertain',last_error_code:'close_http_302',closed_at:null});
   });
   it('a reconnect preserves the original alarm and deadline and only the replacement closes at expiry',async()=>{
     const first=await open(),initial=await state();
