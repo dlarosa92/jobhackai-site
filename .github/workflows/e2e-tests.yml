@@ -20,6 +20,8 @@ concurrency:
 
 jobs:
   e2e-tests:
+    # This suite targets the deployed base, not an isolated release candidate.
+    if: ${{ github.event.pull_request.draft == false && !contains(github.event.pull_request.labels.*.name, 'skip-e2e') && !contains(github.event.pull_request.body, '[skip-e2e]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     
