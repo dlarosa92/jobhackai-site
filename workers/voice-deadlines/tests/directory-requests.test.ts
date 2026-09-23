@@ -5,7 +5,7 @@ import {beforeAll,beforeEach,afterEach,it,expect,vi} from 'vitest';
 import {onRequest} from '../../../app/functions/api/directory-requests.js';
 import {onRequest as recovery} from '../../../app/functions/api/admin/directory-notifications.js';
 const settings={...env,ENVIRONMENT:'dev',FRONTEND_URL:'https://dev.jobhackai.io',ADMIN_API_KEY:'fixture-admin',RESEND_API_KEY:'fixture-email'};
-const fixture=()=>({submission_key:crypto.randomUUID(),business_name:'DEV Synthetic',website:'https://example.com',service_area:'Covington',service_details:'Test only',contact_email:'owner@example.com'});
+const fixture=()=>({category:'mobile-detailing',submission_key:crypto.randomUUID(),business_name:'DEV Synthetic',website:'https://example.com',service_area:'Covington',service_details:'Test only',contact_email:'owner@example.com'});
 const request=(body:unknown)=>new Request('https://dev.jobhackai.io/api/directory-requests',{method:'POST',headers:{Origin:'https://dev0.jobhackai-app-marketing-seo.pages.dev','Content-Type':'application/json','CF-Connecting-IP':'192.0.2.1'},body:JSON.stringify(body)});
 beforeAll(()=>applyD1Migrations(env.DB,env.TEST_MIGRATIONS));
 beforeEach(async()=>{await env.DB.prepare('DELETE FROM directory_requests').run();});
