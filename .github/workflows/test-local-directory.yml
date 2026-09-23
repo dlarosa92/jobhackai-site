@@ -3,9 +3,12 @@ on:
   pull_request:
     paths:
       - 'marketing/directory/**'
+      - 'marketing/scripts/*directory*.mjs'
+      - 'marketing/data/directory/**'
+      - 'marketing/sitemap.xml'
       - 'marketing/tests/directory*.test.mjs'
       - 'app/functions/**/directory*'
-      - 'app/db/migrations/030_directory_requests.sql'
+      - 'app/db/migrations/*directory*.sql'
       - '.github/workflows/test-local-directory.yml'
 jobs:
   directory:
@@ -15,4 +18,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - run: node marketing/scripts/build-directory.mjs && git diff --exit-code -- marketing/directory marketing/sitemap.xml
       - run: node --test app/functions/_lib/__tests__/directory-requests.test.mjs marketing/tests/directory*.test.mjs

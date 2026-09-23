@@ -95,4 +95,21 @@
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
+
+  <!-- DIRECTORY CATEGORIES START -->
+  <url><loc>https://jobhackai.io/directory/junk-removal</loc><changefreq>weekly</changefreq></url>
+  <url><loc>https://jobhackai.io/directory/junk-removal/1-800-got-junk</loc><changefreq>weekly</changefreq></url>
+  <url><loc>https://jobhackai.io/directory/junk-removal/all-in-1-junk-removal</loc><changefreq>weekly</changefreq></url>
+  <url><loc>https://jobhackai.io/directory/junk-removal/cincy-junk-busters</loc><changefreq>weekly</changefreq></url>
+  <url><loc>https://jobhackai.io/directory/junk-removal/goodfellas-junk-removal</loc><changefreq>weekly</changefreq></url>
+  <url><loc>https://jobhackai.io/directory/junk-removal/junk-king-northern-kentucky</loc><changefreq>weekly</changefreq></url>
+  <url><loc>https://jobhackai.io/directory/junk-removal/rumpke-haul-it-away</loc><changefreq>weekly</changefreq></url>
+  <url><loc>https://jobhackai.io/directory/ev-charger-installation</loc><changefreq>weekly</changefreq></url>
+  <url><loc>https://jobhackai.io/directory/ev-charger-installation/apollo-home</loc><changefreq>weekly</changefreq></url>
+  <url><loc>https://jobhackai.io/directory/ev-charger-installation/arlinghaus</loc><changefreq>weekly</changefreq></url>
+  <url><loc>https://jobhackai.io/directory/ev-charger-installation/gronotte-electric</loc><changefreq>weekly</changefreq></url>
+  <url><loc>https://jobhackai.io/directory/ev-charger-installation/ground-zero-electric</loc><changefreq>weekly</changefreq></url>
+  <url><loc>https://jobhackai.io/directory/ev-charger-installation/nabi-electric</loc><changefreq>weekly</changefreq></url>
+  <url><loc>https://jobhackai.io/directory/ev-charger-installation/velasco-electric</loc><changefreq>weekly</changefreq></url>
+  <!-- DIRECTORY CATEGORIES END -->
 </urlset>

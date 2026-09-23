@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 const source=readFileSync(new URL('../directory/request-form.js',import.meta.url),'utf8');
-function setup(host='dev0.jobhackai-app-marketing-seo.pages.dev') {
+function setup(host='dev0.jobhackai-app-marketing-seo.pages.dev', search='') {
  const nodes={},calls=[],events=[];let submit,outcome='offline',consent=false;
- for(const id of ['directory-request','request-submit','request-error','request-environment','request-reference','request-success']) nodes[id]={hidden:false,disabled:true,textContent:'',focus(){this.focused=true;},reportValidity:()=>true,addEventListener:(name,fn)=>{submit=fn;}};
- const fields={business_name:'Test',website:'https://example.com',service_area:'Covington',service_details:'Synthetic',contact_email:'owner@example.com'};
- vm.runInNewContext(source,{document:{getElementById:id=>nodes[id]},window:{location:{hostname:host},JHA:{cookieConsent:{hasAnalyticsConsent:()=>consent},gtagSafe:(...args)=>events.push(args)}},crypto,AbortController,setTimeout,clearTimeout,FormData:class {constructor(){return new Map(Object.entries(fields));}},fetch:async(url,init)=>{calls.push({url,...init});if(outcome==='offline')throw Error();return {ok:outcome!=='invalid',status:outcome==='invalid'?400:201,json:async()=>outcome==='invalid'?{errors:{contact_email:'Enter a valid contact email.'}}:{ok:true,request_id:'saved-reference',duplicate:outcome==='duplicate'}};}});
+ for(const id of ['directory-request','request-submit','request-error','request-environment','request-reference','request-success','directory-category','service-help']) nodes[id]={hidden:false,disabled:true,textContent:'',value:'',focus(){this.focused=true;},reportValidity:()=>true,addEventListener:(name,fn)=>{if(name==='submit')submit=fn;}};
+ const fields={category:'mobile-detailing',business_name:'Test',website:'https://example.com',service_area:'Covington',service_details:'Synthetic',contact_email:'owner@example.com'};
+ vm.runInNewContext(source,{document:{getElementById:id=>nodes[id],body:{dataset:{}}},window:{location:{hostname:host,search},JHA:{cookieConsent:{hasAnalyticsConsent:()=>consent},gtagSafe:(...args)=>events.push(args)}},URLSearchParams,crypto,AbortController,setTimeout,clearTimeout,FormData:class {constructor(){return new Map(Object.entries(fields));}},fetch:async(url,init)=>{calls.push({url,...init});if(outcome==='offline')throw Error();return {ok:outcome!=='invalid',status:outcome==='invalid'?400:201,json:async()=>outcome==='invalid'?{errors:{contact_email:'Enter a valid contact email.'}}:{ok:true,request_id:'saved-reference',duplicate:outcome==='duplicate'}};}});
  return {nodes,calls,events,fields,send:()=>submit({preventDefault(){}}),outcome:value=>outcome=value,consent:value=>consent=value};
 }
 test('failed transport keeps form and reuses idempotency key; success focuses receipt without tracking unconsented',async()=>{
@@ -30,5 +30,20 @@ test('unrecognized previews cannot write any environment',()=>{
 test('production, QA and release previews target their own API',async()=>{
  for(const [host,api] of Object.entries({'jobhackai.io':'https://app.jobhackai.io','qa-marketing.jobhackai.io':'https://qa.jobhackai.io','directory-dev.jobhackai-app-marketing-seo.pages.dev':'https://dev.jobhackai.io','directory-qa.jobhackai-app-marketing-seo.pages.dev':'https://qa.jobhackai.io'})){
  const f=setup(host);f.outcome('saved');await f.send();assert.equal(f.calls[0].url,api+'/api/directory-requests');
+ }
+});
+
+test('category links preselect only valid categories and update helpful instructions',()=>{
+ for(const category of ['junk-removal','ev-charger-installation']){
+  const f=setup('jobhackai.io','?category='+category);assert.equal(f.nodes['directory-category'].value,category);
+  assert.match(f.nodes['service-help'].textContent,category==='junk-removal'?/accepted and excluded items/:/panel assessment/);
+ }
+ for(const category of ['<script>','unknown','__proto__'])assert.equal(setup('jobhackai.io','?category='+category).nodes['directory-category'].value,'');
+});
+test('saved events identify each category independently without collecting the submitted details',async()=>{
+ for(const category of ['mobile-detailing','junk-removal','ev-charger-installation']){
+  const f=setup();f.fields.category=category;f.consent(true);f.outcome('saved');await f.send();
+  assert.equal(f.events[0][2].directory_category,category.replaceAll('-','_'));
+  assert.equal(JSON.parse(f.calls[0].body).category,category);
  }
 });

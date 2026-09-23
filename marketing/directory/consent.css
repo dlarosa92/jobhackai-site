@@ -375,3 +375,10 @@
     transition: none;
   }
 }
+
+/* Same directory action hierarchy, including the consent panel. */
+.jha-cookie-actions button,.jha-btn-save{min-height:48px}
+.jha-cookie-actions .jha-btn-reject,.jha-cookie-actions .jha-btn-manage{background:var(--directory-secondary);color:var(--color-card-bg)}
+.jha-cookie-actions .jha-btn-reject:hover,.jha-cookie-actions .jha-btn-manage:hover{background:var(--directory-secondary-hover)}
+.jha-cookie-inner a{color:var(--color-cta-green)}
+#jha-modal-close{width:48px;height:48px;min-width:48px}

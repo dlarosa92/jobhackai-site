@@ -1,0 +1,175 @@
+{
+  "category": "ev-charger-installation",
+  "market": "Northern Kentucky and Cincinnati",
+  "checkedAt": "2026-09-23",
+  "verification": "Provider-published services and service areas checked against linked sources. No service-quality, active-license, insurance or partnership endorsement. Null fields mean not established in the checked sources.",
+  "listings": [
+    {
+      "id": "arlinghaus",
+      "name": "Arlinghaus",
+      "website": "https://www.arlinghausair.com/electrical/ev-chargers/",
+      "regions": [
+        "Cincinnati",
+        "Northern Kentucky"
+      ],
+      "services": [
+        "panel-upgrade"
+      ],
+      "details": {
+        "panel": "Provider says electricians evaluate the panel before installation and offer panel upgrades.",
+        "charger": null,
+        "permits": null,
+        "area": "Northern Kentucky and Greater Cincinnati; the EV page names Erlanger and Florence.",
+        "quote": "Request a consultation by phone or website; ask for an itemized installation quote.",
+        "scope": "Panel evaluation and Level 2 installation are described. Hardware, permit fees and inspection charges are not itemized.",
+        "license": null
+      },
+      "sources": [
+        {
+          "url": "https://www.arlinghausair.com/electrical/ev-chargers/",
+          "label": "Provider service page",
+          "checkedAt": "2026-09-23"
+        }
+      ]
+    },
+    {
+      "id": "gronotte-electric",
+      "name": "Gronotte Electric",
+      "website": "https://www.callgcm.com/electric-vehicle-charger-installation",
+      "regions": [
+        "Cincinnati",
+        "Northern Kentucky"
+      ],
+      "services": [
+        "panel-upgrade",
+        "indoor-outdoor"
+      ],
+      "details": {
+        "panel": "Panel upgrades for EV charging are listed; the assessment procedure is not specified.",
+        "charger": null,
+        "permits": null,
+        "area": "Northern Kentucky, Greater Cincinnati and Southeast Indiana.",
+        "quote": "Call, text or request a consultation; the provider offers free estimates.",
+        "scope": "Level 2 home installation, smart-charger integration and indoor/outdoor options are listed. Ask which are included in your quote.",
+        "license": "Website lists ME67198 and CE66737. Current status and jurisdiction coverage have not been independently verified."
+      },
+      "sources": [
+        {
+          "url": "https://www.callgcm.com/electric-vehicle-charger-installation",
+          "label": "Provider service page",
+          "checkedAt": "2026-09-23"
+        }
+      ]
+    },
+    {
+      "id": "nabi-electric",
+      "name": "Nabi Electric",
+      "website": "https://www.nabielectric.com/contact/ev-charger-installation-service-area/cincinnati-oh",
+      "regions": [
+        "Cincinnati",
+        "Northern Kentucky"
+      ],
+      "services": [],
+      "details": {
+        "panel": "The EV page describes checking home circuit capacity.",
+        "charger": null,
+        "permits": "Provider says it manages permits through final inspection; confirm fees and jurisdiction in writing.",
+        "area": "Cincinnati service page; the page also identifies service in the Union, KY area. Confirm other Northern Kentucky addresses.",
+        "quote": "Request service online or call for an estimate.",
+        "scope": "Home Level 2 installation, circuit assessment, permits and final inspection are described. Hardware supply and itemized charges are unknown.",
+        "license": "Website lists Ohio 24614 and Kentucky ME63606. Current status, contractor authority and jurisdiction coverage have not been independently verified."
+      },
+      "sources": [
+        {
+          "url": "https://www.nabielectric.com/contact/ev-charger-installation-service-area/cincinnati-oh",
+          "label": "Provider service page",
+          "checkedAt": "2026-09-23"
+        }
+      ]
+    },
+    {
+      "id": "ground-zero-electric",
+      "name": "Ground Zero Electric",
+      "website": "https://www.gz-electric.com/ev-chargers.html",
+      "regions": [
+        "Cincinnati",
+        "Northern Kentucky"
+      ],
+      "services": [
+        "panel-upgrade",
+        "multi-vehicle"
+      ],
+      "details": {
+        "panel": "On-site panel and service assessment and a load calculation are described before recommending work.",
+        "charger": null,
+        "permits": "The published residential scope includes permit and inspection coordination; confirm fees in the written quote.",
+        "area": "Greater Cincinnati and Northern Kentucky.",
+        "quote": "Fixed quote after reviewing the panel and planned charger location; contact the provider directly.",
+        "scope": "Assessment, circuit installation, mounting, connection, commissioning and customer setup are described. Confirm hardware supply and any extra panel work.",
+        "license": null
+      },
+      "sources": [
+        {
+          "url": "https://www.gz-electric.com/ev-chargers.html",
+          "label": "Provider service page",
+          "checkedAt": "2026-09-23"
+        }
+      ]
+    },
+    {
+      "id": "apollo-home",
+      "name": "Apollo Home",
+      "website": "https://apollohome.com/electrical/ev-charging-station-installation/",
+      "regions": [
+        "Cincinnati"
+      ],
+      "services": [
+        "panel-upgrade"
+      ],
+      "details": {
+        "panel": "Home electrical capacity assessment and any necessary panel upgrades are described.",
+        "charger": null,
+        "permits": null,
+        "area": "Cincinnati, Dayton and surrounding areas. Northern Kentucky coverage is unknown on this service page.",
+        "quote": "Call or schedule online; the page offers a consultation and upfront pricing.",
+        "scope": "Assessment, wiring, circuit installation, testing and a customer walkthrough are listed. Ask about hardware, permits and inspection costs.",
+        "license": null
+      },
+      "sources": [
+        {
+          "url": "https://apollohome.com/electrical/ev-charging-station-installation/",
+          "label": "Provider service page",
+          "checkedAt": "2026-09-23"
+        }
+      ]
+    },
+    {
+      "id": "velasco-electric",
+      "name": "Velasco Electric",
+      "website": "https://velascoelectricllc.com/servicios/cargadores-tesla-ev",
+      "regions": [
+        "Cincinnati",
+        "Northern Kentucky"
+      ],
+      "services": [
+        "panel-upgrade"
+      ],
+      "details": {
+        "panel": "The provider describes a panel load calculation and subpanel work when needed.",
+        "charger": null,
+        "permits": "Electrical permits and city inspections in Cincinnati and surrounding Ohio counties are listed. Kentucky arrangements are unknown.",
+        "area": "Cincinnati and nearby Ohio communities, plus Florence, KY.",
+        "quote": "Call for a quote; confirm the site assessment and an itemized scope.",
+        "scope": "Dedicated circuit, connection, load calculation and permit/inspection work are listed. Final design must match the home and charger.",
+        "license": null
+      },
+      "sources": [
+        {
+          "url": "https://velascoelectricllc.com/servicios/cargadores-tesla-ev",
+          "label": "Provider service page",
+          "checkedAt": "2026-09-23"
+        }
+      ]
+    }
+  ]
+}
