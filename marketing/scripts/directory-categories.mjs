@@ -66,8 +66,8 @@ export function buildAdditionalCategories({root,out,shell,esc}) {
     if(data.category!==category) throw Error('Category does not match filename');
     validateCategory(data,d);
     mkdirSync(join(out,category),{recursive:true});
-    const hub='/directory/'+category;
-    const path=l=>hub+'/'+l.id;
+    const hub='/directory/'+category+'/';
+    const path=l=>hub+l.id;
     const sourceList=l=>`<ul>${l.sources.map(s=>`<li><a href="${esc(s.url)}" rel="noopener noreferrer">${esc(s.label)}</a>, checked ${esc(s.checkedAt)}</li>`).join('')}</ul>`;
     const details=l=>Object.entries(d.fields).map(([key,label])=>`<dt>${esc(label)}</dt><dd>${text(l.details[key])}</dd>`).join('');
     const rows=data.listings.slice().sort((a,b)=>a.name.localeCompare(b.name));
