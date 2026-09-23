@@ -1,0 +1,32 @@
+[
+  {
+    "results": [
+      {
+        "id": "a304a110-71a9-4e6f-a11b-1696f256982d",
+        "category": "mobile-detailing",
+        "notification_format_version": 2,
+        "review_status": "pending",
+        "notification_status": "accepted",
+        "notification_attempts": 1
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "ENAM",
+      "served_by_colo": "ATL",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.1504
+      },
+      "duration": 0.1504,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 1490944,
+      "rows_read": 1,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  }
+]

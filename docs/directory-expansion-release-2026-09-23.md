@@ -4,12 +4,16 @@ Status: production held. Junk removal and home Level 2 EV charger installation a
 
 ## Review surfaces
 
+- [Draft PR955: API and mobile-only bridge](https://github.com/dlarosa92/jobhackai-site/pull/955).
+- [Draft PR956: category pages and campaign packages](https://github.com/dlarosa92/jobhackai-site/pull/956), stacked on PR955.
+
+
 - [Dev junk removal](https://directory-dev.jobhackai-app-marketing-seo.pages.dev/directory/junk-removal/) and [Dev EV installation](https://directory-dev.jobhackai-app-marketing-seo.pages.dev/directory/ev-charger-installation/).
 - [QA junk removal](https://directory-qa.jobhackai-app-marketing-seo.pages.dev/directory/junk-removal/) and [QA EV installation](https://directory-qa.jobhackai-app-marketing-seo.pages.dev/directory/ev-charger-installation/).
 - [QA mobile detailing regression](https://directory-qa.jobhackai-app-marketing-seo.pages.dev/directory/) and [QA intake](https://directory-qa.jobhackai-app-marketing-seo.pages.dev/directory/get-listed).
 - [Verified businesses and sources](campaigns/directory-expansion-2026-09-23/listing-register.md), [campaign packages](campaigns/directory-expansion-2026-09-23/README.md), [tracking manifest](campaigns/directory-expansion-2026-09-23/manifest.json), [three-category scorecard](directory-experiment-scorecard.md), and [verification evidence](evidence/directory-expansion-2026-09-23/observations.md).
 
-The source of truth is the isolated main-based release branch, not all of dev0 or develop. Base is addf6cadd0b4fcf921ff88ec9eb082c2886d25fc. Production work is split into an intake/bridge stage and a stacked category-page stage to make deployment ordering safe. Dev PR953 and QA PR954 contain only the directory API/migration; Dev additionally updates two existing directory test-harness fixtures. Their unrelated application behavior is retained.
+Both production PRs are draft and unmerged. The source of truth is the isolated main-based release branch, not all of dev0 or develop. Base is addf6cadd0b4fcf921ff88ec9eb082c2886d25fc. Production work is split into an intake/bridge stage and a stacked category-page stage to make deployment ordering safe. Dev PR953 and QA PR954 contain only the directory API/migration; Dev additionally updates two existing directory test-harness fixtures. Their unrelated application behavior is retained.
 
 ## What changes
 
