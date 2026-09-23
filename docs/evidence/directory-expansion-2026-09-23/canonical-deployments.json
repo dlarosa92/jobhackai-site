@@ -1,0 +1,82 @@
+[
+  {
+    "name": "jobhackai-app-dev",
+    "branch": "dev0",
+    "canonical": {
+      "id": "32f92396-6770-4aaf-a903-27d94e9dc0ed",
+      "url": "https://32f92396.jobhackai-app-dev.pages.dev",
+      "source": {
+        "branch": "dev0",
+        "commit_hash": "c1e944f30451a99a6bcaa12e27959c536b9a3410",
+        "commit_message": "Merge pull request #953 from dlarosa92/codex/directory-categories-dev-20260923\n\nDirectory categories: isolated Dev API promotion",
+        "commit_dirty": false
+      },
+      "stage": {
+        "name": "deploy",
+        "started_on": "2026-09-23T04:10:03.599734Z",
+        "ended_on": "2026-09-23T04:10:13.923279Z",
+        "status": "success"
+      }
+    }
+  },
+  {
+    "name": "jobhackai-app-qa",
+    "branch": "develop",
+    "canonical": {
+      "id": "85a2005b-2d5f-4a99-9c4a-a88a167ad71d",
+      "url": "https://85a2005b.jobhackai-app-qa.pages.dev",
+      "source": {
+        "branch": "develop",
+        "commit_hash": "cf419cea5a65056547ff398ac8d24326d941d1f6",
+        "commit_message": "Merge pull request #954 from dlarosa92/codex/directory-categories-qa-20260923\n\nDirectory categories: isolated QA API promotion",
+        "commit_dirty": false
+      },
+      "stage": {
+        "name": "deploy",
+        "started_on": "2026-09-23T04:14:30.843291Z",
+        "ended_on": "2026-09-23T04:14:39.288243Z",
+        "status": "success"
+      }
+    }
+  },
+  {
+    "name": "jobhackai-app-marketing-seo",
+    "branch": "main",
+    "canonical": {
+      "id": "5c2444cc-554f-47a1-9fc1-047a3f139654",
+      "url": "https://5c2444cc.jobhackai-app-marketing-seo.pages.dev",
+      "source": {
+        "branch": "main",
+        "commit_hash": "addf6cadd0b4fcf921ff88ec9eb082c2886d25fc",
+        "commit_message": "Merge pull request #952 from dlarosa92/codex/directory-guide-publish-20260922\n\nPublish JobHackAI Local mobile-detailing comparison guide",
+        "commit_dirty": false
+      },
+      "stage": {
+        "name": "deploy",
+        "started_on": "2026-09-23T00:24:02.05572Z",
+        "ended_on": "2026-09-23T00:24:12.062818Z",
+        "status": "success"
+      }
+    }
+  },
+  {
+    "name": "jobhackai-app-prod",
+    "branch": "main",
+    "canonical": {
+      "id": "c484a503-16c3-4058-9f72-df00e129cda5",
+      "url": "https://c484a503.jobhackai-app-prod.pages.dev",
+      "source": {
+        "branch": "main",
+        "commit_hash": "addf6cadd0b4fcf921ff88ec9eb082c2886d25fc",
+        "commit_message": "Merge pull request #952 from dlarosa92/codex/directory-guide-publish-20260922\n\nPublish JobHackAI Local mobile-detailing comparison guide",
+        "commit_dirty": false
+      },
+      "stage": {
+        "name": "deploy",
+        "started_on": "2026-09-23T00:23:40.67702Z",
+        "ended_on": "2026-09-23T00:23:55.804855Z",
+        "status": "success"
+      }
+    }
+  }
+]

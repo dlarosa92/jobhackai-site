@@ -1,0 +1,18 @@
+[
+  {
+    "category": "junk-removal",
+    "providers": 6,
+    "sourceSnapshotMatches": true,
+    "distinctCampaign": true,
+    "distinctChannelAssets": true,
+    "draftOnly": true
+  },
+  {
+    "category": "ev-charger-installation",
+    "providers": 6,
+    "sourceSnapshotMatches": true,
+    "distinctCampaign": true,
+    "distinctChannelAssets": true,
+    "draftOnly": true
+  }
+]

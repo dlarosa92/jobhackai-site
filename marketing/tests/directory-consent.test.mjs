@@ -3,10 +3,10 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 const source = readFileSync(new URL('../directory/directory.js', import.meta.url), 'utf8');
-function setup({ consent = false, visible = true, listing = 'pearls', owner = true } = {}) {
+function setup({ consent = false, visible = true, listing = 'pearls', owner = true, category = 'mobile-detailing', categoryPage = false } = {}) {
   const calls = [], windowListeners = {}, documentListeners = {};
   const document = {
-    visibilityState: visible ? 'visible' : 'hidden', body: { dataset: { listing } },
+    visibilityState: visible ? 'visible' : 'hidden', body: { dataset: { listing, directoryCategory:category, categoryPage:String(categoryPage) } },
     getElementById: () => null,
     addEventListener(name, fn) { documentListeners[name] = fn; }
   };
@@ -50,4 +50,13 @@ test('no consent owner or a directory hub never manufactures a listing view', ()
   assert.equal(absent.calls.length, 0);
   const hub = setup({ listing: '', consent: true });
   hub.visible(true); hub.consent(true); assert.equal(hub.calls.length, 0);
+});
+
+test('category views and contact events carry the correct category and do not replay denied clicks',()=>{
+ for(const category of ['mobile-detailing','junk-removal','ev-charger-installation']){
+  const h=setup({listing:'',category,categoryPage:true});h.click({directoryContact:'provider'});assert.equal(h.calls.length,0);
+  h.consent(true);assert.equal(h.calls[0][1],'directory_category_view');h.click({directoryContact:'provider'});
+  assert.ok(h.calls.every(c=>c[2].directory_category===category.replaceAll('-','_')));
+  h.consent(false);h.consent(true);assert.equal(h.calls.length,2);
+ }
 });

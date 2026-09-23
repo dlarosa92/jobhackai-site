@@ -6,7 +6,7 @@
     if (window.JHA?.cookieConsent?.hasAnalyticsConsent?.() !== true) return;
     if (typeof window.JHA?.gtagSafe !== 'function') return;
     window.JHA.gtagSafe('event', name, Object.assign({
-      business_line: 'local_directory', directory_category: 'mobile_detailing',
+      business_line: 'local_directory', directory_category: (document.body.dataset.directoryCategory || 'mobile-detailing').replaceAll('-','_'),
       directory_market: 'nky_cincinnati'
     }, values));
   }
@@ -17,21 +17,27 @@
       var values = new FormData(filters);
       var count = 0;
       cards.forEach(function (card) {
-        var matches = ['region', 'service', 'utilities'].every(function (key) {
-          return !values.get(key) || card.dataset[key].split('|').includes(values.get(key));
+        var matches = Array.from(values.keys()).every(function (key) {
+          return !values.get(key) || (card.dataset[key] || '').split('|').includes(values.get(key));
         });
         card.hidden = !matches;
         if (matches) count++;
       });
-      document.getElementById('result-count').textContent = count + (count === 1 ? ' detailer' : ' detailers') + ' · alphabetical order';
+      var noun = document.body.dataset.providerNoun || 'detailer';
+      document.getElementById('result-count').textContent = count + ' ' + noun + (count === 1 ? '' : 's') + ' · alphabetical order';
       document.getElementById('no-results').hidden = count !== 0;
     }
     filters.addEventListener('submit', function (event) { event.preventDefault(); });
-    filters.addEventListener('change', filter);
+    filters.addEventListener('change', function () { filter(); track('directory_filter_change',Object.fromEntries(new FormData(filters))); });
     filters.addEventListener('reset', function () { setTimeout(filter, 0); });
   }
   var viewed = false;
+  var categoryViewed = false;
   function listingView() {
+    if (!categoryViewed && document.body.dataset.categoryPage === 'true' && document.visibilityState === 'visible' && window.JHA?.cookieConsent?.hasAnalyticsConsent?.() === true && typeof window.JHA?.gtagSafe === 'function') {
+      categoryViewed = true;
+      track('directory_category_view',{});
+    }
     if (!viewed && document.visibilityState === 'visible' && document.body.dataset.listing && window.JHA?.cookieConsent?.hasAnalyticsConsent?.() === true && typeof window.JHA?.gtagSafe === 'function') {
       viewed = true;
       track('directory_listing_view', { listing_id: document.body.dataset.listing });

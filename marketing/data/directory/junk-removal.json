@@ -1,0 +1,200 @@
+{
+  "category": "junk-removal",
+  "market": "Northern Kentucky and Cincinnati",
+  "checkedAt": "2026-09-23",
+  "verification": "Provider-published services and service areas checked against linked sources. No service-quality, active-license, insurance or partnership endorsement. Null fields mean not established in the checked sources.",
+  "listings": [
+    {
+      "id": "goodfellas-junk-removal",
+      "name": "GoodFellas Junk Removal",
+      "website": "https://goodfellasjunkremovalohio.com/",
+      "regions": [
+        "Cincinnati",
+        "Northern Kentucky"
+      ],
+      "services": [
+        "furniture",
+        "appliances",
+        "yard-waste",
+        "construction-debris"
+      ],
+      "details": {
+        "items": "Furniture, appliances, household clutter, renovation debris and yard waste.",
+        "loading": "Full-service removal; the crew hauls after you approve the on-site quote.",
+        "area": "Greater Cincinnati and Northern Kentucky, including Covington, Newport, Bellevue and Dayton, KY.",
+        "quote": "Call, text, email or use the form; an exact quote follows a look at the items.",
+        "exclusions": null
+      },
+      "sources": [
+        {
+          "url": "https://goodfellasjunkremovalohio.com/",
+          "label": "Provider service page",
+          "checkedAt": "2026-09-23"
+        }
+      ],
+      "loading": [
+        "full-service"
+      ]
+    },
+    {
+      "id": "junk-king-northern-kentucky",
+      "name": "Junk King Northern Kentucky",
+      "website": "https://www.junk-king.com/locations/northern-kentucky/cincinnati",
+      "regions": [
+        "Cincinnati",
+        "Northern Kentucky"
+      ],
+      "services": [
+        "furniture",
+        "appliances",
+        "yard-waste",
+        "construction-debris"
+      ],
+      "details": {
+        "items": "Furniture, appliances, construction debris and yard waste.",
+        "loading": "The provider describes carrying and loading items from their location.",
+        "area": "Cincinnati and neighboring communities through the Northern Kentucky location; confirm your address.",
+        "quote": "Book online, call for an estimate, or send item photos by text.",
+        "exclusions": null
+      },
+      "sources": [
+        {
+          "url": "https://www.junk-king.com/locations/northern-kentucky/cincinnati",
+          "label": "Provider service page",
+          "checkedAt": "2026-09-23"
+        }
+      ],
+      "loading": [
+        "full-service"
+      ]
+    },
+    {
+      "id": "1-800-got-junk",
+      "name": "1-800-GOT-JUNK? Cincinnati / Northern Kentucky",
+      "website": "https://www.1800gotjunk.com/us_en/locations/junk-removal-cincinnati/us02030",
+      "regions": [
+        "Cincinnati",
+        "Northern Kentucky"
+      ],
+      "services": [
+        "furniture",
+        "appliances",
+        "yard-waste",
+        "electronics"
+      ],
+      "details": {
+        "items": "Furniture, mattresses, appliances, televisions, scrap metal and yard waste.",
+        "loading": "Crew removal and cleanup after acceptance of an in-person estimate.",
+        "area": "Northern Kentucky and Cincinnati; the page names Florence, Fort Thomas and Independence.",
+        "quote": "Book online or call; the final estimate is provided in person before removal.",
+        "exclusions": "The provider excludes hazardous items. Confirm acceptance of your specific materials."
+      },
+      "sources": [
+        {
+          "url": "https://www.1800gotjunk.com/us_en/locations/junk-removal-cincinnati/us02030",
+          "label": "Provider service page",
+          "checkedAt": "2026-09-23"
+        }
+      ],
+      "loading": [
+        "full-service"
+      ]
+    },
+    {
+      "id": "rumpke-haul-it-away",
+      "name": "Rumpke Haul-it-Away",
+      "website": "https://www.rumpke.com/residential/junk-removal",
+      "regions": [
+        "Cincinnati"
+      ],
+      "services": [
+        "furniture",
+        "appliances",
+        "yard-waste",
+        "construction-debris",
+        "electronics"
+      ],
+      "details": {
+        "items": "Furniture, appliances, wood, construction material, garden waste, electronics and tires.",
+        "loading": "Removal directly from basements, garages and other storage locations.",
+        "area": "Greater Cincinnati and Dayton, roughly an hour from Colerain Township. Northern Kentucky address coverage is unknown; ask before booking.",
+        "quote": "Request an estimate online; the crew updates the estimate on arrival.",
+        "exclusions": null
+      },
+      "sources": [
+        {
+          "url": "https://www.rumpke.com/residential/junk-removal",
+          "label": "Provider service page",
+          "checkedAt": "2026-09-23"
+        }
+      ],
+      "loading": [
+        "full-service"
+      ]
+    },
+    {
+      "id": "cincy-junk-busters",
+      "name": "Cincy Junk Busters",
+      "website": "https://www.cincyjunkbusters.com/",
+      "regions": [
+        "Cincinnati",
+        "Northern Kentucky"
+      ],
+      "services": [
+        "furniture",
+        "appliances",
+        "yard-waste",
+        "construction-debris",
+        "electronics"
+      ],
+      "details": {
+        "items": "Furniture, appliances, mattresses, electronics, yard brush and construction debris.",
+        "loading": "Inside carrying and loading; curbside pickup is also listed.",
+        "area": "Greater Cincinnati and Northern Kentucky, including Florence and Fort Thomas.",
+        "quote": "Call, text or use the quote form. Describe the job and supply photos; phone and on-site estimates are offered.",
+        "exclusions": "Hazardous, regulated or unusually heavy materials may be excluded. Confirm first."
+      },
+      "sources": [
+        {
+          "url": "https://www.cincyjunkbusters.com/",
+          "label": "Provider service page",
+          "checkedAt": "2026-09-23"
+        }
+      ],
+      "loading": [
+        "full-service",
+        "curbside"
+      ]
+    },
+    {
+      "id": "all-in-1-junk-removal",
+      "name": "All-In-1 Junk Removal and Demo",
+      "website": "https://allin1junk.com/",
+      "regions": [
+        "Cincinnati",
+        "Northern Kentucky"
+      ],
+      "services": [
+        "construction-debris"
+      ],
+      "details": {
+        "items": "Household junk and construction debris. Ask about individual items and disposal restrictions.",
+        "loading": "The crew lifts, loads and sweeps up. Separate dumpster rental requires customer loading.",
+        "area": "Cincinnati metro and northern Kentucky.",
+        "quote": "Call or request an estimate through the website; the crew quotes before beginning work.",
+        "exclusions": null
+      },
+      "sources": [
+        {
+          "url": "https://allin1junk.com/",
+          "label": "Provider service page",
+          "checkedAt": "2026-09-23"
+        }
+      ],
+      "loading": [
+        "full-service",
+        "self-load"
+      ]
+    }
+  ]
+}
