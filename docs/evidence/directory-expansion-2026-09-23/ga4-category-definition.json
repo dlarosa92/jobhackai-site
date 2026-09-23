@@ -1,0 +1,25 @@
+{
+  "observed_at_utc": "2026-09-23T10:40:18Z",
+  "account_id": "366252518",
+  "property_id": "523348532",
+  "property_name": "jobhackai-prod-510a4",
+  "url": "https://analytics.google.com/analytics/web/?authuser=1#/a366252518p523348532/admin/customdefinitions/hub",
+  "authorization": "Owner approved completing the GA4 reporting setup after the missing production category dimension was reported.",
+  "dimension": {
+    "display_name": "Directory category",
+    "scope": "Event",
+    "event_parameter": "directory_category",
+    "description": "Provider category for the local directory experiment: mobile detailing, junk removal, or home EV charger installation.",
+    "last_changed_visible": "Sep 23, 2026"
+  },
+  "verification": "Saved, reloaded GA4, and read the persisted definition table. Directory category and the existing page_path definition were both present; table count was 2.",
+  "expected_parameter_values": [
+    "mobile_detailing",
+    "junk_removal",
+    "ev_charger_installation"
+  ],
+  "new_production_category_events_verified": false,
+  "processed_category_reports_verified": false,
+  "production_release_authorized_by_this_followup": false,
+  "campaign_activation_authorized_by_this_followup": false
+}

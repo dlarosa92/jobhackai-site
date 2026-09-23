@@ -2,6 +2,8 @@
 
 Status: production held. Junk removal and home Level 2 EV charger installation are implemented and verified in Dev and QA. No production database migration, main merge, production deployment, agent run, public campaign publication, live scheduling, outreach or new spending is authorized by this package.
 
+GA4 follow-up, September 23: after the owner approved the reporting setup, the production property's event-scoped **Directory category** dimension was created for `directory_category` and verified after reloading GA4. This closes the missing category-registration gap identified after the initial handoff. It supports all three category values already implemented and tested in QA. The existing `page_path` definition was preserved. The approval was applied to GA4 configuration; the directory release and campaigns remain held. See [GA4 evidence](evidence/directory-expansion-2026-09-23/ga4-category-definition.json). Processed reports are not yet verified for the unreleased categories; Google documents a [24–48 hour processing window](https://support.google.com/analytics/answer/14239696?hl=en) after data collection and dimension creation.
+
 ## Review surfaces
 
 - [Draft PR955: API and mobile-only bridge](https://github.com/dlarosa92/jobhackai-site/pull/955).
