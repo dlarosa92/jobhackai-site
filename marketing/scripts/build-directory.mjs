@@ -2,11 +2,17 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { createHash } from 'node:crypto';
 import { buildAdditionalCategories } from './directory-categories.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const data = JSON.parse(readFileSync(join(root, 'data/directory/mobile-detailing.json'), 'utf8'));
 const out = join(root, 'directory');
+// Returning visitors can retain directory assets for hours. Tie each URL to
+// its contents so a new page never mixes category markup with an older runtime.
+const assets = Object.fromEntries(['directory.css', 'consent.css', 'consent.js', 'directory.js', 'request-form.js'].map(name => [
+  name, `/directory/${name}?v=${createHash('sha256').update(readFileSync(join(out, name))).digest('hex').slice(0, 12)}`
+]));
 const esc = value => String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
 const seen = new Set();
 for (const listing of data.listings) {
@@ -24,13 +30,13 @@ const mail = (subject, body) => `mailto:support@jobhackai.io?subject=${encodeURI
 const shell = (title, description, body, listing = '', canonical = listing ? `/directory/${data.category}/${listing}` : '/directory', category = data.category, noun = 'detailer') => `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(title)} | JobHackAI Local</title><meta name="description" content="${esc(description)}">
-<link rel="canonical" href="https://jobhackai.io${canonical}"><link rel="stylesheet" href="/css/tokens.css"><link rel="stylesheet" href="/directory/directory.css"><link rel="stylesheet" href="/directory/consent.css">
-<script src="/directory/consent.js?v=20260922-directory" defer></script>
+<link rel="canonical" href="https://jobhackai.io${canonical}"><link rel="stylesheet" href="/css/tokens.css"><link rel="stylesheet" href="${assets['directory.css']}"><link rel="stylesheet" href="${assets['consent.css']}">
+<script src="${assets['consent.js']}" defer></script>
 
 </head><body data-listing="${esc(listing)}" data-directory-category="${esc(category)}" data-provider-noun="${esc(noun)}" data-category-page="${!listing && canonical !== '/directory/get-listed'}"><a class="skip" href="#main">Skip to content</a>
 <header><a class="brand" href="/directory">JobHackAI <span>LOCAL</span></a><nav aria-label="Directory"><a href="/directory">Mobile detailing</a><a href="/directory/junk-removal/">Junk removal</a><a href="/directory/ev-charger-installation/">EV charger installation</a><a href="/directory/get-listed${category ? `?category=${esc(category)}` : ''}">Get listed</a></nav></header>
 <main id="main" tabindex="-1">${body}</main><footer><p>A local directory experiment from <a href="/">JobHackAI</a>. No paid placements.</p><p><a href="https://app.jobhackai.io/privacy">Privacy</a> · <a href="https://app.jobhackai.io/cookies">Cookies</a> · <a href="/directory/get-listed${category ? `?category=${esc(category)}` : ''}">Suggest a correction</a></p><button type="button" id="open-cookie-preferences">Cookie preferences</button></footer>
-<script src="/directory/directory.js" defer></script></body></html>`;
+<script src="${assets['directory.js']}" defer></script></body></html>`;
 const cards = data.listings.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(l => `<article class="listing" data-region="${esc(l.regions.join('|'))}" data-service="${esc(l.services.join('|'))}" data-utilities="${esc(l.waterPower)}"><div><span class="eyebrow">Mobile service</span><h2><a href="${path(l)}">${esc(l.name)}</a></h2><p>${esc(l.regions.join(' · '))}</p></div><div class="price">${price(l.interiorPrice)}</div><p>${esc(l.waterPowerNote)}</p><a class="more" href="${path(l)}">See packages &amp; booking details <span aria-hidden="true">→</span></a></article>`).join('\n');
 writeFileSync(join(out, 'index.html'), shell('Mobile detailing in Northern Kentucky & Cincinnati', 'Compare local mobile detailers by package scope, starting prices, and water and power requirements.', `
 <section class="hero"><span class="eyebrow">Northern Kentucky + Cincinnati · Directory pilot</span><h1>A cleaner car.<br>Fewer tabs to open.</h1><p class="lead">Compare mobile detailers by what they actually include, what they charge to start, and what they need at your home.</p><p>Browse freely. Book directly with the provider.</p></section>
@@ -63,6 +69,6 @@ writeFileSync(join(out, 'get-listed.html'), shell('Get listed', 'Suggest a local
 <button class="button" id="request-submit" type="submit" disabled>Save listing request</button>
 <noscript><p>JavaScript is needed to submit this form. You can email support@jobhackai.io instead.</p></noscript>
 </form><div id="request-success" role="status" tabindex="-1" hidden><h2>Request saved</h2><p>Your details are saved privately for review. Nothing has been published. Keep this reference if you need to contact us.</p><p id="request-reference"></p><p class="small">This confirms storage of your request, not email delivery or acceptance of a listing.</p></div>
-<p class="small">Need help? <a href="mailto:support@jobhackai.io">support@jobhackai.io</a></p></section><p><a href="/directory">Back to the directory</a></p><script src="/directory/request-form.js" defer></script>`, '', '/directory/get-listed', ''));
+<p class="small">Need help? <a href="mailto:support@jobhackai.io">support@jobhackai.io</a></p></section><p><a href="/directory">Back to the directory</a></p><script src="${assets['request-form.js']}" defer></script>`, '', '/directory/get-listed', ''));
 buildAdditionalCategories({root, out, shell, esc});
 console.log(`Built directory hub, ${data.listings.length} provider pages and Get listed.`);

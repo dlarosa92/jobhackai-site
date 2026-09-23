@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync,existsSync,mkdtempSync,cpSync,rmSync} from 'node:fs';
+import {readFileSync,writeFileSync,existsSync,mkdtempSync,cpSync,rmSync} from 'node:fs';
+import {execFileSync} from 'node:child_process';
 import {tmpdir} from 'node:os';
 import {join,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -39,6 +40,9 @@ test('all generated directory links resolve and production canonicals occur once
  }
  for(const file of files){
   const html=read(file),canonical=html.match(/rel="canonical" href="([^"]+)"/)[1];
+  for(const [,asset] of html.matchAll(/(?:src|href)="(\/directory\/[^"?]+\.(?:js|css)(?:\?[^\"]*)?)"/g)){
+   assert.match(asset,/\?v=[a-f0-9]{12}$/,file+' must invalidate cached directory assets: '+asset);
+  }
   assert.equal(sitemap.split(`<loc>${canonical}</loc>`).length-1,1,canonical);
   assert.equal(html.includes('noindex'),false);
   for(const [,href] of html.matchAll(/href="(\/directory[^"?#]*)/g)){
@@ -47,6 +51,20 @@ test('all generated directory links resolve and production canonicals occur once
   }
  }
  assert.ok(read('_headers').includes('https://:preview.jobhackai-app-marketing-seo.pages.dev/*\n  X-Robots-Tag: noindex, nofollow'));
+});
+test('changing a cached runtime gives every generated page a new asset URL',t=>{
+ const temp=mkdtempSync(join(tmpdir(),'directory-cache-'));t.after(()=>rmSync(temp,{recursive:true,force:true}));
+ for(const dir of ['data','scripts','directory'])cpSync(join(root,dir),join(temp,dir),{recursive:true});
+ cpSync(join(root,'sitemap.xml'),join(temp,'sitemap.xml'));
+ const run=()=>execFileSync(process.execPath,[join(temp,'scripts/build-directory.mjs')]);
+ const asset=html=>html.match(/src="(\/directory\/directory\.js\?v=[a-f0-9]+)"/)[1];
+ run();const before=readFileSync(join(temp,'directory/index.html'),'utf8');
+ const runtime=join(temp,'directory/directory.js');writeFileSync(runtime,readFileSync(runtime,'utf8')+'\n// changed runtime for cache regression\n');
+ run();const after=readFileSync(join(temp,'directory/index.html'),'utf8');
+ assert.notEqual(asset(after),asset(before));
+ for(const path of ['directory/get-listed.html','directory/junk-removal/index.html','directory/ev-charger-installation/index.html']){
+  assert.equal(asset(readFileSync(join(temp,path),'utf8')),asset(after));
+ }
 });
 test('additional generation is repeatable and preserves existing sitemap entries',t=>{
  const temp=mkdtempSync(join(tmpdir(),'directory-build-'));t.after(()=>rmSync(temp,{recursive:true,force:true}));
