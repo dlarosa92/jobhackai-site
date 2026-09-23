@@ -1,0 +1,33 @@
+[
+  {
+    "results": [
+      {
+        "id": "56e6d022-7952-49af-9600-0146f7318947",
+        "category": "junk-removal",
+        "notification_format_version": 2,
+        "review_status": "pending",
+        "notification_status": "accepted",
+        "notification_attempts": 1,
+        "notification_provider_id": "01a0cc75-b9e4-7259-a974-32522914f94a"
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "ENAM",
+      "served_by_colo": "ATL",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.1706
+      },
+      "duration": 0.1706,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 1490944,
+      "rows_read": 2,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  }
+]

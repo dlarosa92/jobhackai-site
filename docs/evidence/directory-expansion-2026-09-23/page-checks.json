@@ -1,0 +1,418 @@
+[
+  {
+    "env": "dev",
+    "path": "directory/",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "3b599e3306a3f7b76dc08bbaff2edd9bb624dc6f381698fbfe27a0a8707f7eb4"
+  },
+  {
+    "env": "dev",
+    "path": "directory/get-listed",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "b506fbc6147179420fe974333ad230fcae89358fd2303ac54ccb006d0d1f7bc8"
+  },
+  {
+    "env": "dev",
+    "path": "directory/directory.js",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "952801d10a63794d43b3f8d43c995c0aa6cb866016fb6a9bdc19e83c8769bc9e"
+  },
+  {
+    "env": "dev",
+    "path": "directory/request-form.js",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "38c6643082a0ea7bb2644910f40c9db90e3633102c9f621cb3e6bb652e72ba86"
+  },
+  {
+    "env": "dev",
+    "path": "directory/directory.css",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "61250c3158147f2cf1b367455af5b41294857fe01fcdf137f50e07bae8d6fbc0"
+  },
+  {
+    "env": "dev",
+    "path": "directory/consent.css",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "4c974a694fc4756aaf2a7bff359232765a12864c24b5b54d007be330027ef77e"
+  },
+  {
+    "env": "dev",
+    "path": "directory/mobile-detailing/pearls-auto-recon",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "86c44f16fae4e004329fdf5f42fca16043814363ebef002ec2d5eab1a3530130"
+  },
+  {
+    "env": "dev",
+    "path": "directory/mobile-detailing/detlings-detailing",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "d2914cd1f54c96a473674d74b635c28c52358cc63bc0a584b4e868351158a00c"
+  },
+  {
+    "env": "dev",
+    "path": "directory/mobile-detailing/513-auto-clean",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "fc1dd68834491a6c3b854974646f0c5ee2cdf04b3791438ec68dc037a0905fea"
+  },
+  {
+    "env": "dev",
+    "path": "directory/mobile-detailing/og-mobile-detailing",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "03e72b54c6149295514c9df41946af1a58edc33d440f27ef37ab3c3cdd873cb3"
+  },
+  {
+    "env": "dev",
+    "path": "directory/mobile-detailing/deets-mobile-detailing",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "e4cc2c8dc6306e1699a7d6b226ac99aa37259f77b0887a0d5d5e1c62e55b0249"
+  },
+  {
+    "env": "dev",
+    "path": "directory/mobile-detailing/precision-gloss",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "e55a0fee6e33a9fe79db84b91c523ab8f48267c17204e3eeddfe420f439a6dd1"
+  },
+  {
+    "env": "dev",
+    "path": "directory/junk-removal/",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "c765172b133bf7509f5565b2c1271ee5a1dc38d241a55801fd6360843bbf2c13"
+  },
+  {
+    "env": "dev",
+    "path": "directory/junk-removal/goodfellas-junk-removal",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "d3eda4c9d41baf0ff69b06c92c2aac41a0011b016a05414a749e2975dcca8146"
+  },
+  {
+    "env": "dev",
+    "path": "directory/junk-removal/junk-king-northern-kentucky",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "f6697201fbd2bd04d5d148a06186fa1b24be026f4652ac12350bbdb2bee2e2c6"
+  },
+  {
+    "env": "dev",
+    "path": "directory/junk-removal/1-800-got-junk",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "df12836f363f6b30b4a938262e9e5774ebfbe1088fb0bf09aad155b6b99ad770"
+  },
+  {
+    "env": "dev",
+    "path": "directory/junk-removal/rumpke-haul-it-away",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "34b9844c223173ee8a1b6bfcb64c8412bec8c050c8fe14a3685e876351c04c3d"
+  },
+  {
+    "env": "dev",
+    "path": "directory/junk-removal/cincy-junk-busters",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "6a367438ad8567b923dcb6b32013baf15cef1e2b20e3c5c3c9eee6ba0100251c"
+  },
+  {
+    "env": "dev",
+    "path": "directory/junk-removal/all-in-1-junk-removal",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "4c80fea6746af28eac96f3bffc8a8f8058614dc127f4cdd1dcff48a2b9e4dae6"
+  },
+  {
+    "env": "dev",
+    "path": "directory/ev-charger-installation/",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "746d95d406461ee63a9fe177e64f22a4136750773dd6505297cb8271c943466d"
+  },
+  {
+    "env": "dev",
+    "path": "directory/ev-charger-installation/arlinghaus",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "14055e23c506e20c43157ad62d770c89da8cf0617fa3fd99c3ee213a764d8eee"
+  },
+  {
+    "env": "dev",
+    "path": "directory/ev-charger-installation/gronotte-electric",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "0f7a3bb027df598bb9def102edd5b808c97902d036c90ce7fa1fb28bfce42dcb"
+  },
+  {
+    "env": "dev",
+    "path": "directory/ev-charger-installation/nabi-electric",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "b0aee0271766c6d7106b0556b161266019e8edbfb44be766ed7218acd0f7e995"
+  },
+  {
+    "env": "dev",
+    "path": "directory/ev-charger-installation/ground-zero-electric",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "b5180d284e9b7635ea2aefd97ed1339af3ac43501865d21bf0952b79c95c00b0"
+  },
+  {
+    "env": "dev",
+    "path": "directory/ev-charger-installation/apollo-home",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "3dbccaa3e23e800a2a98eb0f44688ea0a122dfea091c1ec7fbabe2af7eca93a1"
+  },
+  {
+    "env": "dev",
+    "path": "directory/ev-charger-installation/velasco-electric",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "46811716d960e4f4bb5b4a7e437185dddd7a178ed5500b0af102d793d3c315fd"
+  },
+  {
+    "env": "qa",
+    "path": "directory/",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "3b599e3306a3f7b76dc08bbaff2edd9bb624dc6f381698fbfe27a0a8707f7eb4"
+  },
+  {
+    "env": "qa",
+    "path": "directory/get-listed",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "b506fbc6147179420fe974333ad230fcae89358fd2303ac54ccb006d0d1f7bc8"
+  },
+  {
+    "env": "qa",
+    "path": "directory/directory.js",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "952801d10a63794d43b3f8d43c995c0aa6cb866016fb6a9bdc19e83c8769bc9e"
+  },
+  {
+    "env": "qa",
+    "path": "directory/request-form.js",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "38c6643082a0ea7bb2644910f40c9db90e3633102c9f621cb3e6bb652e72ba86"
+  },
+  {
+    "env": "qa",
+    "path": "directory/directory.css",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "61250c3158147f2cf1b367455af5b41294857fe01fcdf137f50e07bae8d6fbc0"
+  },
+  {
+    "env": "qa",
+    "path": "directory/consent.css",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "4c974a694fc4756aaf2a7bff359232765a12864c24b5b54d007be330027ef77e"
+  },
+  {
+    "env": "qa",
+    "path": "directory/mobile-detailing/pearls-auto-recon",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "86c44f16fae4e004329fdf5f42fca16043814363ebef002ec2d5eab1a3530130"
+  },
+  {
+    "env": "qa",
+    "path": "directory/mobile-detailing/detlings-detailing",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "d2914cd1f54c96a473674d74b635c28c52358cc63bc0a584b4e868351158a00c"
+  },
+  {
+    "env": "qa",
+    "path": "directory/mobile-detailing/513-auto-clean",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "fc1dd68834491a6c3b854974646f0c5ee2cdf04b3791438ec68dc037a0905fea"
+  },
+  {
+    "env": "qa",
+    "path": "directory/mobile-detailing/og-mobile-detailing",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "03e72b54c6149295514c9df41946af1a58edc33d440f27ef37ab3c3cdd873cb3"
+  },
+  {
+    "env": "qa",
+    "path": "directory/mobile-detailing/deets-mobile-detailing",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "e4cc2c8dc6306e1699a7d6b226ac99aa37259f77b0887a0d5d5e1c62e55b0249"
+  },
+  {
+    "env": "qa",
+    "path": "directory/mobile-detailing/precision-gloss",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "e55a0fee6e33a9fe79db84b91c523ab8f48267c17204e3eeddfe420f439a6dd1"
+  },
+  {
+    "env": "qa",
+    "path": "directory/junk-removal/",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "c765172b133bf7509f5565b2c1271ee5a1dc38d241a55801fd6360843bbf2c13"
+  },
+  {
+    "env": "qa",
+    "path": "directory/junk-removal/goodfellas-junk-removal",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "d3eda4c9d41baf0ff69b06c92c2aac41a0011b016a05414a749e2975dcca8146"
+  },
+  {
+    "env": "qa",
+    "path": "directory/junk-removal/junk-king-northern-kentucky",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "f6697201fbd2bd04d5d148a06186fa1b24be026f4652ac12350bbdb2bee2e2c6"
+  },
+  {
+    "env": "qa",
+    "path": "directory/junk-removal/1-800-got-junk",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "df12836f363f6b30b4a938262e9e5774ebfbe1088fb0bf09aad155b6b99ad770"
+  },
+  {
+    "env": "qa",
+    "path": "directory/junk-removal/rumpke-haul-it-away",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "34b9844c223173ee8a1b6bfcb64c8412bec8c050c8fe14a3685e876351c04c3d"
+  },
+  {
+    "env": "qa",
+    "path": "directory/junk-removal/cincy-junk-busters",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "6a367438ad8567b923dcb6b32013baf15cef1e2b20e3c5c3c9eee6ba0100251c"
+  },
+  {
+    "env": "qa",
+    "path": "directory/junk-removal/all-in-1-junk-removal",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "4c80fea6746af28eac96f3bffc8a8f8058614dc127f4cdd1dcff48a2b9e4dae6"
+  },
+  {
+    "env": "qa",
+    "path": "directory/ev-charger-installation/",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "746d95d406461ee63a9fe177e64f22a4136750773dd6505297cb8271c943466d"
+  },
+  {
+    "env": "qa",
+    "path": "directory/ev-charger-installation/arlinghaus",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "14055e23c506e20c43157ad62d770c89da8cf0617fa3fd99c3ee213a764d8eee"
+  },
+  {
+    "env": "qa",
+    "path": "directory/ev-charger-installation/gronotte-electric",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "0f7a3bb027df598bb9def102edd5b808c97902d036c90ce7fa1fb28bfce42dcb"
+  },
+  {
+    "env": "qa",
+    "path": "directory/ev-charger-installation/nabi-electric",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "b0aee0271766c6d7106b0556b161266019e8edbfb44be766ed7218acd0f7e995"
+  },
+  {
+    "env": "qa",
+    "path": "directory/ev-charger-installation/ground-zero-electric",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "b5180d284e9b7635ea2aefd97ed1339af3ac43501865d21bf0952b79c95c00b0"
+  },
+  {
+    "env": "qa",
+    "path": "directory/ev-charger-installation/apollo-home",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "3dbccaa3e23e800a2a98eb0f44688ea0a122dfea091c1ec7fbabe2af7eca93a1"
+  },
+  {
+    "env": "qa",
+    "path": "directory/ev-charger-installation/velasco-electric",
+    "status": 200,
+    "noindex": "noindex, nofollow",
+    "matchesCandidate": true,
+    "sha256": "46811716d960e4f4bb5b4a7e437185dddd7a178ed5500b0af102d793d3c315fd"
+  }
+]

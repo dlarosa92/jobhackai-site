@@ -1,0 +1,69 @@
+{
+  "prepared_at": "2026-09-23",
+  "status": "draft_paused",
+  "production_approval": false,
+  "activation_approval": false,
+  "incremental_ad_budget": 0,
+  "campaigns": [
+    {
+      "category": "junk-removal",
+      "campaign_id": "directory_junk_removal_nky_2026_09",
+      "agent_name": "JobHackAI Local Junk Removal Coordinator",
+      "agent_state": "draft_configuration_not_started",
+      "instructions_file": "junk-removal/agent-instructions.md",
+      "launch_at": null,
+      "assets": [
+        {
+          "asset_id": "directory_junk_removal_launch_li_01",
+          "channel": "linkedin",
+          "state": "draft",
+          "native_post_id": null,
+          "scheduled_at": null,
+          "public_url": null,
+          "landing_link": "https://jobhackai.io/directory/junk-removal/?utm_source=linkedin&utm_medium=organic_social&utm_campaign=directory_junk_removal_nky_2026_09&utm_content=directory_junk_removal_launch_li_01",
+          "copy_file": "linkedin-draft.md"
+        },
+        {
+          "asset_id": "directory_junk_removal_launch_ig_01",
+          "channel": "instagram",
+          "state": "draft",
+          "native_post_id": null,
+          "scheduled_at": null,
+          "public_url": null,
+          "landing_link": "https://jobhackai.io/directory/junk-removal/?utm_source=instagram&utm_medium=organic_social&utm_campaign=directory_junk_removal_nky_2026_09&utm_content=directory_junk_removal_launch_ig_01",
+          "copy_file": "instagram-draft.md"
+        }
+      ]
+    },
+    {
+      "category": "ev-charger-installation",
+      "campaign_id": "directory_ev_charger_installation_nky_2026_09",
+      "agent_name": "JobHackAI Local Home EV Installation Coordinator",
+      "agent_state": "draft_configuration_not_started",
+      "instructions_file": "ev-charger-installation/agent-instructions.md",
+      "launch_at": null,
+      "assets": [
+        {
+          "asset_id": "directory_ev_charger_installation_launch_li_01",
+          "channel": "linkedin",
+          "state": "draft",
+          "native_post_id": null,
+          "scheduled_at": null,
+          "public_url": null,
+          "landing_link": "https://jobhackai.io/directory/ev-charger-installation/?utm_source=linkedin&utm_medium=organic_social&utm_campaign=directory_ev_charger_installation_nky_2026_09&utm_content=directory_ev_charger_installation_launch_li_01",
+          "copy_file": "linkedin-draft.md"
+        },
+        {
+          "asset_id": "directory_ev_charger_installation_launch_ig_01",
+          "channel": "instagram",
+          "state": "draft",
+          "native_post_id": null,
+          "scheduled_at": null,
+          "public_url": null,
+          "landing_link": "https://jobhackai.io/directory/ev-charger-installation/?utm_source=instagram&utm_medium=organic_social&utm_campaign=directory_ev_charger_installation_nky_2026_09&utm_content=directory_ev_charger_installation_launch_ig_01",
+          "copy_file": "instagram-draft.md"
+        }
+      ]
+    }
+  ]
+}

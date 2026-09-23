@@ -1,0 +1,13 @@
+
+ RUN  v4.1.11 /Users/sebastian/.codex/worktrees/directory-categories-dev-20260923/workers/voice-deadlines
+
+Using secrets defined in process.env
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mMissing required secrets: OPENAI_API_KEY. Add them to .dev.vars, .env, or set as environment variables.[0m
+
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  00:05:45
+   Duration  333ms (transform 33ms, setup 0ms, import 80ms, tests 23ms, environment 0ms)
+
