@@ -10,4 +10,3 @@ Using secrets defined in process.env
       Tests  2 passed (2)
    Start at  00:05:45
    Duration  333ms (transform 33ms, setup 0ms, import 80ms, tests 23ms, environment 0ms)
-
