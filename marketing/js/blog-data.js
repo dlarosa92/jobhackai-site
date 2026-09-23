@@ -13,6 +13,16 @@
 
 window.BLOG_POSTS = [
   {
+    "slug": "compare-mobile-detailing-cincinnati-nky",
+    "title": "Comparing mobile detailers in Cincinnati and Northern Kentucky",
+    "excerpt": "A practical guide to comparing mobile detailing quotes in Cincinnati and Northern Kentucky: what packages include, how vehicle condition and on-site requirements change the price, and the questions to ask before you book.",
+    "category": "Local Directory",
+    "date": "2026-09-22",
+    "readTime": 3,
+    "author": "JobHackAI Local",
+    "featured": false
+  },
+  {
     slug: 'credibility-deficit-age-of-autocomplete',
     title: 'The Credibility Deficit: How We Lost Our Voice in the Age of Autocomplete',
     excerpt: 'AI-polished resumes get past ATS filters but fail in the interview. Learn how to break the autocomplete trap and stand out as a real, verifiable person.',
