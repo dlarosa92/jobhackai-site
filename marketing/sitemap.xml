@@ -81,7 +81,7 @@
 
 
   <!-- Bounded JobHackAI Local pilot -->
-  <url><loc>https://jobhackai.io/directory</loc><changefreq>weekly</changefreq></url>
+  <url><loc>https://jobhackai.io/directory/</loc><changefreq>weekly</changefreq></url>
   <url><loc>https://jobhackai.io/directory/get-listed</loc><changefreq>weekly</changefreq></url>
   <url><loc>https://jobhackai.io/directory/mobile-detailing/pearls-auto-recon</loc><changefreq>weekly</changefreq></url>
   <url><loc>https://jobhackai.io/directory/mobile-detailing/detlings-detailing</loc><changefreq>weekly</changefreq></url>

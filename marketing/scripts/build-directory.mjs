@@ -27,7 +27,7 @@ mkdirSync(join(out, data.category), { recursive: true });
 const path = listing => `/directory/${data.category}/${listing.id}`;
 const price = p => p ? `<strong>${p.to ? `$${p.from}–$${p.to}` : `From $${p.from}`}</strong><span>${esc(p.package)}</span><p>${esc(p.scope)}</p>` : '<strong>Request a quote</strong><p>No comparable package price recorded.</p>';
 const mail = (subject, body) => `mailto:support@jobhackai.io?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-const shell = (title, description, body, listing = '', canonical = listing ? `/directory/${data.category}/${listing}` : '/directory', category = data.category, noun = 'detailer') => `<!doctype html>
+const shell = (title, description, body, listing = '', canonical = listing ? `/directory/${data.category}/${listing}` : '/directory/', category = data.category, noun = 'detailer') => `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(title)} | JobHackAI Local</title><meta name="description" content="${esc(description)}">
 <link rel="canonical" href="https://jobhackai.io${canonical}"><link rel="stylesheet" href="/css/tokens.css"><link rel="stylesheet" href="${assets['directory.css']}"><link rel="stylesheet" href="${assets['consent.css']}">

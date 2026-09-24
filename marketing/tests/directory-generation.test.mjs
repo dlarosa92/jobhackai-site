@@ -44,6 +44,8 @@ test('all generated directory links resolve and production canonicals occur once
    assert.match(asset,/\?v=[a-f0-9]{12}$/,file+' must invalidate cached directory assets: '+asset);
   }
   assert.equal(sitemap.split(`<loc>${canonical}</loc>`).length-1,1,canonical);
+  // Cloudflare serves index.html directories at the trailing-slash URL.
+  if(file.endsWith('/index.html'))assert.equal(new URL(canonical).pathname,'/'+file.slice(0,-'index.html'.length));
   assert.equal(html.includes('noindex'),false);
   for(const [,href] of html.matchAll(/href="(\/directory[^"?#]*)/g)){
    const path=join(root,href.slice(1));
