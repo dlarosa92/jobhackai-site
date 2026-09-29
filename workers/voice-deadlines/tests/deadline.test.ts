@@ -113,6 +113,18 @@ describe('durable interview deadlines in the actual Workers runtime',()=>{
     expect((await state()).saved).toMatchObject({status:'review'});expect((await state()).alarm).toBeGreaterThan(Date.now());
     await runInDurableObject(stub,(instance)=>instance.alarm());expect(requests.filter(x=>x.endsWith('/hangup'))).toHaveLength(1);
   });
+  it('the exact provider call absence response closes at deadline and removes the alarm',async()=>{
+    await open();vi.mocked(fetch).mockImplementation(async(input,init)=>{
+      const request=new Request(input,init);expect(request.redirect).toBe('manual');requests.push(request.url);
+      return Response.json({error:{code:'call_id_not_found',type:'invalid_request_error'}},{status:404});
+    });
+    await due();await runDurableObjectAlarm(stub);
+    expect(await call()).toMatchObject({state:'closed',last_error_code:'close_call_id_not_found',execution_token:null});
+    expect((await control())?.closed_at).toBeTruthy();
+    expect(await state()).toEqual({saved:undefined,alarm:null});
+    expect(requests.filter(x=>x.endsWith('/hangup'))).toHaveLength(1);
+    expect(await runDurableObjectAlarm(stub)).toBe(false);
+  });
   it('a provider timeout is retained for review without automatic retry',async()=>{
     await open();vi.mocked(fetch).mockImplementation(async(input)=>{requests.push(String(input));throw Error('private provider body');});
     await due();await runDurableObjectAlarm(stub);expect((await call())?.state).toBe('uncertain');

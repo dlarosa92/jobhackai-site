@@ -1,5 +1,22 @@
 # Verified voice-call recovery
 
+**September 29 controlled QA finding:** provider-first finish returned200.
+Closing the browser transport and then reconnecting reproduced404 with the
+structured provider error `call_id_not_found` / `invalid_request_error`.
+The adapter now recognizes only that exact JSON code/type with HTTP404 as
+confirmed absence, after validating the owned call ID from creation and the
+unchanged issuing key. It records `provider_absent` before saving the closed
+state and `last_error_code=close_call_id_not_found`, allowing a replacement
+connection under the same interview, credit and original deadline.
+
+A generic404, a similar error code, message text, authentication error,
+unreadable body or timeout still leaves a hold. Already-uncertain historical
+attempts are not retried or reclassified. If saving a new absence receipt fails,
+the attempt remains uncertain for explicit reconciliation like any other lost
+closure receipt. This behavior was reproduced with generated silence, not
+candidate speech; it does not establish voice naturalness or conversation
+continuity acceptance.
+
 **Staging update, September 21:** migration028 and the managed application are
 now deployed to dev and QA; production is unchanged. The first owner-authorized
 development test failed at 03:01:03 UTC. Its single provider attempt remains
@@ -37,7 +54,7 @@ missing dashboard entry is not terminal evidence. Then reconcile the provider
 outcome after that invocation ended. A provider404 or network timeout alone
 does not prove hangup. If authoritative evidence is unavailable, keep the hold.
 
-The provider adapter now logs `provider_created`, `provider_closed`, or a
+The provider adapter logs `provider_created`, `provider_closed`, `provider_absent`, or a
 definite `provider_rejected` receipt **before** its D1 update. Restricted
 invocation logs contain the application attempt/execution, validated provider
 call ID when present, validated `req_...` request reference and HTTP status.

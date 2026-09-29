@@ -8,7 +8,9 @@ const TYPES = new Set(['invalid_request_error', 'authentication_error', 'permiss
 
 /** Fixed diagnostic categories only. Never return a provider body/message,
  * credential, SDP, request header, transcript or arbitrary error-code string.
- * This is evidence collection, never a decision to release a closure hold. */
+ * Message categories are diagnostic only. The call adapter may recognize the
+ * exact structured call_id_not_found code with its HTTP status and error type;
+ * message matches, unknown codes and failed reads never establish closure. */
 export async function voiceProviderFailureDiagnostic(response) {
   let reader, timer, bytes = 0;
   const chunks = [];
