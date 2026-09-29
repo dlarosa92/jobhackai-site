@@ -1,5 +1,6 @@
 import { getDb } from './db.js';
 import { realtimeSessionConfig } from './voice-interviewer.js';
+import { voiceProviderFailureDiagnostic } from './voice-provider-diagnostic.js';
 
 const CALLS_URL = 'https://api.openai.com/v1/realtime/calls';
 const CALL_ID = /^rtc_[A-Za-z0-9_-]{1,240}$/;
@@ -100,6 +101,10 @@ export async function createManagedVoiceCall(env, { uid, sessionId, sdp, instruc
         closed_at=CASE WHEN ? THEN datetime('now') ELSE NULL END
         WHERE id=? AND execution_token=? AND state='creating'`)
         .bind(definite?'closed':'uncertain',definite?'create_rejected':failureCode,definite?1:0,definite?1:0,id,execution).run();
+      // Save the authoritative HTTP result before optional body diagnostics.
+      // A terminated diagnostic read must never lose a definite rejection.
+      console.log('[voice-call] provider_diagnostic',{attempt:id,execution,operation:'create',status:response.status,
+        ...await voiceProviderFailureDiagnostic(response)});
       throw Error(definite?'voice_call_create_rejected':'voice_call_create_unconfirmed');
     }
     const callId = providerCallId(response.headers.get('Location'));
@@ -169,6 +174,8 @@ export async function closeManagedVoiceCall(env,{uid,attemptId}) {
     if (!response.ok) {
       failureCode='close_http_'+response.status;
       providerReceipt('provider_close_unconfirmed',response,{attempt:attemptId,execution,callId:before.provider_call_id});
+      console.log('[voice-call] provider_diagnostic',{attempt:attemptId,execution,operation:'close',status:response.status,
+        ...await voiceProviderFailureDiagnostic(response)});
       throw Error('voice_call_close_unconfirmed');
     }
     providerReceipt('provider_closed',response,{attempt:attemptId,execution,callId:before.provider_call_id});
