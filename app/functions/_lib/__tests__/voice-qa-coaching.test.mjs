@@ -38,7 +38,9 @@ test('only fixed synthetic cases reach the scorer; request bodies cannot supply 
     } };
   } });
   const list = await handler({ request: request(), env });
-  assert.equal((await list.json()).cases.length, 7);
+  const listedCases = (await list.json()).cases;
+  assert.equal(listedCases.length, 8);
+  assert.ok(listedCases.some(item => item.id === 'metrics-requested'));
   assert.equal(calls, 0);
   assert.equal((await handler({ request: request('POST', true, 'arbitrary-case'), env })).status, 400);
   const result = await handler({ request: request('POST', true, cases[0].id, JSON.stringify({ transcript: 'private candidate text', model: 'other-model' })), env });
