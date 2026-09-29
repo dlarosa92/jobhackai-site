@@ -1,6 +1,6 @@
 import { getBearer, verifyFirebaseIdToken } from '../../_lib/firebase-auth.js';
 import { getUserPlanData, isTrialEligible } from '../../_lib/db.js';
-import { getVoiceEntitlement, voiceFeatureEnabled } from '../../_lib/voice-entitlements.js';
+import { getVoicePlanSummary } from '../../_lib/voice-plan-summary.js';
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -38,32 +38,7 @@ export async function onRequest(context) {
     // is down), getVoiceEntitlement reports not_migrated/db_unavailable and we
     // report enabled:false, so the dashboard tile and tool CTAs (which key off
     // `enabled`) stay hidden instead of surfacing entry points that 503.
-    const voiceEnabled = voiceFeatureEnabled(env);
-    let voice = { enabled: false, lookupStatus: voiceEnabled ? 'unavailable' : 'disabled', canStart: false, mode: null, unlimited: false, freeSessionUsed: false, sessionsRemaining: 0 };
-    if (voiceEnabled) {
-      try {
-        const managed = env.VOICE_MANAGED_CALLS_ENABLED === 'true';
-        const ent = await getVoiceEntitlement(env, uid, { managed });
-        const backendReady = ent.reason !== 'not_migrated' && ent.reason !== 'db_unavailable';
-        voice = {
-          enabled: backendReady,
-          lookupStatus: backendReady ? 'ready' : 'unavailable',
-          transport: managed ? 'managed' : 'legacy',
-          canStart: ent.canStart,
-          mode: ent.mode,
-          reason: ent.reason,
-          monthlyLimit: ent.monthlyLimit ?? null,
-          monthlyRemaining: ent.monthlyRemaining ?? null,
-          unlimited: ent.unlimited,
-          freeSessionUsed: ent.freeSessionUsed,
-          sessionsRemaining: ent.sessionsRemaining,
-          packExpiresAt: ent.packExpiresAt ?? null
-        };
-      } catch (voiceErr) {
-        console.warn('[PLAN-ME] Voice entitlement lookup failed (non-fatal):', voiceErr?.message || voiceErr);
-        // Leave enabled:false so the UI stays hidden until the backend works.
-      }
-    }
+    const voice = await getVoicePlanSummary(env, uid);
 
     return new Response(JSON.stringify({
       plan: planData?.plan || 'free',
