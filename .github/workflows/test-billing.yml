@@ -10,6 +10,7 @@ on:
       - 'account-setting.html'
       - 'pricing.html'
       - 'js/voice-cta.js'
+      - 'voice-connection-check.html'
       - 'app/functions/api/**'
       - 'app/functions/pricing.js'
       - 'app/functions/_lib/**'
@@ -27,6 +28,7 @@ on:
       - 'account-setting.html'
       - 'pricing.html'
       - 'js/voice-cta.js'
+      - 'voice-connection-check.html'
       - 'app/functions/api/**'
       - 'app/functions/pricing.js'
       - 'app/functions/_lib/**'
@@ -156,6 +158,9 @@ jobs:
 
       - name: Managed voice call ownership and deletion coordination
         run: node --test app/functions/_lib/__tests__/voice-provider-calls.test.mjs app/functions/_lib/__tests__/voice-provider-diagnostic.test.mjs app/functions/_lib/__tests__/voice-managed-interview.test.mjs app/functions/_lib/__tests__/voice-closure-reconcile.test.mjs
+
+      - name: QA connection check lifecycle
+        run: node --test app/functions/_lib/__tests__/voice-connection-check.test.mjs
 
   admission-bundle:
     runs-on: ubuntu-latest

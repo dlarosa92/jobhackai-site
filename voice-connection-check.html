@@ -59,6 +59,7 @@
       dc = next.createDataChannel('oai-events');
       dc.onopen = () => {
         if (finishing || finished || pc !== next) return;
+        dropped = false;
         log('data_channel_open');
         status('Silent test connected. No microphone is in use.');
         el('drop').disabled = false;
@@ -95,7 +96,8 @@
         const result = await api('/api/voice/session/' + encodeURIComponent(sessionId) + '/complete', {
           sessionId, reason:dropped ? 'connection_lost' : 'user_ended', transcript:[],
           durationSeconds:Math.round((Date.now() - startedAt) / 1000)});
-        finished = result.saved === true || result.status === 'cancelled' || result.closureNeedsReview === true;
+        finished = result.closureNeedsReview === true || (result.connectionClosed === true &&
+          (result.saved === true || result.status === 'cancelled'));
         status(finished ? (result.closureNeedsReview ? 'Check saved. Provider closure needs review.' : 'Check finished.')
           : 'Closure is still in progress. Finish again to check its result.');
       } catch { status('Finishing was not acknowledged. Use Finish check again.'); }
@@ -105,16 +107,34 @@
       if (busy || finishing || finished) return;
       busy = true;
       try { await action(); }
-      catch { status('Connection request failed. Finish the check to preserve its result.'); disconnect(); }
+      catch {
+        disconnect();
+        if (sessionId) {
+          // An open request may already own a provider call. Finish checks it;
+          // never replay an uncertain create or replacement from this tool.
+          status('Connection request failed. Use Finish check; reload after it finishes to start a new check.');
+          el('finish').disabled = false;
+        } else {
+          stream?.getTracks().forEach(track => track.stop());
+          if (audio && audio.state !== 'closed') await audio.close();
+          status('The check did not start. You can try Start silent QA check again.');
+          el('start').disabled = false;
+        }
+      }
       finally { busy = false; }
     }
     el('start').addEventListener('click', () => { void run(async () => {
       if (!allowed || sessionId) return;
       el('start').disabled = true;
-      const plan = await api('/api/plan/me');
-      if (plan.voice?.transport !== 'managed') throw Error('managed_transport_required');
+      // Begin audio while the click still carries user activation.
       audio = new AudioContext();
-      await audio.resume();
+      const resume = audio.resume();
+      let audioTimer;
+      try {
+        const [plan] = await Promise.all([api('/api/plan/me'), Promise.race([resume,
+          new Promise((_, reject) => { audioTimer = setTimeout(() => reject(Error('audio_start_timeout')), 5000); })])]);
+        if (plan.voice?.transport !== 'managed') throw Error('managed_transport_required');
+      } finally { clearTimeout(audioTimer); }
       stream = audio.createMediaStreamDestination().stream;
       sessionId = crypto.randomUUID(); startedAt = Date.now();
       log('check_started', {sessionId, source:'generated_silence', maxSeconds:60});
