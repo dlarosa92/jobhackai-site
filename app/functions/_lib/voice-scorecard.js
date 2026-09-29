@@ -21,14 +21,14 @@ export const SCORECARD_SCHEMA = {
     properties: {
       assessmentScope: { type: 'string', description: 'Briefly name the role/level or posting used and the limits of the evidence; identify important areas not explored.' },
       competencies: {
-        type: 'array', description: '3-5 role-relevant competencies, including areas not assessed',
+        type: 'array', description: '3-5 role-relevant competencies. Assess only evidence within the questions asked; unexplored areas are not_assessed, never needs_practice merely for missing detail.',
         items: {
           type: 'object', additionalProperties: false,
           properties: {
             name: { type: 'string' },
-            status: { type: 'string', enum: ['demonstrated', 'needs_practice', 'not_assessed'] },
+            status: { type: 'string', enum: ['demonstrated', 'needs_practice', 'not_assessed'], description: 'demonstrated: sound evidence at the selected level, even with room to elaborate. needs_practice: a specific observed error, unsupported claim, or failure to answer the actual question. not_assessed: no relevant question/evidence. Missing metrics, production scale or memorized parameters alone are not errors.' },
             quote: { type: 'string', description: 'Exact excerpt from ONE candidate turn supporting the assessment; empty for not_assessed. Never quote interviewer.' },
-            feedback: { type: 'string', description: 'Explain what the evidence demonstrates or leaves unclear for this role, with one truthful next practice step. For not_assessed, say it was not explored, not that candidate lacks skill.' }
+            feedback: { type: 'string', description: 'Address the candidate as you. Explain the quoted evidence within its stated context. For needs_practice, name the actual observed problem, not an unasked topic. Credit qualitative outcomes and honest limits. Suggestions to elaborate are optional practice, not proof of a skill deficit.' }
           },
           required: ['name', 'status', 'quote', 'feedback']
         }
@@ -62,7 +62,7 @@ export const SCORECARD_SCHEMA = {
         items: { type: 'string' }
       },
       topStrength: { type: 'string', description: 'The single strongest thing the candidate did, 1-2 sentences' },
-      topImprovement: { type: 'string', description: 'The single most important improvement, 1-2 sentences, actionable' },
+      topImprovement: { type: 'string', description: 'One achievable next practice step tied to the question and evidence. For a sound answer, suggest a useful extension without inventing a weakness, experience or metric.' },
       moments: {
         type: 'array',
         description: '2-4 specific moments from the interview with feedback',
@@ -151,6 +151,11 @@ export async function scoreVoiceTranscript({ role, seniority, transcript, jd = n
   const promptParts = [
     "You are the candidate's interview coach at JobHackAI. Give warm, direct, evidence-based feedback on this practice sample.",
     COACHING_GUIDANCE,
+    'EVIDENCE DECISION RULES: First identify what each interviewer question actually asked. Assess the answer to that question, not the entire job checklist. Choose observed competencies before adding unassessed areas. A competency can be demonstrated with room to elaborate; do not use needs_practice merely to justify giving advice.',
+    'Use needs_practice only when you can name a concrete mistake, an unsupported conclusion, an explicitly admitted omission relevant to the question, or an answer that does not address that question. A quote about coordination is not proof of weak leadership. An explanation of a technical choice does not have to supply an unrelated incident history. If the only criticism is that something was not discussed or explored, use not_assessed and exclude it from scores and negative summary claims.',
+    'Accept the stated context and scale. School, volunteer, personal and workplace examples can demonstrate the same junior skill. A tested fix in a student project demonstrates verification within that project; lack of a production deployment does not make it deficient. Do not make production experience or enterprise leadership the improvement priority unless the question actually required it.',
+    'A concrete qualitative result is an outcome: completing work safely, resolving a reported problem, or passing a described test counts. Never say no outcome was given when one is present. Missing numerical metrics alone must not trigger needs_practice, lower a score or become the main criticism. Suggest future measurement only as an optional next step, and never ask the candidate to add numbers they did not record.',
+    'Honest uncertainty and bounded conclusions are strengths when paired with a sensible verification plan. Not recalling a configuration value is not evidence of an unsafe implementation. A limited test does not prove production behavior, but acknowledging that limit is not a failure of reliability. If terminology may be a transcription error, make any interpretation conditional and ask for clarification; do not confidently endorse or reject an ambiguous term.',
     'Use 3-5 competencies. A demonstrated skill needs specific candidate evidence; needs_practice needs an observed gap, not an unasked question. Use not_assessed for areas not explored and an empty quote. Do not lower scores simply because an interview ended before all competencies were discussed.',
     'Base every judgment only on what the CANDIDATE actually said. Every moment and competency quote must be an exact continuous excerpt from one CANDIDATE answer. Never quote the INTERVIEWER, stitch turns, invent facts or put interpretation inside a quote.',
     'For each feedback point identify the evidence, why it matters for this role, and a concrete next attempt. Credit supported strengths without false praise. Distinguish a lack of evidence from a demonstrated error. If a claim may reflect transcription error, ask for clarification rather than confidently diagnosing a knowledge gap.',
@@ -160,7 +165,8 @@ export async function scoreVoiceTranscript({ role, seniority, transcript, jd = n
     'Estimate saoBalance as approximate shares of candidate answer content, not speaking time or exact measurement. There is no ideal ratio. Situation is context, Action includes decisions and execution, Outcome is explicitly stated effects or learning. Do not invent effects to make the distribution look balanced.',
     'State the assessment scope and important untested areas, especially for short interviews. A job-description match reflects this practice evidence, not qualification verification or a hiring prediction.',
     'Give exactly two concise saoCoaching practice steps under 120 characters each. Make topImprovement one achievable priority. Suggested practice must not invent accomplishments, metrics or experience for the candidate.',
-    'Write directly to the candidate using you, plain language and short sentences. Explain uncertainty without hiding useful criticism. End the summary with a specific next practice focus, not a sales pitch. Before returning, check that scores, quotes and feedback agree.'
+    'Write directly to the candidate using you, plain language and short sentences. Explain uncertainty without hiding useful criticism. End the summary with a specific next practice focus, not a sales pitch.',
+    'FINAL AUDIT: For every needs_practice item, verify the quote establishes an actual problem under the evidence decision rules. Change missing or unasked evidence to not_assessed, and sound limited evidence to demonstrated. Remove any criticism elsewhere that depends on those rejected gaps. Check scores, topImprovement, summary and moments agree with the final statuses. Do not diagnose job readiness from one answer.'
   ];
   if (jd) {
     promptParts.push('A job description excerpt is provided: score roleFit against it specifically, and cite the most relevant match or gap in a moment or the summary.');
