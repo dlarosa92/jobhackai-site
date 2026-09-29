@@ -1,6 +1,6 @@
 const MAX_BYTES = 8192;
 const MAX_READ_MS = 1000;
-const CODES = new Set(['call_not_found', 'session_not_found', 'resource_not_found', 'not_found',
+const CODES = new Set(['call_not_found', 'call_id_not_found', 'session_not_found', 'resource_not_found', 'not_found',
   'invalid_api_key', 'insufficient_permissions', 'permission_denied', 'invalid_request_error',
   'model_not_found', 'rate_limit_exceeded']);
 const TYPES = new Set(['invalid_request_error', 'authentication_error', 'permission_error',
@@ -51,6 +51,9 @@ export async function voiceProviderFailureDiagnostic(response) {
     clearTimeout(timer);
     // Cancellation must not extend this diagnostic's deadline. Its failure
     // cannot replace the original provider result or keep a request alive.
-    if (reader) { void reader.cancel().catch(() => {}); reader.releaseLock(); }
+    if (reader) {
+      try { void Promise.resolve(reader.cancel()).catch(() => {}); } catch { /* Diagnostic cleanup only. */ }
+      try { reader.releaseLock(); } catch { /* Never replace the provider result. */ }
+    }
   }
 }
