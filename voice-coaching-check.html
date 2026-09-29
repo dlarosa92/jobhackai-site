@@ -7,9 +7,9 @@
 </head>
 <body>
   <h1>Synthetic coaching check</h1>
-  <p>Operator-only QA check using seven fixed fictional interviews and the actual report model. It makes no voice calls, uses no interview credits and does not change interview history. Outputs need semantic review.</p>
+  <p>Operator-only QA check using fixed fictional interviews and the actual report model. It makes no voice calls, uses no interview credits and does not change interview history. Outputs need semantic review.</p>
   <p id="status" role="status">Checking access...</p>
-  <button id="run" disabled>Run seven coaching cases</button>
+  <button id="run" disabled>Run coaching cases</button>
   <p><a href="/voice-interview">Back to voice interviews</a></p>
   <pre id="results" aria-label="Synthetic coaching results"></pre>
   <script type="module">
@@ -36,7 +36,7 @@
           report.results.push(await api(fixture.id));
           output.textContent = JSON.stringify(report, null, 2);
         }
-        status.textContent = 'Seven cases complete. Review each report against its stated criteria.';
+        status.textContent = report.results.length + ' cases complete. Review each report against its stated criteria.';
       } catch {
         status.textContent = 'The check stopped. Completed results remain below. Reload to retry; completed model outputs may be cached.';
       }

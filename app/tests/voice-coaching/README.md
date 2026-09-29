@@ -4,7 +4,7 @@ Run `npm run test:voice:coaching` for deterministic candidate-only evidence,
 quote grounding and report rendering checks. These do not prove model quality.
 
 With the development OpenAI key provided privately in the process environment,
-run `npm run eval:voice:coaching`. It calls the actual scoring path with seven
+run `npm run eval:voice:coaching`. It calls the actual scoring path with eight
 synthetic cases, the configured current scorecard model, and no microphone,
 D1 writes or real candidate data. Never put the key in a tracked file or output.
 
@@ -24,7 +24,7 @@ Live reconnect, audio naturalness, consent, billing and usage are separate QA
 acceptance checks. These synthetic reports do not establish hiring validity.
 
 When no local provider key is available, `/voice-coaching-check` runs the same
-seven fixed fixtures with the existing staging key. The endpoint fails closed
+eight fixed fixtures with the existing staging key. The endpoint fails closed
 outside explicit dev/QA environments. It additionally requires a verified
 Firebase user matching `VOICE_QA_EVAL_UID` and a future ISO `VOICE_QA_EVAL_UNTIL`.
 Enable only for the operator's short evaluation window and remove both values
