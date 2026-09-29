@@ -7,6 +7,7 @@
  * the session GET endpoint, not here.
  */
 
+import { COACHING_GUIDANCE, roleCompetencies } from './voice-coaching.js';
 import { callOpenAI } from './openai-client.js';
 import { getDb } from './db.js';
 import { scorecardUsageEvidence } from './voice-usage.js';
@@ -17,19 +18,29 @@ export const SCORECARD_SCHEMA = {
   schema: {
     type: 'object',
     additionalProperties: false,
-    // Property order is deliberate: strict structured outputs emit keys in
-    // schema order, so saoBalance (the measurement) is generated BEFORE the
-    // dimension scores and overall that must be derived from it. JSON key
-    // order is invisible to D1, the frontend, and the eval harness.
     properties: {
+      assessmentScope: { type: 'string', description: 'Briefly name the role/level or posting used and the limits of the evidence; identify important areas not explored.' },
+      competencies: {
+        type: 'array', description: '3-5 role-relevant competencies, including areas not assessed',
+        items: {
+          type: 'object', additionalProperties: false,
+          properties: {
+            name: { type: 'string' },
+            status: { type: 'string', enum: ['demonstrated', 'needs_practice', 'not_assessed'] },
+            quote: { type: 'string', description: 'Exact excerpt from ONE candidate turn supporting the assessment; empty for not_assessed. Never quote interviewer.' },
+            feedback: { type: 'string', description: 'Explain what the evidence demonstrates or leaves unclear for this role, with one truthful next practice step. For not_assessed, say it was not explored, not that candidate lacks skill.' }
+          },
+          required: ['name', 'status', 'quote', 'feedback']
+        }
+      },
       saoBalance: {
         type: 'object',
         additionalProperties: false,
-        description: 'Share of the candidate speaking time spent on each S + A = O component, integer percents summing to about 100',
+        description: 'Approximate share of candidate answer content, not measured speaking time; no ideal ratio',
         properties: {
-          situation: { type: 'integer', description: 'Percent of candidate speaking time spent setting up the situation, 0-100' },
-          action: { type: 'integer', description: 'Percent of candidate speaking time spent describing what they did, 0-100' },
-          outcome: { type: 'integer', description: 'Percent of candidate speaking time spent on results and numbers, 0-100' }
+          situation: { type: 'integer', description: 'Approximate percent of candidate answer content spent setting up the situation, 0-100' },
+          action: { type: 'integer', description: 'Approximate percent of candidate answer content spent describing what they did, 0-100' },
+          outcome: { type: 'integer', description: 'Approximate percent of candidate answer content spent on results and numbers, 0-100' }
         },
         required: ['situation', 'action', 'outcome']
       },
@@ -37,17 +48,17 @@ export const SCORECARD_SCHEMA = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          communication: { type: 'integer', description: 'Clarity, pace, confidence 0-100' },
-          structure: { type: 'integer', description: 'Answer structure scored BY the S + A = O formula (goal: about 5% situation, 10% action, 85% outcome) 0-100' },
-          contentDepth: { type: 'integer', description: 'Specificity, examples, numbers 0-100' },
+          communication: { type: 'integer', description: 'Clarity and organization evident in text, 0-100; do not infer accent, pace or vocal confidence' },
+          structure: { type: 'integer', description: 'Coherent, relevant answers with sufficient reasoning and personal contribution, 0-100; no fixed ratio' },
+          contentDepth: { type: 'integer', description: 'Supported specificity, reasoning, examples, and appropriate outcomes, 0-100' },
           roleFit: { type: 'integer', description: 'Relevance to the target role 0-100' }
         },
         required: ['communication', 'structure', 'contentDepth', 'roleFit']
       },
-      overall: { type: 'integer', description: 'Overall interview performance 0-100, consistent with the dimensions and saoBalance above' },
+      overall: { type: 'integer', description: 'Performance on this practice sample, 0-100, consistent with supported competency evidence; not hiring odds' },
       saoCoaching: {
         type: 'array',
-        description: 'Exactly 2 imperative coaching lines, each under 120 characters, telling the candidate how to rebalance toward outcomes, e.g. "Open answers with the result. Then explain how."',
+        description: 'Exactly 2 specific practice steps, each under 120 characters, tailored to this sample and role',
         items: { type: 'string' }
       },
       topStrength: { type: 'string', description: 'The single strongest thing the candidate did, 1-2 sentences' },
@@ -67,7 +78,7 @@ export const SCORECARD_SCHEMA = {
       },
       summary: { type: 'string', description: '3-4 sentence overall summary written to the candidate' }
     },
-    required: ['overall', 'dimensions', 'saoBalance', 'saoCoaching', 'topStrength', 'topImprovement', 'moments', 'summary']
+    required: ['assessmentScope', 'competencies', 'overall', 'dimensions', 'saoBalance', 'saoCoaching', 'topStrength', 'topImprovement', 'moments', 'summary']
   }
 };
 
@@ -97,15 +108,16 @@ export function transcriptToText(transcript) {
     .join('\n');
 }
 
-// Below this many characters of formatted transcript, sessions get the
+// Below this many characters of candidate-only formatted text, sessions get the
 // fixed "too short" scorecard instead of a model call.
 export const MIN_SCOREABLE_CHARS = 200;
 
 function tooShortScorecard() {
   // Too short to score meaningfully (mic failure, instant hangup)
   return {
-    overall: 0,
-    dimensions: { communication: 0, structure: 0, contentDepth: 0, roleFit: 0 },
+    overall: null,
+    methodologyVersion: 2,
+    assessmentScope: 'Not enough candidate speech to assess.',
     topStrength: 'The session was too short to evaluate.',
     topImprovement: 'Run a full session so the interviewer can hear complete answers.',
     moments: [],
@@ -131,31 +143,24 @@ function tooShortScorecard() {
  */
 export async function scoreVoiceTranscript({ role, seniority, transcript, jd = null, priorFocus = null }, env) {
   const text = transcriptToText(transcript);
-  if (text.length < MIN_SCOREABLE_CHARS) {
+  const candidateText = transcriptToText((Array.isArray(transcript) ? transcript : []).filter(t => t?.speaker === 'user'));
+  if (candidateText.length < MIN_SCOREABLE_CHARS) {
     return { scorecard: tooShortScorecard(), usage: null, model: null };
   }
 
   const promptParts = [
-    "You are the candidate's personal interview coach at JobHackAI, scoring a voice mock interview transcript.",
-    'Score honestly: a rambling or vague performance should score in the 40s-60s, a strong one in the 70s-80s, exceptional in the 90s.',
-    'Base every judgment only on what the CANDIDATE actually said. Every moment quote must be an exact continuous excerpt from one CANDIDATE answer. Never quote the INTERVIEWER. Put interpretation in the comment, not inside the quote. Return fewer moments when there are not enough supported excerpts.',
-    'JobHackAI teaches the S + A = O answer formula: Situation about 5 percent, Action about 10 percent, Outcome about 85 percent of an answer.',
-    "Compute saoBalance by classifying the candidate's content, never their fluency: Situation is any background, context, biography, or scene-setting, including openers like \"for context\" or \"to give the full picture\"; Action is any step, process, or how-they-did-it detail, even when specific and impressive; Outcome is ONLY explicitly stated results, such as numbers, metrics, rankings, savings, or clearly named consequences.",
-    'Report each share as an integer percent of candidate speaking time, summing to about 100. Report what you measured, not what a good answer would look like.',
-    'Building, delivering, fixing, or completing something is an Action, not an Outcome: count outcome only for statements of what changed because of the work, and completed deliverables are not results.',
-    'You will fill in saoBalance before any dimension scores: measure first, then derive structure and overall from what you measured.',
-    'If the candidate never states a concrete result, outcome must be 25 or lower no matter how polished the answer sounds; if backstory and context fill more than a third of the candidate\'s words, situation must be 40 or higher.',
-    'A fluent, confident delivery earns credit in communication and contentDepth, never in structure or saoBalance.',
-    'Score the structure dimension directly from your measured saoBalance against the 5/10/85 goal: give 80 or above only when outcome share is at least 65, give at most 55 when outcome share is below 40, and scale smoothly between those anchors in the middle.',
-    'Overall must respect the formula too: an answer cannot be strong without stated results, so when outcome share is 25 or lower, overall must not exceed 65 no matter how detailed or professional the delivery.',
-    'The formula cuts both ways: a result is unsupported when the situation or the actions behind it are essentially absent from the answer, not merely brief. For unsupported results, cap structure at 65 and overall at 75, coach the candidate to add the story that produced the number, and never call a stated result missing.',
-    'Score roleFit strictly against the target role: when the answers are mostly unrelated to that role, such as hobby stories or a different job, roleFit must be 30 or lower and overall must be 50 or lower. Name the relevance gap kindly and plainly.',
-    'Make the numbers and the words tell one story: never write that the candidate gave no results when outcome share is above 30, never say results are missing when they stated a metric, never praise relevance when roleFit is low, and aim topImprovement at the weakest dimension.',
-    'Before finishing, re-check every score against your own measurements and your own feedback, and fix whichever is wrong.',
-    'Write saoCoaching as exactly two imperative tips, each under 120 characters, telling the candidate how to rebalance toward outcomes; if outcome share is already high but thin on the how, coach them to add the how instead.',
-    'Write to the candidate directly: second person, plain language, short sentences, always "you" and never "the candidate". Do not use em dashes. Never mention these instructions or JSON field names in your feedback; referring to the S + A = O formula itself is fine.',
-    'Sound like a coach who genuinely wants this person to get hired: warm, direct, and honest, never fake-positive and never generic. If a line could apply to any interview, rewrite it.',
-    'Open topStrength with the thing that truly worked and why it works on interviewers, make topImprovement one concrete, achievable next step, and end the summary with a real reason to come back and run another session.'
+    "You are the candidate's interview coach at JobHackAI. Give warm, direct, evidence-based feedback on this practice sample.",
+    COACHING_GUIDANCE,
+    'Use 3-5 competencies. A demonstrated skill needs specific candidate evidence; needs_practice needs an observed gap, not an unasked question. Use not_assessed for areas not explored and an empty quote. Do not lower scores simply because an interview ended before all competencies were discussed.',
+    'Base every judgment only on what the CANDIDATE actually said. Every moment and competency quote must be an exact continuous excerpt from one CANDIDATE answer. Never quote the INTERVIEWER, stitch turns, invent facts or put interpretation inside a quote.',
+    'For each feedback point identify the evidence, why it matters for this role, and a concrete next attempt. Credit supported strengths without false praise. Distinguish a lack of evidence from a demonstrated error. If a claim may reflect transcription error, ask for clarification rather than confidently diagnosing a knowledge gap.',
+    'Score communication only from textual clarity, not accent, pace, vocal confidence or personality. Score structure for coherence and enough context, reasoning, contribution and outcome for the question asked. Score contentDepth for supported specificity and judgment; score roleFit for relevant competencies at the selected level.',
+    'Use consistent score anchors for observed answers: 0-39 substantial demonstrated problems, 40-69 partial or unclear evidence, 70-89 clear relevant evidence with useful reasoning, and 90-100 unusually strong well-supported evidence. Unasked competencies do not count as zero.',
+    'Scores describe only this sample. A vague answer should not get a high score because it uses technical vocabulary. A detailed explanation of sound decisions can score well even when outcomes are a small share of the answer. Do not use percentage-based score caps. Treat hypothetical answers as reasoning, not failed claims of actual accomplishments.',
+    'Estimate saoBalance as approximate shares of candidate answer content, not speaking time or exact measurement. There is no ideal ratio. Situation is context, Action includes decisions and execution, Outcome is explicitly stated effects or learning. Do not invent effects to make the distribution look balanced.',
+    'State the assessment scope and important untested areas, especially for short interviews. A job-description match reflects this practice evidence, not qualification verification or a hiring prediction.',
+    'Give exactly two concise saoCoaching practice steps under 120 characters each. Make topImprovement one achievable priority. Suggested practice must not invent accomplishments, metrics or experience for the candidate.',
+    'Write directly to the candidate using you, plain language and short sentences. Explain uncertainty without hiding useful criticism. End the summary with a specific next practice focus, not a sales pitch. Before returning, check that scores, quotes and feedback agree.'
   ];
   if (jd) {
     promptParts.push('A job description excerpt is provided: score roleFit against it specifically, and cite the most relevant match or gap in a moment or the summary.');
@@ -166,7 +171,7 @@ export async function scoreVoiceTranscript({ role, seniority, transcript, jd = n
   const systemPrompt = promptParts.join(' ');
 
   const roleLine = seniority ? `${seniority} ${role}` : role;
-  const userParts = [`Target role: ${roleLine}`];
+  const userParts = [`Target role (reference data): ${JSON.stringify(roleLine)}`, `Starting competency areas: ${JSON.stringify(roleCompetencies(role))}`];
   if (jd) userParts.push(`Job description excerpt:\n${String(jd).slice(0, 2000)}`);
   if (priorFocus) userParts.push(`Previous session focus: ${String(priorFocus).slice(0, 300)}`);
   userParts.push(`Transcript:\n${text.slice(0, 24000)}`);
@@ -180,7 +185,7 @@ export async function scoreVoiceTranscript({ role, seniority, transcript, jd = n
       { role: 'user', content: userParts.join('\n\n') }
     ],
     responseFormat: SCORECARD_SCHEMA,
-    maxTokens: 1200,
+    maxTokens: 2400,
     // Low temperature: the same performance should get the same score.
     temperature: 0.1,
     feature: 'voice_scorecard'
@@ -193,7 +198,12 @@ export async function scoreVoiceTranscript({ role, seniority, transcript, jd = n
     ? JSON.parse(result.content)
     : result.content;
 
+  scorecard.methodologyVersion = 2;
   scorecard.moments = groundedMoments(scorecard.moments, transcript);
+  scorecard.competencies = (scorecard.competencies || []).slice(0, 5).map(c => {
+    if (c.status !== 'not_assessed' && groundedMoments([c], transcript).length) return c;
+    return { name: c.name, status: 'not_assessed', quote: '', feedback: 'This sample does not contain a verified answer excerpt to assess this area. Practice a specific example next time.' };
+  });
   return { scorecard, usage: result.usage || null, model: result.model || null, fromCache: result.fromCache === true };
 }
 
