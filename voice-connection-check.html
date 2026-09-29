@@ -35,7 +35,7 @@
     function status(text) { el('status').textContent = text; }
     async function api(path, body) {
       const user = await authManager.waitForAuthReady();
-      if (!user) throw Error('sign_in_required');
+      if (!user || user._authPending || typeof user.getIdToken !== 'function') throw Error('sign_in_required');
       const response = await fetch(path, {method: body ? 'POST' : 'GET',
         headers: {'Content-Type':'application/json', Authorization:'Bearer ' + await user.getIdToken(true)},
         ...(body ? {body:JSON.stringify(body)} : {}), signal:AbortSignal.timeout(30000)});
@@ -157,9 +157,15 @@
     });
     if (!allowed) status('This check is available only on QA or development.');
     else {
-      const user = await authManager.waitForAuthReady();
-      status(user ? 'Ready for a silent QA connection check.' : 'Sign in on this QA tab first.');
-      el('start').disabled = !user;
+      function showAuth(user) {
+        if (sessionId || busy) return;
+        const ready = user && !user._authPending && typeof user.getIdToken === 'function';
+        status(ready ? 'Ready for a silent QA connection check.' : user?._authPending
+          ? 'Sign-in is still loading. Start will become available when it is ready.' : 'Sign in on this QA tab first.');
+        el('start').disabled = !ready;
+      }
+      showAuth(await authManager.waitForAuthReady());
+      authManager.onAuthStateChange(showAuth);
     }
   </script>
 </body>

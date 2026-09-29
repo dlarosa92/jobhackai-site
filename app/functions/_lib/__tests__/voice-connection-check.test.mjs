@@ -6,7 +6,7 @@ import {readFileSync} from 'node:fs';
 const page = readFileSync(new URL('../../../../voice-connection-check.html', import.meta.url), 'utf8');
 const source = page.match(/<script type="module">([\s\S]*?)<\/script>/)[1]
   .replace(/import authManager from [^;]+;/, '');
-async function harness(responses) {
+async function harness(responses, initialUser={getIdToken:async()=> 'test-only-token'}) {
   const nodes = new Map(), events = {}, calls = [], peers = [], order = [];
   const element = id => {
     if (!nodes.has(id)) nodes.set(id, {disabled:true,textContent:'',addEventListener(type, fn) {this[type] = fn;}});
@@ -30,7 +30,7 @@ async function harness(responses) {
   }
   await vm.runInNewContext('(async()=>{' + source + '})()', {
     document:{getElementById:element},location:{hostname:'qa.jobhackai.io'},AudioContext,RTCPeerConnection,
-    authManager:{waitForAuthReady:async()=>({getIdToken:async()=> 'test-only-token'})},
+    authManager:{waitForAuthReady:async()=>initialUser,onAuthStateChange(fn){events.auth=fn;}},
     crypto:{randomUUID:()=> '11111111-1111-4111-8111-111111111111'},Date,AbortSignal,
     setTimeout(fn, ms) {const timer=setTimeout(fn,ms);timers.add(timer);return timer;},
     clearTimeout(timer) {clearTimeout(timer);timers.delete(timer);},
@@ -48,6 +48,12 @@ async function harness(responses) {
     cleanup() {for(const timer of timers)clearTimeout(timer);}};
 }
 const plan={voice:{transport:'managed'}}, opened={attemptId:'attempt-1',sdp:'v=0-answer'};
+test('pending authentication does not enable Start and a later user does', async t=>{
+  const h=await harness([], {_authPending:true});t.after(h.cleanup);
+  assert.equal(h.element('start').disabled,true);
+  h.events.auth({getIdToken:async()=> 'test-only-token'});
+  assert.equal(h.element('start').disabled,false);assert.equal(h.calls.length,0);
+});
 test('preflight failure leaves Start retryable and starts audio before awaiting network', async t=>{
   const h=await harness([new Error('offline')]);t.after(h.cleanup);
   await h.click('start');
