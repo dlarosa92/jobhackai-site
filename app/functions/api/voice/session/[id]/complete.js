@@ -59,24 +59,25 @@ async function completeRequest(context) {
     }
     const managed = env.VOICE_MANAGED_CALLS_ENABLED === 'true';
     let connectionClosed = true;
+    let closureNeedsReview = false;
     if (managed) {
       // End may arrive before startup has inserted its history/reservation.
       // Persist intent first, then re-read after closing: reservation can have
       // committed between the initial SELECT and that intent.
-      ({ closed: connectionClosed } = await closeManagedInterview(env,{uid,sessionId}));
+      ({ closed: connectionClosed, needsReview: closureNeedsReview = false } = await closeManagedInterview(env,{uid,sessionId}));
       session = await db.prepare(`SELECT id,user_id,status,transcript_json,end_reason FROM voice_sessions WHERE id=?`)
         .bind(sessionId).first();
       if (!session) {
         const control = await db.prepare('SELECT reserved_at FROM voice_interview_controls WHERE session_id=? AND auth_id=?')
           .bind(sessionId,uid).first();
         if (control?.reserved_at) return errorResponse('The saved interview is no longer available.',409,origin,env,requestId,{reason:'voice_connection_history_removed'});
-        return successResponse({sessionId,status:connectionClosed?'cancelled':'ending',saved:false,connectionClosed},
+        return successResponse({sessionId,status:connectionClosed?'cancelled':'ending',saved:false,connectionClosed,closureNeedsReview},
           connectionClosed?200:202,origin,env,requestId);
       }
       if (session.user_id !== d1User.id) return errorResponse('Session not found',404,origin,env,requestId);
     }
     if (!session) return errorResponse('Session not found',404,origin,env,requestId);
-    const completedResponse = data => successResponse({ ...data, ...(managed ? {saved:true,connectionClosed} : {}) },
+    const completedResponse = data => successResponse({ ...data, ...(managed ? {saved:true,connectionClosed,closureNeedsReview} : {}) },
       managed && !connectionClosed ? 202 : 200,origin,env,requestId);
     if (session.status === 'completed') {
       // Idempotent: keep the original completion, still ensure a scorecard

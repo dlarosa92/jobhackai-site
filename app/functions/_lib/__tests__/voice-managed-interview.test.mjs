@@ -196,14 +196,14 @@ test('a deadline passed during setup prevents reservation and reconnect cannot e
 test('completion before reconnect forbids reopening; unknown hangup never becomes a successful close',async t=>{
   const f=fixture(t),first=await f.open();
   f.setHandler(async()=>new Response(null,{status:404}));
-  assert.deepEqual(await f.close(),{closed:false});assert.deepEqual(await f.close(),{closed:false});
+  assert.deepEqual(await f.close(),{closed:false,needsReview:true});assert.deepEqual(await f.close(),{closed:false,needsReview:true});
   await assert.rejects(f.open({replacesAttemptId:first.attemptId}),/ended/);assert.equal(f.calls.length,2);
   assert.equal((await f.sessions()).length,1,'the transport helper does not overwrite the transcript or delete history');
 });
 
 test('legacy closure uncertainty persists across retry and still prevents account erasure',async t=>{
   const f=fixture(t);await f.db.prepare("INSERT INTO voice_sessions(id,user_id,status,role) VALUES(?,1,'active','Engineer')").bind(FIRST).run();
-  assert.deepEqual(await f.close(),{closed:false});assert.deepEqual(await f.close(),{closed:false});
+  assert.deepEqual(await f.close(),{closed:false,needsReview:true});assert.deepEqual(await f.close(),{closed:false,needsReview:true});
   await beginDeletionAdmission(f.env,{uid:'owner',origin:'user_request'});
   await assert.rejects(assertDeletionQuiescent(f.env,'owner'),/deletion_voice_pending/);
   assert.equal(f.calls.length,0);
@@ -344,7 +344,7 @@ test('completion overtaking setup reports pending, then cancelled without consum
   f.setHandler(async({url})=>{if(url.endsWith('/hangup'))return new Response(null,{status:200});entered.resolve();await release.promise;return new Response(SDP,{status:201,headers:{Location:'/v1/realtime/calls/rtc_overtaken'}});});
   const opening=f.open();await entered.promise;
   const first=completion(f);const pending=await first.execute();await first.flush();
-  assert.equal(pending.status,202);assert.deepEqual(Object.fromEntries(Object.entries(await pending.json()).filter(([key])=>['status','saved','connectionClosed'].includes(key))),{status:'ending',saved:false,connectionClosed:false});
+  assert.equal(pending.status,202);assert.deepEqual(Object.fromEntries(Object.entries(await pending.json()).filter(([key])=>['status','saved','connectionClosed','closureNeedsReview'].includes(key))),{status:'ending',saved:false,connectionClosed:false,closureNeedsReview:false});
   release.resolve();await assert.rejects(opening,/reservation_unavailable/);
   const retry=completion(f);const cancelled=await retry.execute();await retry.flush();
   assert.equal(cancelled.status,200);assert.equal((await cancelled.json()).status,'cancelled');assert.equal((await f.user()).free_session_used,0);
@@ -354,15 +354,33 @@ test('uncertain hangup does not lose the report or pretend closure succeeded',as
   const f=fixture(t);await f.open();f.setHandler(async()=>new Response(null,{status:404}));
   const first=completion(f);const response=await first.execute();await first.flush();const payload=await response.json();
   assert.equal(response.status,202);assert.equal(payload.saved,true);assert.equal(payload.connectionClosed,false);assert.equal(payload.status,'completed');
+  assert.equal(payload.closureNeedsReview,true);
   const original=(await f.sessions())[0].transcript_json;
   const retry=completion(f,{transcript:[]});const again=await retry.execute();await retry.flush();
   assert.equal(again.status,202);assert.equal((await f.sessions())[0].transcript_json,original);assert.equal(f.calls.length,2);
+  assert.equal((await again.json()).closureNeedsReview,true);
+});
+
+test('failed reconnect preserves one reservation and saves the report with a non-retryable closure review',async t=>{
+  const f=fixture(t),first=await f.open();
+  f.setHandler(async()=>new Response(null,{status:404}));
+  await assert.rejects(f.open({replacesAttemptId:first.attemptId}),/close_unconfirmed/);
+  const run=completion(f,{reason:'connection_lost',durationSeconds:124});
+  const response=await run.execute();await run.flush();const payload=await response.json();
+  assert.equal(response.status,202);assert.equal(payload.saved,true);
+  assert.equal(payload.connectionClosed,false);assert.equal(payload.closureNeedsReview,true);
+  const sessions=await f.sessions();assert.equal(sessions.length,1);
+  assert.equal(sessions[0].end_reason,'connection_lost');assert.equal(sessions[0].duration_seconds,124);
+  assert.equal((await f.user()).free_session_used,1);assert.equal(f.calls.length,2);
+  const attempt=await f.db.prepare('SELECT state,last_error_code,closed_at FROM voice_provider_calls WHERE id=?').bind(first.attemptId).first();
+  assert.deepEqual(attempt,{state:'uncertain',last_error_code:'close_http_404',closed_at:null});
 });
 
 test('completion of a legacy session saves its report while preserving unverified call closure',async t=>{
   const f=fixture(t);await f.db.prepare("INSERT INTO voice_sessions(id,user_id,status,role) VALUES(?,1,'active','Engineer')").bind(FIRST).run();
   const run=completion(f);const response=await run.execute();await run.flush();const payload=await response.json();
   assert.equal(response.status,202);assert.equal(payload.saved,true);assert.equal(payload.connectionClosed,false);
+  assert.equal(payload.closureNeedsReview,true);
   assert.equal((await f.controls()).legacy_unverified,1);assert.equal(f.calls.length,0);
 });
 
