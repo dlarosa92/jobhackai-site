@@ -39,7 +39,7 @@ export async function onRequest(context) {
     // report enabled:false, so the dashboard tile and tool CTAs (which key off
     // `enabled`) stay hidden instead of surfacing entry points that 503.
     const voiceEnabled = voiceFeatureEnabled(env);
-    let voice = { enabled: false, canStart: false, mode: null, unlimited: false, freeSessionUsed: false, sessionsRemaining: 0 };
+    let voice = { enabled: false, lookupStatus: voiceEnabled ? 'unavailable' : 'disabled', canStart: false, mode: null, unlimited: false, freeSessionUsed: false, sessionsRemaining: 0 };
     if (voiceEnabled) {
       try {
         const managed = env.VOICE_MANAGED_CALLS_ENABLED === 'true';
@@ -47,6 +47,7 @@ export async function onRequest(context) {
         const backendReady = ent.reason !== 'not_migrated' && ent.reason !== 'db_unavailable';
         voice = {
           enabled: backendReady,
+          lookupStatus: backendReady ? 'ready' : 'unavailable',
           transport: managed ? 'managed' : 'legacy',
           canStart: ent.canStart,
           mode: ent.mode,

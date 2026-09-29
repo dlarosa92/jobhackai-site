@@ -879,16 +879,25 @@
 
         // Billing status covers subscriptions. Only a successful entitlement
         // lookup can establish that a free subscriber has no paid pack.
+        const storedPlan = localStorage.getItem('user-plan');
+        const storedDevPlan = localStorage.getItem('dev-plan');
+        const voiceDisabled = planMeta?.voice?.lookupStatus === 'disabled';
         if ((!data.plan || data.plan === 'free') && (!planMeta?.voice ||
-            planMeta.voice.enabled !== true ||
+            (!voiceDisabled && planMeta.voice.enabled !== true) ||
+            planMeta.voice.lookupStatus === 'unavailable' ||
             ['db_unavailable', 'not_migrated'].includes(planMeta.voice.reason))) {
           billingSection.innerHTML = '<div role="status" style="color: #6B7280;">Unable to load your interview allowance. Please refresh the page to try again.</div>';
           return;
         }
+        if (voiceDisabled && (!data.plan || data.plan === 'free') &&
+            (storedPlan === 'pack' || storedDevPlan === 'pack')) {
+          // A feature rollback skips the pack lookup. Preserve its cached
+          // identity without inventing a balance or treating it as an outage.
+          billingSection.innerHTML = '<div role="status" style="color: #6B7280;">Voice interviews are temporarily unavailable. Your interview allowance will appear when service resumes.</div>';
+          return;
+        }
 
         const plan = (data.plan === 'free' && planMeta?.voice?.mode === 'pack' && planMeta.voice.sessionsRemaining > 0) ? 'pack' : (data.plan || 'free');
-        const storedPlan = localStorage.getItem('user-plan');
-        const storedDevPlan = localStorage.getItem('dev-plan');
         const planChanged = storedPlan !== plan || storedDevPlan !== plan;
 
         console.log(`🔄 [ACCOUNT-SETTINGS] Applying billing-status plan locally: ${plan}`);
