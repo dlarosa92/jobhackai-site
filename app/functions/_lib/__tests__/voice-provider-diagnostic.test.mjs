@@ -14,6 +14,14 @@ test('unknown error fields cannot become a credential or content logging channel
   assert.deepEqual(result,{bodyFormat:'json',errorCode:'other',errorType:'other',messageClass:'unclassified'});
 });
 
+test('stream cleanup failures cannot escape diagnostic handling', async () => {
+  const response={body:{getReader:()=>({
+    read:async()=>({done:true}), cancel(){throw Error('cancel failed');},
+    releaseLock(){throw Error('release failed');}
+  })}};
+  assert.deepEqual(await diagnose(response),{bodyFormat:'empty',errorCode:null,errorType:null,messageClass:'unclassified'});
+});
+
 test('HTML and empty 404 responses remain distinct from a provider call-unavailable diagnostic', async () => {
   assert.deepEqual(await diagnose(new Response('<html>Not Found</html>',{status:404})),
     {bodyFormat:'non_json',errorCode:null,errorType:null,messageClass:'unclassified'});

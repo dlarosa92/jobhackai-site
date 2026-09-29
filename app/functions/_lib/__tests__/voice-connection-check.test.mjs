@@ -84,3 +84,10 @@ test('failed reconnect requires Finish and does not replay an uncertain create',
   await h.click('finish');assert.equal(h.calls.at(-1).body.reason,'connection_lost');
   assert.match(h.element('status').textContent,/needs review/);
 });
+test('an open response arriving after Finish cannot reactivate a completed check', async t=>{
+  let resolveOpen;const delayed=new Promise(resolve=>{resolveOpen=resolve;});
+  const h=await harness([plan,delayed,{}, {status:'cancelled',connectionClosed:true}]);t.after(h.cleanup);
+  await h.click('start');await h.click('finish');resolveOpen(opened);await h.flush();
+  assert.equal(h.element('status').textContent,'Check finished.');
+  assert.equal(h.element('drop').disabled,true);assert.equal(h.element('finish').disabled,true);
+});
