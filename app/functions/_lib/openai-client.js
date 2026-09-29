@@ -137,7 +137,7 @@ export async function callOpenAI({
         cachedResponse = null; // Force fresh generation
       } else {
         console.log(`[OPENAI] Cache hit for ${feature}`, { userId, model: cached.model });
-        return cached;
+        return { ...cached, fromCache: true };
       }
     }
   }
@@ -218,10 +218,10 @@ export async function callOpenAI({
         const data = await response.json();
 
         const usage = data.usage || {};
-        const promptTokens = usage.prompt_tokens || 0;
-        const completionTokens = usage.completion_tokens || 0;
-        const totalTokens = usage.total_tokens || 0;
-        const cachedTokens = usage.cached_tokens || 0;
+        const promptTokens = usage.prompt_tokens ?? null;
+        const completionTokens = usage.completion_tokens ?? null;
+        const totalTokens = usage.total_tokens ?? null;
+        const cachedTokens = usage.prompt_tokens_details?.cached_tokens ?? usage.cached_tokens ?? null;
 
         console.log(`[OPENAI] Usage for ${feature}`, {
           userId,
@@ -242,6 +242,7 @@ export async function callOpenAI({
             cachedTokens
           },
           model: data.model || activeModel,
+          fromCache: false,
           finishReason: data.choices?.[0]?.finish_reason
         };
 

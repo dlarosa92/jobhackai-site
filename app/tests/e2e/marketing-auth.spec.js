@@ -63,7 +63,8 @@ test.describe('Marketing Site Auth Handoff', () => {
         break;
       }
     }
-    const visitorNavLoc = page.locator('a:has-text("Start Free Trial"), a:has-text("Log in")');
+    const visitorNavLoc = page.getByRole('button', { name: 'Start Free', exact: true })
+      .or(page.getByRole('link', { name: 'Login', exact: true }));
     const visitorCount = await visitorNavLoc.count();
     let hasVisitorNav = false;
     for (let i = 0; i < visitorCount; i++) {

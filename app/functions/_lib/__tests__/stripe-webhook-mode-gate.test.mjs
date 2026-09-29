@@ -207,20 +207,41 @@ import { stubStripeFetch } from './billing-test-helper.mjs';
   assert.strictEqual(res.status, 200);
   assert.strictEqual(db.usersByAuthId('uid_A').plan, 'essential', 'legacy marker must not suppress processing');
   assert.strictEqual(db.ledgerRow('evt_legacy_1')?.status, 'processed', 'ledger row created despite legacy marker');
-  assert.ok(kv.__puts.includes('evtl:evt_legacy_1'), 'post-commit marker uses the versioned key');
+  assert.ok(kv.__puts.includes('evtl:prod:evt_legacy_1'), 'post-commit marker uses the versioned, environment-scoped key');
 }
 
 // 14. (PR #851 F1) The versioned `evtl:` marker (only ever written after a
-//     durable commit) short-circuits with zero writes.
+//     durable commit) short-circuits with zero writes. (dev0 integration: the
+//     marker is scoped by ENVIRONMENT — see test 15.)
 {
   const db = createFakeD1({ users: [seedUser()] });
-  const kv = createFakeKV({ 'evtl:evt_new_1': '1' });
+  const kv = createFakeKV({ 'evtl:prod:evt_new_1': '1' });
   const env = makeEnv({ DB: db, JOBHACKAI_KV: kv });
   const sub = makeSubscription({ id: 'sub_gate01', customer: 'cus_gate01', metadata: { firebaseUid: 'uid_A' }, itemPeriodStart: START, itemPeriodEnd: END });
   const res = await postWebhook(onRequest, env, makeEvent('customer.subscription.created', sub, { id: 'evt_new_1' }));
   assert.strictEqual(res.status, 200);
   assert.strictEqual(db.__state.writes, 0, 'evtl: fast-path performs zero D1 writes');
   assert.strictEqual(kv.writeCount, 0, 'evtl: fast-path performs zero KV writes');
+}
+
+// 15. (dev0 integration) dev and QA share one Stripe test-mode account (every
+//     test event is delivered to BOTH webhooks) and one KV namespace. A
+//     marker written by the other environment — or an unscoped legacy
+//     `evtl:` marker — must never suppress this environment's delivery: the
+//     event still processes fully through this environment's own ledger.
+{
+  const db = createFakeD1({ users: [seedUser()] });
+  const kv = createFakeKV({ 'evtl:qa:evt_shared_1': '1', 'evtl:evt_shared_1': '1', 'processing:qa:evt_shared_1': '1' });
+  const env = makeEnv({ DB: db, JOBHACKAI_KV: kv, ENVIRONMENT: 'dev', STRIPE_SECRET_KEY: 'sk_test_x' });
+  const stub = stubStripeFetch([customerStub]);
+  const sub = makeSubscription({ id: 'sub_gate01', customer: 'cus_gate01', metadata: { firebaseUid: 'uid_A' }, itemPeriodStart: START, itemPeriodEnd: END });
+  const res = await postWebhook(onRequest, env, makeEvent('customer.subscription.created', sub, { id: 'evt_shared_1', livemode: false }));
+  stub.restore();
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(db.usersByAuthId('uid_A').plan, 'essential', 'another environment\'s marker must not suppress processing here');
+  assert.strictEqual(db.ledgerRow('evt_shared_1')?.status, 'processed');
+  assert.ok(kv.__puts.includes('evtl:dev:evt_shared_1'), 'this environment writes its own scoped marker');
+  assert.ok(kv.__map.has('evtl:qa:evt_shared_1'), 'the other environment\'s marker is left alone');
 }
 
 console.log('stripe-webhook-mode-gate.test.mjs: all assertions passed');

@@ -4,6 +4,7 @@
 // a top-of-funnel capture for visitors who aren't ready to sign up yet.
 
 import { sendEmail } from '../_lib/email.js';
+import { queueAccountWork } from '../_lib/account-operation-scope.js';
 import { getDb } from '../_lib/db.js';
 
 const ALLOWED_ASSETS = new Set(['ats-checklist']);
@@ -269,7 +270,7 @@ export async function onRequest(context) {
   if (asset === 'ats-checklist') {
     // Send off-thread so response latency matches the duplicate-send path
     // (avoids timing probes against deduped addresses).
-    context.waitUntil((async () => {
+    queueAccountWork(context, async () => {
       const result = await sendEmail(env, {
         to: email,
         subject: 'Your 12-Point ATS Resume Checklist',
@@ -282,7 +283,7 @@ export async function onRequest(context) {
         // probe; we logged the lead and ops can resend manually if needed.
         console.warn('[LEAD-MAGNET] Resend failed for', redactEmailForLog(email), result.error);
       }
-    })());
+    });
   }
 
   return json({ ok: true }, 200, origin, env);

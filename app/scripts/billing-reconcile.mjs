@@ -1,18 +1,30 @@
 #!/usr/bin/env node
 // One-time billing reconciliation — LOCAL OPERATOR TOOL (never deployed).
 //
-//   node app/scripts/billing-reconcile.mjs [--preflight] --env=prod|qa|dev   (default mode; read-only)
-//   node app/scripts/billing-reconcile.mjs --verify --env=...                (duplicate scan = migration-023 gate)
-//   node app/scripts/billing-reconcile.mjs --apply --allowlist=<file> --run-id=<id> --env=...
+//   node app/scripts/billing-reconcile.mjs [--preflight] --env=prod|qa|dev --stripe-account=acct_…   (default mode; read-only)
+//   node app/scripts/billing-reconcile.mjs --verify --env=...                (duplicate scan = migration-023 gate; no Stripe access)
+//   node app/scripts/billing-reconcile.mjs --apply --allowlist=<file> --run-id=<id> --env=... --stripe-account=acct_… [--acknowledge-mass-not-found]
 //   node app/scripts/billing-reconcile.mjs --rollback --run-id=<id> --env=...
+//
+//   --stripe-account pins the Stripe account (or sandbox) the rows' objects
+//   live in; it is compared with GET /v1/account BEFORE any row is inspected
+//   and recorded in the report/allowlist. Without it, a key for another
+//   account or sandbox would make every valid object look missing.
+//   --acknowledge-mass-not-found is required to --apply when (almost) every
+//   verified object is missing — the signature of a cross-account run — and
+//   must only be used for an explicitly reviewed legacy reset.
 //
 // Requirements:
 //   * wrangler authenticated locally (see app/scripts/API_TOKEN_SETUP.md)
 //   * STRIPE_SECRET_KEY in the shell env for preflight/apply verification
-//     (read-only GETs; the key is never printed and never written to disk;
-//     repairs against --env=prod refuse to run unless the key is live-mode)
+//     (read-only GETs; the key is never printed and never written to disk).
+//     Its MODE must match the target: --env=prod requires sk_live_/rk_live_,
+//     --env=qa|dev require sk_test_/rk_test_; missing or mismatched keys are
+//     refused before any network access (verify/rollback need no key)
 //   * price→plan mapping via STRIPE_PRICE_{ESSENTIAL,PRO,PREMIUM}_MONTHLY
-//     (or PRICE_* variants) so LEGIT rows backfill without guessing
+//     (or PRICE_* variants) plus STRIPE_PRICE_WEEKLY / STRIPE_PRICE_MONTHLY
+//     for the dev0 voice subscriptions, so LEGIT rows backfill without
+//     guessing (STRIPE_PRICE_PACK is a one-time price, never a subscription)
 //   * KV namespace id via JOBHACKAI_KV_NAMESPACE_ID for cache invalidation
 //
 // Guarantees:
@@ -40,7 +52,13 @@ import {
   kvKeysForUid,
   assertSafeRunId,
   assertSafeStripeId,
-  subLast4
+  subLast4,
+  assertCredentialModeForEnv,
+  findRollbackIdCollisions,
+  ROLLBACK_ORDER_INSTRUCTIONS,
+  assertSafeStripeAccountId,
+  assertStripeAccountMatches,
+  notFoundSignal
 } from './lib/billing-reconcile-core.mjs';
 
 const DB_BY_ENV = {
@@ -50,6 +68,34 @@ const DB_BY_ENV = {
 };
 
 const ROW_QUERY = `SELECT id, auth_id, plan, subscription_status, stripe_customer_id, stripe_subscription_id, current_period_start, current_period_end, trial_ends_at, cancel_at, scheduled_plan, scheduled_at, has_ever_paid, plan_updated_at FROM users WHERE stripe_customer_id IS NOT NULL OR stripe_subscription_id IS NOT NULL OR subscription_status IS NOT NULL OR plan != 'free'`;
+
+// Migration 022 adds users.current_period_start, billing_repair_audit and
+// stripe_event_ledger. The READ-ONLY modes (preflight/verify) tolerate a
+// pre-022 database so the operator can review the allowlist before the schema
+// is touched (dev0 rollout: 022 must precede the deploy, not the preflight);
+// --apply and --rollback require 022 (the audit table IS the rollback record)
+// and refuse to run without it.
+let usersColumnsCache = null;
+function usersColumns(db) {
+  if (!usersColumnsCache) {
+    usersColumnsCache = new Set(wranglerD1Json(db, 'PRAGMA table_info(users)').map((c) => c.name));
+  }
+  return usersColumnsCache;
+}
+function rowQuery(db) {
+  if (usersColumns(db).has('current_period_start')) return ROW_QUERY;
+  console.warn('notice: users.current_period_start is missing (migration 022 not applied) — read as NULL for this read-only run; --apply/--rollback refuse until 022 is applied');
+  return ROW_QUERY.replace('current_period_start,', 'NULL AS current_period_start,');
+}
+function requireMigration022(db, mode) {
+  const present = new Set(wranglerD1Json(db, "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('billing_repair_audit', 'stripe_event_ledger')").map((r) => r.name));
+  const missing = [];
+  if (!usersColumns(db).has('current_period_start')) missing.push('users.current_period_start');
+  for (const t of ['billing_repair_audit', 'stripe_event_ledger']) if (!present.has(t)) missing.push(t);
+  if (missing.length > 0) {
+    throw new Error(`--${mode} requires migration 022 (missing: ${missing.join(', ')}); apply app/db/migrations/022_billing_periods_and_audit.sql to this database first`);
+  }
+}
 
 function parseArgs(argv) {
   const args = { mode: 'preflight' };
@@ -62,6 +108,8 @@ function parseArgs(argv) {
     else if (a.startsWith('--allowlist=')) args.allowlist = a.slice(12);
     else if (a.startsWith('--run-id=')) args.runId = a.slice(9);
     else if (a.startsWith('--report=')) args.report = a.slice(9);
+    else if (a.startsWith('--stripe-account=')) args.stripeAccount = a.slice(17);
+    else if (a === '--acknowledge-mass-not-found') args.acknowledgeMassNotFound = true;
     else throw new Error(`unknown argument: ${a}`);
   }
   if (!args.env || !DB_BY_ENV[args.env]) {
@@ -104,6 +152,10 @@ function priceToPlanFromEnv(priceId) {
   const essential = env.STRIPE_PRICE_ESSENTIAL_MONTHLY || env.PRICE_ESSENTIAL_MONTHLY || env.STRIPE_PRICE_ESSENTIAL || env.PRICE_ESSENTIAL;
   const pro = env.STRIPE_PRICE_PRO_MONTHLY || env.PRICE_PRO_MONTHLY || env.STRIPE_PRICE_PRO || env.PRICE_PRO;
   const premium = env.STRIPE_PRICE_PREMIUM_MONTHLY || env.PRICE_PREMIUM_MONTHLY || env.STRIPE_PRICE_PREMIUM || env.PRICE_PREMIUM;
+  const weekly = env.STRIPE_PRICE_WEEKLY;
+  const monthly = env.STRIPE_PRICE_MONTHLY;
+  if (priceId && weekly && priceId === weekly) return 'weekly';
+  if (priceId && monthly && priceId === monthly) return 'monthly';
   if (priceId && priceId === essential) return 'essential';
   if (priceId && priceId === pro) return 'pro';
   if (priceId && priceId === premium) return 'premium';
@@ -176,8 +228,22 @@ async function verifyRowAgainstStripe(row) {
   return state;
 }
 
+function requireStripeAccountArg(args) {
+  if (!args.stripeAccount) {
+    throw new Error('--stripe-account=acct_… is required for --preflight and --apply: the Stripe account (or sandbox) whose objects these rows reference; it is verified against GET /v1/account before any row is inspected');
+  }
+  return assertSafeStripeAccountId(args.stripeAccount);
+}
+
+// Read-only identity check, performed before any row is inspected.
+async function verifyStripeAccount(expected) {
+  const { status, body } = await stripeGet('/account');
+  if (status !== 200) throw new Error(`GET /v1/account returned ${status}; refusing to inspect any row`);
+  return assertStripeAccountMatches(expected, body?.id);
+}
+
 async function runPreflight(db) {
-  const rows = wranglerD1Json(db, ROW_QUERY);
+  const rows = wranglerD1Json(db, rowQuery(db));
   const stripeStateByRowId = {};
   for (const row of rows) {
     stripeStateByRowId[row.id] = await verifyRowAgainstStripe(row);
@@ -210,9 +276,11 @@ function buildLegitBackfill(classification, stripeStateByRowId, rows) {
   return backfill;
 }
 
-function printReport(classification, reportPath) {
+function printReport(classification, reportPath, { stripeAccount = null, notFound = null } = {}) {
   const report = {
     generated_for: 'billing-reconcile',
+    stripe_account: stripeAccount,
+    not_found_signal: notFound,
     counts: classification.counts,
     classes: classification.classes,
     duplicates: classification.duplicates,
@@ -247,13 +315,6 @@ function invalidateKvForUids(uids) {
   }
 }
 
-function requireLiveKeyForProd(envName) {
-  if (envName !== 'prod') return;
-  const key = String(process.env.STRIPE_SECRET_KEY || '');
-  if (!key.startsWith('sk_live_') && !key.startsWith('rk_live_')) {
-    throw new Error('refusing to run against prod without a live-mode STRIPE_SECRET_KEY (verification would be meaningless)');
-  }
-}
 
 async function main() {
   const args = parseArgs(process.argv);
@@ -261,7 +322,7 @@ async function main() {
   console.log(`billing-reconcile: mode=${args.mode} env=${args.env} db=${db}`);
 
   if (args.mode === 'verify') {
-    const rows = wranglerD1Json(db, ROW_QUERY);
+    const rows = wranglerD1Json(db, rowQuery(db));
     const dups = duplicateGroups(rows);
     console.log(JSON.stringify({ duplicates: dups, readyForUniqueIndex: dups.length === 0 }, null, 2));
     process.exitCode = dups.length === 0 ? 0 : 2;
@@ -269,14 +330,21 @@ async function main() {
   }
 
   if (args.mode === 'preflight') {
-    requireLiveKeyForProd(args.env);
-    const { classification } = await runPreflight(db);
-    printReport(classification, args.report);
+    assertCredentialModeForEnv(args.env, process.env.STRIPE_SECRET_KEY);
+    const account = await verifyStripeAccount(requireStripeAccountArg(args));
+    const { stripeStateByRowId, classification } = await runPreflight(db);
+    const signal = notFoundSignal(stripeStateByRowId);
+    if (signal.massNotFound) {
+      console.error(`WARNING: ${signal.notFound}/${signal.checked} verified Stripe objects are missing in account ${account}. That is the signature of rows created in ANOTHER account, sandbox or mode — a 404 is never authorization to downgrade. --apply will refuse this set unless --acknowledge-mass-not-found is passed for an explicitly reviewed legacy reset.`);
+    }
+    printReport(classification, args.report, { stripeAccount: account, notFound: signal });
     return;
   }
 
   if (args.mode === 'apply') {
-    requireLiveKeyForProd(args.env);
+    assertCredentialModeForEnv(args.env, process.env.STRIPE_SECRET_KEY);
+    const account = await verifyStripeAccount(requireStripeAccountArg(args));
+    requireMigration022(db, 'apply');
     if (!args.allowlist) throw new Error('--apply requires --allowlist=<file> (the operator-approved preflight sets)');
     assertSafeRunId(args.runId || '');
     const allowlist = JSON.parse(readFileSync(args.allowlist, 'utf8'));
@@ -290,8 +358,24 @@ async function main() {
       throw new Error(`run id ${args.runId} already has ${priorAudit[0].n} audit rows — choose a new --run-id`);
     }
 
+    // The allowlist was approved for exactly one Stripe account. A missing pin
+    // is refused (regenerate it from a pinned preflight report); a different
+    // pin is refused (never apply under another account or sandbox).
+    if (!allowlist.stripe_account) {
+      throw new Error('allowlist has no stripe_account — regenerate it from a --preflight report produced with --stripe-account (the report records the verified account)');
+    }
+    if (allowlist.stripe_account !== account) {
+      throw new Error(`allowlist was generated for Stripe account ${allowlist.stripe_account} but this run is verified against ${account} — refusing`);
+    }
+
     // Recheck Stripe immediately before writing; abort on any drift.
     const { rows, stripeStateByRowId, classification } = await runPreflight(db);
+    const signal = notFoundSignal(stripeStateByRowId);
+    if (signal.massNotFound && !args.acknowledgeMassNotFound) {
+      console.error(`ABORTING — ${signal.notFound}/${signal.checked} verified Stripe objects are missing in account ${account}: this looks like rows created in another account, sandbox or mode. A 404 is never authorization to downgrade. Re-run against the account the rows belong to, or pass --acknowledge-mass-not-found ONLY for an explicitly reviewed legacy reset.`);
+      process.exitCode = 5;
+      return;
+    }
     const drift = compareToAllowlist(classification, allowlist);
     if (!drift.ok) {
       console.error('ABORTING — classification drifted from the approved allowlist:');
@@ -317,7 +401,27 @@ async function main() {
 
   if (args.mode === 'rollback') {
     assertSafeRunId(args.runId || '');
+    requireMigration022(db, 'rollback');
     const auditRows = wranglerD1Json(db, `SELECT * FROM billing_repair_audit WHERE run_id = '${args.runId}' AND mode = 'apply' ORDER BY id`);
+
+    // Rollback ordering guard: with 023's unique indexes in place, a restore
+    // that re-introduces duplicate Stripe ids is refused by the database (the
+    // batch is atomic, nothing lands) — refuse it here first with the exact
+    // ordering, instead of surfacing a raw UNIQUE error.
+    const uniqueIdx = wranglerD1Json(db, "SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('idx_users_stripe_customer_id_unique', 'idx_users_stripe_subscription_id_unique')");
+    if (uniqueIdx.length > 0 && auditRows.length > 0) {
+      const touchedIds = [...new Set(auditRows.map((a) => Number(a.user_row_id)).filter((v) => Number.isInteger(v) && v > 0))];
+      const currentRows = wranglerD1Json(db, `SELECT id, stripe_customer_id, stripe_subscription_id FROM users WHERE stripe_customer_id IS NOT NULL OR stripe_subscription_id IS NOT NULL OR id IN (${touchedIds.join(',')})`);
+      const collisions = findRollbackIdCollisions(auditRows, currentRows);
+      if (collisions.length > 0) {
+        console.error('ABORTING — this rollback would restore duplicate Stripe ids while migration 023\'s unique indexes exist:');
+        for (const c of collisions) console.error(`  * ${c.field} …${c.valueLast4} would be held by rows ${c.rowIds.join(', ')}`);
+        console.error('Required order:');
+        for (const line of ROLLBACK_ORDER_INSTRUCTIONS) console.error(`  ${line}`);
+        process.exitCode = 4;
+        return;
+      }
+    }
     const sql = buildRollbackSql(args.runId, auditRows, new Date().toISOString());
     const dir = mkdtempSync(join(tmpdir(), 'billing-reconcile-'));
     const sqlPath = join(dir, `rollback-${args.runId}.sql`);

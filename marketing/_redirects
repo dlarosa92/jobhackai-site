@@ -4,16 +4,16 @@
 /pages/blog         /blog  301
 /pages/features.html  /features  301
 /pages/features     /features  301
-/pages/pricing.html https://app.jobhackai.io/pricing-a  301
-/pages/pricing      https://app.jobhackai.io/pricing-a  301
+/pages/pricing.html https://app.jobhackai.io/pricing  301
+/pages/pricing      https://app.jobhackai.io/pricing  301
 /pages/             /  301
 
 # Redirect .html extensions to clean URLs
 /index.html   /  301
 /blog.html    /blog  301
 /features.html  /features  301
-/pricing.html https://app.jobhackai.io/pricing-a  301
-/pricing      https://app.jobhackai.io/pricing-a  301
+/pricing.html https://app.jobhackai.io/pricing  301
+/pricing      https://app.jobhackai.io/pricing  301
 
 # Blog post clean URLs are handled automatically by Cloudflare Pages' pretty URLs feature.
 # Do NOT add rewrite rules here for blog posts — they cause redirect loops (308 loop).

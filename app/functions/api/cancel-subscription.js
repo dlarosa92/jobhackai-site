@@ -1,4 +1,5 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
+import { accountOperationEnv } from '../_lib/account-operation-scope.js';
 import { getUserPlanData } from '../_lib/db.js';
 import { stripe, listSubscriptions, getPlanFromSubscription, invalidateBillingCaches } from '../_lib/billing-utils.js';
 import { assertStripeKeyMatchesEnvironment } from '../_lib/stripe-environment.js';
@@ -6,7 +7,8 @@ import { readSubscriptionPeriod } from '../_lib/stripe-identity.js';
 import { ENTITLED_SUBSCRIPTION_STATUSES } from '../_lib/billing-ownership.js';
 
 export async function onRequest(context) {
-  const { request, env } = context;
+  const { request } = context;
+  const env = accountOperationEnv(context);
   const origin = request.headers.get('Origin') || '';
   if (request.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders(origin, env) });

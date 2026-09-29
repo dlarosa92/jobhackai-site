@@ -3,5 +3,23 @@
   "private": true,
   "dependencies": {
     "jose": "^5.0.0"
+  },
+  "scripts": {
+    "build:roles": "node marketing/scripts/build-role-pages.mjs",
+    "build:directory": "node marketing/scripts/build-directory.mjs",
+    "test:voice:transcripts:smoke": "node app/tests/voice-transcripts/run-evals.mjs --mode smoke",
+    "test:voice:transcripts:full": "node app/tests/voice-transcripts/run-evals.mjs --mode full",
+    "test:voice:transcripts:stability": "node app/tests/voice-transcripts/run-evals.mjs --mode stability",
+    "test:voice:transcripts:unit": "node app/tests/voice-transcripts/unit.test.mjs",
+    "test:voice:interviewer": "node app/functions/_lib/__tests__/voice-interviewer.test.mjs",
+    "test:voice:transcript-order": "node app/functions/_lib/__tests__/voice-transcript-order.test.mjs",
+    "test:voice:conduct": "node app/functions/_lib/__tests__/voice-conduct.test.mjs",
+    "test:voice:lifecycle": "node app/functions/_lib/__tests__/voice-lifecycle.test.mjs",
+    "test:voice:usage": "node --test app/functions/_lib/__tests__/voice-usage.test.mjs",
+    "test:voice:client": "node app/functions/_lib/__tests__/voice-client.test.mjs",
+    "test:role-selector": "node app/functions/_lib/__tests__/role-selector.test.mjs",
+    "test:analytics": "node --test app/functions/_lib/__tests__/analytics-consent.test.mjs",
+    "test:voice:coaching": "node --test app/functions/_lib/__tests__/voice-coaching.test.mjs",
+    "eval:voice:coaching": "node app/tests/voice-coaching/run.mjs"
   }
 }

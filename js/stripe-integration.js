@@ -592,34 +592,11 @@ class JobHackAIStripe {
     }
 
     try {
-      // Resolve auth user for backend mapping
-      const authUser = (function getAuthUser(){
-        try {
-          const u = window.FirebaseAuthManager?.getCurrentUser?.();
-          if (u && u.uid && u.email) return { uid: u.uid, email: u.email };
-        } catch(_){}
-        // Fallback: Get user data from Firebase SDK keys (works synchronously)
-        // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
-        function getUserFromFirebaseKeys() {
-          for (const storage of [sessionStorage, localStorage]) {
-            try {
-              const firebaseKeys = Object.keys(storage).filter(k => k.startsWith('firebase:authUser:'));
-              if (firebaseKeys.length > 0) {
-                const keyData = JSON.parse(storage.getItem(firebaseKeys[0]) || '{}');
-                if (keyData.uid && keyData.email) {
-                  return { uid: keyData.uid, email: keyData.email };
-                }
-              }
-            } catch (e) {
-              console.warn('Failed to get user from Firebase keys:', e);
-            }
-          }
-          return null;
-        }
-        return getUserFromFirebaseKeys();
-      })();
+      // Only a Firebase User can provide the token required by checkout.
+      await window.FirebaseAuthManager?.waitForAuthReady?.(4000);
+      const authUser = window.FirebaseAuthManager?.getCurrentUser?.();
 
-      if (!authUser) {
+      if (!authUser || typeof authUser.getIdToken !== 'function') {
         console.error('Missing authenticated user for checkout');
         alert('Please log in to start your subscription.');
         window.location.href = 'login.html';
@@ -627,15 +604,17 @@ class JobHackAIStripe {
       }
 
       // Create checkout session (Cloudflare Pages Function)
+      const idToken = await authUser.getIdToken();
+      const analytics = await window.JHA?.cookieConsent?.getCheckoutAnalyticsContext?.();
       const response = await fetch('/api/stripe-checkout', {
         method: 'POST',
         headers: {
+          'Authorization': `Bearer ${idToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           plan: plan,
-          firebaseUid: authUser.uid,
-          email: authUser.email,
+          ...(analytics ? { analytics } : {}),
           forceNew: plan === 'trial'
         }),
       });
@@ -997,13 +976,14 @@ async function upgradePlan(targetPlan, options = {}) {
     const idToken = await user.getIdToken();
     // Trial plans must use stripe-checkout (creates a new subscription with trial period)
     if (plan === 'trial') {
+      const analytics = await window.JHA?.cookieConsent?.getCheckoutAnalyticsContext?.();
       const res = await fetch('/api/stripe-checkout', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${idToken}`
         },
-        body: JSON.stringify({ plan: 'trial', forceNew: true })
+        body: JSON.stringify({ plan: 'trial', forceNew: true, ...(analytics ? { analytics } : {}) })
       });
       const data = await res.json().catch(() => ({}));
       if (data?.ok && data?.url) {

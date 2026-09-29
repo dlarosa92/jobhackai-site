@@ -1,4 +1,5 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
+import { accountOperationEnv } from '../_lib/account-operation-scope.js';
 import { getUserPlanData, updateUserPlan, resetFeatureDailyUsage, resetUsageEvents } from '../_lib/db.js';
 import {
   stripe,
@@ -23,7 +24,8 @@ import { buildUpgradeCheckoutSessionBody, resolveCustomerByEmailOwnership, selec
  * Safely upgrades a user to a paid plan without creating duplicate subscriptions.
  */
 export async function onRequest(context) {
-  const { request, env } = context;
+  const { request } = context;
+  const env = accountOperationEnv(context);
   const origin = request.headers.get('Origin') || '';
 
   if (request.method === 'OPTIONS') {
@@ -40,7 +42,11 @@ export async function onRequest(context) {
     const requestedReturnUrl = body?.returnUrl || request.headers.get('Referer') || '';
 
     const targetPlan = normalizePlan(targetPlanRaw);
-    if (!targetPlan || !['essential', 'pro', 'premium'].includes(targetPlan)) {
+    // Voice subscription plans (weekly/monthly) are valid upgrade targets so
+    // existing subscribers can switch plans from /pricing without hitting
+    // INVALID_PLAN. The pack stays excluded: it is a one-time payment product
+    // handled by stripe-checkout (mode=payment), not a subscription change.
+    if (!targetPlan || !['essential', 'pro', 'premium', 'weekly', 'monthly'].includes(targetPlan)) {
       return json({ ok: false, code: 'INVALID_PLAN' }, 400, origin, env);
     }
 
