@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow"><title>Synthetic coaching check | JobHackAI QA</title>
+  <style>body{max-width:960px;margin:40px auto;padding:0 24px;font:16px/1.5 system-ui;color:#1f2937}button{padding:12px 20px}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f3f4f6;padding:20px}</style>
+</head>
+<body>
+  <h1>Synthetic coaching check</h1>
+  <p>Operator-only QA check using seven fixed fictional interviews and the actual report model. It makes no voice calls, uses no interview credits and does not change interview history. Outputs need semantic review.</p>
+  <p id="status" role="status">Checking access...</p>
+  <button id="run" disabled>Run seven coaching cases</button>
+  <p><a href="/voice-interview">Back to voice interviews</a></p>
+  <pre id="results" aria-label="Synthetic coaching results"></pre>
+  <script type="module">
+    import authManager from '/js/firebase-auth.js?v=20260207-2';
+    const status = document.getElementById('status'), run = document.getElementById('run'), output = document.getElementById('results');
+    let fixtures = [], running = false;
+    async function api(id) {
+      const user = await authManager.waitForAuthReady();
+      if (!user || user._authPending || typeof user.getIdToken !== 'function') throw Error('sign_in_required');
+      const response = await fetch('/api/voice/qa-coaching' + (id ? '?case=' + encodeURIComponent(id) : ''), {
+        method: id ? 'POST' : 'GET', headers: { Authorization: 'Bearer ' + await user.getIdToken(true) },
+        signal: AbortSignal.timeout(95000)
+      });
+      if (!response.ok) throw Error('request_failed_' + response.status);
+      return response.json();
+    }
+    run.addEventListener('click', async () => {
+      if (running) return;
+      running = true; run.disabled = true;
+      const report = { createdAt: new Date().toISOString(), results: [] };
+      try {
+        for (const fixture of fixtures) {
+          status.textContent = 'Scoring ' + fixture.id + ' (' + (report.results.length + 1) + ' of ' + fixtures.length + ')...';
+          report.results.push(await api(fixture.id));
+          output.textContent = JSON.stringify(report, null, 2);
+        }
+        status.textContent = 'Seven cases complete. Review each report against its stated criteria.';
+      } catch {
+        status.textContent = 'The check stopped. Completed results remain below. Reload to retry; completed model outputs may be cached.';
+      }
+    });
+    try {
+      if (!['qa.jobhackai.io', 'dev.jobhackai.io', 'localhost', '127.0.0.1'].includes(location.hostname)) throw Error('not_qa');
+      fixtures = (await api()).cases;
+      status.textContent = 'Ready. All input is fixed synthetic test data.'; run.disabled = false;
+    } catch { status.textContent = 'This check is unavailable or your account does not have operator access.'; }
+  </script>
+</body>
+</html>

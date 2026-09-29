@@ -22,3 +22,13 @@ score ranges as validation of this revised rubric.
 
 Live reconnect, audio naturalness, consent, billing and usage are separate QA
 acceptance checks. These synthetic reports do not establish hiring validity.
+
+When no local provider key is available, `/voice-coaching-check` runs the same
+seven fixed fixtures with the existing staging key. The endpoint fails closed
+outside explicit dev/QA environments. It additionally requires a verified
+Firebase user matching `VOICE_QA_EVAL_UID` and a future ISO `VOICE_QA_EVAL_UNTIL`.
+Enable only for the operator's short evaluation window and remove both values
+afterward. No client-supplied transcript or model is accepted. It writes no D1
+interview records and uses no voice credits. The normal prompt cache avoids
+repeating completed model work. Save the displayed synthetic output with the
+deployed revision, review every case semantically, and record model/cache usage.
