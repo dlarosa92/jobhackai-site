@@ -9,6 +9,7 @@ const render = html.slice(start, end);
 for (const fixture of [
   { billing: 'free', voice: { mode: 'pack', sessionsRemaining: 4, packExpiresAt: '2099-12-31T12:00:00.000Z' }, expected: 'Interview Pack', cached: 'pack' },
   { billing: 'free', voice: { mode: null, sessionsRemaining: 0 }, expected: 'Free Account', cached: 'free' },
+  { billing: 'free', voice: { enabled: false, lookupStatus: 'disabled', mode: null, sessionsRemaining: 0 }, expected: 'Free Account', cached: 'free' },
   { billing: 'monthly', voice: { mode: 'subscription', sessionsRemaining: 4 }, expected: 'Monthly Plan', cached: 'monthly' },
   { billing:'weekly', voice:{mode:'subscription'}, status:'active', currentPeriodEnd:1790481600000, cancelAt:1790481600000, metaCancelAt:null, expected:'will cancel', absent:'Renews on', cached:'weekly' },
   { billing:'weekly', voice:{mode:'subscription'}, status:'active', currentPeriodEnd:1790481600000, cancelAt:null, metaCancelAt:1790481600000, expected:'Renews on', absent:'will cancel', cached:'weekly' }
@@ -33,7 +34,7 @@ for (const fixture of [
 }
 // A transient entitlement failure must not downgrade the cache, dispatch a
 // plan change, or present a paid pack owner as a free customer.
-for (const failure of ['network', 'http', 'json', 'missing', 'backend']) {
+for (const failure of ['network', 'http', 'json', 'missing', 'backend', 'disabled']) {
   const section = { innerHTML: '' };
   const store = new Map([['user-plan', 'pack'], ['dev-plan', 'pack']]);
   let changes = 0;
@@ -47,13 +48,14 @@ for (const failure of ['network', 'http', 'json', 'missing', 'backend']) {
       if (failure === 'network') throw Error('offline');
       return { ok: failure !== 'http', json: async () => {
         if (failure === 'json') throw Error('invalid JSON');
-        return failure === 'backend' ? { voice: { enabled: false, reason: 'db_unavailable' } } : {};
+        if (failure === 'disabled') return { voice: { enabled: false, lookupStatus: 'disabled' } };
+        return failure === 'backend' ? { voice: { enabled: false, lookupStatus: 'unavailable', reason: 'db_unavailable' } } : {};
       } };
     }
   };
   vm.createContext(ctx);
   await vm.runInContext('let billingSectionRetryCount=0; const MAX_BILLING_RETRIES=3;'+render+';renderBillingSection();', ctx);
-  assert.match(section.innerHTML, /Unable to load your interview allowance/, failure);
+  assert.match(section.innerHTML, failure === 'disabled' ? /Voice interviews are temporarily unavailable/ : /Unable to load your interview allowance/, failure);
   assert.doesNotMatch(section.innerHTML, /Free Account/, failure);
   assert.equal(store.get('user-plan'), 'pack', failure);
   assert.equal(store.get('dev-plan'), 'pack', failure);
