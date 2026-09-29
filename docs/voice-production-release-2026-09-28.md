@@ -9,7 +9,55 @@ are superseded by this instruction; technical acceptance requirements remain.
 
 **Status: production is not ready. No voice launch has been published.**
 
-## September 29 supervised QA result
+## September 29 reconnect fix and controlled acceptance
+
+The transport failure was reproduced and fixed. PR963/964 added a QA-only
+generated-silence check and fixed-category provider diagnostics; PR965 isolated
+diagnostic cleanup from authoritative state persistence. The normal-close case
+returned200. The dropped-transport case returned404 with the exact structured
+provider error `call_id_not_found` / `invalid_request_error`, which previously
+left the old attempt uncertain and made reconnect return409.
+
+PR966/967 recognize only that exact JSON status/code/type for an already-owned
+call with its original issuing key. Generic404s, message text, other errors and
+timeouts remain uncertain. Previously uncertain attempts are never replayed or
+reclassified. A distinct `provider_absent` receipt is logged before the old
+attempt is saved as closed.
+
+At 12:38–12:39 UTC, the controlled QA retest passed on application revision
+`bbf67df81e77c1a2f0db4534df08d28e9ed17de0`, deployment
+`0dbf7433-912c-4160-ab42-c20b7d130831`, and deadline Worker version
+`8eb1e957-83b9-4eaf-a203-71769f7cf5ee`. The browser connected, dropped its voice
+transport while the network remained online, and reconnected under the same
+application interview. The provider confirmed the old call absent; the new
+call returned201 and its data channel opened. Finish returned200, the new call
+returned200 on hangup, and completion returned `saved=true`,
+`connectionClosed=true`, `closureNeedsReview=false`. Both attempt rows are
+closed. There is one interview row, one reservation, and the original deadline.
+The visible allowance changed from51 to50: reconnect consumed no extra credit.
+
+This is a transport acceptance result using silence, not proof of spoken
+continuity, naturalness or report quality. The original Scrum Master report is
+still present. Historical staging holds remain one in development and four in
+QA, including the deliberate pre-fix reproduction. They were not cleared.
+
+The retest also exposed a history rendering defect: completed methodology-v2
+reports with `tooShort=true` and no score fell through to “Scoring…”. The
+candidate now labels ready unscored reports “Not scored”; PR968/969 promote
+that small UI fix. Its browser verification follows deployment.
+
+Validation for the reconnect patch: 119 provider/interview/diagnostic/recovery
+tests and 32 native Workers/D1/DO tests pass, including exact-error recognition,
+same-credit/same-deadline reconnect, ambiguous-error holds, failed persistence,
+and deadline cleanup. Worker typecheck and both staging dry runs pass. The
+integrated production candidate passes126 targeted Node tests; all38 client
+checks pass with the history label change.
+
+Current remaining acceptance: supervised spoken reconnect/ending and listening,
+seven synthetic real-model coaching cases, and production schema/configuration/
+checkout verification. The production release and campaign remain unpublished.
+
+## September 29 initial supervised QA result
 
 At 10:50 UTC, QA was independently reverified at `ca637be87ff0acd5bcbc9aee9edf369c5228287d`
 and canonical deployment `9914e691-e126-43cc-bfeb-3f15b9607458`.
@@ -49,7 +97,7 @@ No native historical Pages invocation recovery path was found. Absence of logs
 does not confirm closure. Preserve the private session/attempt receipts in the
 local QA evidence files; do not publish user identifiers or transcript content.
 
-Remaining gates: provider closure/reconnect evidence, live reconnect continuity,
+The gates at the end of this initial run were provider closure/reconnect evidence, live reconnect continuity,
 spoken ending (not reached in this run), natural voice quality, seven real-model
 coaching cases, and production migration/configuration/checkout acceptance.
 
@@ -80,23 +128,19 @@ exact revision, verified at 02:44:55 UTC. Its managed flag, RPC, D1 and deadline
 bindings match; deadline scheduling remains enabled. The signed-in QA page now
 renders the revised setup guidance and JD field. No production code was merged.
 
-## Technical release blockers
+## Release acceptance and remaining work
 
-1. **Provider closure and reconnect.** Live SELECTs show one development
-   `create_unconfirmed` attempt, and two QA attempts with `close_unconfirmed`
-   and `close_http_404`. Two other QA attempts are closed. Aggregate categories
-   overlap; these are ledger states, not proof that three provider calls remain
-   running. No historical state was cleared or retried. The authenticated
-   OpenAI Realtime log view currently has no saved traces. Absence is not closure
-   evidence. Follow `voice-call-reconciliation.md` only with actual invocation
-   and provider receipts. A timeout, old date or 404 cannot be relabelled as
-   success to pass the release.
+1. **Provider lifecycle.** The controlled transport retest now passes as
+   recorded above. Historical staging uncertainty remains an operator recovery
+   follow-up, not evidence that those calls are still running. Follow
+   `voice-call-reconciliation.md` with actual receipts; never infer historical
+   closure from age, generic404s or the behavior of a different test call.
 2. **Report quality.** PR941 replaces the fixed 5/10/85 scoring target with
    role/level evidence, grounded quotes, unassessed skills and no numeric grade
    for insufficient candidate speech. Local integration checks pass. The seven
    synthetic real-model cases still require execution and semantic review;
    no development API key is present locally. No model upgrade is included.
-3. **Live acceptance.** After closure behavior is corrected, run supervised
+3. **Live acceptance.** With the transport fix deployed, run supervised
    reconnect and spoken ending, inspect the persisted transcript/report, and
    verify no extra credit on reconnect. Check mobile audio and report readability.
    Codex runs technical checks; Sebastian judges spoken pacing and usefulness.
