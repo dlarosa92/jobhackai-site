@@ -21,7 +21,9 @@ const NON_PRODUCTION_ONLY_DEBUG_PATHS = new Set([
   '/simple-test.html',
   '/stripe-key-test',
   '/stripe-test',
-  '/stripe-test.html'
+  '/stripe-test.html',
+  '/voice-connection-check',
+  '/voice-connection-check.html'
 ]);
 
 // Retired legacy routes, blocked in EVERY environment as a second layer of
