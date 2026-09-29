@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Voice connection check | JobHackAI QA</title>
+  <style>
+    body { max-width: 900px; margin: 48px auto; padding: 0 24px; font: 16px/1.5 system-ui,sans-serif; color: #1f2937; background: #f8fafc; }
+    button { padding: 12px 16px; margin: 0 8px 12px 0; cursor: pointer; }
+    button:disabled { cursor: default; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; background: white; border: 1px solid #d1d5db; padding: 20px; border-radius: 12px; }
+  </style>
+</head>
+<body>
+  <h1>Voice connection check</h1>
+  <p>QA only. Uses a silent generated audio track, never your microphone. This uses one interview from the signed-in QA account. Reconnect keeps the same interview.</p>
+  <p>Finish the check before leaving. It automatically attempts to finish after 60 seconds. No spoken answers or interview transcript are collected.</p>
+  <p id="status" role="status">Checking QA access...</p>
+  <button id="start" disabled>Start silent QA check</button>
+  <button id="drop" disabled>Disconnect browser transport</button>
+  <button id="reconnect" disabled>Reconnect same interview</button>
+  <button id="finish" disabled>Finish check</button>
+  <p><a href="/voice-interview">Back to voice interviews</a></p>
+  <pre id="events" aria-label="Connection check events"></pre>
+  <script type="module">
+    import authManager from '/js/firebase-auth.js?v=20260207-2';
+    const el = id => document.getElementById(id);
+    const allowed = ['qa.jobhackai.io','dev.jobhackai.io','localhost','127.0.0.1'].includes(location.hostname);
+    let sessionId, attemptId, pc, dc, audio, stream, startedAt, stopTimer;
+    let busy = false, finishing = false, finished = false, dropped = false;
+    function log(event, detail = {}) {
+      el('events').textContent += new Date().toISOString() + ' ' + event + ' ' + JSON.stringify(detail) + '\n';
+    }
+    function status(text) { el('status').textContent = text; }
+    async function api(path, body) {
+      const user = await authManager.waitForAuthReady();
+      if (!user) throw Error('sign_in_required');
+      const response = await fetch(path, {method: body ? 'POST' : 'GET',
+        headers: {'Content-Type':'application/json', Authorization:'Bearer ' + await user.getIdToken(true)},
+        ...(body ? {body:JSON.stringify(body)} : {}), signal:AbortSignal.timeout(30000)});
+      const data = await response.json();
+      // Never display an auth token, SDP, provider payload, transcript or key.
+      log(body?.action || (body ? 'complete' : 'entitlement'), {status:response.status,
+        reason:/^voice_[a-z_]+$/.test(data.reason || '') ? data.reason : undefined,
+        connectionClosed:data.connectionClosed, closureNeedsReview:data.closureNeedsReview, saved:data.saved});
+      if (!response.ok) throw Error('request_failed_' + response.status);
+      return data;
+    }
+    function disconnect() {
+      if (dc) { dc.close(); dc = null; }
+      if (pc) { pc.close(); pc = null; }
+    }
+    async function connect() {
+      const next = new RTCPeerConnection();
+      pc = next;
+      stream.getAudioTracks().forEach(track => next.addTrack(track, stream));
+      next.onconnectionstatechange = () => log('transport', {state:next.connectionState});
+      dc = next.createDataChannel('oai-events');
+      dc.onopen = () => {
+        if (finishing || finished || pc !== next) return;
+        log('data_channel_open');
+        status('Silent test connected. No microphone is in use.');
+        el('drop').disabled = false;
+      };
+      dc.onmessage = event => {
+        try {
+          const message = JSON.parse(event.data);
+          if (message.type === 'session.created') log('provider_session_ready');
+        } catch { /* No arbitrary provider content is displayed. */ }
+      };
+      await next.setLocalDescription(await next.createOffer());
+      const answer = await api('/api/voice/connection', {action:'open', sessionId,
+        replacesAttemptId:attemptId || null, sdp:next.localDescription.sdp,
+        role:'QA connection check', seniority:'Any level', transcript:[], interviewStarted:false});
+      if (finishing) { next.close(); return; }
+      attemptId = answer.attemptId;
+      log('owned_attempt', {sessionId, attemptId});
+      await next.setRemoteDescription({type:'answer', sdp:answer.sdp});
+    }
+    async function finish() {
+      if (!sessionId || finishing || finished) return;
+      finishing = true;
+      clearTimeout(stopTimer);
+      el('finish').disabled = el('drop').disabled = el('reconnect').disabled = true;
+      status('Finishing the QA check...');
+      try {
+        // Match the product's normal close ordering: provider before transport.
+        try { await api('/api/voice/connection', {action:'close',sessionId}); }
+        catch { log('close_request_unacknowledged'); }
+        finally {
+          disconnect(); stream?.getTracks().forEach(track => track.stop());
+          if (audio && audio.state !== 'closed') await audio.close();
+        }
+        const result = await api('/api/voice/session/' + encodeURIComponent(sessionId) + '/complete', {
+          sessionId, reason:dropped ? 'connection_lost' : 'user_ended', transcript:[],
+          durationSeconds:Math.round((Date.now() - startedAt) / 1000)});
+        finished = result.saved === true || result.status === 'cancelled' || result.closureNeedsReview === true;
+        status(finished ? (result.closureNeedsReview ? 'Check saved. Provider closure needs review.' : 'Check finished.')
+          : 'Closure is still in progress. Finish again to check its result.');
+      } catch { status('Finishing was not acknowledged. Use Finish check again.'); }
+      finally { finishing = false; el('finish').disabled = finished; }
+    }
+    async function run(action) {
+      if (busy || finishing || finished) return;
+      busy = true;
+      try { await action(); }
+      catch { status('Connection request failed. Finish the check to preserve its result.'); disconnect(); }
+      finally { busy = false; }
+    }
+    el('start').addEventListener('click', () => { void run(async () => {
+      if (!allowed || sessionId) return;
+      el('start').disabled = true;
+      const plan = await api('/api/plan/me');
+      if (plan.voice?.transport !== 'managed') throw Error('managed_transport_required');
+      audio = new AudioContext();
+      await audio.resume();
+      stream = audio.createMediaStreamDestination().stream;
+      sessionId = crypto.randomUUID(); startedAt = Date.now();
+      log('check_started', {sessionId, source:'generated_silence', maxSeconds:60});
+      el('finish').disabled = false;
+      stopTimer = setTimeout(() => { void finish(); }, 60000);
+      await connect();
+    }); });
+    el('drop').addEventListener('click', () => {
+      if (busy || finishing || finished) return;
+      dropped = true; disconnect(); log('browser_transport_disconnected');
+      el('drop').disabled = true; el('reconnect').disabled = false;
+      status('Browser transport disconnected. Reconnect uses the same interview.');
+    });
+    el('reconnect').addEventListener('click', () => { void run(async () => {
+      el('reconnect').disabled = true; status('Requesting a replacement connection...'); await connect();
+    }); });
+    el('finish').addEventListener('click', () => { void finish(); });
+    addEventListener('beforeunload', event => {
+      if (sessionId && !finished) { event.preventDefault(); event.returnValue = ''; }
+    });
+    if (!allowed) status('This check is available only on QA or development.');
+    else {
+      const user = await authManager.waitForAuthReady();
+      status(user ? 'Ready for a silent QA connection check.' : 'Sign in on this QA tab first.');
+      el('start').disabled = !user;
+    }
+  </script>
+</body>
+</html>

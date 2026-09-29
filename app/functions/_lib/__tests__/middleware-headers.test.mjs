@@ -71,5 +71,18 @@ await test('middleware overrides conflicting headers from the asset layer', asyn
   assert.equal(voice.get('permissions-policy'), 'camera=(), microphone=(self), geolocation=()');
 });
 
+await test('silent connection check is non-production only and cannot use the microphone', async () => {
+  for (const path of ['/voice-connection-check','/voice-connection-check.html','/voice-connection-check/']) {
+    for (const environment of [undefined,'prod','production','prd','qa']) {
+      let reachedAsset = false;
+      const response = await onRequest({request:{url:'https://qa.jobhackai.io'+path},env:{ENVIRONMENT:environment},
+        next:async()=>{reachedAsset=true;return new Response('fixture');}});
+      assert.equal(response.status,environment==='qa'?200:404);
+      assert.equal(reachedAsset,environment==='qa');
+      assert.equal(response.headers.get('permissions-policy'),'camera=(), microphone=(), geolocation=()');
+    }
+  }
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
