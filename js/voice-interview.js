@@ -2135,6 +2135,9 @@
     if (item.overall != null && isFinite(Number(item.overall))) {
       return '<span class="vi-history-chip vi-history-chip--score">' + Math.round(Number(item.overall)) + '</span>';
     }
+    if (item.status === 'ready') {
+      return '<span class="vi-history-chip vi-history-chip--partial">Not scored</span>';
+    }
     return '<span class="vi-history-chip vi-history-chip--scoring">Scoring…</span>';
   }
 
