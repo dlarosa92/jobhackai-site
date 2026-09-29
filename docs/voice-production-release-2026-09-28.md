@@ -103,6 +103,15 @@ preserve the already applied billing and directory schema. Prepare additive
 019-021 and 024-029 changes with an export/restore point and verify exact state
 before applying. No production migration has run in this task.
 
+Schema-only rehearsal at 02:51 UTC: exported 66 schema objects (no user rows),
+loaded them into local SQLite, and successfully applied 019, 020, 021 and
+024-029 in sequence. Local integrity_check returned ok, with 114 resulting schema
+objects and both end_reason/usage_details_json voice columns. This verifies SQL
+compatibility with the observed schema, not migration of live user data. Remote
+read-only checks confirm both migration023 unique Stripe indexes already exist
+and duplicate customer/subscription groups are both zero; do not rerun the old
+billing repair or migration023 as part of this release.
+
 The authenticated live JOBHACKAI LLC Stripe catalog initially contains exactly
 three products: Essential $29/month, Pro $59/month, Premium $99/month. No voice
 offers exist in the all-products list. Browser access works; the Stripe
@@ -138,6 +147,7 @@ files/data/generator have no content diff from main, and application Functions
 have no content diff from the tested QA revision. Shared consent source/copies
 received whitespace cleanup only. All 74 marketing tests and the app production
 build pass. This candidate is preparation, not production acceptance or deploy.
+Draft production PR: https://github.com/dlarosa92/jobhackai-site/pull/960.
 The accumulated feature release is large (367 files before these release notes)
 and includes voice, billing/consent/account-lifecycle dependencies. Keep it draft
 until live acceptance and production migration/configuration are complete.
