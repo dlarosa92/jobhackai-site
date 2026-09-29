@@ -64,7 +64,7 @@ export async function onRequest(context) {
         const result=await closeManagedInterview(env,{uid,sessionId:body.sessionId});
         const reserved=await getDb(env).prepare('SELECT id FROM voice_sessions WHERE id=? AND user_id=?')
           .bind(body.sessionId,user.id).first();
-        return ok({sessionId:body.sessionId,connectionClosed:result.closed,sessionReserved:!!reserved},result.closed?200:202);
+        return ok({sessionId:body.sessionId,connectionClosed:result.closed,closureNeedsReview:!!result.needsReview,sessionReserved:!!reserved},result.closed?200:202);
       }
       const result=await openManagedInterview(env,{uid,sessionId:body.sessionId,sdp:body.sdp,
         role:body.role,seniority:body.seniority,jd:body.jd,

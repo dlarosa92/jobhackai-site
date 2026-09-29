@@ -138,7 +138,7 @@ test('an active call waits for its pending transcript before server hangup and k
   assert.equal(f.h.peerConnection().connectionState,'closed');assert.ok(f.h.completeBodies()[0].transcript.some(turn=>turn.text.includes('support tickets')));
 });
 
-test('saved transcript with uncertain closure keeps an exact retry payload and does not claim completion',async t=>{
+test('saved transcript with in-flight closure keeps an exact retry payload and does not claim completion',async t=>{
   let attempts=0;
   const f=fixture(t,{routes:{'/api/voice/session/':url=>url.includes('/complete')
     ? (++attempts===1?{__status:202,status:'completed',saved:true,connectionClosed:false}:{status:'completed',saved:true,connectionClosed:true})
@@ -173,6 +173,27 @@ test('an acknowledged report remains available while call closure is separately 
   assert.match(f.h.el('vi-scorecard').innerHTML,/Your interview report/);
   assert.match(f.h.el('vi-save-status').textContent,/Connection closure still needs confirmation/);
   assert.equal(f.h.el('vi-save-retry').style.display,'');
+});
+
+test('a saved report needing closure review offers no ineffective retry or leave-page warning',async t=>{
+  const f=fixture(t,{timerDelay:ms=>ms===2500?0:ms,routes:{'/api/voice/session/':url=>url.includes('/complete')
+    ? {__status:202,status:'completed',saved:true,connectionClosed:false,closureNeedsReview:true}:scoredSessionPayload()}});
+  await live(f);await f.h.click('vi-end-btn');await new Promise(resolve=>setTimeout(resolve,10));await f.h.settle();
+  assert.match(f.h.el('vi-scorecard').innerHTML,/Your interview report/);
+  assert.match(f.h.el('vi-save-status').textContent,/interview is saved.*technical review.*can leave/);
+  assert.equal(f.h.el('vi-save-retry').style.display,'none');
+  assert.equal(f.h.el('vi-save-retry').disabled,true);
+  let prevented=false;f.h.windowEvent('beforeunload',{preventDefault(){prevented=true;}});
+  assert.equal(prevented,false);
+  await f.h.click('vi-save-retry');assert.equal(f.h.completeBodies().length,1);
+});
+
+test('an unreserved startup needing closure review never claims a saved report',async t=>{
+  const f=fixture(t,{routes:{'/api/voice/session/':()=>({__status:202,status:'ending',saved:false,connectionClosed:false,closureNeedsReview:true})}});
+  await f.start();await f.h.click('vi-end-btn');
+  assert.match(f.h.el('vi-save-status').textContent,/No interview was saved.*technical review/);
+  assert.equal(f.h.el('vi-save-retry').style.display,'none');
+  assert.equal(f.h.requests.filter(r=>r.method==='GET' && r.url.includes('/api/voice/session/')).length,0);
 });
 
 for(const reason of ['voice_connection_unconfirmed','voice_connection_pending','voice_call_close_unconfirmed','voice_connection_deadline_unavailable','voice_call_create_rejected']) {
@@ -231,7 +252,7 @@ test('unconfirmed replacement closure cleans up both browser transports without 
   const f=fixture(t,{routes:{'/api/voice/connection':(url,init)=>{
     const body=JSON.parse(init.body);if(body.action==='close')return {connectionClosed:false};
     return ++count===1?f.answer(body):response.promise;
-  },'/api/voice/session/':()=>({__status:202,status:'completed',saved:true,connectionClosed:false})}});
+  },'/api/voice/session/':()=>({__status:202,status:'completed',saved:true,connectionClosed:false,closureNeedsReview:true})}});
   await live(f);const oldPc=f.h.peerConnection();
   const replacing=f.h.click('vi-reconnect-btn');await f.h.settle();const newPc=f.h.peerConnection();
   assert.notEqual(oldPc.connectionState,'closed');
@@ -239,5 +260,7 @@ test('unconfirmed replacement closure cleans up both browser transports without 
   await replacing;await f.h.settle(20);
   assert.equal(oldPc.connectionState,'closed');assert.equal(newPc.connectionState,'closed');
   assert.ok(newPc.tracks.every(t=>!t.enabled));assert.equal(f.opens().length,2);
-  assert.match(f.h.el('vi-save-status').textContent,/needs confirmation/);
+  assert.match(f.h.el('vi-save-status').textContent,/technical review/);
+  assert.equal(f.h.el('vi-save-retry').style.display,'none');
+  assert.equal(f.h.completeBodies()[0].reason,'connection_lost');
 });
