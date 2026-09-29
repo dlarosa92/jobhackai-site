@@ -877,6 +877,15 @@
           }
         } catch (_) {}
 
+        // Billing status covers subscriptions. Only a successful entitlement
+        // lookup can establish that a free subscriber has no paid pack.
+        if ((!data.plan || data.plan === 'free') && (!planMeta?.voice ||
+            planMeta.voice.enabled !== true ||
+            ['db_unavailable', 'not_migrated'].includes(planMeta.voice.reason))) {
+          billingSection.innerHTML = '<div role="status" style="color: #6B7280;">Unable to load your interview allowance. Please refresh the page to try again.</div>';
+          return;
+        }
+
         const plan = (data.plan === 'free' && planMeta?.voice?.mode === 'pack' && planMeta.voice.sessionsRemaining > 0) ? 'pack' : (data.plan || 'free');
         const storedPlan = localStorage.getItem('user-plan');
         const storedDevPlan = localStorage.getItem('dev-plan');

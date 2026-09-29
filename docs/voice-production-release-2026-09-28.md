@@ -14,12 +14,12 @@ are superseded by this instruction; technical acceptance requirements remain.
 The transport failure was reproduced and fixed. PR963/964 added a QA-only
 generated-silence check and fixed-category provider diagnostics; PR965 isolated
 diagnostic cleanup from authoritative state persistence. The normal-close case
-returned200. The dropped-transport case returned404 with the exact structured
+returned 200. The dropped-transport case returned 404 with the exact structured
 provider error `call_id_not_found` / `invalid_request_error`, which previously
-left the old attempt uncertain and made reconnect return409.
+left the old attempt uncertain and made reconnect return 409.
 
 PR966/967 recognize only that exact JSON status/code/type for an already-owned
-call with its original issuing key. Generic404s, message text, other errors and
+call with its original issuing key. Generic 404s, message text, other errors and
 timeouts remain uncertain. Previously uncertain attempts are never replayed or
 reclassified. A distinct `provider_absent` receipt is logged before the old
 attempt is saved as closed.
@@ -30,11 +30,11 @@ At 12:38–12:39 UTC, the controlled QA retest passed on application revision
 `8eb1e957-83b9-4eaf-a203-71769f7cf5ee`. The browser connected, dropped its voice
 transport while the network remained online, and reconnected under the same
 application interview. The provider confirmed the old call absent; the new
-call returned201 and its data channel opened. Finish returned200, the new call
-returned200 on hangup, and completion returned `saved=true`,
+call returned 201 and its data channel opened. Finish returned 200, the new call
+returned 200 on hangup, and completion returned `saved=true`,
 `connectionClosed=true`, `closureNeedsReview=false`. Both attempt rows are
 closed. There is one interview row, one reservation, and the original deadline.
-The visible allowance changed from51 to50: reconnect consumed no extra credit.
+The visible allowance changed from 51 to 50: reconnect consumed no extra credit.
 
 This is a transport acceptance result using silence, not proof of spoken
 continuity, naturalness or report quality. The original Scrum Master report is
@@ -43,14 +43,19 @@ QA, including the deliberate pre-fix reproduction. They were not cleared.
 
 The retest also exposed a history rendering defect: completed methodology-v2
 reports with `tooShort=true` and no score fell through to “Scoring…”. The
-candidate now labels ready unscored reports “Not scored”; PR968/969 promote
-that small UI fix. Its browser verification follows deployment.
+candidate now labels ready unscored reports “Not scored”. PR968/969 are merged.
+At 12:45 UTC, the signed-in QA browser confirmed all three silent checks show
+“Not scored”, the original Scrum Master score 48 remains, and allowance is 50.
+The loaded script is `voice-interview.js?v=20260929-history`. QA canonical
+revision is `e1d16c215ac95afa8b0da86b727d19dca229be8e`, deployment
+`e57e2c3f-b6c2-44cc-8cbd-56d21fa88fe6`. The deadline Worker is unchanged;
+its enabled flag and matching bindings were independently reverified.
 
 Validation for the reconnect patch: 119 provider/interview/diagnostic/recovery
 tests and 32 native Workers/D1/DO tests pass, including exact-error recognition,
 same-credit/same-deadline reconnect, ambiguous-error holds, failed persistence,
 and deadline cleanup. Worker typecheck and both staging dry runs pass. The
-integrated production candidate passes126 targeted Node tests; all38 client
+integrated production candidate passes 126 targeted Node tests; all 38 client
 checks pass with the history label change.
 
 Current remaining acceptance: supervised spoken reconnect/ending and listening,
@@ -134,7 +139,7 @@ renders the revised setup guidance and JD field. No production code was merged.
    recorded above. Historical staging uncertainty remains an operator recovery
    follow-up, not evidence that those calls are still running. Follow
    `voice-call-reconciliation.md` with actual receipts; never infer historical
-   closure from age, generic404s or the behavior of a different test call.
+   closure from age, generic 404s or the behavior of a different test call.
 2. **Report quality.** PR941 replaces the fixed 5/10/85 scoring target with
    role/level evidence, grounded quotes, unassessed skills and no numeric grade
    for insufficient candidate speech. Local integration checks pass. The seven

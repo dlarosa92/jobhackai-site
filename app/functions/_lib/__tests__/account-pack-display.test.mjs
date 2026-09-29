@@ -19,7 +19,7 @@ for (const fixture of [
     window: { FirebaseAuthManager: { getCurrentUser: () => ({ getIdToken: async () => 'fixture' }) }, dispatchEvent() {} },
     localStorage: { getItem: k => store.get(k), setItem: (k,v) => store.set(k,v) },
     CustomEvent: class {}, console,
-    fetch: async url => ({ ok: true, json: async () => url.includes('billing-status') ? { ok: true, plan: fixture.billing, status:fixture.status, currentPeriodEnd:fixture.currentPeriodEnd, cancelAt:fixture.cancelAt } : { plan: 'free', voice: fixture.voice, cancelAt:fixture.metaCancelAt } })
+    fetch: async url => ({ ok: true, json: async () => url.includes('billing-status') ? { ok: true, plan: fixture.billing, status:fixture.status, currentPeriodEnd:fixture.currentPeriodEnd, cancelAt:fixture.cancelAt } : { plan: 'free', voice: { enabled: true, ...fixture.voice }, cancelAt:fixture.metaCancelAt } })
   };
   vm.createContext(ctx);
   await vm.runInContext('let billingSectionRetryCount=0; const MAX_BILLING_RETRIES=3;'+render+';renderBillingSection();', ctx);
@@ -30,5 +30,33 @@ for (const fixture of [
     assert.ok(!section.innerHTML.includes('Billing Management'));
     assert.ok(section.innerHTML.includes('Valid through') && section.innerHTML.includes('2099'));
   }
+}
+// A transient entitlement failure must not downgrade the cache, dispatch a
+// plan change, or present a paid pack owner as a free customer.
+for (const failure of ['network', 'http', 'json', 'missing', 'backend']) {
+  const section = { innerHTML: '' };
+  const store = new Map([['user-plan', 'pack'], ['dev-plan', 'pack']]);
+  let changes = 0;
+  const ctx = {
+    document: { getElementById: () => section },
+    window: { FirebaseAuthManager: { getCurrentUser: () => ({ getIdToken: async () => 'fixture' }) }, dispatchEvent() { changes++; } },
+    localStorage: { getItem: k => store.get(k), setItem: (k,v) => store.set(k,v) },
+    CustomEvent: class {}, console,
+    fetch: async url => {
+      if (url.includes('billing-status')) return { ok: true, json: async () => ({ ok: true, plan: 'free' }) };
+      if (failure === 'network') throw Error('offline');
+      return { ok: failure !== 'http', json: async () => {
+        if (failure === 'json') throw Error('invalid JSON');
+        return failure === 'backend' ? { voice: { enabled: false, reason: 'db_unavailable' } } : {};
+      } };
+    }
+  };
+  vm.createContext(ctx);
+  await vm.runInContext('let billingSectionRetryCount=0; const MAX_BILLING_RETRIES=3;'+render+';renderBillingSection();', ctx);
+  assert.match(section.innerHTML, /Unable to load your interview allowance/, failure);
+  assert.doesNotMatch(section.innerHTML, /Free Account/, failure);
+  assert.equal(store.get('user-plan'), 'pack', failure);
+  assert.equal(store.get('dev-plan'), 'pack', failure);
+  assert.equal(changes, 0, failure);
 }
 console.log('Account settings pack, exhausted pack and subscription displays passed');
