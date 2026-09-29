@@ -144,13 +144,38 @@ runtime, generator, tests and experiment documents are retained; QA's deployed
 E2E safeguards are kept; marketing preview protections are combined; the sitemap
 retains all 35 production entries and adds 11 distinct QA entries. Directory
 files/data/generator have no content diff from main, and application Functions
-have no content diff from the tested QA revision. Shared consent source/copies
-received whitespace cleanup only. All 74 marketing tests and the app production
+initially matched the tested QA revision. All 74 marketing tests and the app production
 build pass. This candidate is preparation, not production acceptance or deploy.
 Draft production PR: https://github.com/dlarosa92/jobhackai-site/pull/960.
 The accumulated feature release is large (367 files before these release notes)
 and includes voice, billing/consent/account-lifecycle dependencies. Keep it draft
 until live acceptance and production migration/configuration are complete.
+
+The first candidate revision passed all applicable remote checks. Browser
+inspection then reproduced duplicate cookie banners on the exact marketing
+preview during authentication restoration. The candidate now preserves one
+actionable banner and dismisses it when the restored account already has a
+decision. All three new regression cases failed before the fix; all 106 consent,
+attribution and diagnostic checks pass after it. The shared marketing copy is
+synchronized. The only application Functions change relative to QA is this test
+harness/regression coverage; server runtime Functions remain unchanged.
+
+Production deadline configuration is now explicit in
+`workers/voice-deadlines/wrangler.jsonc`, targeting the live-verified
+`jobhackai-prod-db` ID above with `VOICE_DEADLINES_ENABLED=false` and no public
+route. Type generation/typecheck, all 29 current native worker tests and a
+production dry-run build passed. CI also checks the production dry run. This
+does not create a worker or enable scheduling. A private OPENAI_API_KEY matching
+the production Pages key must be provisioned before activation; no such key is
+present locally and encrypted Cloudflare secrets are not readable for copying.
+
+Cutover order after live acceptance: take the production recovery point, apply
+and verify the additive schema, provision the isolated deadline worker/binding
+and live price mapping, and deploy the pinned candidate app to the production
+app project. Verify that exact deployment and entitlement/closure behavior
+before merging main to publish marketing and converge the Git deployments.
+Preserve the old app/marketing deployment IDs above for rollback. Do not rely on
+simultaneous app and marketing auto-deploy timing.
 
 ## Campaign execution
 

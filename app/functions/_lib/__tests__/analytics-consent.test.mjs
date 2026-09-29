@@ -11,7 +11,7 @@ function harness({host = 'app.jobhackai.io', consent = true, config, pendingServ
   function element(tag = 'div') {
     return { tagName: tag, style: {}, innerHTML: '', classList: {add(){},remove(){},contains(){return false;}},
       setAttribute(k,v){this[k]=v;}, getAttribute(k){return this[k];}, events:{}, addEventListener(type,fn){this.events[type]=fn;}, focus(){},
-      remove(){ const i = scripts.indexOf(this); if(i >= 0) scripts.splice(i,1); },
+      remove(){ const i = scripts.indexOf(this); if(i >= 0) scripts.splice(i,1); const b = appendedElements.indexOf(this); if(b >= 0) appendedElements.splice(b,1); },
       querySelector(){return element();}, parentNode: {insertBefore(e){scripts.push(e);insertedScripts.push(e);}} };
   }
   const node = id => { if(!elements.has(id)) elements.set(id, element()); return elements.get(id); };
@@ -52,6 +52,29 @@ function harness({host = 'app.jobhackai.io', consent = true, config, pendingServ
     setConsent(analytics){ctx.JHA.cookieConsent.openPreferences();node('jha-toggle-analytics').checked=analytics;node('jha-save-preferences').onclick();}
   };
 }
+test('authentication restoration keeps one actionable banner for a new visitor',async()=>{
+  const h=harness({host:'preview.pages.dev',accountAuthPage:true,consent:null,pendingServer:true});
+  const banners=()=>h.appendedElements.filter(e=>e.id==='jha-cookie-banner');
+  await h.init();
+  assert.equal(banners().length,1);
+  const original=banners()[0];
+  const resumed=h.authReady(null);
+  h.finishServer(null);await resumed;
+  assert.equal(banners().length,1);
+  assert.equal(banners()[0],original);
+  h.node('jha-reject-all').onclick();
+  assert.equal(banners().length,0);
+  assert.equal(h.ctx.JHA.cookieConsent.hasAnalyticsConsent(),false);
+});
+for(const analytics of [false,true])test('a restored account decision dismisses the provisional banner: '+analytics,async()=>{
+  const h=harness({accountAuthPage:true,consent:null,pendingServer:true});
+  await h.init();
+  assert.equal(h.appendedElements.filter(e=>e.id==='jha-cookie-banner').length,1);
+  const resumed=h.authReady({getIdToken:async()=>'fixture-auth-token'});
+  h.finishServer(analytics);await resumed;
+  assert.equal(h.appendedElements.filter(e=>e.id==='jha-cookie-banner').length,0);
+  assert.equal(h.ctx.JHA.cookieConsent.hasAnalyticsConsent(),analytics);
+});
 test('account pages wait for restored authentication and the server consent decision',async()=>{
   const h=harness({accountAuthPage:true,consent:true,pendingServer:true});
   const startup=h.init();await Promise.resolve();await Promise.resolve();h.runTimers();

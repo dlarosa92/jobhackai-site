@@ -58,6 +58,8 @@ jobs:
         run: npm test
       - name: Build deadline Worker without deployment
         run: npx wrangler deploy --dry-run --env qa --outdir /tmp/jobhackai-voice-deadlines
+      - name: Validate disabled production deadline configuration without deployment
+        run: npx wrangler deploy --dry-run --env prod --outdir /tmp/jobhackai-voice-deadlines-prod
   billing-tests:
     runs-on: ubuntu-latest
     steps:

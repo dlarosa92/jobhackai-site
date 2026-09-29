@@ -627,7 +627,13 @@
 
   // Create banner
   function createBanner() {
-    if (hasConsent()) return; // Already has consent
+    if (hasConsent()) {
+      removeBanner();
+      return;
+    }
+    // Authentication restoration resumes init after a provisional banner may
+    // already be visible. Preserve that banner and its existing handlers.
+    if (bannerElement) return;
 
     bannerElement = document.createElement('div');
     bannerElement.id = 'jha-cookie-banner';
