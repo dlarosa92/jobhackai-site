@@ -96,13 +96,15 @@ export async function createManagedVoiceCall(env, { uid, sessionId, sdp, instruc
       failureCode = 'create_http_' + response.status;
       const definite = DEFINITE_REJECTION.has(response.status);
       providerReceipt(definite ? 'provider_rejected' : 'provider_response_unconfirmed',response,{attempt:id,execution,callId:null});
-      console.log('[voice-call] provider_diagnostic',{attempt:id,execution,operation:'create',status:response.status,
-        ...await voiceProviderFailureDiagnostic(response)});
       await db.prepare(`UPDATE voice_provider_calls SET state=?,last_error_code=?,
         execution_token=CASE WHEN ? THEN NULL ELSE execution_token END,updated_at=datetime('now'),
         closed_at=CASE WHEN ? THEN datetime('now') ELSE NULL END
         WHERE id=? AND execution_token=? AND state='creating'`)
         .bind(definite?'closed':'uncertain',definite?'create_rejected':failureCode,definite?1:0,definite?1:0,id,execution).run();
+      // Save the authoritative HTTP result before optional body diagnostics.
+      // A terminated diagnostic read must never lose a definite rejection.
+      console.log('[voice-call] provider_diagnostic',{attempt:id,execution,operation:'create',status:response.status,
+        ...await voiceProviderFailureDiagnostic(response)});
       throw Error(definite?'voice_call_create_rejected':'voice_call_create_unconfirmed');
     }
     const callId = providerCallId(response.headers.get('Location'));

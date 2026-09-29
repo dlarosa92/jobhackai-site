@@ -74,7 +74,7 @@
       const answer = await api('/api/voice/connection', {action:'open', sessionId,
         replacesAttemptId:attemptId || null, sdp:next.localDescription.sdp,
         role:'QA connection check', seniority:'Any level', transcript:[], interviewStarted:false});
-      if (finishing) { next.close(); return; }
+      if (finishing || finished || pc !== next) { next.close(); return; }
       attemptId = answer.attemptId;
       log('owned_attempt', {sessionId, attemptId});
       await next.setRemoteDescription({type:'answer', sdp:answer.sdp});
@@ -109,6 +109,7 @@
       try { await action(); }
       catch {
         disconnect();
+        if (finishing || finished) return;
         if (sessionId) {
           // An open request may already own a provider call. Finish checks it;
           // never replay an uncertain create or replacement from this tool.

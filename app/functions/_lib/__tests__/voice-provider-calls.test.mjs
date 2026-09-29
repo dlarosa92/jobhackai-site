@@ -115,6 +115,17 @@ test('definite create rejection permits a fresh attempt without pretending a cal
   f.setHandler(null);await f.create();assert.equal(f.calls.length,2);
 });
 
+test('definite rejection is saved before diagnostic reads and survives stream cleanup failure',async t=>{
+  const f=fixture(t);let observed;
+  f.setHandler(async()=>({ok:false,status:400,headers:new Headers(),body:{getReader:()=>({
+    async read(){observed=await f.row();return {done:true};},
+    cancel(){throw Error('diagnostic cleanup failed');},releaseLock(){throw Error('diagnostic lock failed');}
+  })}}));
+  await assert.rejects(f.create(),/create_rejected/);
+  assert.equal(observed.state,'closed');assert.equal(observed.execution_token,null);
+  assert.equal((await f.row()).last_error_code,'create_rejected');
+});
+
 test('definite provider rejection remains recoverable from a receipt log when its database write fails',async t=>{
   const f=fixture(t),logs=[];t.mock.method(console,'log',(...entry)=>logs.push(entry));
   f.db.exec("CREATE TRIGGER deny_rejection_receipt BEFORE UPDATE OF state ON voice_provider_calls WHEN NEW.state='closed' BEGIN SELECT RAISE(ABORT,'fixture storage failure'); END;");
