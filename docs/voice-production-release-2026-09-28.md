@@ -46,8 +46,9 @@ reports with `tooShort=true` and no score fell through to “Scoring…”. The
 candidate now labels ready unscored reports “Not scored”. PR968/969 are merged.
 At 12:45 UTC, the signed-in QA browser confirmed all three silent checks show
 “Not scored”, the original Scrum Master score 48 remains, and allowance is 50.
-The loaded script is `voice-interview.js?v=20260929-history`. QA canonical
-revision is `e1d16c215ac95afa8b0da86b727d19dca229be8e`, deployment
+The loaded script is `voice-interview.js?v=20260929-history`; the deployed retry
+button's computed bottom margin is 24px. At that check, QA canonical
+revision was `e1d16c215ac95afa8b0da86b727d19dca229be8e`, deployment
 `e57e2c3f-b6c2-44cc-8cbd-56d21fa88fe6`. The deadline Worker is unchanged;
 its enabled flag and matching bindings were independently reverified.
 
@@ -59,8 +60,56 @@ integrated production candidate passes 126 targeted Node tests; all 38 client
 checks pass with the history label change.
 
 Current remaining acceptance: supervised spoken reconnect/ending and listening,
-seven synthetic real-model coaching cases, and production schema/configuration/
+spoken report precision/usefulness review, and production schema/configuration/
 checkout verification. The production release and campaign remain unpublished.
+
+## September 29 account display and coaching evaluation
+
+PR970 and PR971 merged after all applicable current-head CI and Bugbot checks
+passed; deployed-base E2E was explicitly skipped. Paid pack ownership now comes
+from the server even when voice is paused and a prior subscription cache says
+free. The response separates feature availability from entitlement lookup
+status. Failed lookups retain the cached display state and show a retry message;
+healthy free accounts remain readable during a feature pause. New tests cover
+paused pack/free accounts and lookup failures; existing entitlement tests pass.
+
+As of 13:26 UTC, development is at
+`dab567a61eb4336e8a44addb4f589d746506cb83`, deployment
+`a954d34e-9b3c-413d-a793-98b38add007e`. QA is at
+`072c63eb299e8328b3c229e0fae159445a17580c`, deployment
+`faf5ddb2-50c5-4bad-8d04-0682e93b09be`. Following model comparison and evaluator
+cleanup, canonical QA is `aa5e3338-813a-4792-a983-0761221abe0c` on that same
+revision, with GPT-4.1 report configuration and no evaluator operator or expiry
+values. The signed-in browser confirms evaluation access is unavailable.
+Historical evaluation deployment windows expire by 13:43:06.985 UTC.
+The candidate report scorer, shared
+guidance and fictional fixtures match the deployed QA source byte for byte.
+
+The synthetic coaching tool initially used seven fixed fictional fixtures and the exact
+report scorer. It creates no voice calls, interview rows or credits. It is
+restricted to an explicitly nonproduction environment, a configured operator UID
+and a short expiry, and returns 404 in production. QA access is temporary for this
+evaluation; remove its two configuration values and verify runtime expiry after
+collecting results. Unit tests cover those gates and fixed-input enforcement.
+The first real-model run was structurally valid but failed semantic acceptance: it
+penalized unasked skills, limited project scale and honest uncertainty, and
+discounted a qualitative outcome. PR972/973 tighten those rules; the follow-up
+PR974/975 distinguishes an explicitly requested number and adds an eighth case.
+The repeat improved several cases but still failed qualitative-outcome
+acceptance. A same-code, same-input GPT-4.1 comparison corrected that penalty.
+QA keeps GPT-4.1 for written reports during supervised acceptance; the realtime
+voice is unchanged. The comparison is not an all-clear on factual precision: the
+acceptance note records remaining transcription interpretation and scope wording
+limitations. See `voice-coaching-acceptance-2026-09-29.md` for exact results and
+usage. Development retains its prior report-model default, and production has
+not changed. Make the report model explicit at production cutover.
+
+The authenticated provider usage view for September 29 showed rounded project
+spend of $0.02, 17,850 tokens and three requests at approximately 12:50 UTC. Its
+Realtime model breakdown names `gpt-realtime-mini-2025-12-15`. This is a rounded
+project snapshot, not a verified per-interview cost or margin. The earlier spoken
+QA record contains observed client usage plus report-model usage, with
+`cost_usd=null`; do not substitute those observations for provider billing.
 
 ## September 29 initial supervised QA result
 
@@ -119,6 +168,8 @@ Read from GitHub and Cloudflare on September 29 at approximately 02:29 UTC.
 
 Production deployment IDs: app `a24bcf9c-07d4-4c55-b9f2-7cdec4b0ae3e`,
 marketing `b6051278-49a8-4e8c-8d19-d2b497065ae1`.
+Both canonical production revisions and deployment IDs were reverified unchanged
+on September 29 at approximately 12:58 UTC.
 
 The original working directory remains on an older dev0 checkout with untracked
 UI/artifact files. Work is isolated in `codex/voice-production-release-20260928`.
@@ -143,8 +194,13 @@ renders the revised setup guidance and JD field. No production code was merged.
 2. **Report quality.** PR941 replaces the fixed 5/10/85 scoring target with
    role/level evidence, grounded quotes, unassessed skills and no numeric grade
    for insufficient candidate speech. Local integration checks pass. The seven
-   synthetic real-model cases still require execution and semantic review;
-   no development API key is present locally. No model upgrade is included.
+   synthetic real-model cases ran on QA and exposed semantic feedback defects.
+   The evidence and follow-up are in `voice-coaching-acceptance-2026-09-29.md`;
+   a repeat adds an explicit numerical-question boundary. The repeat still
+   overemphasized missing metrics, so the existing GPT-4.1 report fallback is
+   retained on QA after correcting that observed penalty under the same inputs
+   and prompt. Remaining precision/usefulness notes accompany supervised
+   acceptance. The realtime voice is unchanged.
 3. **Live acceptance.** With the transport fix deployed, run supervised
    reconnect and spoken ending, inspect the persisted transcript/report, and
    verify no extra credit on reconnect. Check mobile audio and report readability.
@@ -274,9 +330,19 @@ simultaneous app and marketing auto-deploy timing.
 
 Marblism access verified. Instagram, LinkedIn and Facebook show connected.
 Facebook is the Local directory page and is excluded from voice distribution.
-Native integrations confirms LinkedIn handle `sebastian-larosa-b40b5279`, but
-does not independently identify personal-profile versus company-page posting.
-The earlier company-page statement is user-reported, not new browser evidence.
+The LinkedIn destination is now independently verified as the JobHackAI company
+page, https://www.linkedin.com/company/jobhackai/. Sonny's saved provider readback
+identified organization URN `110918089`. On September 29 at approximately
+12:55 UTC, Codex opened that company ID in LinkedIn: its admin page identifies
+JobHackAI and displays the same two Local posts reported by the provider. View
+as member resolves to `/company/jobhackai/?viewAsMember=true` and explicitly
+identifies the Organization page for JobHackAI. This closes the destination
+blocker; the personal-looking integration handle is not the publishing entity.
+Sonny confirmed the bounded destination update in the existing voice campaign
+register at 12:55 UTC. At 13:01 UTC he returned the six current draft IDs below
+and confirmed section 3 now uses those IDs, with older versions marked
+superseded. This is his saved-register readback, not publication evidence.
+No post, schedule, connection or Local campaign was changed.
 
 Sonny received the owner delegation and six exact revised captions. He returned
 saved draft version IDs; all six captions were independently observed in the
@@ -323,13 +389,13 @@ the control phrase, report persistence and usage evidence. Sebastian judges
 spoken pacing and feedback usefulness. Do not start his microphone automatically
 or mark historical uncertain attempts closed based on this new test.
 
-The current temporary collector is
-`/tmp/jobhackai-voice-qa-receipts-20260928.mjs`, maximum 20 minutes, writing private
-sanitized invocation/provider metadata to its same-name `.jsonl`. It stores no
-headers, bodies, SDP, audio or transcript. A real QA `/api/voice/sessions` refresh
-at 02:46:33 UTC confirms Pages capture works. The owner has been asked whether he
-can do the short supervised test now or later; no voice session has been started
-by Codex. Restart capture on the then-current deployment if the test is later.
+All prospective collectors are stopped. For the next spoken check, start
+`/tmp/jobhackai-provider-probe-receipts-20260929.mjs` against the then-current
+QA deployment. Its 20-minute capture stores sanitized invocation/provider
+metadata, not headers, bodies, SDP, audio or transcript. Verify a real history
+refresh reaches the collector before testing. The owner was asked at 12:46 UTC
+whether he can do the spoken test now or later; no answer has arrived and no
+microphone session has been started by Codex.
 
 Editorial rules: direct language, useful exercises, factual product descriptions
 and clearly labelled examples. No fabricated statistics, testimonials, founder
