@@ -68,6 +68,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install endpoint dependencies for authenticated QA route tests
+        run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: app
 
       - name: Environment / mode-gate unit tests
         run: node app/functions/_lib/__tests__/stripe-environment.test.mjs
