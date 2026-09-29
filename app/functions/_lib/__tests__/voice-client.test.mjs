@@ -109,7 +109,7 @@ test('a normal scored session from history still renders its normal report', asy
     assert.ok(card.innerHTML.includes('Your interview report'));
     assert.ok(card.innerHTML.includes('>72<'), 'the overall score renders');
     assert.ok(card.innerHTML.includes('Communication'));
-    assert.ok(card.innerHTML.includes('S + A = O structure'));
+    assert.ok(card.innerHTML.includes('Answer structure'));
     assert.ok(card.innerHTML.includes('Top strength'));
     assert.ok(card.innerHTML.includes('Moments from your interview'));
     assert.ok(card.innerHTML.includes('Full transcript'));

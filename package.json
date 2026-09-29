@@ -18,6 +18,8 @@
     "test:voice:usage": "node --test app/functions/_lib/__tests__/voice-usage.test.mjs",
     "test:voice:client": "node app/functions/_lib/__tests__/voice-client.test.mjs",
     "test:role-selector": "node app/functions/_lib/__tests__/role-selector.test.mjs",
-    "test:analytics": "node --test app/functions/_lib/__tests__/analytics-consent.test.mjs"
+    "test:analytics": "node --test app/functions/_lib/__tests__/analytics-consent.test.mjs",
+    "test:voice:coaching": "node --test app/functions/_lib/__tests__/voice-coaching.test.mjs",
+    "eval:voice:coaching": "node app/tests/voice-coaching/run.mjs"
   }
 }
