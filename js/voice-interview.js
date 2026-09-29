@@ -1739,17 +1739,31 @@
       if (!saved.ok) throw new Error((saved.data && saved.data.error) || 'save_failed');
       if (saved.status === 202 || (saved.data && saved.data.connectionClosed === false)) {
         state.completionSaved = !!(saved.data && saved.data.saved);
+        var closureNeedsReview = !!(saved.data && saved.data.closureNeedsReview);
         if (saveStatus) saveStatus.textContent = state.completionSaved
-          ? 'Interview saved. Connection closure still needs confirmation. Keep this page open and retry finishing.'
-          : 'Connection closure is still pending. Keep this page open and retry finishing.';
-        if (!isSafetyEnd && $('vi-done-status')) $('vi-done-status').textContent = 'Finishing the interview...';
+          ? (closureNeedsReview
+            ? 'Your interview is saved. We couldn\'t confirm the connection ended, so it needs a technical review. You can leave this page.'
+            : 'Interview saved. Connection closure still needs confirmation. Keep this page open and retry finishing.')
+          : (closureNeedsReview
+            ? 'No interview was saved. The connection needs a technical review; retrying here will not resolve it.'
+            : 'Connection closure is still pending. Keep this page open and retry finishing.');
+        if (!isSafetyEnd && $('vi-done-status')) $('vi-done-status').textContent = closureNeedsReview
+          ? (state.completionSaved ? 'Interview saved. Preparing your report...' : 'Interview ended.')
+          : 'Finishing the interview...';
         if (state.completionSaved && !isSafetyEnd && !state.reportPollingStarted) {
           // The saved report is useful even if operational call closure still
           // needs verification. Keep that pending status visible separately.
           state.reportPollingStarted = true;
           pollScorecard(0);
         }
-        if (retryBtn) { retryBtn.textContent = 'Retry finishing'; retryBtn.style.display = ''; retryBtn.disabled = false; }
+        if (closureNeedsReview) {
+          // The server has either saved the report or fenced an unreserved
+          // startup. Its durable review hold does not depend on this page.
+          // Do not trap the user with a retry that cannot make progress.
+          state.pendingCompletion = null;
+          state.startRequestId = null;
+          if (!state.completionSaved) historyLiveClear(true);
+        } else if (retryBtn) { retryBtn.textContent = 'Retry finishing'; retryBtn.style.display = ''; retryBtn.disabled = false; }
         return;
       }
       state.pendingCompletion = null;
