@@ -147,7 +147,10 @@ export async function closeManagedInterview(env,{uid,sessionId}) {
   const active=await db.prepare(`SELECT id FROM voice_provider_calls
     WHERE session_id=? AND auth_id=? AND state='active' LIMIT 1`).bind(sessionId,uid).first();
   if (active) await closeManagedVoiceCall(env,{uid,attemptId:active.id}).catch(()=>{});
-  const pending=await db.prepare(`SELECT 1 FROM voice_provider_calls
-    WHERE session_id=? AND auth_id=? AND state<>'closed' LIMIT 1`).bind(sessionId,uid).first();
-  return {closed:!pending && !saved.legacy_unverified};
+  const pending=await db.prepare(`SELECT COUNT(*) AS count,MAX(state='uncertain') AS needs_review FROM voice_provider_calls
+    WHERE session_id=? AND auth_id=? AND state<>'closed'`).bind(sessionId,uid).first();
+  // In-flight creation/closure can settle on a later request. Uncertain and
+  // legacy calls require independent evidence; repeating End cannot fix them.
+  const needsReview=!!(pending.needs_review || saved.legacy_unverified);
+  return {closed:!pending.count && !saved.legacy_unverified,...(needsReview?{needsReview:true}:{})};
 }
