@@ -94,6 +94,55 @@ test('hangup is exclusive and a confirmed close is idempotent',async t=>{
   assert.equal(f.calls.length,2);assert.equal((await f.row()).state,'closed');
 });
 
+const absentBody=JSON.stringify({error:{code:'call_id_not_found',type:'invalid_request_error',message:'Private provider detail'}});
+test('the exact provider absence response closes an owned call once and records its distinct receipt',async t=>{
+  const f=fixture(t),created=await f.create(),logs=[];t.mock.method(console,'log',(...entry)=>logs.push(entry));
+  f.setHandler(async()=>new Response(absentBody,{status:404}));
+  assert.deepEqual(await closeManagedVoiceCall(f.env,{uid:'owner',attemptId:created.attemptId}),{closed:true,alreadyClosed:true});
+  const row=await f.row();assert.equal(row.state,'closed');assert.equal(row.execution_token,null);
+  assert.ok(row.closed_at);assert.equal(row.last_error_code,'close_call_id_not_found');
+  assert.ok(logs.some(([event])=>event==='[voice-call] provider_absent'));
+  assert.ok(!logs.some(([event])=>event==='[voice-call] provider_closed'));
+  assert.equal(JSON.stringify(logs).includes('Private provider detail'),false);
+  await closeManagedVoiceCall(f.env,{uid:'owner',attemptId:created.attemptId});assert.equal(f.calls.length,2);
+});
+
+for (const [name,status,body] of [
+  ['generic not-found code',404,JSON.stringify({error:{code:'not_found',type:'invalid_request_error'}})],
+  ['similar call code',404,JSON.stringify({error:{code:'call_not_found',type:'invalid_request_error'}})],
+  ['message only',404,JSON.stringify({error:{message:'Call not found',type:'invalid_request_error'}})],
+  ['wrong error type',404,JSON.stringify({error:{code:'call_id_not_found',type:'authentication_error'}})],
+  ['missing error type',404,JSON.stringify({error:{code:'call_id_not_found'}})],
+  ['wrong HTTP status',403,absentBody], ['provider fault',503,absentBody],
+  ['HTML',404,'<html>call_id_not_found invalid_request_error</html>'],
+  ['oversized',404,JSON.stringify({error:{code:'call_id_not_found',type:'invalid_request_error',message:'x'.repeat(8193)}})]
+]) test('ambiguous provider response retains the hold: '+name,async t=>{
+  const f=fixture(t),created=await f.create();f.setHandler(async()=>new Response(body,{status}));
+  await assert.rejects(closeManagedVoiceCall(f.env,{uid:'owner',attemptId:created.attemptId}),/close_unconfirmed/);
+  assert.equal((await f.row()).state,'uncertain');assert.equal((await f.row()).closed_at,null);
+  await assert.rejects(closeManagedVoiceCall(f.env,{uid:'owner',attemptId:created.attemptId}),/close_unconfirmed/);
+  assert.equal(f.calls.length,2);
+});
+
+test('an absence receipt followed by a failed database write stays uncertain without replay',async t=>{
+  const f=fixture(t),created=await f.create(),logs=[];t.mock.method(console,'log',(...entry)=>logs.push(entry));
+  f.db.exec("CREATE TRIGGER deny_absence_receipt BEFORE UPDATE OF state ON voice_provider_calls WHEN NEW.state='closed' BEGIN SELECT RAISE(ABORT,'fixture storage failure'); END;");
+  f.setHandler(async()=>new Response(absentBody,{status:404}));
+  await assert.rejects(closeManagedVoiceCall(f.env,{uid:'owner',attemptId:created.attemptId}),/close_unconfirmed/);
+  const row=await f.row();assert.equal(row.state,'uncertain');assert.equal(row.last_error_code,'close_receipt_unconfirmed');
+  assert.ok(logs.some(([event])=>event==='[voice-call] provider_absent'));
+  await assert.rejects(closeManagedVoiceCall(f.env,{uid:'owner',attemptId:created.attemptId}),/close_unconfirmed/);
+  assert.equal(f.calls.length,2);
+});
+
+test('historical uncertain calls are not replayed or reclassified from their old HTTP status',async t=>{
+  const f=fixture(t),created=await f.create();
+  f.db.exec("UPDATE voice_provider_calls SET state='uncertain',last_error_code='close_http_404'");
+  f.setHandler(async()=>new Response(absentBody,{status:404}));
+  await assert.rejects(closeManagedVoiceCall(f.env,{uid:'owner',attemptId:created.attemptId}),/close_unconfirmed/);
+  assert.equal(f.calls.length,1);assert.equal((await f.row()).state,'uncertain');
+});
+
 for(const scenario of ['timeout','5xx','429','missing_location','foreign_location','query_location','encoded_location']) {
   test('uncertain create is retained without releasing SDP or retrying: '+scenario,async t=>{
     const f=fixture(t);f.setHandler(async()=>{
@@ -230,7 +279,7 @@ for (const [scenario, expected] of [
     assert.equal(f.calls.length,2);
     assert.equal(logs.find(([event])=>event==='[voice-call] close_failed')[1].diagnostic,expected);
     if(/^\d/.test(scenario)) {
-      const receipt=logs.find(([event])=>event==='[voice-call] provider_close_unconfirmed')[1];
+      const receipt=logs.find(([event])=>event==='[voice-call] provider_close_response')[1];
       assert.equal(receipt.status,Number(scenario));assert.equal(receipt.providerRequestId,'req_close_test');
     }
     assert.doesNotMatch(JSON.stringify(logs),/SECRET|sk-test|UDP\/TLS/);

@@ -147,8 +147,9 @@ export async function createManagedVoiceCall(env, { uid, sessionId, sdp, instruc
   }
 }
 
-/** Close only an owned, provider-confirmed call. 404/timeout is not a hangup
- * receipt; an uncertain result keeps the durable hold for explicit review. */
+/** Close only an owned, provider-confirmed call. An exact structured
+ * call_id_not_found response confirms this previously created call is absent.
+ * Generic 404s, other errors and timeouts retain their durable review hold. */
 export async function closeManagedVoiceCall(env,{uid,attemptId}) {
   if (typeof uid !== 'string' || !uid || uid.length>128 || typeof attemptId !== 'string' || !attemptId) throw Error('voice_call_owner_invalid');
   const db=database(env);
@@ -171,21 +172,31 @@ export async function closeManagedVoiceCall(env,{uid,attemptId}) {
       redirect:'manual',signal:AbortSignal.timeout(10000)
     });
     phase='response';
+    let confirmedAbsent=false;
     if (!response.ok) {
-      failureCode='close_http_'+response.status;
-      providerReceipt('provider_close_unconfirmed',response,{attempt:attemptId,execution,callId:before.provider_call_id});
+      providerReceipt('provider_close_response',response,{attempt:attemptId,execution,callId:before.provider_call_id});
+      const diagnostic=await voiceProviderFailureDiagnostic(response);
       console.log('[voice-call] provider_diagnostic',{attempt:attemptId,execution,operation:'close',status:response.status,
-        ...await voiceProviderFailureDiagnostic(response)});
-      throw Error('voice_call_close_unconfirmed');
+        ...diagnostic});
+      // Observed in the controlled QA disconnect/reconnect run: once WebRTC
+      // ends, hangup returns this provider code. The ID came from our own
+      // confirmed create and the issuing key was checked before dispatch.
+      // Never use a message match or HTTP 404 alone to establish absence.
+      confirmedAbsent=response.status===404 && diagnostic.bodyFormat==='json' &&
+        diagnostic.errorCode==='call_id_not_found' && diagnostic.errorType==='invalid_request_error';
+      if (!confirmedAbsent) {
+        failureCode='close_http_'+response.status;
+        throw Error('voice_call_close_unconfirmed');
+      }
     }
-    providerReceipt('provider_closed',response,{attempt:attemptId,execution,callId:before.provider_call_id});
+    providerReceipt(confirmedAbsent?'provider_absent':'provider_closed',response,{attempt:attemptId,execution,callId:before.provider_call_id});
     phase='persist';
     const saved=await db.prepare(`UPDATE voice_provider_calls SET state='closed',execution_token=NULL,
-      closed_at=datetime('now'),updated_at=datetime('now'),last_error_code=NULL
+      closed_at=datetime('now'),updated_at=datetime('now'),last_error_code=?
       WHERE id=? AND auth_id=? AND state='closing' AND execution_token=? RETURNING id`)
-      .bind(attemptId,uid,execution).first();
+      .bind(confirmedAbsent?'close_call_id_not_found':null,attemptId,uid,execution).first();
     if (!saved) throw Error('voice_call_close_unconfirmed');
-    return {closed:true,alreadyClosed:false};
+    return {closed:true,alreadyClosed:confirmedAbsent};
   } catch (error) {
     // Persist only fixed categories/statuses, never provider bodies or exception text.
     // This survives loss of the operator's live log stream during a Wi-Fi test.
