@@ -1,5 +1,6 @@
 import { getDb } from './db.js';
 import { realtimeSessionConfig } from './voice-interviewer.js';
+import { voiceProviderFailureDiagnostic } from './voice-provider-diagnostic.js';
 
 const CALLS_URL = 'https://api.openai.com/v1/realtime/calls';
 const CALL_ID = /^rtc_[A-Za-z0-9_-]{1,240}$/;
@@ -95,6 +96,8 @@ export async function createManagedVoiceCall(env, { uid, sessionId, sdp, instruc
       failureCode = 'create_http_' + response.status;
       const definite = DEFINITE_REJECTION.has(response.status);
       providerReceipt(definite ? 'provider_rejected' : 'provider_response_unconfirmed',response,{attempt:id,execution,callId:null});
+      console.log('[voice-call] provider_diagnostic',{attempt:id,execution,operation:'create',status:response.status,
+        ...await voiceProviderFailureDiagnostic(response)});
       await db.prepare(`UPDATE voice_provider_calls SET state=?,last_error_code=?,
         execution_token=CASE WHEN ? THEN NULL ELSE execution_token END,updated_at=datetime('now'),
         closed_at=CASE WHEN ? THEN datetime('now') ELSE NULL END
@@ -169,6 +172,8 @@ export async function closeManagedVoiceCall(env,{uid,attemptId}) {
     if (!response.ok) {
       failureCode='close_http_'+response.status;
       providerReceipt('provider_close_unconfirmed',response,{attempt:attemptId,execution,callId:before.provider_call_id});
+      console.log('[voice-call] provider_diagnostic',{attempt:attemptId,execution,operation:'close',status:response.status,
+        ...await voiceProviderFailureDiagnostic(response)});
       throw Error('voice_call_close_unconfirmed');
     }
     providerReceipt('provider_closed',response,{attempt:attemptId,execution,callId:before.provider_call_id});
