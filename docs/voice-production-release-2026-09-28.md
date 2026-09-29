@@ -9,6 +9,50 @@ are superseded by this instruction; technical acceptance requirements remain.
 
 **Status: production is not ready. No voice launch has been published.**
 
+## September 29 supervised QA result
+
+At 10:50 UTC, QA was independently reverified at `ca637be87ff0acd5bcbc9aee9edf369c5228287d`
+and canonical deployment `9914e691-e126-43cc-bfeb-3f15b9607458`.
+The owner tested a Mid-level Scrum Master interview, turned Wi-Fi off and back
+on, clicked Reconnect, then attempted recovery. Reconnect failed and the app
+saved a 124-second interview with `end_reason=connection_lost`, six transcript
+turns, a methodology-v2 scorecard and rendered score 48. There is one provider
+attempt for that application session; no replacement call was created. Its
+hangup returned HTTP 404 and the ledger remains `uncertain` / `close_http_404`
+with no provider closure timestamp. This adds one QA uncertainty to the two
+historical QA records described below. No record was reconciled or retried.
+
+The owner confirmed that Retry finishing appeared ineffective and supplied
+screenshots showing the button touching the report heading. PR961 (development)
+and PR962 (QA) distinguish technical review from a retryable in-flight closure.
+An acknowledged saved report no longer offers an ineffective retry or traps
+the user with a leave-page warning. Genuine save failures and in-flight closures
+retain recovery. The provider hold remains intact. Status and retry spacing are
+24 pixels above the report; this was measured in a browser using a synthetic
+local preview. All 139 targeted client/provider/reservation/reconciliation and
+account-operation checks, the app build and Pages Functions compilation passed.
+These fixes are also included in this production candidate. They do not fix
+the underlying reconnect failure or establish live voice acceptance.
+
+The owner also reported that the voice may have sounded robotic, with uncertainty
+about the speakers. Treat naturalness as unresolved. The tested configuration is
+`gpt-realtime-mini`, `marin`, output speed 0.9 and semantic VAD. No audio recording
+was available to assess the sound, and no voice/model/pacing change is justified
+by the screenshots alone. A future controlled listening comparison must keep
+the device, network and substantive question consistent before attributing it.
+
+The bounded prospective log collector captured provider creation (HTTP 201),
+but the local Wi-Fi interruption disconnected the Pages tail before hangup.
+It stopped at its 20-minute limit. Persistent D1 metadata supplies the 404
+category; the authenticated provider Realtime log view has no saved traces.
+No native historical Pages invocation recovery path was found. Absence of logs
+does not confirm closure. Preserve the private session/attempt receipts in the
+local QA evidence files; do not publish user identifiers or transcript content.
+
+Remaining gates: provider closure/reconnect evidence, live reconnect continuity,
+spoken ending (not reached in this run), natural voice quality, seven real-model
+coaching cases, and production migration/configuration/checkout acceptance.
+
 ## Verified starting point
 
 Read from GitHub and Cloudflare on September 29 at approximately 02:29 UTC.
