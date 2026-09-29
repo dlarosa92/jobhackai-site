@@ -128,6 +128,22 @@ test('a reconnect closes exactly the previous owned call and keeps the same cred
   assert.equal(f.calls.length,3,'stale reconnect cannot hang up the replacement');
 });
 
+test('provider-confirmed absence after a dropped connection permits reconnect without another credit or deadline',async t=>{
+  const f=fixture(t),first=await f.open(),before=await f.controls();
+  f.setHandler(async({url})=>url.endsWith('/hangup')
+    ? new Response(JSON.stringify({error:{code:'call_id_not_found',type:'invalid_request_error'}}),{status:404})
+    : new Response(SDP,{status:201,headers:{Location:'/v1/realtime/calls/rtc_reconnected'}}));
+  const resumed=await f.open({replacesAttemptId:first.attemptId,interviewStarted:true,
+    transcript:[{speaker:'user',text:'I improved the onboarding process.'}]});
+  assert.equal(resumed.resumed,true);assert.notEqual(resumed.attemptId,first.attemptId);
+  assert.equal(resumed.deadlineAt,first.deadlineAt);assert.equal((await f.controls()).reserved_at,before.reserved_at);
+  assert.equal((await f.user()).free_session_used,1);assert.equal((await f.sessions()).length,1);
+  const old=await f.db.prepare('SELECT state,last_error_code FROM voice_provider_calls WHERE id=?').bind(first.attemptId).first();
+  assert.deepEqual(old,{state:'closed',last_error_code:'close_call_id_not_found'});
+  assert.match(JSON.parse(f.calls[2].init.body.get('session')).instructions,/RESUMING/);
+  f.setHandler(null);assert.deepEqual(await f.close(),{closed:true});assert.equal(f.calls.length,4);
+});
+
 test('lost success response is recoverable by the same session ID without another entitlement',async t=>{
   const f=fixture(t),first=await f.open();let current;
   await assert.rejects(f.open(),e=>{current=e.currentAttemptId;return e.message==='voice_connection_conflict';});
