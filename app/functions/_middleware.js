@@ -23,7 +23,10 @@ const NON_PRODUCTION_ONLY_DEBUG_PATHS = new Set([
   '/stripe-test',
   '/stripe-test.html',
   '/voice-connection-check',
-  '/voice-connection-check.html'
+  '/voice-connection-check.html',
+  '/voice-coaching-check',
+  '/voice-coaching-check.html',
+  '/api/voice/qa-coaching'
 ]);
 
 // Retired legacy routes, blocked in EVERY environment as a second layer of
