@@ -378,7 +378,10 @@ The owner completed the September 29 evening spoken reconnect test. Continuity,
 one-credit use (50 to 49), persistent closure of both provider calls, and report
 saving passed. Spoken ending failed: the owner had to press End, and the report
 misused the request to stop as outcome evidence. Native playback and narrow
-spoken-request/scoring fixes are in PR 976. The exact findings and remaining
+spoken-request/scoring fixes are merged through PRs 976/977 and verified deployed
+on canonical QA revision `40b808bb11bae36063fb37cda5de55c1b3e104a0`, deployment
+`e1ced479-17a1-47e3-93aa-006f6e468b37`. The existing report now marks the unsupported
+outcome competency unassessed, preserving its historical score. The exact findings and remaining
 listening test are recorded in `docs/voice-coaching-acceptance-2026-09-29.md`.
 Another network interruption is unnecessary for the next short end-request and
 audio comparison unless reconnect code changes. Do not treat `user_ended` alone
@@ -391,20 +394,22 @@ quote those answers accurately, mark unasked areas unassessed, and give useful
 next practice steps. There is no fixed 5/10/85 target; old runbook expectations
 for that formula are superseded for methodologyVersion2.
 
-Capture prospective Pages and deadline-worker logs before the reconnect test.
-After context is established, briefly interrupt the network, restore it and use
-Reconnect. Confirm continuity and no extra credit. End with a spoken request.
+For the next short acceptance check, keep the network connected, answer one
+question and say “I'd like to end this now.” Wait for the report without pressing
+End. Capture prospective Pages and deadline-worker logs before the check.
 Codex checks provider close receipts, session/end reason, transcript exclusion of
 the control phrase, report persistence and usage evidence. Sebastian judges
 spoken pacing and feedback usefulness. Do not start his microphone automatically
 or mark historical uncertain attempts closed based on this new test.
 
-The evening collector was stopped after the completed test. For the next spoken check, start
+The first evening collector was stopped after the completed test. A new bounded
+capture began at 00:28:02 UTC September 30 against canonical QA deployment
+`e1ced479-17a1-47e3-93aa-006f6e468b37`; an actual `/api/voice/sessions` invocation
+arrived at 00:28:05. If the next test occurs outside that 20-minute window, restart
 `/tmp/jobhackai-provider-probe-receipts-20260929.mjs` against the then-current
-QA deployment. Its 20-minute capture stores sanitized invocation/provider
-metadata, not headers, bodies, SDP, audio or transcript. Verify a real history
-refresh reaches the collector before testing. The owner starts their microphone;
-Codex must not start it automatically.
+QA deployment and verify a real history refresh reaches it. Captures contain
+sanitized invocation/provider metadata, not headers, bodies, SDP, audio or
+transcript. The owner starts their microphone; Codex must not start it automatically.
 
 Editorial rules: direct language, useful exercises, factual product descriptions
 and clearly labelled examples. No fabricated statistics, testimonials, founder

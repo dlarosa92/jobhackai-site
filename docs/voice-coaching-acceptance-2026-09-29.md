@@ -150,6 +150,16 @@ OpenAI's [voice prompting guidance](https://developers.openai.com/api/docs/guide
 distinguishes playback speed from speech composition. This is a controlled
 comparison, not proof that playback speed caused the perceived artifact.
 
+PRs 976 and 977 merged to development and QA. At 00:27:58 UTC September 30,
+canonical development deployment `8266af1e-3ac1-4866-896a-13aadee5789d` served
+revision `7856cc2b441f646b031fea2d52176d294f78c6d7`, and canonical QA deployment
+`e1ced479-17a1-47e3-93aa-006f6e468b37` served
+`40b808bb11bae36063fb37cda5de55c1b3e104a0`; both reported successful deployment.
+On the deployed QA report, the former stop-request competency now displays
+“Outcomes and learning · Not assessed” with neutral insufficient-evidence copy.
+The historical score remains 32. The same signed-in Chrome tab is prepared for
+Scrum Master / Mid, showing 49 interviews remaining; the owner starts it.
+
 Next live acceptance requires “I'd like to end this now” to close without
 pressing End, exclusion of that request from candidate scoring, and owner
 assessment of native-rate audio. Another network interruption is unnecessary
