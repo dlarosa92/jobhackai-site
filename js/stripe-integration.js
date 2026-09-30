@@ -993,13 +993,19 @@ async function upgradePlan(targetPlan, options = {}) {
       throw new Error(data?.error || data?.code || 'Checkout failed');
     }
 
+    // This endpoint can create a fresh Checkout if the subscription ended
+    // since pricing checked it. Optional measurement must not block billing.
+    let analytics = null;
+    try {
+      analytics = await window.JHA?.cookieConsent?.getCheckoutAnalyticsContext?.();
+    } catch (_) { /* Continue without attribution when analytics is unavailable. */ }
     const res = await fetch('/api/upgrade-plan', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${idToken}`
       },
-      body: JSON.stringify({ targetPlan: plan, source, returnUrl })
+      body: JSON.stringify({ targetPlan: plan, source, returnUrl, ...(analytics ? { analytics } : {}) })
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {

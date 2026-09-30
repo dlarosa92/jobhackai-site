@@ -29,10 +29,12 @@ on:
       - 'js/verify-email.js'
       - 'js/stripe-integration.js'
       - 'app/functions/api/stripe-checkout.js'
+      - 'app/functions/api/upgrade-plan.js'
       - 'app/functions/_lib/checkout-attribution.js'
       - 'app/functions/_lib/analytics-client-id.js'
       - 'app/db/migrations/025_checkout_attribution.sql'
       - 'app/functions/_lib/__tests__/checkout-attribution.test.mjs'
+      - 'app/functions/_lib/__tests__/upgrade-checkout-attribution.test.mjs'
       - 'app/functions/api/cookie-consent.js'
       - 'app/functions/_lib/db.js'
       - 'app/functions/_lib/consent-storage.js'
@@ -78,10 +80,12 @@ on:
       - 'js/verify-email.js'
       - 'js/stripe-integration.js'
       - 'app/functions/api/stripe-checkout.js'
+      - 'app/functions/api/upgrade-plan.js'
       - 'app/functions/_lib/checkout-attribution.js'
       - 'app/functions/_lib/analytics-client-id.js'
       - 'app/db/migrations/025_checkout_attribution.sql'
       - 'app/functions/_lib/__tests__/checkout-attribution.test.mjs'
+      - 'app/functions/_lib/__tests__/upgrade-checkout-attribution.test.mjs'
       - 'app/functions/api/cookie-consent.js'
       - 'app/functions/_lib/db.js'
       - 'app/functions/_lib/consent-storage.js'
@@ -106,7 +110,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - run: node --test app/functions/_lib/__tests__/signup-analytics.test.mjs app/functions/_lib/__tests__/checkout-attribution.test.mjs app/functions/_lib/__tests__/analytics-consent.test.mjs app/functions/_lib/__tests__/analytics-diagnostic.test.mjs app/functions/_lib/__tests__/consent-api.test.mjs
+      - run: node --test app/functions/_lib/__tests__/signup-analytics.test.mjs app/functions/_lib/__tests__/checkout-attribution.test.mjs app/functions/_lib/__tests__/upgrade-checkout-attribution.test.mjs app/functions/_lib/__tests__/analytics-consent.test.mjs app/functions/_lib/__tests__/analytics-diagnostic.test.mjs app/functions/_lib/__tests__/consent-api.test.mjs
 
   revenue-delivery:
     runs-on: ubuntu-latest
