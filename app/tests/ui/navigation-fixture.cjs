@@ -66,18 +66,22 @@ function checkContainer(container,plan) {
   const links=[...container.querySelectorAll('a')];
   const voice=links.filter(link=>link.textContent.trim()==='Voice Mock Interview');
   const primary=voice.filter(link=>!link.closest('.nav-dropdown,.mobile-nav-group'));
-  assert(voice.length===(plan==='visitor'?1:2),'Voice link count '+voice.length);
-  assert(primary.length===1,'Exactly one Voice shortcut must be top-level');
+  const marketingCopy=${JSON.stringify(copy==='marketing')};
+  assert(voice.length===(plan==='visitor'?(marketingCopy?0:1):(marketingCopy?1:2)),'Voice link count '+voice.length);
+  assert(primary.length===(marketingCopy?0:1),'Unexpected top-level Voice shortcut');
   for(const link of voice) assert(link.getAttribute('aria-disabled')!=='true'&&!link.classList.contains('locked-link'),'Voice must be clickable');
-  const target=new URL(primary[0].href);
-  if(plan==='visitor') assert(target.href===new URL(${JSON.stringify(copy==='marketing'?'/features.html#voice-title':'https://app.jobhackai.io/voice-interview.html')},location.href).href,'Visitor target '+target.href);
+  if(plan==='visitor') {
+    if(marketingCopy) assert(links.some(link=>link.textContent.trim()==='Features'),'Features remains discoverable');
+    else assert(new URL(primary[0].href).href==='https://app.jobhackai.io/voice-interview.html','Visitor target');
+  }
   else {
+    const target=new URL(voice[0].href);
     assert(target.origin===${JSON.stringify(copy==='marketing'?'https://dev.jobhackai.io':'https://app.jobhackai.io')}&&target.pathname==='/voice-interview.html','App target '+target.href);
-    const nested=voice.find(link=>link!==primary[0]);
+    const nested=voice.find(link=>link.closest('.nav-dropdown,.mobile-nav-group'));
     const group=nested.closest('.nav-dropdown,.mobile-nav-group');
     assert(group?.querySelector('.nav-dropdown-toggle,.mobile-nav-trigger')?.textContent.trim()==='Interview Prep','Voice must be under Interview Prep');
     assert(group.querySelector('.nav-dropdown-menu a,.mobile-nav-submenu a')===nested,'Voice must be first under Interview Prep');
-    assert(nested.href===primary[0].href,'Both Voice entry points must share the app target');
+    for(const link of voice) assert(link.href===nested.href,'Voice entry points must share the app target');
     for(const label of ['Resume Feedback','Cover Letter','Interview Questions','Typed Mock Interview','LinkedIn Optimizer']) {
       const link=links.find(item=>item.textContent.trim()===label);
       assert(link,'Missing '+label);

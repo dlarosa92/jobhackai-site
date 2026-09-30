@@ -69,7 +69,6 @@ const header = (depth) => `  <header class="site-header" id="top">
           <!-- Static fallback for crawlers; replaced by navigation.js -->
           <a href="${SITE}/">Home</a>
           <a href="${SITE}/blog">Blog</a>
-          <a href="${SITE}/features#voice-title">Voice Mock Interview</a>
           <a href="${SITE}/features">Features</a>
         </nav>
       </div>
@@ -86,7 +85,6 @@ const header = (depth) => `  <header class="site-header" id="top">
     <!-- Static fallback for crawlers; replaced by navigation.js -->
     <a href="${SITE}/">Home</a>
     <a href="${SITE}/blog">Blog</a>
-    <a href="${SITE}/features#voice-title">Voice Mock Interview</a>
     <a href="${SITE}/features">Features</a>
   </nav>
   <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
