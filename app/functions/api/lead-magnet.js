@@ -67,8 +67,8 @@ function checklistHtml() {
         <li>No graphics, icons, or color blocks behind text</li>
         <li>Length: 1 page if &lt;10 yrs experience, 2 pages otherwise</li>
       </ol>
-      <p style="margin-top:1.5rem;">Want JobHackAI to score and rewrite your resume against any job description? <a href="https://app.jobhackai.io/pricing-a" style="color:#0077B5;">Start your free 3-day trial</a> — converts to $29/mo, cancel anytime.</p>
-      <p style="font-size:0.8rem;color:#6B7280;margin-top:2rem;">Sent because you requested the checklist on jobhackai.io. Reply to this email if you didn't.</p>
+      <p style="margin-top:1.5rem;">The checklist covers resume and ATS basics. When you're ready to go further, JobHackAI has resume tools and spoken interview practice: choose a role, answer aloud, handle the follow-ups, and see feedback on your answers. <a href="https://jobhackai.io/features?utm_source=jobhackai&amp;utm_medium=email&amp;utm_campaign=ats_checklist_delivery&amp;utm_content=features_cta" style="color:#0077B5;">See JobHackAI Features</a></p>
+      <p style="font-size:0.8rem;color:#6B7280;margin-top:2rem;">Sent because you requested the checklist on jobhackai.io. Questions? Email <a href="mailto:support@jobhackai.io" style="color:inherit;">support@jobhackai.io</a>.</p>
     </div>
   `;
 }
