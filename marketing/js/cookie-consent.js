@@ -64,6 +64,32 @@
   let bannerElement = null;
   let gaLoadingPrevented = false;
   let escHandler = null; // Persistent ESC handler for modal
+  let googleConsentInitialized = false;
+  let googleAnalyticsConsent = null;
+
+  function updateGoogleConsent(analytics) {
+    // Basic consent mode: keep Google completely unloaded until our existing
+    // consent checks pass. Advertising is never an option in this banner.
+    if (!GA_MEASUREMENT_ID || (!googleConsentInitialized && !analytics)) return;
+    window.dataLayer = window.dataLayer || [];
+    function consentCommand() { window.dataLayer.push(arguments); }
+    const state = {
+      analytics_storage: analytics ? 'granted' : 'denied',
+      ad_storage: 'denied',
+      ad_user_data: 'denied',
+      ad_personalization: 'denied'
+    };
+    if (!googleConsentInitialized) {
+      consentCommand('consent', 'default', { ...state, analytics_storage: 'denied' });
+      googleConsentInitialized = true;
+    }
+    if (googleAnalyticsConsent !== analytics) {
+      // Use the command queue directly: the event wrapper correctly blocks
+      // calls after withdrawal, but Google must still receive this denial.
+      consentCommand('consent', 'update', state);
+      googleAnalyticsConsent = analytics;
+    }
+  }
 
   // Helper: Get consent from localStorage (UI performance)
   function getConsent() {
@@ -412,6 +438,7 @@
     // Removing a script does not stop listeners that already ran. Google's
     // disable flag also blocks collection by the previously loaded tag.
     if (GA_MEASUREMENT_ID) window['ga-disable-' + GA_MEASUREMENT_ID] = true;
+    updateGoogleConsent(false);
     // Keep the loaded GA tag: removing it does not unload its runtime, and
     // reinserting it after re-grant would leave two collectors in memory.
     // The disable flag and consent-gated gtag wrapper pause this instance.
@@ -528,6 +555,9 @@
       return;
     }
 
+    // Defaults and the analytics-only update must precede tag loading, config,
+    // and every queued event. Regrant updates the existing runtime as well.
+    updateGoogleConsent(true);
     window['ga-disable-' + GA_MEASUREMENT_ID] = false;
 
     // Check if already loaded

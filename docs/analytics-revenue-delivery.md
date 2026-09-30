@@ -4,7 +4,7 @@ The Stripe ledger is the money source. Google Analytics is a consented marketing
 
 ## Current scope
 
-The worker supports QA Sandbox delivery to the verified test stream `G-VH888WWY3M`. Delivery defaults to disabled. Development only runs retention; the browser has no development Analytics destination. There is deliberately no production worker environment in this change. Production release remains held.
+The worker supports isolated QA and production delivery. QA uses `G-VH888WWY3M`; production uses `G-SQYSWPFM5X`. Development only runs retention. The checked-in deployment defaults remain disabled; the authorized production release enabled `jobhackai-analytics-delivery-prod` at version `23c081b0-ec9e-49b0-838a-17397a04472b`. A production redeploy must explicitly preserve `--var DELIVERY_ENABLED:true`. See [the current launch measurement record](voice-launch-measurement-2026-09-30.md) for deployed settings and evidence limits.
 
 Migration 027 must precede the enriched Stripe webhook. It adds a verified tax breakdown and a consent-owned D1 outbox. A five-minute schedule scans recently collected money and exact checkout attribution links. It sends at most five events per invocation, validates each with Google's strict debug endpoint, then rechecks consent and payment state before collection. It does not require a Stripe secret or expose an HTTP trigger.
 
@@ -53,4 +53,4 @@ Do not reset `uncertain` or `accepted_unverified` rows merely because a report i
 
 ## QA configuration evidence (2026-09-20)
 
-The test stream's unwanted-referral list was empty. Exact-match exclusions for `checkout.stripe.com` and `billing.stripe.com` were saved and reopened to verify. This prevents payment-provider return traffic from becoming a new referral source; it does not rewrite historical attribution. The test property had already reported Stripe referral sessions before this change. Production settings remain unchanged pending its held release. [Google referral guidance](https://support.google.com/analytics/answer/10327750).
+The test stream's unwanted-referral list was empty. Exact-match exclusions for `checkout.stripe.com` and `billing.stripe.com` were saved and reopened to verify. This prevents payment-provider return traffic from becoming a new referral source; it does not rewrite historical attribution. The test property had already reported Stripe referral sessions before this change. This paragraph records the September 20 QA-only check; it does not describe later production settings. See the current launch measurement record for production verification. [Google referral guidance](https://support.google.com/analytics/answer/10327750).
