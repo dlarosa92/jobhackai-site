@@ -112,3 +112,44 @@ The previously authorized browser now reports the check unavailable and disables
 its run button. The normal voice page remains available. Historical immutable
 deployment URLs retain their original short windows, the latest ending at
 13:43:06.985 UTC; they must not be mistaken for the current canonical endpoint.
+
+## Supervised spoken test, September 29 evening Eastern
+
+The owner completed the 00:05:28–00:07:39 UTC September 30 test on QA revision
+`072c63eb299e8328b3c229e0fae159445a17580c`, canonical deployment
+`aa5e3338-813a-4792-a983-0761221abe0c`. The session lasted 129 seconds.
+The owner confirmed Reconnect resumed where the interview left off. D1 records
+show both the original and replacement provider calls closed, the original
+deadline and single reservation preserved, and one completed session. Allowance
+fell from 50 to 49. The report persisted, used `gpt-4.1-2025-04-14`, and displayed
+without the previous ineffective retry control. The local Pages log stream did
+not retain the reconnect/close receipts through the Wi-Fi interruption; closure
+is established by the persistent provider ledger, not a claimed complete tail.
+
+**Spoken ending failed.** The recorded request “I'd like to end this now” was
+not recognized by the client. The owner waited and then pressed End; therefore
+`user_ended` is evidence of manual completion, not successful spoken ending.
+The report also quoted the control request as weak outcome evidence. The
+transcript's standalone audio check is session administration, not performance.
+
+PR 976 adds narrow whole-utterance detection for that request and “I would like
+to leave,” including the module-missing fallback. Regression tests preserve
+quoted stories, hypotheticals, continuations, and answers about leaving a job.
+The scorer removes these controls and standalone connection checks before
+minimum-evidence checks, model input, and quotation validation. Existing report
+responses suppress unsupported competency quotations without rewriting stored
+transcripts, reports, or numeric grades.
+
+**Naturalness remains unaccepted.** The owner described the voice as sci-fi and
+cool, but not human-like or good quality; speaker influence is uncertain. PR 976
+restores native playback speed 1.0 for a listening comparison, retaining
+`gpt-realtime-mini`, `marin`, calm-delivery instructions, and semantic VAD.
+OpenAI's [voice prompting guidance](https://developers.openai.com/api/docs/guides/voice-prompting)
+distinguishes playback speed from speech composition. This is a controlled
+comparison, not proof that playback speed caused the perceived artifact.
+
+Next live acceptance requires a short spoken request to leave to close without
+pressing End, exclusion of that request from candidate scoring, and owner
+assessment of native-rate audio. Another network interruption is unnecessary
+unless new code changes reconnect behavior. Production and voice campaign
+publishing remain pending these product checks and the documented cutover gates.

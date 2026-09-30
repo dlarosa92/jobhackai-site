@@ -372,7 +372,17 @@ and retain their sources and illustrative-example labels. The repository edition
 controlling article with its plain title, two labelled fictional examples and
 source links. No additional articles or assets were requested.
 
-## Next supervised QA session
+## Supervised QA and remaining acceptance
+
+The owner completed the September 29 evening spoken reconnect test. Continuity,
+one-credit use (50 to 49), persistent closure of both provider calls, and report
+saving passed. Spoken ending failed: the owner had to press End, and the report
+misused the request to stop as outcome evidence. Native playback and narrow
+spoken-request/scoring fixes are in PR 976. The exact findings and remaining
+listening test are recorded in `docs/voice-coaching-acceptance-2026-09-29.md`.
+Another network interruption is unnecessary for the next short end-request and
+audio comparison unless reconnect code changes. Do not treat `user_ended` alone
+as proof that spoken ending passed.
 
 After exact QA deployment verification, reload the signed-in voice page, use a
 real target role and optional job description, and answer two or three questions
@@ -389,13 +399,12 @@ the control phrase, report persistence and usage evidence. Sebastian judges
 spoken pacing and feedback usefulness. Do not start his microphone automatically
 or mark historical uncertain attempts closed based on this new test.
 
-All prospective collectors are stopped. For the next spoken check, start
+The evening collector was stopped after the completed test. For the next spoken check, start
 `/tmp/jobhackai-provider-probe-receipts-20260929.mjs` against the then-current
 QA deployment. Its 20-minute capture stores sanitized invocation/provider
 metadata, not headers, bodies, SDP, audio or transcript. Verify a real history
-refresh reaches the collector before testing. The owner was asked at 12:46 UTC
-whether he can do the spoken test now or later; no answer has arrived and no
-microphone session has been started by Codex.
+refresh reaches the collector before testing. The owner starts their microphone;
+Codex must not start it automatically.
 
 Editorial rules: direct language, useful exercises, factual product descriptions
 and clearly labelled examples. No fabricated statistics, testimonials, founder
