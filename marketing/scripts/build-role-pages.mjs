@@ -69,6 +69,7 @@ const header = (depth) => `  <header class="site-header" id="top">
           <!-- Static fallback for crawlers; replaced by navigation.js -->
           <a href="${SITE}/">Home</a>
           <a href="${SITE}/blog">Blog</a>
+          <a href="${SITE}/features#voice-title">Voice Mock Interview</a>
           <a href="${SITE}/features">Features</a>
         </nav>
       </div>
@@ -85,10 +86,11 @@ const header = (depth) => `  <header class="site-header" id="top">
     <!-- Static fallback for crawlers; replaced by navigation.js -->
     <a href="${SITE}/">Home</a>
     <a href="${SITE}/blog">Blog</a>
+    <a href="${SITE}/features#voice-title">Voice Mock Interview</a>
     <a href="${SITE}/features">Features</a>
   </nav>
   <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
-  <script src="${depth}js/mobile-menu.js?v=20250115-1"></script>`;
+  <script src="${depth}js/mobile-menu.js?v=20260930-voice-nav-1"></script>`;
 
 const footer = () => `  <footer class="site-footer">
     <div class="footer-container">
@@ -235,7 +237,7 @@ ${JSON.stringify(breadcrumbLd, null, 2)}
   <link rel="stylesheet" href="../css/reset.css">
   <link rel="stylesheet" href="../css/tokens.css">
   <link rel="stylesheet" href="../css/main.css">
-  <link rel="stylesheet" href="../css/header.css">
+  <link rel="stylesheet" href="../css/header.css?v=20260930-voice-nav-1">
   <link rel="stylesheet" href="../css/footer.css">
   <link rel="stylesheet" href="../css/marketing.css">
   <script src="/js/cookie-consent.js" defer></script>
@@ -316,7 +318,7 @@ ${JSON.stringify(listLd, null, 2)}
   <link rel="stylesheet" href="../css/reset.css">
   <link rel="stylesheet" href="../css/tokens.css">
   <link rel="stylesheet" href="../css/main.css">
-  <link rel="stylesheet" href="../css/header.css">
+  <link rel="stylesheet" href="../css/header.css?v=20260930-voice-nav-1">
   <link rel="stylesheet" href="../css/footer.css">
   <link rel="stylesheet" href="../css/marketing.css">
   <script src="/js/cookie-consent.js" defer></script>

@@ -109,14 +109,15 @@
   display: none;
 }
 
-@media (max-width: 900px) {
-  .container {
+/* Use the drawer before the full product navigation can overflow. */
+@media (max-width: 1200px) {
+  .site-header .container {
     padding: 0 1rem;
   }
   .nav-links {
     display: none;
   }
-  .cta-button {
+  .site-header .cta-button {
     display: none;
   }
   .mobile-toggle {
