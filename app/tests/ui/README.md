@@ -53,9 +53,10 @@ supported Chrome browser, open
 actual navigation script's two render paths and desktop/mobile DOM containers,
 all nine visitor/account plans, repeated rendering, and missing, pending,
 failed and disabled Voice plan responses. Expected: **72 passed; 0 failed**.
-For authenticated plans, each menu must have one top-level Voice shortcut and
-one Voice link as the first item inside Interview Prep, both pointing to the
-same app route. Visitors retain only the top-level Voice link.
+For authenticated plans, each menu must have a Voice link as the first item
+inside Interview Prep. The app copy also retains its top-level Voice shortcut.
+Marketing has no separate top-level Voice shortcut; visitors find the product
+through Features. App visitors retain their existing top-level Voice link.
 Each case also checks the actual auth-state and effective-plan APIs retain the
 selected plan. The fixture clears development overrides and uses `displayPlan`
 in its URL because the application's `plan` parameter would create an override.

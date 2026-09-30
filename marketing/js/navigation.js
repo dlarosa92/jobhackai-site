@@ -1485,7 +1485,6 @@ if (typeof document !== 'undefined') {
 const signedInNavItems = () => ([
   { text: 'Home', href: VISITOR_HOME_HREF },
   { text: 'Dashboard', href: APP_BASE_URL + '/dashboard.html' },
-  { text: 'Voice Mock Interview', href: APP_BASE_URL + '/voice-interview.html' },
   { text: 'Blog', href: VISITOR_BLOG_HREF },
   {
     text: 'Resume Tools',
@@ -1518,7 +1517,6 @@ const NAVIGATION_CONFIG = {
   visitor: {
     navItems: [
       { text: 'Home', href: VISITOR_HOME_HREF },
-      { text: 'Voice Mock Interview', href: VISITOR_FEATURES_HREF + '#voice-title' },
       { text: 'Blog', href: VISITOR_BLOG_HREF },
       { text: 'Features', href: VISITOR_FEATURES_HREF },
       { text: 'Pricing', href: `${APP_BASE_URL}/pricing` },
@@ -3034,7 +3032,6 @@ function renderMarketingNav(desktop, mobile) {
   _clearNavActions(desktop);
   desktop.innerHTML = `
     <a href="${VISITOR_HOME_HREF}">Home</a>
-    <a href="${VISITOR_FEATURES_HREF}#voice-title">Voice Mock Interview</a>
     <a href="${VISITOR_BLOG_HREF}">Blog</a>
     <a href="${VISITOR_FEATURES_HREF}">Features</a>
     <a href="${VISITOR_PRICING_HREF}">Pricing</a>
