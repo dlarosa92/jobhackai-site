@@ -11,6 +11,7 @@ import { COACHING_GUIDANCE, roleCompetencies } from './voice-coaching.js';
 import { callOpenAI } from './openai-client.js';
 import { getDb } from './db.js';
 import { scorecardUsageEvidence } from './voice-usage.js';
+import { isExplicitEndRequest } from '../../../js/voice-lifecycle.js';
 
 export const SCORECARD_SCHEMA = {
   name: 'voice_interview_scorecard',
@@ -91,12 +92,31 @@ function quoteWords(value) {
 }
 
 export function groundedMoments(moments, transcript) {
-  const answers = (Array.isArray(transcript) ? transcript : [])
+  const answers = interviewEvidenceTranscript(transcript)
     .filter(turn => turn?.speaker === 'user')
     .map(turn => ` ${quoteWords(turn.text)} `);
   return (Array.isArray(moments) ? moments : []).filter(moment => {
     const quote = quoteWords(moment?.quote);
     return quote && answers.some(answer => answer.includes(` ${quote} `));
+  });
+}
+
+export function groundedCompetencies(competencies, transcript) {
+  return (Array.isArray(competencies) ? competencies : []).slice(0, 5).map(c => {
+    if (c.status !== 'not_assessed' && groundedMoments([c], transcript).length) return c;
+    return { name: c.name, status: 'not_assessed', quote: '', feedback: 'This sample does not contain a verified answer excerpt to assess this area. Practice a specific example next time.' };
+  });
+}
+
+// Old clients and reconnects can submit session controls as candidate turns.
+// Keep those out of both the model input and quote validation. Whole-turn
+// matches preserve real answers that describe audio issues or ending a call.
+export function interviewEvidenceTranscript(transcript) {
+  return (Array.isArray(transcript) ? transcript : []).filter(turn => {
+    if (turn?.speaker !== 'user') return true;
+    const text = String(turn.text || '').trim().replace(/[‘’]/g, "'");
+    if (isExplicitEndRequest(text)) return false;
+    return !/^(?:(?:hello|hi|hey|sorry)[, ]+)?(?:(?:can|could) you hear me(?: (?:now|okay|ok|clearly))?|i (?:can't|cannot) hear you(?: (?:now|clearly))?)[?!.]*$/i.test(text);
   });
 }
 
@@ -142,6 +162,7 @@ function tooShortScorecard() {
  * @throws on model call/parse failure (callers decide whether to swallow)
  */
 export async function scoreVoiceTranscript({ role, seniority, transcript, jd = null, priorFocus = null }, env) {
+  transcript = interviewEvidenceTranscript(transcript);
   const text = transcriptToText(transcript);
   const candidateText = transcriptToText((Array.isArray(transcript) ? transcript : []).filter(t => t?.speaker === 'user'));
   if (candidateText.length < MIN_SCOREABLE_CHARS) {
@@ -151,6 +172,7 @@ export async function scoreVoiceTranscript({ role, seniority, transcript, jd = n
   const promptParts = [
     "You are the candidate's interview coach at JobHackAI. Give warm, direct, evidence-based feedback on this practice sample.",
     COACHING_GUIDANCE,
+    'Connection checks, requests to stop, and other session administration are not interview answers. Never use them as competency evidence or penalize a candidate for choosing to finish. Assess only their substantive answers to interview questions.',
     'EVIDENCE DECISION RULES: First identify what each interviewer question actually asked. Assess the answer to that question, not the entire job checklist. Choose observed competencies before adding unassessed areas. A competency can be demonstrated with room to elaborate; do not use needs_practice merely to justify giving advice.',
     'Use needs_practice only when you can name a concrete mistake, an unsupported conclusion, an explicitly admitted omission relevant to the question, or an answer that does not address that question. A quote about coordination is not proof of weak leadership. An explanation of a technical choice does not have to supply an unrelated incident history. If the only criticism is that something was not discussed or explored, use not_assessed and exclude it from scores and negative summary claims.',
     'Accept the stated context and scale. School, volunteer, personal and workplace examples can demonstrate the same junior skill. A tested fix in a student project demonstrates verification within that project; lack of a production deployment does not make it deficient. Do not make production experience or enterprise leadership the improvement priority unless the question actually required it.',
@@ -206,10 +228,7 @@ export async function scoreVoiceTranscript({ role, seniority, transcript, jd = n
 
   scorecard.methodologyVersion = 2;
   scorecard.moments = groundedMoments(scorecard.moments, transcript);
-  scorecard.competencies = (scorecard.competencies || []).slice(0, 5).map(c => {
-    if (c.status !== 'not_assessed' && groundedMoments([c], transcript).length) return c;
-    return { name: c.name, status: 'not_assessed', quote: '', feedback: 'This sample does not contain a verified answer excerpt to assess this area. Practice a specific example next time.' };
-  });
+  scorecard.competencies = groundedCompetencies(scorecard.competencies, transcript);
   return { scorecard, usage: result.usage || null, model: result.model || null, fromCache: result.fromCache === true };
 }
 

@@ -19,7 +19,7 @@
 import { getBearer, verifyFirebaseIdToken } from '../../../_lib/firebase-auth.js';
 import { getOrCreateUserByAuthId, getDb } from '../../../_lib/db.js';
 import { getVoiceEntitlement, voiceFeatureEnabled } from '../../../_lib/voice-entitlements.js';
-import { partialScorecard, groundedMoments } from '../../../_lib/voice-scorecard.js';
+import { partialScorecard, groundedMoments, groundedCompetencies } from '../../../_lib/voice-scorecard.js';
 import { isSessionExpired, deleteVoiceSession } from '../../../_lib/voice-history.js';
 import { errorResponse, successResponse, generateRequestId } from '../../../_lib/error-handler.js';
 
@@ -113,7 +113,12 @@ export async function onRequest(context) {
 
     // Existing reports also need speaker grounding; keep the stored evidence
     // intact and filter quotations only in the response.
-    if (fullAccess && scorecard) scorecard.moments = groundedMoments(scorecard.moments, transcript);
+    if (fullAccess && scorecard) {
+      scorecard.moments = groundedMoments(scorecard.moments, transcript);
+      if (Array.isArray(scorecard.competencies)) {
+        scorecard.competencies = groundedCompetencies(scorecard.competencies, transcript);
+      }
+    }
 
     return successResponse({
       sessionId: session.id,

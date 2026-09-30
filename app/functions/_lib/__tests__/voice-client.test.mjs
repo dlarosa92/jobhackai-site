@@ -352,6 +352,42 @@ for (const withoutModules of [[], ['isExplicitEndRequest']]) {
 
 // --------------------------------------------------- live safety end view
 
+for (const withoutModules of [[], ['isExplicitEndRequest']]) {
+  for (const request of ["I'd like to end this now.", 'I would like to end this now.']) {
+    test(`QA spoken stop completes once and excludes the control (${request}, ${withoutModules.length ? 'fallback' : 'module'})`, async () => {
+      const h = await liveInterviewWithOneAnswer({ withoutModules });
+      try {
+        h.event({ type: 'conversation.item.created', item: { id: 'qa-stop' } });
+        h.event({ type: 'input_audio_buffer.committed', item_id: 'qa-stop' });
+        h.event({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'qa-stop', transcript: request });
+        await h.settle();
+        // A repeated ASR completion must not submit another completion.
+        h.event({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'qa-stop', transcript: request });
+        await h.settle();
+        const bodies = h.completeBodies();
+        assert.equal(bodies.length, 1);
+        assert.equal(bodies[0].reason, 'user_ended');
+        assert.ok(bodies[0].transcript.some(turn => turn.speaker === 'user'));
+        assert.ok(!bodies[0].transcript.some(turn => turn.text === request));
+        assert.ok(h.peerConnection().tracks.every(track => track.enabled === false));
+      } finally { h.dispose(); }
+    });
+  }
+  test(`bare leave answer does not end a paid session (${withoutModules.length ? 'fallback' : 'module'})`, async () => {
+    const h = await liveInterviewWithOneAnswer({ withoutModules });
+    try {
+      h.event({ type: 'conversation.item.created', item: { id: 'career-answer' } });
+      h.event({ type: 'input_audio_buffer.committed', item_id: 'career-answer' });
+      h.event({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'career-answer', transcript: 'I would like to leave.' });
+      await h.settle();
+      assert.equal(h.completeBodies().length, 0);
+      assert.ok(h.peerConnection().tracks.some(track => track.enabled));
+      await h.click('vi-end-btn');
+      assert.ok(h.completeBodies()[0].transcript.some(turn => turn.text === 'I would like to leave.'));
+    } finally { h.dispose(); }
+  });
+}
+
 test('a session that ends live for safety shows the same visible, scoreless state', async () => {
   // Same hidden-container defect as the history path: renderSafetyEnd is the
   // only renderer that never unhid #vi-scorecard, so the in-session safety
