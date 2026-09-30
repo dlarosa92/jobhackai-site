@@ -7,7 +7,54 @@ campaign. Sebastian tests when needed. He confirmed that the public name remains
 and publishing within this scope are authorized. Earlier approval-only holds
 are superseded by this instruction; technical acceptance requirements remain.
 
-**Status: production is not ready. No voice launch has been published.**
+**Status: the production app is deployed; signed-in production acceptance is pending. Marketing and the voice campaign remain unpublished.**
+
+## September 30 production cutover
+
+The owner supplied the key through hidden local entry on their Mac. Independent
+provider checks passed: authenticated model listing, a short GPT-4.1 report-model
+response, and Realtime client-secret creation all returned HTTP 200. No key or
+ephemeral token was printed, committed or included in these notes.
+
+Before migration, a full private D1 export and recovery bookmark were taken:
+`00000972-00000000-000050f6-c31663659c695b7fa01ea46cd56acf18`.
+A fresh local rehearsal preserved all 21 existing tables' row counts and passed
+SQLite integrity checking. Migrations 019–021 and 024–029 were then applied once
+to production. Independent readback at 02:20 UTC found every expected schema
+object and column and returned `quick_check=ok`. Existing billing and directory
+migrations were preserved; no historical hold or billing repair was performed.
+
+The isolated production deadline Worker is installed and enabled at version
+`e45338cc-fe6b-47f3-ad73-cce774596813`, namespace
+`5b403d17b4014e29abbb52eb9525b16f`. Its D1 binding points to the production database.
+The same validated provider key was provisioned to the Worker and production
+Pages configuration. Production uses `gpt-realtime-mini` with the existing marin
+voice and explicit `gpt-4.1` reports. All three live Stripe voice prices below
+were independently reverified and wired into production. Existing environment
+values, D1 and KV bindings were preserved. The Worker config deliberately defaults
+to disabled; deployments that preserve this live state must explicitly pass
+`--var VOICE_DEADLINES_ENABLED:true`.
+
+At 02:23 UTC, production app deployment
+`a6960b5b-0471-4bf5-a937-b4af6891472f` succeeded at candidate revision
+`f4295a5a5e3a47eb5ef7b2e1b45e5eb7ff68b530`. Canonical deployment metadata confirms
+the production namespace, D1, RPC flag, voice flags, report model and price IDs.
+The live `/voice-interview` page and voice script match the candidate, including
+spoken controls and 24px retry spacing. Public pricing shows the three intended
+offers. Anonymous account/history/connection requests are denied, the legacy
+token route requests a page refresh, and GET/POST to the QA scorer return 404.
+
+Signed-in account, checkout and actual production call closure checks are still
+pending. The first pricing inspection also found an unsupported “Most popular”
+badge on the new Monthly offer; its removal is queued in the candidate. No
+purchase, charge, production voice session, marketing publication or social
+publication has been performed during this cutover. Production marketing still
+serves `13e59270b1847b3f5b18d7e9f14f6b652b275139` on deployment
+`b6051278-49a8-4e8c-8d19-d2b497065ae1`. Retain that marketing deployment and prior
+app deployment `a24bcf9c-07d4-4c55-b9f2-7cdec4b0ae3e` as rollback targets.
+
+The timestamped sections below retain earlier observations; this cutover record
+supersedes their statements that production is unchanged or the key is missing.
 
 ## September 30 spoken acceptance and current release boundary
 
