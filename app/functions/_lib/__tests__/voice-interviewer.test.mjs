@@ -531,10 +531,10 @@ test('the interviewer is told to speak at a calm, measured pace', () => {
   assert.equal(out.split('do not rush').length - 1, 1);
 });
 
-test('the realtime session request sends output speed 0.9', () => {
-  assert.equal(VOICE_OUTPUT_SPEED, 0.9);
+test('the realtime session uses native playback while delivery stays prompt controlled', () => {
+  assert.equal(VOICE_OUTPUT_SPEED, 1.0);
   const cfg = realtimeSessionConfig({ model: 'gpt-realtime-mini', instructions: 'x', voice: 'marin' });
-  assert.equal(cfg.audio.output.speed, 0.9);
+  assert.equal(cfg.audio.output.speed, 1.0);
   assert.equal(cfg.audio.output.voice, 'marin');
 });
 
