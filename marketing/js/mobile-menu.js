@@ -139,7 +139,7 @@
 
     // Close menu on window resize (if resizing to desktop)
     addTrackedListener(window, 'resize', function() {
-      if (window.innerWidth > 900 && isMenuOpen) {
+      if (mobileToggle && window.getComputedStyle(mobileToggle).display === 'none' && isMenuOpen) {
         closeMenu();
       }
     });

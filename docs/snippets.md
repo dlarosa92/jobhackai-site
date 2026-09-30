@@ -27,6 +27,8 @@ _Update this file when a snippet is improved or the design system changes._
     <div class="nav-group">
       <nav class="nav-links" role="navigation">
         <a href="index.html">Home</a>
+        <a href="https://jobhackai.io/features#voice-title">Voice Mock Interview</a>
+        <a href="https://jobhackai.io/features">Features</a>
         <a href="#what-you-get">What You Get</a>
         <a href="pricing-a.html">Pricing</a>
         <a href="#blog">Blog</a>
@@ -45,6 +47,8 @@ _Update this file when a snippet is improved or the design system changes._
 </header>
 <nav class="mobile-nav" id="mobileNav">
   <a href="index.html">Home</a>
+  <a href="https://jobhackai.io/features#voice-title">Voice Mock Interview</a>
+  <a href="https://jobhackai.io/features">Features</a>
   <a href="#what-you-get">What You Get</a>
   <a href="pricing-a.html">Pricing</a>
   <a href="blog.html">Blog</a>

@@ -43,3 +43,23 @@ For a real generation check, use only an authorized dev test account and an
 isolated candidate surface. The fixture alone is not evidence of a successful
 OpenAI request or a deployed change. Keep credentials and test-account evidence
 out of source control.
+
+## Navigation discovery regression
+
+Run `node app/tests/ui/navigation-fixture.cjs` from the repository root. In the
+supported Chrome browser, open
+`http://localhost:43181/navigation-fixture.html?copy=root&plan=monthly`, then click
+**Run DOM regression matrix**. Repeat with `copy=marketing`. Each run checks the
+actual navigation script's two render paths and desktop/mobile DOM containers,
+all nine visitor/account plans, repeated rendering, and missing, pending,
+failed and disabled Voice plan responses. Expected: **72 passed; 0 failed**.
+
+The fixture stubs authentication/HTTP only and prevents remote connections with
+CSP. It does not load analytics, use real accounts, or start interviews. It serves
+the selected navigation and mobile-menu scripts, four header stylesheets, and
+the actual component-loader for the marketing copy. At 1440, 1200, 1024, 901 and
+390px widths, use **Show selected plan** and the hamburger to verify visibility,
+tap targets and overflow; DOM assertions alone do not prove responsive layout.
+An open drawer should remain open from 390 to 1024px and close at 1440px.
+This local fixture does not verify production cookie-only authentication handoff.
+Restore the browser viewport and stop the loopback server after checking.

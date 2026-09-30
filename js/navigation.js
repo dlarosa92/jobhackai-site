@@ -1496,6 +1496,7 @@ if (typeof document !== 'undefined') {
 const signedInNavItems = () => ([
   { text: 'Home', href: VISITOR_HOME_HREF },
   { text: 'Dashboard', href: APP_BASE_URL + '/dashboard.html' },
+  { text: 'Voice Mock Interview', href: APP_BASE_URL + '/voice-interview.html' },
   { text: 'Blog', href: VISITOR_BLOG_HREF },
   {
     text: 'Resume Tools',
@@ -1510,7 +1511,7 @@ const signedInNavItems = () => ([
     isDropdown: true,
     items: [
       { text: 'Interview Questions', href: APP_BASE_URL + '/interview-questions.html' },
-      { text: 'Mock Interviews', href: APP_BASE_URL + '/mock-interview.html' },
+      { text: 'Typed Mock Interview', href: APP_BASE_URL + '/mock-interview.html' },
     ]
   },
   { text: 'LinkedIn Optimizer', href: APP_BASE_URL + '/linkedin-optimizer.html' }
@@ -1522,107 +1523,12 @@ const signedInUserNav = () => ({
   ]
 });
 
-// --- Voice mock interview nav entry (flag-gated) ---
-// The Interview Prep dropdown gains 'Voice Mock Interview' (and the typed
-// item is renamed 'Typed Mock Interview' to distinguish them) ONLY when
-// /api/plan/me reports voice.enabled. With the flag off the dropdown stays
-// exactly as it is today. Voice state rides the shared PlanCache fetch —
-// no second /api/plan/me call is added.
-let _voiceNav = null;          // last-known voice block from /api/plan/me
-let _voiceNavFetching = false;
-
-function voiceNavBadgeText(voice) {
-  if (!voice || !voice.enabled) return null;
-  if (voice.unlimited) return Number.isFinite(voice.monthlyRemaining)
-    ? `${voice.monthlyRemaining} left this month` : 'Monthly session limit';
-  if (voice.mode === 'pack') return `${voice.sessionsRemaining} left`;
-  if (voice.canStart) return '1 free';
-  return null; // free session used: no badge, the page itself paywalls
-}
-
-function withVoiceNavItems(navItems) {
-  if (!_voiceNav || !_voiceNav.enabled || !Array.isArray(navItems)) return navItems;
-  return navItems.map((item) => {
-    if (item.isDropdown !== true || item.text !== 'Interview Prep') return item;
-    const items = item.items.map((sub) =>
-      sub.text === 'Mock Interviews' ? { ...sub, text: 'Typed Mock Interview' } : sub
-    );
-    items.push({
-      text: 'Voice Mock Interview',
-      href: APP_BASE_URL + '/voice-interview.html',
-      badge: voiceNavBadgeText(_voiceNav)
-    });
-    return { ...item, items };
-  });
-}
-
-function withVoiceNavConfig(navConfig) {
-  if (!_voiceNav || !_voiceNav.enabled || !navConfig || !Array.isArray(navConfig.navItems)) return navConfig;
-  return { ...navConfig, navItems: withVoiceNavItems(navConfig.navItems) };
-}
-
-// Reads the voice block via the shared PlanCache (30s TTL, deduplicated) and
-// schedules ONE nav rebuild when the value actually changes, so this cannot
-// loop with updateNavigation calling it on every render.
-function ensureVoiceNavState() {
-  try {
-    const user = (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function')
-      ? window.FirebaseAuthManager.getCurrentUser()
-      : null;
-    if (!user || typeof user.getIdToken !== 'function') {
-      _voiceNav = null;
-      return;
-    }
-    if (_voiceNavFetching || !window.PlanCache || typeof window.PlanCache.getPlan !== 'function') return;
-    _voiceNavFetching = true;
-    const requestUid = user.uid || null;
-    user.getIdToken()
-      .then((token) => window.PlanCache.getPlan(token))
-      .then((data) => {
-        // Discard responses that outlive an account switch: the plan data
-        // belongs to whoever was signed in when the fetch started, and must
-        // not stamp their entitlement onto the next account's nav.
-        const current = (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function')
-          ? window.FirebaseAuthManager.getCurrentUser()
-          : null;
-        if (!current || (current.uid || null) !== requestUid) return;
-        // getPlan resolves null on a failed fetch (it never rejects). That is
-        // indeterminate, not authoritative: keep the last-known voice state
-        // instead of tearing the nav entry out on a transient network blip.
-        if (!data) return;
-        const voice = data.voice || null;
-        const changed = JSON.stringify(voice) !== JSON.stringify(_voiceNav);
-        _voiceNav = voice;
-        if (changed) {
-          navLog('info', 'Voice nav state changed, refreshing navigation', { enabled: !!(voice && voice.enabled) });
-          scheduleUpdateNavigation(true);
-        }
-      })
-      .catch((err) => {
-        navLog('debug', 'Voice nav state fetch failed (non-critical)', { message: err?.message });
-      })
-      .finally(() => { _voiceNavFetching = false; });
-  } catch (err) {
-    navLog('debug', 'ensureVoiceNavState failed (non-critical)', { message: err?.message });
-  }
-}
-
-// Badge on a dropdown item (plan-badge family: #E8F5E9 tint + #388E3C text,
-// pill radius — same palette as the weekly/monthly/pack plan badges).
-function appendNavItemBadge(link, badgeText) {
-  if (!badgeText) return;
-  const badge = document.createElement('span');
-  badge.className = 'nav-dropdown-badge';
-  badge.textContent = badgeText;
-  badge.style.cssText = 'display:inline-block;margin-left:0.5rem;padding:0.1rem 0.55rem;border-radius:var(--radius-full, 9999px);background:#E8F5E9;color:#388E3C;font-size:0.75rem;font-weight:700;vertical-align:middle;';
-  link.appendChild(badge);
-}
-
 const NAVIGATION_CONFIG = {
   // Logged-out / Visitor
   visitor: {
     navItems: [
       { text: 'Home', href: VISITOR_HOME_HREF },
+      { text: 'Voice Mock Interview', href: APP_BASE_URL + '/voice-interview.html' },
       { text: 'Blog', href: VISITOR_BLOG_HREF },
       { text: 'Features', href: VISITOR_FEATURES_HREF },
       { text: 'Pricing', href: `${APP_BASE_URL}/pricing` },
@@ -2016,10 +1922,9 @@ function updateNavigation() {
     url: window.location.href
   });
 
-  // Voice nav entry is flag-gated: refresh the entitlement (async, rebuilds
-  // once if it changed) and fold the current known state into the config.
-  ensureVoiceNavState();
-  const navConfig = withVoiceNavConfig(NAVIGATION_CONFIG[currentPlan] || NAVIGATION_CONFIG.visitor);
+  // Product discovery must not depend on the entitlement request succeeding.
+  // The interview page and API remain responsible for access and allowances.
+  const navConfig = NAVIGATION_CONFIG[currentPlan] || NAVIGATION_CONFIG.visitor;
   navLog('info', 'Using navigation config', {
     plan: currentPlan,
     hasConfig: !!navConfig,
@@ -2189,7 +2094,6 @@ function updateNavigation() {
           const link = document.createElement('a');
           updateLink(link, dropdownItem.href);
           link.textContent = dropdownItem.text;
-          appendNavItemBadge(link, dropdownItem.badge);
           // Only add locked handler if explicitly marked as locked
           // Dropdown items should inherit unlocked state from parent plan config
           // CRITICAL: Use strict equality to prevent issues with truthy non-boolean values
@@ -2340,7 +2244,6 @@ function updateNavigation() {
           const link = document.createElement('a');
           updateLink(link, dropdownItem.href);
           link.textContent = dropdownItem.text;
-          appendNavItemBadge(link, dropdownItem.badge);
           // Only add locked handler if explicitly marked as locked
           // CRITICAL: Use strict equality to prevent issues with truthy non-boolean values
           if (dropdownItem.locked === true) {
@@ -3149,6 +3052,7 @@ function renderMarketingNav(desktop, mobile) {
   _clearNavActions(desktop);
   desktop.innerHTML = `
     <a href="${VISITOR_HOME_HREF}">Home</a>
+    <a href="${APP_BASE_URL}/voice-interview.html">Voice Mock Interview</a>
     <a href="${VISITOR_BLOG_HREF}">Blog</a>
     <a href="${VISITOR_FEATURES_HREF}">Features</a>
     <a href="${VISITOR_PRICING_HREF}">Pricing</a>
@@ -3197,7 +3101,6 @@ function _buildVerifiedNavItems(container, navConfig, wrapHref) {
           link.href = wrapHref(sub.href);
         }
         link.textContent = sub.text;
-        appendNavItemBadge(link, sub.badge);
         menu.appendChild(link);
       });
 
@@ -3275,8 +3178,7 @@ function _buildUserMenu(navConfig, wrapHref) {
 function renderVerifiedNav(desktop, mobile) {
   if (!desktop) return;
   const currentPlan = getEffectivePlan();
-  ensureVoiceNavState();
-  const navConfig = withVoiceNavConfig(NAVIGATION_CONFIG[currentPlan] || NAVIGATION_CONFIG.free);
+  const navConfig = NAVIGATION_CONFIG[currentPlan] || NAVIGATION_CONFIG.free;
   const planForHandoff = normalizeHandoffPlan(localStorage.getItem('user-plan') || localStorage.getItem('dev-plan') || 'free') || 'free';
 
   const wrapHref = (href) => buildAuthHandoffHref(href, true, planForHandoff);
