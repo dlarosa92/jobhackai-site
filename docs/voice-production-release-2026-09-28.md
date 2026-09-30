@@ -7,7 +7,51 @@ campaign. Sebastian tests when needed. He confirmed that the public name remains
 and publishing within this scope are authorized. Earlier approval-only holds
 are superseded by this instruction; technical acceptance requirements remain.
 
-**Status: the production app is deployed; signed-in production acceptance is pending. Marketing and the voice campaign remain unpublished.**
+**Status: the production app passed signed-in lifecycle acceptance. Marketing is prepared for release; the voice social campaign remains unpublished.**
+
+## September 30 production acceptance
+
+At 02:32–02:33 UTC, the owner completed the production spoken-end test on
+canonical app deployment `8113d2b6-abcb-4e7f-b1e9-da15254e59e0`, revision `b956034`
+(the pricing badge removal; application runtime is unchanged by subsequent
+marketing-only commits). The real provider returned 201 on creation and 200 on
+hangup. The isolated production deadline service accepted the arm request. The
+application session, control row and sole provider attempt are closed, with no
+provider error. One interview was used: the signed-in dashboard changed from
+60 to 59. The ending request is absent from saved answers, and the saved report
+is accessible from history with no ineffective retry banner.
+
+The 42-second test contained insufficient candidate speech and correctly saved
+a methodology-v2, unscored report. No report-model request was made for this
+sample. Production GPT-4.1 access was separately verified by a short provider
+request; QA supplies the substantive same-code report acceptance. Do not call
+this production sample a scored-report quality test. Native-rate audio and
+reconnect were accepted on QA; the production owner confirmed that spoken ending
+finished immediately without an audible goodbye and accepted that behavior.
+
+The live account retains its existing Pro subscription and voice allowance.
+Starting Weekly checkout on that account invokes the existing-subscription guard
+and returns to Account Settings. The one-time Interview Pack opens live Stripe
+Checkout for USD39, five interviews and a 90-day expiry, with no recurring charge.
+Checkout was exited without payment. Live Weekly USD17 and Monthly USD34 product
+and price identities were read directly from Stripe and the production mapping
+was verified; neither a new recurring checkout nor paid fulfilment was exercised
+on the already-subscribed account. No plan change, charge or credit grant was made.
+
+The bounded production collector captured the provider receipts and completion
+invocations, then was stopped after acceptance. Temporary local provider-key
+copies were removed after the production call closed; remote secrets remain
+provisioned. Private recovery exports and sanitized technical receipts are kept
+outside the repository.
+
+The final marketing preparation removes unsupported popularity wording, makes
+free-preview versus paid-report access explicit in the AI-readable descriptions,
+adds the voice feature to Features, and prepares the reviewed Marblism article
+for publication with its blog card and sitemap entry. All original 35 sitemap
+entries are retained; the candidate now has 47 distinct entries. The 82 targeted
+blog and directory checks pass. Existing Local content and schedules are preserved.
+The six Marblism social drafts are being prepared for final live-link verification;
+this record does not assert that any post has been published or scheduled.
 
 ## September 30 production cutover
 
