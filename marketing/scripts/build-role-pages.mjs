@@ -238,7 +238,7 @@ ${JSON.stringify(breadcrumbLd, null, 2)}
   <link rel="stylesheet" href="../css/header.css?v=20260930-voice-nav-1">
   <link rel="stylesheet" href="../css/footer.css">
   <link rel="stylesheet" href="../css/marketing.css">
-  <script src="/js/cookie-consent.js" defer></script>
+  <script src="/js/cookie-consent.js?v=20260930-tracking-1" defer></script>
 ${pageStyles}
 </head>
 <body>
@@ -319,7 +319,7 @@ ${JSON.stringify(listLd, null, 2)}
   <link rel="stylesheet" href="../css/header.css?v=20260930-voice-nav-1">
   <link rel="stylesheet" href="../css/footer.css">
   <link rel="stylesheet" href="../css/marketing.css">
-  <script src="/js/cookie-consent.js" defer></script>
+  <script src="/js/cookie-consent.js?v=20260930-tracking-1" defer></script>
 ${pageStyles}
 </head>
 <body>
