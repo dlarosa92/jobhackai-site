@@ -453,13 +453,19 @@ export class RoleSelector {
   trackSelection(roleName) {
     const isCustom = this.isCustomRole(roleName);
 
-    if (window.gtag) {
-      window.gtag('event', 'role_selected', {
-        role_name: roleName,
-        role_type: isCustom ? 'custom' : 'standard',
-        event_category: 'resume_feedback'
-      });
-    }
+    try {
+      if (typeof window.JHA?.trackEventSafe === 'function') {
+        // Custom input can contain personal information. Only send a fixed
+        // label, or the canonical name from the known role list.
+        const standardRole = isCustom ? null : this.roles.find(
+          (role) => role.name.toLowerCase() === roleName.toLowerCase());
+        window.JHA.trackEventSafe('role_selected', {
+          role_name: standardRole ? standardRole.name : 'custom',
+          role_type: isCustom ? 'custom' : 'standard',
+          event_category: 'resume_feedback'
+        });
+      }
+    } catch (_) { /* Analytics must not interrupt role selection. */ }
 
     try {
       const telemetry = JSON.parse(localStorage.getItem('roleSelectorTelemetry') || '[]');
