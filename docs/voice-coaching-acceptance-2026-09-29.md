@@ -132,9 +132,11 @@ not recognized by the client. The owner waited and then pressed End; therefore
 The report also quoted the control request as weak outcome evidence. The
 transcript's standalone audio check is session administration, not performance.
 
-PR 976 adds narrow whole-utterance detection for that request and “I would like
-to leave,” including the module-missing fallback. Regression tests preserve
-quoted stories, hypotheticals, continuations, and answers about leaving a job.
+PR 976 adds narrow whole-utterance detection for that immediate request,
+including the module-missing fallback. Regression tests preserve quoted stories,
+hypotheticals, continuations, and answers about leaving a job. Review caught
+that the standalone “I would like to leave” can answer a career question; it is
+preserved, with interviewer clarification when the intended target is ambiguous.
 The scorer removes these controls and standalone connection checks before
 minimum-evidence checks, model input, and quotation validation. Existing report
 responses suppress unsupported competency quotations without rewriting stored
@@ -148,7 +150,7 @@ OpenAI's [voice prompting guidance](https://developers.openai.com/api/docs/guide
 distinguishes playback speed from speech composition. This is a controlled
 comparison, not proof that playback speed caused the perceived artifact.
 
-Next live acceptance requires a short spoken request to leave to close without
+Next live acceptance requires “I'd like to end this now” to close without
 pressing End, exclusion of that request from candidate scoring, and owner
 assessment of native-rate audio. Another network interruption is unnecessary
 unless new code changes reconnect behavior. Production and voice campaign
