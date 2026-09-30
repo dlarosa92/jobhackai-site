@@ -516,6 +516,7 @@ for (const status of [401, 500]) {
       await h.click('vi-end-btn');
       assert.equal(h.completeBodies().length, 1);
       assert.ok(h.el('vi-save-status').textContent.includes('has not been saved'));
+      assert.equal(h.analyticsEvents.filter(e => e.name === 'voice_session_complete').length, 0);
       assert.equal(h.el('vi-save-retry').style.display, '');
       assert.equal(h.requests.filter(r => r.method === 'GET' && r.url.includes('/api/voice/session/')).length, 0);
       const historyReads = h.requests.filter(r => r.url === '/api/voice/sessions').length;
@@ -526,6 +527,26 @@ for (const status of [401, 500]) {
       assert.equal(h.el('vi-save-status').textContent, '');
       assert.equal(h.el('vi-save-retry').style.display, 'none');
       assert.ok(h.el('vi-done-status').textContent.includes('Interview saved'));
+      assert.equal(h.analyticsEvents.filter(e => e.name === 'voice_session_complete').length, 1);
+    } finally { h.dispose(); }
+  });
+}
+
+for (const mode of ['free', 'pack', 'subscription']) {
+  test('voice funnel preserves Google session identity and reports ' + mode + ' completion', async () => {
+    const h = await liveInterviewWithOneAnswer({ routes: { ...LIVE_ROUTES,
+      '/api/voice/session': () => ({ sessionId: 'live-1', clientSecret: 'ek_test', model: 'test', mode, maxMinutes: 20 })
+    } });
+    try {
+      await h.click('vi-end-btn');
+      for (const name of ['voice_session_start', 'voice_session_complete']) {
+        const events = h.analyticsEvents.filter(e => e.name === name);
+        assert.equal(events.length, 1);
+        assert.equal(events[0].params.mode, mode);
+        assert.equal(events[0].params.interview_id, 'live-1');
+        assert.equal('session_id' in events[0].params, false, 'Google session ID belongs to its own runtime');
+        assert.equal(JSON.stringify(events).includes('checkout relaunch'), false, 'answer content is not analytics');
+      }
     } finally { h.dispose(); }
   });
 }

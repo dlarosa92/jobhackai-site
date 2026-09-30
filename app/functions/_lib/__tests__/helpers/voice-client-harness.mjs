@@ -119,6 +119,7 @@ export function createVoiceClientHarness(options = {}) {
   const logs = [];
   const requests = [];
   const dataChannelSends = [];
+  const analyticsEvents = [];
   let dataChannel = null;
   let peerConnection = null;
   let domReadyHandler = null;
@@ -191,6 +192,7 @@ export function createVoiceClientHarness(options = {}) {
 
   const windowListeners = {};
   const win = {
+    JHA: { trackEventSafe: (name, params) => analyticsEvents.push({ name, params }) },
     crypto: webcrypto,
     location: { search, href: 'https://app.jobhackai.io/voice-interview.html' + search, pathname: '/voice-interview.html' },
     navigator: { mediaDevices: { getUserMedia: options.getUserMedia || (async () => micStream()) } },
@@ -249,6 +251,7 @@ export function createVoiceClientHarness(options = {}) {
     windowEvent: (type, event) => (windowListeners[type] || []).forEach(fn => fn(event)),
     el: (id) => elements[id],
     logs,
+    analyticsEvents,
     requests,
     sends: dataChannelSends,
     settle,

@@ -1,0 +1,24 @@
+/* Product walkthrough: scoped to Features. */
+.voice-feature-hero .hero-content { gap: 1.15rem; }
+.voice-feature-hero .hero-content > p { margin: 0; line-height: 1.65; }
+.product-capture { margin: 0; min-width: 0; background: #fff; border: 1px solid #dde4e1; border-radius: 18px; overflow: hidden; box-shadow: 0 12px 36px rgba(16, 44, 27, .06); }
+.capture-label { padding: 1rem 1.25rem; background: #f0f7f2; color: #166534; font-size: .85rem; font-weight: 700; }
+.product-capture img { width: 100%; height: auto; display: block; }
+.product-capture figcaption { padding: 1rem 1.25rem; color: #596579; font-size: .85rem; line-height: 1.6; }
+.voice-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.5rem; margin: 1.75rem 0 0; padding: 0; list-style: none; }
+.voice-steps li { padding: 1.5rem; background: #fff; border: 1px solid #e2e7e5; border-radius: 16px; }
+.step-number { width: 2.3rem; height: 2.3rem; display: grid; place-items: center; background: #e6f3e9; color: #007a30; border-radius: 50%; font-weight: 700; margin-bottom: 1.25rem; }
+.voice-steps h3, .feedback-option h3 { font-size: 1.2rem; margin: 0 0 .75rem; }
+.voice-steps p, .feedback-option p { margin: .5rem 0 0; line-height: 1.65; color: #4b5563; }
+.feedback-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; align-items: start; }
+.feedback-options { display: grid; gap: 1rem; }
+.feedback-option { padding: 1.5rem; border: 1px solid #dfe5e2; border-radius: 16px; background: #fff; }
+.feedback-option .eyebrow { display: block; font-size: .68rem; margin-bottom: .7rem; }
+.feedback-option ul { padding-left: 1.2rem; line-height: 1.7; margin: 0; }
+.feedback-option li + li { margin-top: .35rem; }
+.paid-option { border-color: #99c4a6; background: #f5faf6; }
+.paid-option a { display: inline-block; margin-top: 1rem; font-weight: 600; color: #006928; }
+.report-note { margin: 0; padding: 0 1.25rem 1.25rem; color: #596579; font-size: .85rem; line-height: 1.6; }
+#feedback { scroll-margin-top: 6rem; }
+@media (max-width: 960px) { .voice-steps { grid-template-columns: repeat(2, minmax(0,1fr)); } .feedback-layout { grid-template-columns: 1fr; } }
+@media (max-width: 600px) { .voice-steps { grid-template-columns: 1fr; gap: 1rem; } .voice-steps li { padding: 1.25rem; } .voice-feature-hero .hero-actions .btn { width: 100%; } }

@@ -328,6 +328,40 @@ test('marketing-to-app navigation preserves first and last touch despite interna
   gaIdentifiers(app);const context=await app.ctx.JHA.cookieConsent.getCheckoutAnalyticsContext();
   assert.equal(context.firstTouch.source,'linkedin');assert.equal(context.lastTouch.source,'linkedin');
 });
+test('consented signup and completion events retain campaign context across the app handoff', async()=>{
+  const marketing=harness({host:'jobhackai.io',search:tagged});await marketing.init();
+  const app=harness({cookies:marketing.cookies});
+  app.ctx.document.referrer='https://jobhackai.io/features';await app.init();
+  app.ctx.JHA.trackEventSafe('sign_up',{method:'google'});
+  app.ctx.JHA.trackEventSafe('voice_session_complete',{mode:'free',interview_id:'fixture-interview'});
+  for (const event of ['sign_up','voice_session_complete']) {
+    const params=app.events(event).at(-1)[2];
+    assert.equal(params.jha_first_source,'linkedin');
+    assert.equal(params.jha_last_asset,'answer_li_01');
+    assert.equal(params.jha_first_campaign,'voice_beta_2026_09');
+    assert.equal(params.session_id,undefined);
+    assert(!JSON.stringify(params).includes('private@example.com'));
+  }
+  app.setConsent(false);
+  app.ctx.JHA.trackEventSafe('voice_session_complete',{mode:'free'});
+  assert.equal(app.events('voice_session_complete').length,1);
+});
+test('a queued event gains only the campaign captured after analytics consent', async()=>{
+  const h=harness({consent:null,search:tagged});await h.init();
+  h.ctx.JHA.trackEventSafe('sign_up',{method:'google'});
+  assert.equal(h.events('sign_up').length,0);
+  h.setConsent(true);
+  assert.equal(h.events('sign_up').at(-1)[2].jha_first_source,'linkedin');
+});
+for(const analytics of [true,false])test('signup waits for restored account consent before navigation: '+analytics,async()=>{
+  const h=harness({accountAuthPage:true,consent:true,pendingServer:true});await h.init();
+  const restoring=h.authReady({getIdToken:async()=>'fixture-auth-token'});
+  h.ctx.JHA.trackEventSafe('sign_up',{method:'google'});
+  const flushing=h.ctx.JHA.cookieConsent.flushAnalyticsBeforeNavigate();
+  assert.equal(h.events('sign_up').length,0);
+  h.finishServer(analytics);await restoring;await flushing;
+  assert.equal(h.events('sign_up').length,analytics?1:0);
+});
 test('a later external tagged visit updates last touch while retaining first touch', async()=>{
   const first=harness({search:tagged});await first.init();
   const next=harness({cookies:first.cookies,search:tagged.replace('linkedin','instagram')});await next.init();

@@ -1,4 +1,4 @@
-// No HTTP trigger, production binding, payload logging or generated browser IDs.
+// No HTTP trigger, payload logging or generated browser IDs.
 // D1 is the durable outbox. A timeout after collection is uncertain, not retryable.
 import { admitAccountOperation, settleAccountOperation } from '../../../app/functions/_lib/account-deletion-admission.js';
 const DAY = 86400000;
@@ -37,32 +37,34 @@ export async function retain(db: D1Database, now: number) {
 }
 
 export async function enqueue(db: D1Database, environment: string, now: number) {
+  if (!['qa', 'prod'].includes(environment)) throw new Error('analytics_environment_not_supported');
+  const livemode = environment === 'prod' ? 1 : 0;
   const earliest=Math.floor(now/1000)-MAX_AGE;
   await db.batch([
     db.prepare(`INSERT INTO analytics_delivery(event_key,charge_id,checkout_session_id,event_name,event_at,created_at,updated_at)
       SELECT 'purchase:'||p.charge_id,p.charge_id,a.checkout_session_id,'purchase',p.charge_created_at,?1,?1
       FROM stripe_collected_payments p JOIN stripe_payment_attributions l ON l.charge_id=p.charge_id
       JOIN checkout_attributions a ON a.checkout_session_id=l.checkout_session_id
-      WHERE p.environment=?2 AND a.environment=?2 AND p.livemode=0 AND p.charge_created_at>=?3
+      WHERE p.environment=?2 AND a.environment=?2 AND p.livemode=?4 AND p.charge_created_at>=?3
         AND a.expires_at>?1 AND ${consent}
-      ON CONFLICT(event_key) DO NOTHING`).bind(now,environment,earliest),
+      ON CONFLICT(event_key) DO NOTHING`).bind(now,environment,earliest,livemode),
     db.prepare(`INSERT INTO analytics_delivery(event_key,charge_id,checkout_session_id,refund_id,event_name,event_at,created_at,updated_at)
       SELECT 'refund:'||r.refund_id,p.charge_id,a.checkout_session_id,r.refund_id,'refund',r.refund_created_at,?1,?1
       FROM stripe_payment_refunds r JOIN stripe_collected_payments p ON p.charge_id=r.charge_id
       JOIN stripe_payment_attributions l ON l.charge_id=p.charge_id
       JOIN checkout_attributions a ON a.checkout_session_id=l.checkout_session_id
-      WHERE p.environment=?2 AND a.environment=?2 AND p.livemode=0 AND r.status='succeeded'
+      WHERE p.environment=?2 AND a.environment=?2 AND p.livemode=?4 AND r.status='succeeded'
         AND r.refund_created_at>=?3 AND a.expires_at>?1 AND ${consent}
-      ON CONFLICT(event_key) DO NOTHING`).bind(now,environment,earliest),
+      ON CONFLICT(event_key) DO NOTHING`).bind(now,environment,earliest,livemode),
     // A partial capture can become a fully allocated payment after the first
     // scan. This row has never reached collection; restore only this safe case.
     db.prepare(`UPDATE analytics_delivery SET state='pending',last_reason='financial_breakdown_ready',next_attempt_at=?1,updated_at=?1
       WHERE state='ineligible' AND last_reason='financial_breakdown_missing' AND EXISTS (
         SELECT 1 FROM stripe_collected_payments p JOIN stripe_payment_analytics_values m ON m.charge_id=p.charge_id
-        WHERE p.charge_id=analytics_delivery.charge_id AND p.environment=?2 AND p.livemode=0
+        WHERE p.charge_id=analytics_delivery.charge_id AND p.environment=?2 AND p.livemode=?3
           AND p.currency='usd' AND m.currency=p.currency AND m.captured_minor=p.amount_captured
           AND m.value_minor>=0 AND m.tax_minor>=0 AND m.value_minor+m.tax_minor=p.amount_captured
-          AND m.item_id IN ('jobhackai_subscription','jobhackai_one_time'))`).bind(now,environment),
+          AND m.item_id IN ('jobhackai_subscription','jobhackai_one_time'))`).bind(now,environment,livemode),
     db.prepare(`UPDATE analytics_delivery SET state='pending',lease_until=NULL,last_reason='validation_lease_expired',updated_at=?
       WHERE state='validating' AND lease_until<=?`).bind(now,now),
     db.prepare(`UPDATE analytics_delivery SET state='uncertain',lease_until=NULL,last_reason='collection_lease_expired',updated_at=?
@@ -84,8 +86,8 @@ async function eligible(db: D1Database, key: string, env: Env, now: number) {
     JOIN users u ON u.id=a.user_id
     LEFT JOIN stripe_payment_analytics_values m ON m.charge_id=p.charge_id
     LEFT JOIN stripe_payment_refunds r ON r.refund_id=d.refund_id AND r.charge_id=d.charge_id
-    WHERE d.event_key=?1 AND p.environment=?2 AND a.environment=?2 AND p.livemode=0
-      AND a.expires_at>?3 AND ${consent}`).bind(key,env.ENVIRONMENT,now).first<Row>();
+    WHERE d.event_key=?1 AND p.environment=?2 AND a.environment=?2 AND p.livemode=?4
+      AND a.expires_at>?3 AND ${consent}`).bind(key,env.ENVIRONMENT,now,env.ENVIRONMENT==='prod'?1:0).first<Row>();
 }
 
 function touchParams(json: string | null, prefix: string, now: number) {
@@ -155,11 +157,13 @@ async function validateResponse(response: Response): Promise<boolean> {
 
 export async function deliver(env: Env, options: {now?:()=>number; request?:Requester}={}) {
   const clock=options.now||Date.now, request=options.request||fetch;
-  // Production is deliberately unsupported until its held release is reviewed.
-  if (!['dev','qa'].includes(env.ENVIRONMENT)) throw new Error('analytics_environment_not_supported');
+  if (!['dev','qa','prod'].includes(env.ENVIRONMENT)) throw new Error('analytics_environment_not_supported');
+  const destination = {qa:'G-VH888WWY3M',prod:'G-SQYSWPFM5X'}[env.ENVIRONMENT];
+  // Fail before database writes when an enabled worker crosses destinations.
+  if (env.DELIVERY_ENABLED==='true' && (!destination || env.GA4_MEASUREMENT_ID!==destination || !env.GA4_API_SECRET
+      || (env.ENVIRONMENT==='prod' && env.DEBUG_EVENTS!=='false'))) throw new Error('analytics_destination_not_ready');
   const db=env.DB; await retain(db,clock());
   if (env.DELIVERY_ENABLED!=='true') return {enabled:false,processed:0};
-  if (env.ENVIRONMENT!=='qa' || env.GA4_MEASUREMENT_ID!=='G-VH888WWY3M' || !env.GA4_API_SECRET) throw new Error('analytics_destination_not_ready');
   await enqueue(db,env.ENVIRONMENT,clock());
   const pending=await db.prepare(`SELECT event_key FROM analytics_delivery WHERE state='pending' AND next_attempt_at<=?
     ORDER BY CASE WHEN event_name='purchase' THEN 0 ELSE 1 END,event_at LIMIT 5`).bind(clock()).all<{event_key:string}>();

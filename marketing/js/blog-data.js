@@ -13,6 +13,16 @@
 
 window.BLOG_POSTS = [
   {
+    "slug": "what-to-expect-from-a-voice-mock-interview",
+    "title": "What to expect from a JobHackAI Voice Mock Interview",
+    "excerpt": "See how to choose your role, answer aloud, handle follow-up questions, and review feedback. Includes the free preview and paid full report.",
+    "category": "Interview Prep",
+    "date": "2026-09-29",
+    "readTime": 4,
+    "author": "JobHackAI",
+    "featured": false
+  },
+  {
     "slug": "how-to-answer-tell-me-about-yourself",
     "title": "How to Answer “Tell Me About Yourself” in an Interview",
     "excerpt": "Build an introduction around your current work, one relevant example and why this role fits. Includes two illustrative answers and a short practice exercise.",

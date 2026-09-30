@@ -22,7 +22,7 @@ function setup({consent=false,existing=true,host='jobhackai.io',observerAvailabl
 test('an existing article CTA is updated once without appending a second offer',()=>{
   const h=setup({consent:true});h.rerun();
   assert.equal(h.appended,0);assert.equal(h.calls.length,0);
-  assert.ok(h.cta.innerHTML.includes('feedback preview'));assert.ok(h.cta.innerHTML.includes('https://app.jobhackai.io/pricing'));
+  assert.ok(h.cta.innerHTML.includes('feedback preview'));assert.ok(h.cta.innerHTML.includes('https://app.jobhackai.io/login?plan=free'));
   assert.ok(!/29\/mo|3.day|trial/i.test(h.cta.innerHTML));
 });
 test('a missing CTA is inserted but a below-fold render is not an impression',()=>{
@@ -46,7 +46,7 @@ test('hidden pages wait for visibility and browsers without observation emit no 
 });
 test('preview CTA destinations never open production billing',()=>{
   for(const [host,base] of [['qa.jobhackai.io','qa'],['qa-marketing.jobhackai.io','qa'],['develop.jobhackai-app-marketing-seo.pages.dev','qa'],['dev0.jobhackai-app-marketing-seo.pages.dev','dev'],['localhost','dev']]){
-    assert.ok(setup({host}).cta.innerHTML.includes(`https://${base}.jobhackai.io/pricing`),host);
+    assert.ok(setup({host}).cta.innerHTML.includes(`https://${base}.jobhackai.io/login?plan=free`),host);
   }
 });
 test('marketing preview navigation and footer use the matching nonproduction app',()=>{

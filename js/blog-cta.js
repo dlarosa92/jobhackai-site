@@ -4,7 +4,7 @@
   'use strict';
   const topics = [
     { test: /linkedin/i, label: 'Explore LinkedIn guidance', path: '/linkedin-optimizer.html', id: 'blog-linkedin' },
-    { test: /interview|behavioral|mock/i, label: 'See interview practice options', path: '/pricing', id: 'blog-interview' },
+    { test: /interview|behavioral|mock/i, label: 'Try your first interview free', path: '/login?plan=free', id: 'blog-interview' },
     { test: /ats|resume|application/i, label: 'Explore resume tools', path: '/resume-feedback-pro.html', id: 'blog-resume' }
   ];
   const defaultTopic = { label: 'See practice options', path: '/pricing', id: 'blog-default' };

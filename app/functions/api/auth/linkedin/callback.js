@@ -374,6 +374,7 @@ export async function onRequest(context) {
                 if (window.opener) {
                   window.opener.postMessage({
                     type: 'linkedin-auth-success',
+                    isNewUser: authData.isNewUser === true,
                     user: {
                       uid: authData.localId,
                       email: authData.email || ''
@@ -398,6 +399,12 @@ export async function onRequest(context) {
                     }
                     // Set flag to trigger user initialization on page load
                     sessionStorage.setItem('linkedin_pending_init', '1');
+                    sessionStorage.removeItem('jha_linkedin_signup_receipt');
+                    if (authData.isNewUser === true) {
+                      sessionStorage.setItem('jha_linkedin_signup_receipt', JSON.stringify({
+                        uid: authData.localId, isNewUser: true, at: Date.now()
+                      }));
+                    }
                   } catch (e) {
                     console.error('Failed to store tokens in same-window flow:', e);
                     throw new Error('Failed to store authentication tokens');

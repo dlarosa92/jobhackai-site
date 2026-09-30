@@ -80,7 +80,30 @@ test('QA never sends live payments, foreign contexts, or production destinations
     const f=setup(t);f.db.exec(sql);await f.run();assert.equal(f.calls.length,0);
   }
   const f=setup(t);f.env.GA4_MEASUREMENT_ID='G-SQYSWPFM5X';await assert.rejects(f.run(),/destination_not_ready/);assert.equal(f.calls.length,0);
-  f.env.ENVIRONMENT='prod';await assert.rejects(f.run(),/environment_not_supported/);
+  f.env.ENVIRONMENT='prod';await assert.rejects(f.run(),/destination_not_ready/);
+});
+test('production sends only consented live payments and refunds to the production stream',async t=>{
+  const f=setup(t); f.env.ENVIRONMENT='prod'; f.env.GA4_MEASUREMENT_ID='G-SQYSWPFM5X'; f.env.DEBUG_EVENTS='false';
+  f.db.exec("UPDATE stripe_collected_payments SET environment='prod',livemode=1; UPDATE checkout_attributions SET environment='prod'");
+  f.refund(); await f.run(); await f.run();
+  const sent=f.calls.filter(c=>!c.url.includes('/debug/'));
+  assert.equal(sent.length,2);
+  assert(sent.every(c=>new URL(c.url).searchParams.get('measurement_id')==='G-SQYSWPFM5X'));
+  assert(sent.every(c=>!c.body.events[0].params.debug_mode));
+  assert.deepEqual(sent.map(c=>c.body.events[0].name),['purchase','refund']);
+});
+test('production rejects QA destinations, debug events, test payments and foreign attribution',async t=>{
+  for(const change of ['test-payment','qa-context','qa-stream','debug']) {
+    const f=setup(t); f.env.ENVIRONMENT='prod'; f.env.GA4_MEASUREMENT_ID='G-SQYSWPFM5X'; f.env.DEBUG_EVENTS='false';
+    f.db.exec("UPDATE stripe_collected_payments SET environment='prod',livemode=1; UPDATE checkout_attributions SET environment='prod'");
+    if(change==='test-payment') f.db.exec('UPDATE stripe_collected_payments SET livemode=0');
+    if(change==='qa-context') f.db.exec("UPDATE checkout_attributions SET environment='qa'");
+    if(change==='qa-stream') f.env.GA4_MEASUREMENT_ID='G-VH888WWY3M';
+    if(change==='debug') f.env.DEBUG_EVENTS='true';
+    if(['qa-stream','debug'].includes(change)) await assert.rejects(f.run(),/destination_not_ready/);
+    else await f.run();
+    assert.equal(f.calls.length,0);
+  }
 });
 test('missing actual browser ID or financial breakdown cannot invent an Analytics purchase',async t=>{
   for(const sql of ['UPDATE checkout_attributions SET ga_client_id=NULL','DELETE FROM stripe_payment_analytics_values']){

@@ -43,6 +43,7 @@
     deadlineAtMs: null,
     starting: false,
     model: null,
+    mode: null,
     pc: null,
     dc: null,
     micStream: null,
@@ -115,11 +116,13 @@
 
   function track(eventName, params) {
     try {
-      var payload = Object.assign({ session_id: state.sessionId || undefined }, params || {});
+      // GA owns session_id. An interview UUID must not replace its numeric
+      // browser session identifier or break acquisition/checkout attribution.
+      var payload = Object.assign({ interview_id: state.sessionId || undefined, mode: state.mode || undefined }, params || {});
       if (window.JHA && window.JHA.analytics && typeof window.JHA.analytics.track === 'function') {
         window.JHA.analytics.track(eventName, payload);
-      } else if (typeof window.gtag === 'function') {
-        window.gtag('event', eventName, payload);
+      } else if (window.JHA && typeof window.JHA.trackEventSafe === 'function') {
+        window.JHA.trackEventSafe(eventName, payload);
       }
     } catch (_) {}
   }
@@ -1425,6 +1428,7 @@
 
       state.sessionId = res.data.sessionId;
       state.model = res.data.model;
+      state.mode = res.data.mode;
       state.maxMinutes = res.data.maxMinutes || 20;
       state.order = newTranscriptOrder();
       state.usage = typeof window.createVoiceUsage === 'function' ? window.createVoiceUsage() : null;
@@ -1470,6 +1474,7 @@
     try {
       if (!state.startRequestId) {
         state.startRequestId = crypto.randomUUID();
+        state.mode = null;
         state.providerAttemptId = null;
         state.startedAtMs = null;
         state.deadlineAtMs = null;
@@ -1498,6 +1503,7 @@
         replacesAttemptId: state.providerAttemptId
       });
       if (!result || state.ending) return;
+      state.mode = result.mode;
       state.startRequestId = null;
       track('voice_session_start', { mode: result.mode });
       startTimer(state.maxMinutes);

@@ -823,6 +823,19 @@
   const _pendingGtagCalls = [];
   const _pendingClarityIdentify = [];
   const MAX_PENDING_CALLS = 50;
+  function withCampaignContext(args) {
+    if (args[0] !== 'event') return args;
+    const params = { ...(args[2] || {}) };
+    const campaign = readCampaign();
+    for (const prefix of ['first', 'last']) {
+      for (const field of ['source', 'medium', 'campaign', 'asset', 'id']) {
+        if (campaign?.[prefix]?.[field]) params[`jha_${prefix}_${field}`] = campaign[prefix][field];
+      }
+    }
+    const asset = document.body?.getAttribute?.('data-asset-id');
+    if (asset && /^[a-z0-9_.-]{1,100}$/i.test(asset)) params.asset_id = asset;
+    return [args[0], args[1], params];
+  }
   function flushPendingGtagCalls() {
     if (!GA_MEASUREMENT_ID || !hasAnalyticsConsent() || !window.gtag) return false;
     let flushedPageView = false;
@@ -832,7 +845,7 @@
         if (args[0] === 'event' && args[1] === 'page_view') {
           flushedPageView = true;
         }
-        window.gtag.apply(null, args);
+        window.gtag.apply(null, withCampaignContext(args));
       } catch (_) { /* ignore */ }
     }
     return flushedPageView;
@@ -855,7 +868,12 @@
   // can race init()'s server consent fetch — if gtag still isn't loaded,
   // kick off loadGAScript() ourselves so we aren't stuck waiting on a
   // network round-trip that will never produce gtag.
-  function flushAnalyticsBeforeNavigate() {
+  async function flushAnalyticsBeforeNavigate() {
+    // A redirect signup can finish before the account consent read. Keep its
+    // queued event private until that read confirms consent, with a bounded wait.
+    if (GA_MEASUREMENT_ID && consentIdentityReady() && !accountConsentReady) {
+      await Promise.race([fetchConsentFromServer(), new Promise(resolve => window.setTimeout(resolve, 1500))]);
+    }
     if (!GA_MEASUREMENT_ID || !hasAnalyticsConsent()) return Promise.resolve();
     if (typeof window.gtag === 'function') {
       flushPendingGtagCalls();
@@ -897,7 +915,8 @@
   window.JHA.gtagSafe = function(...args) {
     if (!GA_MEASUREMENT_ID) return;
     if (!hasAnalyticsConsent()) {
-      if (getConsent() === null && _pendingGtagCalls.length < MAX_PENDING_CALLS) {
+      const cachedConsent = getConsent();
+      if ((cachedConsent === null || (!accountConsentReady && cachedConsent.analytics === true)) && _pendingGtagCalls.length < MAX_PENDING_CALLS) {
         _pendingGtagCalls.push(args);
       }
       return;
@@ -908,7 +927,7 @@
       }
       return;
     }
-    window.gtag.apply(null, args);
+    window.gtag.apply(null, withCampaignContext(args));
   };
   // Queues / bootstraps Clarity like gtagSafe: init() may still be awaiting
   // server consent when identifyUser runs, so window.clarity may not exist yet.

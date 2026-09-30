@@ -9,6 +9,24 @@ are superseded by this instruction; technical acceptance requirements remain.
 
 **Status: the production app passed signed-in lifecycle acceptance. Marketing is prepared for release; the voice social campaign remains unpublished.**
 
+## September 30 Features and measurement expansion
+
+The candidate Features page now leads with Voice Mock Interview, the four-step
+walkthrough, actual setup/report screenshots, and explicit free-preview versus
+paid-full-report access. A second reviewed Marblism product article is included.
+The sitemap now has 48 distinct URLs and preserves every original entry.
+Desktop and 390px mobile layouts were visually checked with no horizontal
+overflow; both product screenshots load.
+
+Campaign-aware browser events, verified OAuth signup counting, and free versus
+paid completion mode now support the requested funnel. Production revenue
+collection is enabled with a dedicated GA4 credential and verified successful
+cron execution; real purchase receipt remains unproven because no qualifying
+payment has occurred. See `voice-launch-measurement-2026-09-30.md` for the exact
+property, dimensions, event definitions, limits and production Worker version.
+No Google Ads spend has been initiated. Website publication and the six-post
+schedule remain pending final candidate checks at this point.
+
 ## September 30 production acceptance
 
 At 02:32–02:33 UTC, the owner completed the production spoken-end test on
