@@ -552,6 +552,36 @@ test('a later external tagged visit updates last touch while retaining first tou
   const next=harness({cookies:first.cookies,search:tagged.replace('linkedin','instagram')});await next.init();
   assert.equal(campaignValue(next).first.source,'linkedin');assert.equal(campaignValue(next).last.source,'instagram');
 });
+for (const runtime of [source, directoryConsentSource]) {
+  for (const decision of [true, false, null]) test('campaign survives authentication restoration only with confirmed consent: '+decision+' '+(runtime===source?'shared':'directory'),async()=>{
+    const marketing=harness({host:'jobhackai.io',search:tagged});await marketing.init();
+    const app=harness({runtime,cookies:marketing.cookies,accountAuthPage:true,pendingServer:true});
+    app.ctx.document.referrer='https://jobhackai.io/features';
+    const original=app.cookies.get('jha_campaign_prod');
+    await app.init();
+    assert.equal(app.cookies.get('jha_campaign_prod'),original,'waiting for auth must not erase the previous consented visit');
+    assert.equal(app.scripts.length,0);
+    assert.equal(await app.ctx.JHA.cookieConsent.getCheckoutAnalyticsContext(),null);
+    const resumed=app.authReady({getIdToken:async()=>'fixture-auth-token'});
+    app.finishServer(decision);await resumed;
+    if(decision===true){
+      gaIdentifiers(app);
+      const context=await app.ctx.JHA.cookieConsent.getCheckoutAnalyticsContext();
+      assert.equal(context.firstTouch.source,'linkedin');
+      assert.equal(context.lastTouch.asset,'answer_li_01');
+    }else{
+      assert.equal(app.cookies.has('jha_campaign_prod'),false);
+      assert.equal(app.scripts.length,0);
+    }
+  });
+  test('explicit rejection still erases the campaign before auth restoration '+(runtime===source?'shared':'directory'),async()=>{
+    const marketing=harness({host:'jobhackai.io',search:tagged});await marketing.init();
+    const app=harness({runtime,cookies:marketing.cookies,accountAuthPage:true,consent:false});
+    await app.init();
+    assert.equal(app.cookies.has('jha_campaign_prod'),false);
+    assert.equal(app.scripts.length,0);
+  });
+}
 test('QA cannot inherit the production campaign cookie', async()=>{
   const prod=harness({search:tagged});await prod.init();
   const qa=harness({host:'qa.jobhackai.io',cookies:prod.cookies});await qa.init();gaIdentifiers(qa);
