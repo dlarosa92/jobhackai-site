@@ -4,8 +4,9 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import test from 'node:test';
 const source = readFileSync(new URL('../../../../js/cookie-consent.js', import.meta.url), 'utf8');
+const directoryConsentSource = readFileSync(new URL('../../../../marketing/directory/consent.js', import.meta.url), 'utf8');
 const GA = 'G-SQYSWPFM5X';
-function harness({host = 'app.jobhackai.io', consent = true, config, pendingServer = false, pendingPost = false, search = '', cookies = new Map(), store = new Map(), scopedCookies = null, footerPreferences = false, accountAuthPage = false, onScriptAppend = () => {}} = {}) {
+function harness({runtime = source, host = 'app.jobhackai.io', consent = true, config, pendingServer = false, pendingPost = false, search = '', cookies = new Map(), store = new Map(), scopedCookies = null, footerPreferences = false, accountAuthPage = false, onScriptAppend = () => {}} = {}) {
   const scripts = [], insertedScripts = [], appendedElements = [], elements = new Map(), timers = [], requests = [], listeners = {};
   if (consent !== null) store.set('jha_cookie_consent_v1', JSON.stringify({version:1,analytics: consent}));
   function element(tag = 'div') {
@@ -41,7 +42,7 @@ function harness({host = 'app.jobhackai.io', consent = true, config, pendingServ
     fetch:async(url,options)=>{requests.push({url,options}); if(options.method==='GET'&&pendingServer)return server; if(options.method==='POST'&&pendingPost)return post; return {ok:true,json:async()=>({ok:true})};}
   };
   ctx.window=ctx;
-  vm.createContext(ctx); vm.runInContext(source,ctx);
+  vm.createContext(ctx); vm.runInContext(runtime,ctx);
   return {ctx, scripts, insertedScripts, appendedElements, requests, node, cookies, store,
     init:()=>listeners.DOMContentLoaded(),
     authReady(user){ctx.__REAL_AUTH_READY=true;ctx.FirebaseAuthManager={getCurrentUser:()=>user};return listeners['firebase-auth-ready']?.();},
@@ -201,10 +202,15 @@ test('revoking and regranting reuse the same GA runtime and configuration',async
   assert.equal(h.events('page_view').length,1);
 });
 
-for (const host of ['jobhackai.io','app.jobhackai.io']) {
-  test(host+' sets Google consent v2 before loading the tag or sending measurement',async()=>{
+for (const {name,host,runtime,ga,noReplay} of [
+  {name:'jobhackai.io',host:'jobhackai.io'},
+  {name:'app.jobhackai.io',host:'app.jobhackai.io'},
+  {name:'directory production',host:'jobhackai.io',runtime:directoryConsentSource,ga:GA,noReplay:true},
+  {name:'directory QA preview',host:'directory-qa.jobhackai-app-marketing-seo.pages.dev',runtime:directoryConsentSource,ga:'G-VH888WWY3M',noReplay:true}
+]) {
+  test(name+' sets Google consent v2 before loading the tag or sending measurement',async()=>{
     let atLoad;
-    const h=harness({host,onScriptAppend(script){
+    const h=harness({host,runtime,onScriptAppend(script){
       if(script.src.includes('googletagmanager.com')) atLoad=Array.from(h.ctx.dataLayer||[],args=>Array.from(args));
     }});
     h.ctx.JHA.trackEventSafe('queued_event',{});
@@ -219,11 +225,14 @@ for (const host of ['jobhackai.io','app.jobhackai.io']) {
     assert.ok(commands.findIndex(args=>args[0]==='event')>1);
     assert.equal(h.events('queued_event').length,1);
     assert.equal(h.events('page_view').length,1);
+    if(ga) assert.equal(commands.find(args=>args[0]==='config')[1],ga);
+    if(noReplay) assert.ok(h.insertedScripts.every(script=>!script.src.includes('clarity.ms')));
   });
 }
+for (const [name,runtime] of [['shared',source],['directory',directoryConsentSource]]) {
 for (const consent of [null,false]) {
-  test('Google consent mode remains fully unloaded without analytics consent: '+consent,async()=>{
-    const h=harness({consent});await h.init();h.runTimers();
+  test(name+' Google consent mode remains fully unloaded without analytics consent: '+consent,async()=>{
+    const h=harness({runtime,consent});await h.init();h.runTimers();
     h.ctx.JHA.trackEventSafe('must_not_send',{});
     assert.equal(h.scripts.length,0);
     assert.equal(h.ctx.dataLayer?.length||0,0,'no Google commands or denied-mode pings before opt-in');
@@ -234,8 +243,8 @@ for (const consent of [null,false]) {
     assert.equal(commands[1][2].analytics_storage,'granted');
   });
 }
-test('withdrawal updates the existing Google consent state immediately and never grants advertising',async()=>{
-  const h=harness({pendingPost:true,config:{CLARITY_ID:''}});await h.init();h.runTimers();
+test(name+' withdrawal updates the existing Google consent state immediately and never grants advertising',async()=>{
+  const h=harness({runtime,pendingPost:true,config:{CLARITY_ID:''}});await h.init();h.runTimers();
   h.setConsent(false);
   const denied=h.ctx.dataLayer.at(-1);
   assert.equal(denied[0],'consent');assert.equal(denied[1],'update');
@@ -252,6 +261,57 @@ test('withdrawal updates the existing Google consent state immediately and never
   }
   assert.equal(h.insertedScripts.length,1);
   assert.equal(h.events('page_view').length,1);
+});
+}
+
+test('directory runtime retains consented Local campaign fields and never replays withdrawn contact clicks',async()=>{
+  const h=harness({runtime:directoryConsentSource,host:'jobhackai.io',
+    search:'?utm_source=instagram&utm_medium=organic_social&utm_campaign=local_directory_2026_09&utm_content=local_profile_01'});
+  await h.init();h.runTimers();
+  const pageEvents={},windowEvents={};
+  assert.equal(h.events('page_view').length,1);
+  assert.equal(h.events('page_view')[0][2].jha_first_campaign,'local_directory_2026_09');
+  h.ctx.document.body.dataset={listing:'pearls',directoryCategory:'mobile-detailing',categoryPage:'false'};
+  h.ctx.document.visibilityState='visible';
+  const getElement=h.ctx.document.getElementById;
+  h.ctx.document.getElementById=()=>null;
+  h.ctx.document.addEventListener=(name,fn)=>{pageEvents[name]=fn;};
+  h.ctx.addEventListener=(name,fn)=>{windowEvents[name]=fn;};
+  h.ctx.dispatchEvent=event=>windowEvents[event.type]?.();
+  vm.runInContext(readFileSync(new URL('../../../../marketing/directory/directory.js',import.meta.url),'utf8'),h.ctx);
+  h.ctx.document.getElementById=getElement;
+  const click=()=>pageEvents.click({target:{closest:()=>({dataset:{directoryContact:'pearls'}})}});
+  assert.equal(h.events('directory_listing_view').length,1);
+  click();assert.equal(h.events('directory_contact_click').length,1);
+  const params=h.events('directory_contact_click')[0][2];
+  assert.equal(params.business_line,'local_directory');
+  assert.equal(params.jha_first_campaign,'local_directory_2026_09');
+  assert.equal(params.jha_last_asset,'local_profile_01');
+  h.setConsent(false);click();
+  assert.equal(h.cookies.has('jha_campaign_prod'),false);
+  h.setConsent(true);h.runTimers();
+  assert.equal(h.events('directory_contact_click').length,1);
+  assert.equal(h.events('directory_listing_view').length,1);
+  assert.equal(h.insertedScripts.length,1,'Local keeps one Google runtime and no Clarity runtime');
+});
+
+test('directory queued events gain only consented campaign fields and bounded page asset IDs',async()=>{
+  const h=harness({runtime:directoryConsentSource,host:'jobhackai.io',consent:null,
+    search:'?utm_source=linkedin&utm_medium=organic_social&utm_campaign=local_directory_2026_09&utm_content=local_article_01'});
+  h.ctx.document.body.getAttribute=()=> 'local_detailing_guide';
+  h.ctx.JHA.trackEventSafe('article_cta_view',{cta_label:'view_local_directory'});
+  await h.init();assert.equal(h.cookies.has('jha_campaign_prod'),false);
+  assert.equal(h.events('article_cta_view').length,0);
+  h.setConsent(true);h.runTimers();
+  const params=h.events('article_cta_view')[0][2];
+  assert.equal(params.jha_first_source,'linkedin');
+  assert.equal(params.jha_last_campaign,'local_directory_2026_09');
+  assert.equal(params.jha_last_asset,'local_article_01');
+  assert.equal(params.asset_id,'local_detailing_guide');
+  assert.equal(params.cta_label,'view_local_directory');
+  h.ctx.document.body.getAttribute=()=> 'private@example.test';
+  h.ctx.JHA.trackEventSafe('article_cta_click',{});
+  assert.equal(h.events('article_cta_click')[0][2].asset_id,undefined);
 });
 
 test('Clarity receives analytics-only consent before loading, never advertising consent',async()=>{

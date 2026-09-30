@@ -85,7 +85,7 @@ for (const fixture of cases) {
   });
 }
 test('pricing includes its offer controller and an actual plan anchor', () => {
-  assert.ok(pricing.includes('src="js/voice-cta.js"'));
+  assert.match(pricing, /src="js\/voice-cta\.js(?:\?[^\"]*)?"/);
   assert.ok(pricing.includes('id="plans"'));
   assert.ok(!pricing.includes('>Try your first voice interview free</a>'));
 });

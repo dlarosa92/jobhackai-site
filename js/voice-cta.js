@@ -52,10 +52,8 @@
 
   function track(eventName, params) {
     try {
-      if (window.JHA && window.JHA.analytics && typeof window.JHA.analytics.track === 'function') {
-        window.JHA.analytics.track(eventName, params || {});
-      } else if (typeof window.gtag === 'function') {
-        window.gtag('event', eventName, params || {});
+      if (window.JHA && typeof window.JHA.trackEventSafe === 'function') {
+        window.JHA.trackEventSafe(eventName, params || {});
       }
     } catch (_) {}
   }

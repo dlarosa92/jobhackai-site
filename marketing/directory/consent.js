@@ -66,6 +66,32 @@
   let bannerElement = null;
   let gaLoadingPrevented = false;
   let escHandler = null; // Persistent ESC handler for modal
+  let googleConsentInitialized = false;
+  let googleAnalyticsConsent = null;
+
+  function updateGoogleConsent(analytics) {
+    // Basic consent mode: keep Google completely unloaded until our existing
+    // consent checks pass. Advertising is never an option in this banner.
+    if (!GA_MEASUREMENT_ID || (!googleConsentInitialized && !analytics)) return;
+    window.dataLayer = window.dataLayer || [];
+    function consentCommand() { window.dataLayer.push(arguments); }
+    const state = {
+      analytics_storage: analytics ? 'granted' : 'denied',
+      ad_storage: 'denied',
+      ad_user_data: 'denied',
+      ad_personalization: 'denied'
+    };
+    if (!googleConsentInitialized) {
+      consentCommand('consent', 'default', { ...state, analytics_storage: 'denied' });
+      googleConsentInitialized = true;
+    }
+    if (googleAnalyticsConsent !== analytics) {
+      // Use the command queue directly: the event wrapper correctly blocks
+      // calls after withdrawal, but Google must still receive this denial.
+      consentCommand('consent', 'update', state);
+      googleAnalyticsConsent = analytics;
+    }
+  }
 
   // Helper: Get consent from localStorage (UI performance)
   function getConsent() {
@@ -414,6 +440,7 @@
     // Removing a script does not stop listeners that already ran. Google's
     // disable flag also blocks collection by the previously loaded tag.
     if (GA_MEASUREMENT_ID) window['ga-disable-' + GA_MEASUREMENT_ID] = true;
+    updateGoogleConsent(false);
     // Keep the loaded GA tag: removing it does not unload its runtime, and
     // reinserting it after re-grant would leave two collectors in memory.
     // The disable flag and consent-gated gtag wrapper pause this instance.
@@ -530,6 +557,9 @@
       return;
     }
 
+    // Defaults and the analytics-only update must precede tag loading, config,
+    // and every queued event. Regrant updates the existing runtime as well.
+    updateGoogleConsent(true);
     window['ga-disable-' + GA_MEASUREMENT_ID] = false;
 
     // Check if already loaded
@@ -600,7 +630,7 @@
         if (!hasAnalyticsConsent() || pageViewSent) return;
         if (flushPendingGtagCalls()) return;
         try {
-          window.gtag('event', 'page_view', {
+          window.JHA.gtagSafe('event', 'page_view', {
             page_location: window.location.href,
             page_path: window.location.pathname + window.location.search,
             page_title: document.title
@@ -818,6 +848,19 @@
   const _pendingGtagCalls = [];
   const _pendingClarityIdentify = [];
   const MAX_PENDING_CALLS = 50;
+  function withCampaignContext(args) {
+    if (args[0] !== 'event') return args;
+    const params = { ...(args[2] || {}) };
+    const campaign = readCampaign();
+    for (const prefix of ['first', 'last']) {
+      for (const field of ['source', 'medium', 'campaign', 'asset', 'id']) {
+        if (campaign?.[prefix]?.[field]) params[`jha_${prefix}_${field}`] = campaign[prefix][field];
+      }
+    }
+    const asset = document.body?.getAttribute?.('data-asset-id');
+    if (asset && /^[a-z0-9_.-]{1,100}$/i.test(asset)) params.asset_id = asset;
+    return [args[0], args[1], params];
+  }
   function flushPendingGtagCalls() {
     if (!GA_MEASUREMENT_ID || !hasAnalyticsConsent() || !window.gtag) return false;
     let flushedPageView = false;
@@ -827,7 +870,7 @@
         if (args[0] === 'event' && args[1] === 'page_view') {
           flushedPageView = true;
         }
-        window.gtag.apply(null, args);
+        window.gtag.apply(null, withCampaignContext(args));
       } catch (_) { /* ignore */ }
     }
     return flushedPageView;
@@ -903,7 +946,7 @@
       }
       return;
     }
-    window.gtag.apply(null, args);
+    window.gtag.apply(null, withCampaignContext(args));
   };
   // Queues / bootstraps Clarity like gtagSafe: init() may still be awaiting
   // server consent when identifyUser runs, so window.clarity may not exist yet.

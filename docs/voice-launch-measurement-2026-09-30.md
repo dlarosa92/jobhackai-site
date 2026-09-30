@@ -54,6 +54,16 @@ Verified native property `523348532` (`jobhackai-prod-510a4`), web stream
 `13491084245`, measurement ID `G-SQYSWPFM5X`. Cross-domain configuration already
 includes jobhackai.io and app.jobhackai.io and was preserved.
 
+On September 30, exact-match unwanted-referral rules for `checkout.stripe.com`
+and `billing.stripe.com` were saved and reopened in the production Google tag.
+This prevents those payment-service returns from becoming new referral sources;
+it does not recover missing historical campaign data. Both the shared site
+consent script and the separate directory runtime use basic Consent Mode v2:
+Google stays unloaded until analytics consent, and advertising storage, user
+data and personalization remain denied. Withdrawal immediately sends a denial
+to an already initialized tag. Diagnostic warnings require subsequent live
+collection and reporting before they can be called cleared.
+
 Eight event-scoped definitions were saved and read back on September 29 Eastern:
 Content asset (`asset_id`), Voice access mode (`mode`), and first/last campaign
 source, asset and name (`jha_first_source`, `jha_first_asset`,
@@ -123,6 +133,15 @@ owner's request. The four published launch links on LinkedIn, X, Threads and
 Pinterest and all three scheduled LinkedIn links were checked with complete,
 platform-specific tags. The two scheduled Instagram posts use the shared bio
 link and cannot be attributed individually from that link alone.
+
+X and Pinterest profile website fields now use the first-party short paths
+`/go/voice-x` and `/go/voice-pinterest`. The saved values were reopened and their
+public links followed to Features with all four expected campaign parameters.
+These redirects address X's field-length limit and Pinterest's removal of query
+parameters from its stored website field. LinkedIn, Threads and YouTube profile
+destinations were also read back with full platform-specific tags. TikTok's
+current web profile has no website field, and the connected Facebook page's
+public identity/destination remains unverified; neither is marked complete.
 
 Native Instagram caption URLs
 are not clickable. The existing primary Instagram profile link was verified as
