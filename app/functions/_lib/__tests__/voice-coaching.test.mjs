@@ -22,7 +22,7 @@ test('session controls cannot manufacture enough evidence for a score', async ()
     {speaker:'assistant',text:'Describe a conflict.'},
     ...Array.from({length:8},()=>({speaker:'user',text:"I'd like to end this now."})),
     {speaker:'user',text:'Can you hear me?'},
-    {speaker:'user',text:'I would like to leave.'}
+    {speaker:'user',text:'I would like to end this now.'}
   ]}, {});
   assert.equal(result.scorecard.tooShort, true);
   assert.equal(result.model, null);
@@ -30,14 +30,15 @@ test('session controls cannot manufacture enough evidence for a score', async ()
 
 test('technical and stop requests are excluded without removing workplace stories', () => {
   const answers = [
+    'I would like to leave.',
     'I would like to leave my current job for more responsibility.',
     'The customer asked, can you hear me? I reconnected the audio and verified it.',
     'I stopped, I looked, and I listened.'
   ];
-  const input = [...answers, 'Can you hear me?', "I'd like to end this now.", 'I would like to leave.']
+  const input = [...answers, 'Can you hear me?', "I'd like to end this now.", 'I would like to end this now.']
     .map(text=>({speaker:'user',text}));
   assert.deepEqual(interviewEvidenceTranscript(input).map(turn=>turn.text), answers);
-  assert.equal(input.length, 6, 'filtering must not rewrite the saved transcript');
+  assert.equal(input.length, 7, 'filtering must not rewrite the saved transcript');
 });
 
 test('existing report competency quotes cannot use session controls as evidence', () => {
