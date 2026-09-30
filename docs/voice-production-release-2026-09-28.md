@@ -9,6 +9,32 @@ are superseded by this instruction; technical acceptance requirements remain.
 
 **Status: production is not ready. No voice launch has been published.**
 
+## September 30 spoken acceptance and current release boundary
+
+The 01:57–01:59 UTC supervised QA retest passed reconnect continuity, spoken
+ending, one-credit use (49 to 48), provider closure and report saving. The owner
+accepted native-rate audio as “Sounded good enough.” The ending request is
+absent from the persisted candidate transcript and report quotations. The QA
+revision remains `40b808bb11bae36063fb37cda5de55c1b3e104a0` on canonical deployment
+`e1ced479-17a1-47e3-93aa-006f6e468b37`.
+
+A possible brief goodbye cutoff is consistent with the existing immediate
+spoken-end playback stop. The generated closing text is saved, but no audio or
+playback trace establishes how much was heard. This remains a polish issue;
+no post-test runtime change was made. Detailed evidence and limitations are in
+`docs/voice-coaching-acceptance-2026-09-29.md`.
+
+At 02:03 UTC, production app and marketing still serve revision
+`13e59270b1847b3f5b18d7e9f14f6b652b275139`, deployments
+`a24bcf9c-07d4-4c55-b9f2-7cdec4b0ae3e` and
+`b6051278-49a8-4e8c-8d19-d2b497065ae1` respectively. The production deadline
+Worker is still absent. The app's OpenAI secret is configured, but its value
+cannot be retrieved from Cloudflare, and the runtime and expected local
+production env files do not contain a copy. Supplying that same private key to
+the isolated deadline Worker is the next prerequisite. The prepared candidate,
+disabled Worker configuration, additive migration rehearsal and cutover order
+remain available; no production migration or launch has occurred.
+
 ## September 29 reconnect fix and controlled acceptance
 
 The transport failure was reproduced and fixed. PR963/964 added a QA-only
@@ -59,9 +85,10 @@ and deadline cleanup. Worker typecheck and both staging dry runs pass. The
 integrated production candidate passes 126 targeted Node tests; all 38 client
 checks pass with the history label change.
 
-Current remaining acceptance: supervised spoken reconnect/ending and listening,
-spoken report precision/usefulness review, and production schema/configuration/
-checkout verification. The production release and campaign remain unpublished.
+The spoken reconnect/ending/listening checks subsequently passed in the
+September 30 retest above. Remaining work is production schema/configuration/
+checkout verification and the documented report-quality limits. The production
+release and campaign remain unpublished.
 
 ## September 29 account display and coaching evaluation
 
@@ -373,6 +400,9 @@ controlling article with its plain title, two labelled fictional examples and
 source links. No additional articles or assets were requested.
 
 ## Supervised QA and remaining acceptance
+
+The September 30 result at the top of this document supersedes the pending
+spoken test below. Keep the earlier failed test as evidence for the fix.
 
 The owner completed the September 29 evening spoken reconnect test. Continuity,
 one-credit use (50 to 49), persistent closure of both provider calls, and report

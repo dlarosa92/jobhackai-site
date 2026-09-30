@@ -160,8 +160,41 @@ On the deployed QA report, the former stop-request competency now displays
 The historical score remains 32. The same signed-in Chrome tab is prepared for
 Scrum Master / Mid, showing 49 interviews remaining; the owner starts it.
 
-Next live acceptance requires “I'd like to end this now” to close without
-pressing End, exclusion of that request from candidate scoring, and owner
-assessment of native-rate audio. Another network interruption is unnecessary
-unless new code changes reconnect behavior. Production and voice campaign
-publishing remain pending these product checks and the documented cutover gates.
+These checks were pending at the first handoff. The next supervised result is
+recorded below; production and campaign publishing still require the separate
+cutover gates.
+
+## Supervised retest, September 30 at 01:57–01:59 UTC
+
+Session `37f0216f-f90e-46d7-a8a7-2233541ec51b` completed on the unchanged canonical
+QA deployment above. The owner chose to repeat the Wi-Fi interruption and
+confirmed reconnect resumed at the same point. The owner also confirmed the
+spoken ending finished the call without pressing End and subsequently rated the
+voice “Sounded good enough.” Native playback at 1.0 is accepted for this release;
+the realtime model and voice remain unchanged.
+
+Persistent records independently show:
+
+- One completed subscription interview, 101 seconds, with `user_ended` reason.
+- Both original and replacement provider attempts closed, with no error code.
+- One reservation at 01:57:48 and the original 02:17:46 deadline retained.
+- Monthly use increased to 12, leaving 48 of 60: one interview used (49 to 48).
+- Six stored turns, with the candidate's end request absent. The generated
+  closing message is present, and the new report saved with score 32 using
+  `gpt-4.1-2025-04-14`. Browser inspection found no end-request quotation in it.
+
+The owner noticed a subtle possible cutoff of the interviewer's goodbye as the
+scoring screen opened. The explicit spoken-end handler currently takes the
+manual-end path: microphone and remote playback stop immediately, then pending
+transcripts flush and the provider closes. The existing client regression
+explicitly covers this immediate-silence behavior. The stored closing text
+confirms generation, not that all of its audio was played. This behavior is
+consistent with the report; no audio recording or per-event playback trace was
+captured, so the exact audible cutoff cannot be confirmed. Record this as a
+remaining closing-transition polish issue, not a connection or save failure.
+No runtime change was made after this acceptance test.
+
+The bounded log collector had expired at 00:48 UTC, before this test. These
+findings rely on the owner's observations, persisted session/provider records,
+and the displayed report, not a claimed live diagnostic capture. This brief
+sample does not establish score calibration or validate every role's feedback.
