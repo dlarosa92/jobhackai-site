@@ -1,5 +1,6 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { accountOperationEnv } from '../_lib/account-operation-scope.js';
+import { saveCheckoutAttribution } from '../_lib/checkout-attribution.js';
 import { getUserPlanData, updateUserPlan, resetFeatureDailyUsage, resetUsageEvents } from '../_lib/db.js';
 import {
   stripe,
@@ -134,6 +135,9 @@ export async function onRequest(context) {
       }
 
       const session = await sessionRes.json();
+      // Only a newly created Checkout receives acquisition context. Existing
+      // subscription changes keep the attribution from their original purchase.
+      await saveCheckoutAttribution(env, { request, session, uid, customerId, analytics: body.analytics });
       return json({ ok: true, action: 'redirect', url: session.url }, 200, origin, env);
     }
 

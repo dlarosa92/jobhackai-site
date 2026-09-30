@@ -1,6 +1,6 @@
 # Collected payment evidence
 
-This change replaces the webhook's estimated GA purchases with a durable financial record. It does **not** finish campaign attribution or send any data to Google Analytics. Keep production and public marketing held.
+The webhook records actual collected money in a durable financial ledger. This module does not send Analytics events itself; consented delivery is handled separately by the [Analytics delivery worker](analytics-revenue-delivery.md). Production and public marketing were released on September 30; current evidence is tracked in [launch measurement](voice-launch-measurement-2026-09-30.md).
 
 ## What is counted
 
@@ -24,7 +24,7 @@ The API reads pin `2025-03-31.basil`, including `/v1/invoice_payments`. A charge
 
 ## Remaining release work
 
-Consent-aware browser campaign capture and checkout linkage, a durable Analytics delivery queue with retry/withdrawal handling, live GA receipt and revenue reconciliation, and campaign reporting are still required. Missing consent or attribution must remain unattributed. Never infer a marketing source from a customer email or insert list-price purchases to fill gaps.
+Consent-aware campaign capture, checkout linkage, and the durable delivery queue are implemented and deployed. A real production paid transaction still needs reconciliation against an actual processed GA purchase; source tests and enabled settings do not prove that receipt. Missing consent or attribution must remain unattributed. Never infer a marketing source from a customer email or insert list-price purchases to fill gaps.
 
 Run `npm run test:billing` in `app`. The collected-revenue suite exercises the signed webhook against actual SQLite transactions, including rollback after a staged payment, retry, missing migration, duplicates, discounts, renewals, partial/refused refunds, cross-environment isolation, currency separation and pre-Checkout races. It uses Python 3's SQLite stdlib and performs no network calls.
 

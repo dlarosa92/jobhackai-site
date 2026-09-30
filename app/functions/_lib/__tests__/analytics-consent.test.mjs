@@ -5,7 +5,7 @@ import vm from 'node:vm';
 import test from 'node:test';
 const source = readFileSync(new URL('../../../../js/cookie-consent.js', import.meta.url), 'utf8');
 const GA = 'G-SQYSWPFM5X';
-function harness({host = 'app.jobhackai.io', consent = true, config, pendingServer = false, pendingPost = false, search = '', cookies = new Map(), store = new Map(), scopedCookies = null, footerPreferences = false, accountAuthPage = false} = {}) {
+function harness({host = 'app.jobhackai.io', consent = true, config, pendingServer = false, pendingPost = false, search = '', cookies = new Map(), store = new Map(), scopedCookies = null, footerPreferences = false, accountAuthPage = false, onScriptAppend = () => {}} = {}) {
   const scripts = [], insertedScripts = [], appendedElements = [], elements = new Map(), timers = [], requests = [], listeners = {};
   if (consent !== null) store.set('jha_cookie_consent_v1', JSON.stringify({version:1,analytics: consent}));
   function element(tag = 'div') {
@@ -18,7 +18,7 @@ function harness({host = 'app.jobhackai.io', consent = true, config, pendingServ
   const document = {
     readyState: 'loading', title: 'JobHackAI', referrer: 'https://example.com/?email=private@example.com', cookie: '',
     createElement: element, getElementById: id => footerPreferences && id === 'open-cookie-preferences' ? (elements.get(id) || null) : node(id),
-    head: {appendChild(e){scripts.push(e);insertedScripts.push(e);}}, body: {style:{},appendChild(e){appendedElements.push(e);}},
+    head: {appendChild(e){scripts.push(e);insertedScripts.push(e);onScriptAppend(e);}}, body: {style:{},appendChild(e){appendedElements.push(e);}},
     addEventListener(type,fn){listeners[type]=fn;},
     querySelector(selector){ if(accountAuthPage && selector === 'script[type="module"][src*="firebase-auth.js"]')return {}; if(footerPreferences && selector === 'footer') return {querySelector(){return null;},appendChild(e){appendedElements.push(e);elements.set(e.id,e);}}; return this.querySelectorAll(selector)[0] || null; },
     querySelectorAll(selector){const needle=selector.match(/src\*="([^"]+)"/)?.[1]; return needle ? scripts.filter(s => (s.src||'').includes(needle)) : [];},
@@ -201,6 +201,59 @@ test('revoking and regranting reuse the same GA runtime and configuration',async
   assert.equal(h.events('page_view').length,1);
 });
 
+for (const host of ['jobhackai.io','app.jobhackai.io']) {
+  test(host+' sets Google consent v2 before loading the tag or sending measurement',async()=>{
+    let atLoad;
+    const h=harness({host,onScriptAppend(script){
+      if(script.src.includes('googletagmanager.com')) atLoad=Array.from(h.ctx.dataLayer||[],args=>Array.from(args));
+    }});
+    h.ctx.JHA.trackEventSafe('queued_event',{});
+    await h.init();h.runTimers();
+    const defaults={analytics_storage:'denied',ad_storage:'denied',ad_user_data:'denied',ad_personalization:'denied'};
+    assert.equal(atLoad[0]?.[0],'consent');assert.equal(atLoad[0]?.[1],'default');
+    assert.deepEqual({...atLoad[0][2]},defaults);
+    assert.equal(atLoad[1]?.[0],'consent');assert.equal(atLoad[1]?.[1],'update');
+    assert.deepEqual({...atLoad[1][2]},{...defaults,analytics_storage:'granted'});
+    const commands=Array.from(h.ctx.dataLayer,args=>Array.from(args));
+    assert.ok(commands.findIndex(args=>args[0]==='config')>1);
+    assert.ok(commands.findIndex(args=>args[0]==='event')>1);
+    assert.equal(h.events('queued_event').length,1);
+    assert.equal(h.events('page_view').length,1);
+  });
+}
+for (const consent of [null,false]) {
+  test('Google consent mode remains fully unloaded without analytics consent: '+consent,async()=>{
+    const h=harness({consent});await h.init();h.runTimers();
+    h.ctx.JHA.trackEventSafe('must_not_send',{});
+    assert.equal(h.scripts.length,0);
+    assert.equal(h.ctx.dataLayer?.length||0,0,'no Google commands or denied-mode pings before opt-in');
+    h.setConsent(true);h.runTimers();
+    const commands=Array.from(h.ctx.dataLayer,args=>Array.from(args));
+    assert.equal(commands[0][0],'consent');assert.equal(commands[0][1],'default');
+    assert.equal(commands[1][0],'consent');assert.equal(commands[1][1],'update');
+    assert.equal(commands[1][2].analytics_storage,'granted');
+  });
+}
+test('withdrawal updates the existing Google consent state immediately and never grants advertising',async()=>{
+  const h=harness({pendingPost:true,config:{CLARITY_ID:''}});await h.init();h.runTimers();
+  h.setConsent(false);
+  const denied=h.ctx.dataLayer.at(-1);
+  assert.equal(denied[0],'consent');assert.equal(denied[1],'update');
+  assert.equal(denied[2].analytics_storage,'denied');
+  assert.equal(h.ctx['ga-disable-'+GA],true);
+  h.ctx.JHA.trackEventSafe('after_withdrawal',{});
+  assert.equal(h.events('after_withdrawal').length,0);
+  h.setConsent(true);h.runTimers();
+  const consentCommands=h.ctx.dataLayer.filter(args=>args[0]==='consent');
+  assert.equal(consentCommands.filter(args=>args[1]==='default').length,1);
+  assert.deepEqual(Array.from(consentCommands,args=>args[2].analytics_storage),['denied','granted','denied','granted']);
+  for(const args of consentCommands) {
+    for(const key of ['ad_storage','ad_user_data','ad_personalization']) assert.equal(args[2][key],'denied');
+  }
+  assert.equal(h.insertedScripts.length,1);
+  assert.equal(h.events('page_view').length,1);
+});
+
 test('Clarity receives analytics-only consent before loading, never advertising consent',async()=>{
   const h=harness({config:{GA_ID:'',CLARITY_ID:'test-project'}});await h.init();
   assert.equal(h.insertedScripts.length,1);
@@ -355,6 +408,68 @@ test('consented signup and completion events retain campaign context across the 
   app.setConsent(false);
   app.ctx.JHA.trackEventSafe('voice_session_complete',{mode:'free'});
   assert.equal(app.events('voice_session_complete').length,1);
+});
+
+// Run pricing's actual button handlers against the real consent module. Direct
+// gtag calls bypass campaign enrichment even when the GA event itself appears.
+function mountPricing(h) {
+  const html = readFileSync(new URL('../../../../pricing.html', import.meta.url), 'utf8');
+  const script = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)]
+    .map(match => match[1]).find(value => value.includes('function trackBeginCheckout('));
+  assert.ok(script, 'pricing checkout script exists');
+  const buttons = [...html.matchAll(/<button class="vp-buy" data-plan="([^"]+)"[^>]*>([^<]+)<\/button>/g)]
+    .map(([,plan,textContent]) => ({dataset:{plan},textContent,events:{},
+      addEventListener(type,callback){this.events[type]=callback;}}));
+  assert.equal(buttons.length, 3);
+  const document = h.ctx.document;
+  const query = document.querySelectorAll.bind(document);
+  document.querySelectorAll = selector => selector === '.vp-buy' ? buttons : query(selector);
+  const listen = document.addEventListener;
+  let ready;
+  document.addEventListener = (type,callback) => { if(type === 'DOMContentLoaded') ready=callback; };
+  const session = new Map();
+  h.ctx.sessionStorage = {getItem:key=>session.get(key)??null,setItem:(key,value)=>session.set(key,value)};
+  vm.runInContext(script, h.ctx);
+  document.addEventListener = listen;
+  ready();
+  return plan => buttons.find(button=>button.dataset.plan===plan).events.click({preventDefault(){}});
+}
+
+for (const [plan,value] of [['weekly',17],['monthly',34],['pack',39]]) {
+  test('pricing '+plan+' click emits one campaign-enriched checkout event before signup',async()=>{
+    const marketing=harness({host:'jobhackai.io',search:tagged});await marketing.init();
+    const app=harness({cookies:marketing.cookies});
+    app.ctx.document.referrer='https://jobhackai.io/features';await app.init();
+    const tracked=[];
+    const track=app.ctx.JHA.trackEventSafe;
+    app.ctx.JHA.trackEventSafe=(...args)=>{tracked.push(args);track(...args);};
+    mountPricing(app)(plan);
+    assert.equal(tracked.length,1,'the shared tracker owns the event');
+    assert.equal(tracked[0][0],'begin_checkout');
+    const events=app.events('begin_checkout');
+    assert.equal(events.length,1,'no duplicate direct gtag event');
+    const params=events[0][2];
+    assert.equal(params.jha_first_source,'linkedin');
+    assert.equal(params.jha_first_campaign,'voice_beta_2026_09');
+    assert.equal(params.jha_last_asset,'answer_li_01');
+    assert.equal(params.plan,plan);assert.equal(params.value,value);assert.equal(params.currency,'USD');
+    assert.equal(params.items[0].item_id,plan);
+    assert.equal(app.ctx.location.href,'login.html?plan='+plan);
+  });
+}
+test('pricing checkout respects denied consent without blocking signup navigation',async()=>{
+  const h=harness({consent:false,search:tagged});await h.init();
+  mountPricing(h)('pack');
+  assert.equal(h.events('begin_checkout').length,0);
+  assert.equal(h.cookies.has('jha_campaign_prod'),false);
+  assert.equal(h.ctx.location.href,'login.html?plan=pack');
+});
+test('pricing never bypasses the shared tracker when analytics is unavailable',async()=>{
+  const h=harness();await h.init();
+  delete h.ctx.JHA.trackEventSafe;
+  mountPricing(h)('monthly');
+  assert.equal(h.events('begin_checkout').length,0);
+  assert.equal(h.ctx.location.href,'login.html?plan=monthly');
 });
 test('a queued event gains only the campaign captured after analytics consent', async()=>{
   const h=harness({consent:null,search:tagged});await h.init();

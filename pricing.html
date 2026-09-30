@@ -443,10 +443,8 @@
       function trackBeginCheckout(plan, value) {
         try {
           var payload = { plan: plan, currency: 'USD', value: value, items: [{ item_id: plan, item_name: plan, price: value, quantity: 1 }] };
-          if (window.JHA && window.JHA.analytics && typeof window.JHA.analytics.track === 'function') {
-            window.JHA.analytics.track('begin_checkout', payload);
-          } else if (typeof window.gtag === 'function') {
-            window.gtag('event', 'begin_checkout', payload);
+          if (window.JHA && typeof window.JHA.trackEventSafe === 'function') {
+            window.JHA.trackEventSafe('begin_checkout', payload);
           }
         } catch (_) {}
       }
