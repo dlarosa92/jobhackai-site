@@ -61,6 +61,25 @@ source, asset and name (`jha_first_source`, `jha_first_asset`,
 Existing directory category and page path definitions remain intact. No unique
 interview IDs were registered as report dimensions.
 
+The saved exploration [JobHackAI Voice — visits to paying customers](https://analytics.google.com/analytics/web/?authuser=1#/analysis/a366252518p523348532/edit/piNHoQmLR-y8JBUC3a70rQ)
+is shared read-only with users of the production property. Its first tab is a
+closed, indirect four-step funnel: campaign page view, actual signup, completed
+free interview (`mode=free`), and purchase. The first step requires
+`jha_first_campaign=voice_beta_2026_09`. The source breakdown is First user source.
+This describes the new-account/free-interview path, not every possible purchase.
+
+The second tab, Campaign assets and conversions, groups first campaign source
+and asset, with event-name columns and Active users, Event count and Transactions.
+It filters the same first campaign and the seven path events above. Returning
+customers who first arrived through another campaign, and purchases that bypass
+the free-interview path, require separate acquisition/payment analysis. First
+touch is not proof that one post caused a purchase. New definitions do not
+backfill historical events; the initial exploration has no campaign data.
+
+Production Realtime showed the new Features page title after release. This
+confirms a page view arrived, not that a signup, free completion or purchase
+conversion has been verified end to end. Release checks are not campaign demand.
+
 The production payment-delivery Worker is enabled at version
 `23c081b0-ec9e-49b0-838a-17397a04472b`, with production D1, the production GA4
 stream, debug events off, a dedicated Measurement Protocol secret, and a five
@@ -81,10 +100,16 @@ are the source for actual collected revenue, GA4 for the attributable subset.
 ## Campaign tags and decisions
 
 Use campaign `voice_beta_2026_09`, medium `organic_social`, platform `linkedin`
-or `instagram`, and a unique content slug per linked placement. Native Instagram
-caption URLs are not clickable: use a verified profile-link destination and
-report it as bio traffic rather than pretend each feed post has direct-click
-attribution. Multiple posts sharing one bio link cannot be reliably separated.
+and a unique content slug per linked placement. Native Instagram caption URLs
+are not clickable. The existing primary Instagram profile link was verified as
+`https://jobhackai.io/?utm_source=ig&utm_medium=social&utm_content=link_in_bio`.
+Its visible label is Start Your Free Trial. Instagram web restricts website-link
+editing to its mobile app, so this working link and both Local links were kept.
+Instagram is aggregate profile-link traffic (`ig / social`), not article-level
+or per-post campaign attribution. This legacy URL lacks `utm_campaign`, so it
+is excluded from the campaign-filtered exploration and from the custom campaign
+cookie; use native source/medium reporting for this traffic. Do not imply full
+purchase attribution from those aggregate visits.
 
 Review visits, signups, completed free interviews, checkouts, first-time paid
 customers, collected revenue net of refunds, and repeat use by platform/content.
