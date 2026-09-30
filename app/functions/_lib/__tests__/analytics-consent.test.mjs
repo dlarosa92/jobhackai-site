@@ -319,6 +319,16 @@ test('campaign capture waits for consent and stores only controlled tags', async
   assert.equal(context.firstTouch.campaign,'voice_beta_2026_09');
   assert.equal(h.requests.at(-1).options.method,'POST','checkout explicitly persists the current consent');
 });
+test('marketing fallback page view includes its content asset and consented campaign',async()=>{
+  const h=harness({host:'jobhackai.io',search:tagged});
+  h.ctx.document.body.getAttribute=key=>key==='data-asset-id'?'voice_features_01':null;
+  await h.init();h.runTimers();
+  assert.equal(h.events('page_view').length,1);
+  const params=h.events('page_view')[0][2];
+  assert.equal(params.asset_id,'voice_features_01');
+  assert.equal(params.jha_first_source,'linkedin');
+  assert.equal(params.jha_last_asset,'answer_li_01');
+});
 test('marketing-to-app navigation preserves first and last touch despite internal UTMs', async()=>{
   const marketing=harness({host:'jobhackai.io',search:tagged});await marketing.init();
   const original=marketing.cookies.get('jha_campaign_prod');

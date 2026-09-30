@@ -598,7 +598,7 @@
         if (!hasAnalyticsConsent() || pageViewSent) return;
         if (flushPendingGtagCalls()) return;
         try {
-          window.gtag('event', 'page_view', {
+          window.JHA.gtagSafe('event', 'page_view', {
             page_location: window.location.href,
             page_path: window.location.pathname + window.location.search,
             page_title: document.title
