@@ -433,8 +433,8 @@
   }
 
   // Analytics Script Loading: Prevent if consent denied (covers GA + Clarity)
-  function preventGALoading() {
-    clearCampaign();
+  function preventGALoading({ preserveCampaign = false } = {}) {
+    if (!preserveCampaign) clearCampaign();
     // Removing a script does not stop listeners that already ran. Google's
     // disable flag also blocks collection by the previously loaded tag.
     if (GA_MEASUREMENT_ID) window['ga-disable-' + GA_MEASUREMENT_ID] = true;
@@ -1052,7 +1052,10 @@
       controlsInitialized = true;
     }
     if (!consentIdentityReady()) {
-      preventGALoading();
+      // Authentication is unresolved, not a withdrawal. Keep an existing
+      // consented visit private until the authoritative decision arrives.
+      // An explicit local rejection must still erase it immediately.
+      preventGALoading({ preserveCampaign: getConsent()?.analytics !== false && getPendingConsent()?.analytics !== false });
       createBanner();
       return;
     }
