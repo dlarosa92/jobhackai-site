@@ -1,0 +1,127 @@
+name: Analytics integrity
+on:
+  push:
+    branches: [main, develop, dev0]
+    paths:
+      - 'app/scripts/lib/*reconcile-core.mjs'
+      - 'workers/analytics-delivery/**'
+      - 'app/db/migrations/027_analytics_delivery.sql'
+      - 'app/db/migrations/028_account_deletion_recovery.sql'
+      - 'app/functions/_lib/account-deletion-admission.js'
+      - 'app/functions/_lib/account-deletion-admission.d.ts'
+      - 'app/functions/_lib/__tests__/analytics-delivery-bundle.test.mjs'
+      - 'app/functions/_lib/analytics-money.js'
+      - 'app/functions/_lib/collected-revenue.js'
+      - 'js/cookie-consent.js'
+      - 'voice-interview.html'
+      - 'mock-interview.html'
+      - 'cover-letter-generator.html'
+      - 'interview-questions.html'
+      - 'linkedin-optimizer.html'
+      - 'resume-feedback-pro.html'
+      - 'account-setting.html'
+      - 'dashboard.html'
+      - 'dashboard-trial.html'
+      - 'free-account-onboarding.html'
+      - 'js/login-page.js'
+      - 'js/auth-action.js'
+      - 'js/verify-email.js'
+      - 'js/stripe-integration.js'
+      - 'app/functions/api/stripe-checkout.js'
+      - 'app/functions/_lib/checkout-attribution.js'
+      - 'app/functions/_lib/analytics-client-id.js'
+      - 'app/db/migrations/025_checkout_attribution.sql'
+      - 'app/functions/_lib/__tests__/checkout-attribution.test.mjs'
+      - 'app/functions/api/cookie-consent.js'
+      - 'app/functions/_lib/db.js'
+      - 'app/functions/_lib/consent-storage.js'
+      - 'functions/_lib/db.js'
+      - 'functions/api/cookie-consent.js'
+      - 'app/functions/_lib/__tests__/consent-api.test.mjs'
+      - 'app/functions/analytics-check.js'
+      - 'app/functions/_lib/__tests__/analytics-diagnostic.test.mjs'
+      - 'js/signup-analytics.js'
+      - 'js/firebase-auth.js'
+      - 'app/functions/api/auth/linkedin/callback.js'
+      - 'app/functions/_lib/__tests__/signup-analytics.test.mjs'
+      - 'js/firebase-config.js'
+      - 'marketing/js/firebase-config.js'
+      - 'app/functions/_lib/__tests__/analytics-consent.test.mjs'
+      - '.github/workflows/test-analytics.yml'
+  pull_request:
+    branches: [main, develop, dev0]
+    paths:
+      - 'app/scripts/lib/*reconcile-core.mjs'
+      - 'workers/analytics-delivery/**'
+      - 'app/db/migrations/027_analytics_delivery.sql'
+      - 'app/db/migrations/028_account_deletion_recovery.sql'
+      - 'app/functions/_lib/account-deletion-admission.js'
+      - 'app/functions/_lib/account-deletion-admission.d.ts'
+      - 'app/functions/_lib/__tests__/analytics-delivery-bundle.test.mjs'
+      - 'app/functions/_lib/analytics-money.js'
+      - 'app/functions/_lib/collected-revenue.js'
+      - 'js/cookie-consent.js'
+      - 'voice-interview.html'
+      - 'mock-interview.html'
+      - 'cover-letter-generator.html'
+      - 'interview-questions.html'
+      - 'linkedin-optimizer.html'
+      - 'resume-feedback-pro.html'
+      - 'account-setting.html'
+      - 'dashboard.html'
+      - 'dashboard-trial.html'
+      - 'free-account-onboarding.html'
+      - 'js/login-page.js'
+      - 'js/auth-action.js'
+      - 'js/verify-email.js'
+      - 'js/stripe-integration.js'
+      - 'app/functions/api/stripe-checkout.js'
+      - 'app/functions/_lib/checkout-attribution.js'
+      - 'app/functions/_lib/analytics-client-id.js'
+      - 'app/db/migrations/025_checkout_attribution.sql'
+      - 'app/functions/_lib/__tests__/checkout-attribution.test.mjs'
+      - 'app/functions/api/cookie-consent.js'
+      - 'app/functions/_lib/db.js'
+      - 'app/functions/_lib/consent-storage.js'
+      - 'functions/_lib/db.js'
+      - 'functions/api/cookie-consent.js'
+      - 'app/functions/_lib/__tests__/consent-api.test.mjs'
+      - 'app/functions/analytics-check.js'
+      - 'app/functions/_lib/__tests__/analytics-diagnostic.test.mjs'
+      - 'js/signup-analytics.js'
+      - 'js/firebase-auth.js'
+      - 'app/functions/api/auth/linkedin/callback.js'
+      - 'app/functions/_lib/__tests__/signup-analytics.test.mjs'
+      - 'js/firebase-config.js'
+      - 'marketing/js/firebase-config.js'
+      - 'app/functions/_lib/__tests__/analytics-consent.test.mjs'
+      - '.github/workflows/test-analytics.yml'
+jobs:
+  consent-and-destinations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: node --test app/functions/_lib/__tests__/signup-analytics.test.mjs app/functions/_lib/__tests__/checkout-attribution.test.mjs app/functions/_lib/__tests__/analytics-consent.test.mjs app/functions/_lib/__tests__/analytics-diagnostic.test.mjs app/functions/_lib/__tests__/consent-api.test.mjs
+
+  revenue-delivery:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci
+        working-directory: workers/analytics-delivery
+      - run: npm run types -- --check && npm run typecheck && npm test
+        working-directory: workers/analytics-delivery
+      - run: |
+          npx wrangler deploy --dry-run --env qa --outdir /tmp/jobhackai-analytics-worker
+          cp /tmp/jobhackai-analytics-worker/index.js /tmp/jobhackai-analytics-worker/index.mjs
+        working-directory: workers/analytics-delivery
+      - name: Verify compiled Analytics scheduling and deletion admission without sending live events
+        env:
+          JOBHACKAI_ANALYTICS_BUNDLE: /tmp/jobhackai-analytics-worker/index.mjs
+        run: node --test app/functions/_lib/__tests__/analytics-delivery-bundle.test.mjs

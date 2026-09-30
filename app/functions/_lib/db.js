@@ -1,3 +1,4 @@
+import { saveCookieConsent } from './consent-storage.js';
 /**
  * D1 Database Helper for JobHackAI
  * 
@@ -23,6 +24,13 @@ import { sanitizeRoleSpecificFeedback } from './feedback-validator.js';
  * To prevent silent persistence failures, we resolve from a small allowlist.
  */
 const DB_BINDING_NAMES = ['DB', 'JOBHACKAI_DB', 'INTERVIEW_QUESTIONS_DB', 'IQ_D1'];
+
+// Subscription plans that mark has_ever_paid when written: legacy tiers plus
+// the dev0 voice subscriptions. Shared by updateUserPlan and the batch-safe
+// buildUserPlanUpdateStatement so the two write paths cannot drift. The
+// Interview Pack is a one-time purchase: its grant sets has_ever_paid itself
+// (voice-entitlements.js) and never flows through a plan update.
+export const PAID_SUBSCRIPTION_PLANS = new Set(['weekly', 'monthly', 'essential', 'pro', 'premium']);
 
 export function getDb(env) {
   if (!env) return null;
@@ -157,25 +165,36 @@ export async function getOrCreateUserByAuthId(env, authId, email = null, { updat
       return existing;
     }
 
-    // Create new user
+    // Refuse recreation atomically with the insert. A separate tombstone
+    // read (including the webhook's early check) can race deletion intent.
+    // Both tables are required: missing schema must fail closed. Existing-row
+    // mutations still require full request/webhook operation admission.
+    const creationFence = `WHERE NOT EXISTS (
+      SELECT 1 FROM account_deletion_admissions WHERE auth_id = ?
+    ) AND NOT EXISTS (
+      SELECT 1 FROM deleted_auth_ids WHERE auth_id = ?
+    )`;
     let result;
     try {
       result = await db.prepare(
-        'INSERT INTO users (auth_id, email, last_login_at) VALUES (?, ?, datetime(\'now\')) RETURNING id, auth_id, email, created_at, updated_at'
-      ).bind(authId, email).first();
+        `INSERT INTO users (auth_id, email, last_login_at)
+         SELECT ?, ?, datetime('now') ${creationFence}
+         RETURNING id, auth_id, email, created_at, updated_at`
+      ).bind(authId, email, authId, authId).first();
     } catch (insertErr) {
-      if (insertErr.message && insertErr.message.includes('no such column')) {
+      if (/(?:no such column:|no column named) last_login_at\b/.test(insertErr.message || '')) {
         console.warn('[DB] last_login_at column not yet migrated, inserting without it');
         result = await db.prepare(
-          'INSERT INTO users (auth_id, email) VALUES (?, ?) RETURNING id, auth_id, email, created_at, updated_at'
-        ).bind(authId, email).first();
+          `INSERT INTO users (auth_id, email) SELECT ?, ? ${creationFence}
+           RETURNING id, auth_id, email, created_at, updated_at`
+        ).bind(authId, email, authId, authId).first();
       } else {
         throw insertErr;
       }
     }
 
     if (!result) {
-      throw new Error('Failed to create user: INSERT returned null');
+      throw new Error('account_creation_blocked_by_deletion');
     }
 
     // Add plan property if it wasn't returned (pre-migration state)
@@ -341,7 +360,7 @@ export async function updateUserPlan(env, authId, {
       binds.push(scheduledAt);
     }
 
-    const paidPlans = new Set(['essential', 'pro', 'premium']);
+    const paidPlans = PAID_SUBSCRIPTION_PLANS;
     const normalizedHasEverPaid = hasEverPaid !== undefined ? hasEverPaid : has_ever_paid;
     const shouldMarkEverPaid = (plan !== undefined && paidPlans.has(plan))
       || (normalizedHasEverPaid !== undefined && Number(normalizedHasEverPaid) === 1);
@@ -445,7 +464,7 @@ export function buildUserPlanUpdateStatement(db, authId, {
   if (scheduledPlan !== undefined) push('scheduled_plan', scheduledPlan);
   if (scheduledAt !== undefined) push('scheduled_at', scheduledAt);
 
-  const paidPlans = new Set(['essential', 'pro', 'premium']);
+  const paidPlans = PAID_SUBSCRIPTION_PLANS;
   if ((plan !== undefined && paidPlans.has(plan)) || (hasEverPaid !== undefined && Number(hasEverPaid) === 1)) {
     push('has_ever_paid', 1);
   }
@@ -2309,124 +2328,8 @@ export async function markUpgradePopupAsSeen(env, authId) {
  * @param {Object} params.consent - Consent object {version, analytics, updatedAt}
  * @returns {Promise<boolean>} Success
  */
-export async function upsertCookieConsent(env, { userId, authId, clientId, consent }) {
-  const db = getDb(env);
-  if (!db) {
-    console.warn('[DB] D1 binding not available');
-    console.warn('[DB] Available env keys:', Object.keys(env || {}).filter(k => k.includes('DB') || k.includes('D1')));
-    return false;
-  }
-
-  console.log('[DB] upsertCookieConsent called:', { hasUserId: !!userId, hasClientId: !!clientId, hasDb: !!db });
-
-  try {
-    if (!userId && !clientId) {
-      console.warn('[DB] No userId or clientId provided for cookie consent');
-      return false;
-    }
-
-    const consentStr = typeof consent === 'string' ? consent : JSON.stringify(consent);
-    const now = new Date().toISOString();
-
-    // Use SELECT → INSERT/UPDATE pattern for compatibility with D1 partial indexes.
-    // NOTE: This pattern is NOT atomic by itself. Concurrent requests can still race:
-    // two requests may SELECT and see no row, then both try to INSERT. To mitigate
-    // that, we catch UNIQUE constraint failures on INSERT and retry as an UPDATE.
-    // This provides a robust fallback for D1 environments that don't accept
-    // partial UNIQUE indexes as ON CONFLICT targets.
-    if (userId) {
-      // For authenticated users: upsert by user_id (prefer user_id over client_id)
-      const existing = await db.prepare(
-        'SELECT id FROM cookie_consents WHERE user_id = ?'
-      ).bind(userId).first();
-
-      if (existing) {
-        // Update existing
-        await db.prepare(
-          'UPDATE cookie_consents SET consent_json = ?, updated_at = ? WHERE user_id = ?'
-        ).bind(consentStr, now, userId).run();
-      } else {
-        // Insert new; on UNIQUE violation (race), fall back to UPDATE
-        try {
-          await db.prepare(
-            `INSERT INTO cookie_consents (user_id, client_id, consent_json, created_at, updated_at)
-             VALUES (?, NULL, ?, ?, ?)`
-          ).bind(userId, consentStr, now, now).run();
-        } catch (err) {
-          // D1/SQLite returns an error when UNIQUE constraint is violated.
-          // Perform an UPDATE as a fallback if it's a UNIQUE constraint error,
-          // otherwise rethrow.
-          const msg = err && err.message ? String(err.message) : '';
-          if (msg.includes('UNIQUE constraint failed') || msg.includes('ON CONFLICT clause')) {
-            await db.prepare(
-              'UPDATE cookie_consents SET consent_json = ?, updated_at = ? WHERE user_id = ?'
-            ).bind(consentStr, now, userId).run();
-          } else {
-            throw err;
-          }
-        }
-      }
-      // After successful upsert, clean up any orphaned client_id record
-      if (clientId) {
-        try {
-          await db.prepare('DELETE FROM cookie_consents WHERE client_id = ? AND user_id IS NULL').bind(clientId).run();
-        } catch (e) {
-          // Ignore if delete fails (non-critical, just cleanup)
-          console.warn('[DB] Failed to delete client_id record during migration:', e);
-        }
-      }
-      console.log('[DB] Upserted cookie consent (user):', { userId });
-    } else if (clientId) {
-      // For anonymous users: upsert by client_id
-      const existingClient = await db.prepare(
-        'SELECT id FROM cookie_consents WHERE client_id = ?'
-      ).bind(clientId).first();
-      if (existingClient) {
-        await db.prepare(
-          'UPDATE cookie_consents SET consent_json = ?, updated_at = ? WHERE client_id = ?'
-        ).bind(consentStr, now, clientId).run();
-      } else {
-        try {
-          await db.prepare(
-            `INSERT INTO cookie_consents (user_id, client_id, consent_json, created_at, updated_at)
-             VALUES (NULL, ?, ?, ?, ?)`
-          ).bind(clientId, consentStr, now, now).run();
-        } catch (err) {
-          const msg = err && err.message ? String(err.message) : '';
-          if (msg.includes('UNIQUE constraint failed') || msg.includes('ON CONFLICT clause')) {
-            await db.prepare(
-              'UPDATE cookie_consents SET consent_json = ?, updated_at = ? WHERE client_id = ?'
-            ).bind(consentStr, now, clientId).run();
-          } else {
-            throw err;
-          }
-        }
-      }
-      console.log('[DB] Upserted cookie consent (client):', { clientId });
-    }
-
-    return true;
-  } catch (error) {
-    console.error('[DB] Error in upsertCookieConsent:', error);
-    console.error('[DB] Error details:', {
-      message: error.message,
-      stack: error.stack,
-      userId: userId || null,
-      clientId: clientId || null,
-      consentPreview: (() => {
-        if (typeof consent === 'string') return consent.substring(0, 100);
-        if (consent === undefined) return 'undefined';
-        if (consent === null) return 'null';
-        try {
-          const str = JSON.stringify(consent);
-          return str ? str.substring(0, 100) : 'empty';
-        } catch {
-          return 'unstringifiable';
-        }
-      })()
-    });
-    return false;
-  }
+export async function upsertCookieConsent(env, options) {
+  return saveCookieConsent(getDb(env), options);
 }
 
 /**
@@ -2438,39 +2341,30 @@ export async function upsertCookieConsent(env, { userId, authId, clientId, conse
  */
 export async function getCookieConsent(env, userId, clientId) {
   const db = getDb(env);
-  if (!db) {
-    return null;
-  }
+  if (!db) throw new Error('consent_read_unavailable');
 
   try {
-    let row = null;
-    
-    // Prefer userId over clientId, but fall back to clientId if userId query returns nothing
-    // This handles migration: user saved consent anonymously (client_id), then logged in (user_id)
-    if (userId) {
-      row = await db.prepare(
-        'SELECT consent_json FROM cookie_consents WHERE user_id = ?'
-      ).bind(userId).first();
-      
-      // If no user_id record found, fall back to client_id (for migration scenario)
-      if (!row && clientId) {
-        row = await db.prepare(
-          'SELECT consent_json FROM cookie_consents WHERE client_id = ?'
-        ).bind(clientId).first();
-      }
-    } else if (clientId) {
-      row = await db.prepare(
-        'SELECT consent_json FROM cookie_consents WHERE client_id = ?'
-      ).bind(clientId).first();
-    }
+    const rows = [];
+    if (userId) rows.push(await db.prepare(
+      'SELECT consent_json FROM cookie_consents WHERE user_id = ?'
+    ).bind(userId).first());
+    if (clientId) rows.push(await db.prepare(
+      'SELECT consent_json FROM cookie_consents WHERE client_id = ?'
+    ).bind(clientId).first());
 
-    if (!row || !row.consent_json) {
-      return null;
-    }
-
-    return JSON.parse(row.consent_json);
-  } catch (error) {
-    console.error('[DB] Error in getCookieConsent:', error);
-    return null;
+    const decisions = rows.filter(Boolean).map(row => {
+      try {
+        const value = JSON.parse(row.consent_json);
+        if (value?.version === 1 && typeof value.analytics === 'boolean') return value;
+      } catch (_) { /* A corrupt decision cannot authorize collection. */ }
+      return { version: 0, analytics: false };
+    });
+    // An account grant cannot override a withdrawal on this browser, and an
+    // anonymous grant cannot override an account withdrawal. An explicit
+    // signed-in grant updates both records atomically in saveCookieConsent.
+    return decisions.find(value => value.analytics !== true) || decisions[0] || null;
+  } catch (_) {
+    console.error('[DB] Consent lookup failed');
+    throw new Error('consent_read_unavailable');
   }
 }

@@ -1,5 +1,6 @@
 import { getBearer, verifyFirebaseIdToken } from '../../_lib/firebase-auth.js';
 import { getUserPlanData, isTrialEligible } from '../../_lib/db.js';
+import { getVoicePlanSummary } from '../../_lib/voice-plan-summary.js';
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -31,13 +32,22 @@ export async function onRequest(context) {
     const planData = await getUserPlanData(env, uid);
     const trialEligible = await isTrialEligible(env, uid, email);
 
-    return new Response(JSON.stringify({ 
+    // Voice mock interview entitlement summary (read-only; server enforces).
+    // `enabled` means the feature is actually USABLE: the flag is on AND the
+    // entitlement backend is operational. If migration 020 has not run (or D1
+    // is down), getVoiceEntitlement reports not_migrated/db_unavailable and we
+    // report enabled:false, so the dashboard tile and tool CTAs (which key off
+    // `enabled`) stay hidden instead of surfacing entry points that 503.
+    const voice = await getVoicePlanSummary(env, uid);
+
+    return new Response(JSON.stringify({
       plan: planData?.plan || 'free',
       trialEndsAt: planData?.trialEndsAt || null,
       cancelAt: planData?.cancelAt || null,
       currentPeriodEnd: planData?.currentPeriodEnd || null,
       scheduledPlanChange: planData?.scheduledPlanChange || null,
-      trialEligible
+      trialEligible,
+      voice
     }), {
       headers: corsHeaders(origin, env)
     });
@@ -63,4 +73,3 @@ function corsHeaders(origin, env) {
     'Vary': 'Origin'
   };
 }
-

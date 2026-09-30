@@ -399,22 +399,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (e) {}
     const plan = planParam || storedSelection || 'free';
 
-    function planRequiresPayment(p) { return ['essential', 'pro', 'premium', 'trial'].includes(p); }
+    function planRequiresPayment(p) { return ['essential', 'pro', 'premium', 'trial', 'weekly', 'monthly', 'pack'].includes(p); }
 
     if (planRequiresPayment(plan)) {
       try {
         const idToken = await authManager.getCurrentUser()?.getIdToken?.(true);
+        const analytics = await window.JHA?.cookieConsent?.getCheckoutAnalyticsContext?.();
         const res = await fetch('/api/stripe-checkout', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
-          body: JSON.stringify({ plan, startTrial: plan === 'trial', forceNew: plan === 'trial' })
+          body: JSON.stringify({ plan, startTrial: plan === 'trial', forceNew: plan === 'trial', ...(analytics ? { analytics } : {}) })
         });
         const data = await res.json();
         if (data && data.ok && data.url) { window.location.href = data.url; return true; }
       } catch (err) {
         console.error('Checkout error from verify-email flow:', err);
       }
-      window.location.href = 'pricing-a.html';
+      window.location.href = 'pricing.html';
       return true;
     } else {
       try {

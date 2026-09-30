@@ -14,7 +14,9 @@ binding = "AI"
 name = "jobhackai-site-dev"
 d1_databases = [
   # Canonical D1 binding for new features (LinkedIn Optimizer, etc.)
-  { binding = "JOBHACKAI_DB", database_name = "jobhackai-dev-db", database_id = "c5c0eee5-a223-4ea2-974e-f4aee5a28bab" },
+  # migrations_dir is used only by `wrangler d1 migrations` tooling (the local
+  # preview applies the schema with it); deploys ignore it.
+  { binding = "JOBHACKAI_DB", database_name = "jobhackai-dev-db", database_id = "c5c0eee5-a223-4ea2-974e-f4aee5a28bab", migrations_dir = "app/db/migrations" },
   # Legacy binding retained for existing endpoints
   { binding = "INTERVIEW_QUESTIONS_DB", database_name = "jobhackai-dev-db", database_id = "c5c0eee5-a223-4ea2-974e-f4aee5a28bab" }
 ]

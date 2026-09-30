@@ -1,0 +1,22 @@
+-- Migration: Record why a voice session ended
+-- Purpose: /complete already received a `reason` from the client and discarded
+--          it, so a session the interviewer terminated for conduct looked
+--          identical to one the candidate ended normally. Without this there is
+--          no way to audit or count conduct terminations. Additive and
+--          nullable; no entitlement, credit, or cost logic is touched.
+-- Date: 2026-07-25
+--
+-- IMPORTANT: Existing databases must run this migration.
+-- SQLite doesn't support IF NOT EXISTS for ADD COLUMN; running twice will error.
+--
+-- Run per environment:
+--   npx wrangler d1 execute jobhackai-dev-db  --remote --file=app/db/migrations/021_add_voice_end_reason.sql
+--   npx wrangler d1 execute jobhackai-qa-db   --remote --file=app/db/migrations/021_add_voice_end_reason.sql
+--   npx wrangler d1 execute jobhackai-prod-db --remote --file=app/db/migrations/021_add_voice_end_reason.sql
+
+-- Clamped server-side to the allowlist in _lib/voice-interviewer.js:
+--   user_ended | time_up | connection_lost
+--   ended_by_interviewer            (conduct, after the required warning)
+--   ended_by_interviewer_unwarned   (conduct end attempted with no warning)
+-- NULL for sessions completed before this column existed.
+ALTER TABLE voice_sessions ADD COLUMN end_reason TEXT;

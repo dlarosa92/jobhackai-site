@@ -266,7 +266,7 @@
   <link rel="icon" type="image/png" sizes="128x128" href="assets/jobhackai_icon_Favicon_128.png">
   <link rel="apple-touch-icon" sizes="180x180" href="assets/jobhackai_apple_touch_icon_180.png">
   <script src="js/dynamic-favicon.js?v=20260418-3" defer></script>
-  <script src="js/cookie-consent.js?v=20260506-1" defer></script>
+  <script src="js/cookie-consent.js?v=20260613-1" defer></script>
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/header.css">
@@ -512,7 +512,7 @@
     }
   </style>
 </head>
-<body>
+<body data-clarity-mask="true">
   <!-- Header (canonical) -->
   <header class="site-header">
     <div class="container">
@@ -527,7 +527,7 @@
         <nav class="nav-links" role="navigation">
           <a href="https://jobhackai.io/">Home</a>
           <a href="#what-you-get">What You Get</a>
-          <a href="/pricing-a">Pricing</a>
+          <a href="/pricing">Pricing</a>
           <a href="https://jobhackai.io/blog">Blog</a>
           <a href="login.html">Login</a>
         </nav>
@@ -620,7 +620,7 @@
           Delete Account
         </button>
         <div class="settings-note" style="margin-top:0.8rem;font-size:0.8rem;color:#9ca3af;">
-          Your tool history is automatically deleted after 90 days per our data retention policy.
+          Tool-history retention varies by content type. See our Privacy Policy for time limits and exceptions.
         </div>
       </div>
       <!-- Dynamic Billing Section -->
@@ -630,7 +630,7 @@
       </div>
       <!-- Actions Row -->
       <div class="settings-actions-row" style="display:flex; gap:1rem; margin-bottom:2.2rem; flex-wrap:wrap;">
-        <a href="pricing-a.html" class="btn-link" aria-label="Compare subscription plans">Compare Plans</a>
+        <a href="pricing.html" class="btn-link" aria-label="Compare subscription plans">Compare Plans</a>
         <a href="mailto:support@jobhackai.io?subject=Account%20Settings%20Support" class="btn-link" aria-label="Contact support via email">Contact Support</a>
         <button class="btn-outline-grey" type="button" data-action="logout">Log Out</button>
       </div>
@@ -662,7 +662,7 @@
   </footer>
   <!-- Removed duplicate checkAuthentication - now handled by firebase-auth-ready event -->
   <!-- Load navigation system -->
-  <script src="js/navigation.js?v=20260208-1"></script>
+  <script src="js/navigation.js?v=20260920-1"></script>
   <script src="js/universal-logout.js?v=20260208-1"></script>
   <script src="js/stripe-integration.js"></script>
   <!-- Inactivity tracker - auto-logout after 30 minutes of inactivity -->
@@ -869,9 +869,27 @@
           return;
         }
         
-        const plan = data.plan || 'free';
+        let planMeta = null;
+        try {
+          const metaRes = await fetch('/api/plan/me', { headers: { Authorization: `Bearer ${idToken}` } });
+          if (metaRes.ok) {
+            planMeta = await metaRes.json();
+          }
+        } catch (_) {}
+
+        // Billing status covers subscriptions. Only a successful entitlement
+        // lookup can establish that a free subscriber has no paid pack.
         const storedPlan = localStorage.getItem('user-plan');
         const storedDevPlan = localStorage.getItem('dev-plan');
+        if ((!data.plan || data.plan === 'free') && (!planMeta?.voice ||
+            (planMeta.voice.lookupStatus !== 'ready' && planMeta.voice.enabled !== true) ||
+            planMeta.voice.lookupStatus === 'unavailable' ||
+            ['db_unavailable', 'not_migrated'].includes(planMeta.voice.reason))) {
+          billingSection.innerHTML = '<div role="status" style="color: #6B7280;">Unable to load your interview allowance. Please refresh the page to try again.</div>';
+          return;
+        }
+
+        const plan = (data.plan === 'free' && planMeta?.voice?.mode === 'pack' && planMeta.voice.sessionsRemaining > 0) ? 'pack' : (data.plan || 'free');
         const planChanged = storedPlan !== plan || storedDevPlan !== plan;
 
         console.log(`🔄 [ACCOUNT-SETTINGS] Applying billing-status plan locally: ${plan}`);
@@ -897,38 +915,39 @@
           // Non-critical, continue rendering
         }
         
-        let planMeta = null;
-        try {
-          const metaRes = await fetch('/api/plan/me', { headers: { Authorization: `Bearer ${idToken}` } });
-          if (metaRes.ok) {
-            planMeta = await metaRes.json();
-          }
-        } catch (_) {}
-
         // Plan name mapping
         const planNames = {
           free: 'Free Account',
           trial: 'Trial (3 days)',
           essential: 'Essential',
           pro: 'Pro',
-          premium: 'Premium'
+          premium: 'Premium',
+          weekly: 'Weekly Pass',
+          monthly: 'Monthly',
+          pack: 'Interview Pack'
         };
-        
+
         const planPrices = {
           free: 'Free',
           trial: 'Free for 3 days',
           essential: '$29/month',
           pro: '$59/month',
-          premium: '$99/month'
+          premium: '$99/month',
+          weekly: '$17/week',
+          monthly: '$34/month',
+          pack: '$39 one time'
         };
-        
+
         // Plan badge text mapping
         const planBadgeText = {
           free: 'Free',
           trial: 'Trial',
           essential: 'Essential',
           pro: 'Pro',
-          premium: 'Premium'
+          premium: 'Premium',
+          weekly: 'Weekly',
+          monthly: 'Monthly',
+          pack: 'Pack'
         };
         
         let html = '<div class="settings-label" style="margin-bottom:0.5rem;">Subscription</div>';
@@ -940,10 +959,15 @@
               <div style="color:#6B7280;font-size:0.98rem;margin-top:0.2rem;">Limited features • Upgrade anytime</div>
             </div>
             <div class="subscription-action-row">
-              <a href="/pricing-a" class="btn-primary" style="text-decoration:none;display:inline-block;">View Plans</a>
-              <span class="plan-badge free">${planBadgeText[plan]}</span>
+              <a href="/pricing" class="btn-primary" style="text-decoration:none;display:inline-block;">View Plans</a>
+              <span class="plan-badge free">${planBadgeText[plan] || plan}</span>
             </div>
           `;
+        } else if (plan === 'pack') {
+          const remaining = Number(planMeta?.voice?.sessionsRemaining || 0);
+          const expires = planMeta?.voice?.packExpiresAt;
+          const expiryText = expires && Number.isFinite(Date.parse(expires)) ? ` Valid through ${new Date(expires).toLocaleDateString('en-US')}.` : '';
+          html += `<div style="margin-bottom:0.8rem;"><strong>Interview Pack</strong><p>${remaining} voice interviews remaining.${expiryText}</p><p>$39 one-time purchase for five sessions, valid 90 days. No recurring subscription.</p></div><a href="/pricing" class="btn-primary">View plans and packs</a>`;
         } else {
           html += `<div style="margin-bottom:0.8rem;">`;
           
@@ -965,19 +989,19 @@
               </div>`;
             }
           } else {
-            html += `<div style="font-size:1.1rem;font-weight:600;color:#232B36;">${planNames[plan]} Plan</div>`;
-            html += `<div style="color:#6B7280;font-size:0.98rem;margin-top:0.2rem;">${planPrices[plan]}</div>`;
+            html += `<div style="font-size:1.1rem;font-weight:600;color:#232B36;">${planNames[plan] || plan} Plan</div>`;
+            html += `<div style="color:#6B7280;font-size:0.98rem;margin-top:0.2rem;">${planPrices[plan] || ''}</div>`;
             
-            // Show next renewal date for active subscriptions
-            if (data.currentPeriodEnd && data.status === 'active') {
+            // A scheduled cancellation ends access; it is not an upcoming renewal.
+            if (data.currentPeriodEnd && data.status === 'active' && !data.cancelAt) {
               const renewDate = new Date(data.currentPeriodEnd).toLocaleDateString('en-US', { 
                 year: 'numeric', month: 'long', day: 'numeric' 
               });
               html += `<div style="color:#6B7280;font-size:0.92rem;margin-top:0.4rem;">Renews on ${renewDate}</div>`;
             }
 
-            if (planMeta?.cancelAt) {
-              const cancelDateStr = new Date(planMeta.cancelAt).toLocaleDateString('en-US', {
+            if (data.cancelAt) {
+              const cancelDateStr = new Date(data.cancelAt).toLocaleDateString('en-US', {
                 year: 'numeric', month: 'long', day: 'numeric'
               });
               html += `<div style="background:#FEF3C7;border-left:4px solid #F59E0B;color:#92400E;padding:0.6rem 0.8rem;border-radius:6px;margin-top:0.8rem;font-size:0.95rem;">
@@ -999,13 +1023,13 @@
           html += `</div>`;
           html += `<div class="subscription-action-row">`;
           html += `<button class="btn-outline" type="button" onclick="openBillingPortal()">Billing Management</button>`;
-          html += `<span class="plan-badge ${plan}">${planBadgeText[plan]}</span>`;
+          html += `<span class="plan-badge ${plan}">${planBadgeText[plan] || plan}</span>`;
           html += `</div>`;
           
           // Phase 2.4 & Phase 4.1: Add Stripe portal messaging and billing data notice
           html += `<div style="background:#F3F4F6;border-left:3px solid #6B7280;padding:0.75rem 1rem;border-radius:8px;margin-top:1rem;font-size:0.875rem;color:#374151;line-height:1.5;">
             <div style="margin-bottom:0.5rem;"><strong>Billing Information</strong></div>
-            <div style="margin-bottom:0.5rem;">To change plans, visit your billing portal. Your current plan will remain active until the next billing cycle.</div>
+            <div style="margin-bottom:0.5rem;">To change plans, visit your billing portal. Review the effective date, charges, and credits shown by Stripe before confirming a change.</div>
             <div style="font-size:0.8125rem;color:#6B7280;">We use Stripe for secure payment processing. We don't store your card details — Stripe handles all payment data securely.</div>
           </div>`;
         }
@@ -1027,7 +1051,7 @@
         });
         return;
       }
-      window.location.href = 'pricing-a.html?plan=essential';
+      window.location.href = 'pricing.html?plan=essential';
     }
     
     // CRITICAL FIX: Define refreshPlanData function for upgradePlan callback
@@ -1268,7 +1292,7 @@
         <div style="background:#fff;border-radius:12px;padding:2rem;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.15);">
           <h3 style="margin:0 0 0.75rem;font-size:1.1rem;color:#1F2937;">Delete your account?</h3>
           <p style="margin:0 0 1.5rem;font-size:0.9rem;color:#6B7280;line-height:1.5;">
-            This will permanently delete your account, cancel any active subscription, and remove all personal data. Tool history is already auto-deleted after 90 days.
+            This will permanently delete your account, cancel any active subscription, and remove your profile and saved tool content. Some billing, tax, and security records are retained as described in our Privacy Policy.
           </p>
           <div style="display:flex;gap:0.75rem;justify-content:flex-end;">
             <button id="delete-modal-cancel" class="btn-outline" style="padding:0.5rem 1.25rem;font-size:0.9rem;">Cancel</button>
@@ -1312,8 +1336,22 @@
             throw new Error(data.error || 'Deletion failed');
           }
 
-          // Firebase Auth user is deleted server-side by /api/user/delete.
-          // Sign out locally to clear the session.
+          if (data.status !== 'complete' && data.status !== 'pending') {
+            throw new Error('Deletion status could not be confirmed. Please retry or contact privacy@jobhackai.io.');
+          }
+          if (data.status === 'pending') {
+            alert((data.message || 'Your deletion request is saved, but cleanup is not yet complete.') +
+              (data.reference ? '\n\nReference: ' + data.reference : ''));
+            if (data.identityRemoved !== true) {
+              // Keep the still-valid token so the owner can check the same
+              // deletion request, even when ordinary account work is fenced.
+              btn.textContent = 'Check Deletion Status';
+              btn.disabled = false;
+              return;
+            }
+          }
+
+          // Clear the local session only after confirmed sign-in removal.
           try {
             if (window.FirebaseAuthManager?.signOut) {
               await window.FirebaseAuthManager.signOut();
@@ -1321,18 +1359,6 @@
           } catch (_) {}
 
           localStorage.clear();
-
-          // Surface any partial-cleanup warnings from the API before redirecting.
-          // The API returns { ok: true, warnings: [...] } when Firebase Auth was
-          // deleted but some cleanup steps (Stripe, D1 tables, KV) had issues.
-          if (data.warnings && data.warnings.length > 0) {
-            console.warn('[ACCOUNT-SETTINGS] Deletion warnings:', data.warnings);
-            alert(
-              'Your account has been deleted, but some cleanup steps encountered issues:\n\n' +
-              data.warnings.map(w => '- ' + w).join('\n') +
-              '\n\nIf billing continues, please contact support at privacy@jobhackai.io.'
-            );
-          }
 
           window.location.href = 'index.html';
         } catch (error) {

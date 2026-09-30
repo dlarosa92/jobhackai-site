@@ -1,8 +1,12 @@
 // Pure logic for the one-time billing reconciliation (no I/O, no wrangler,
 // no fetch) so every decision the operator relies on is unit-testable in
 // bare Node: classification, allowlist drift comparison, SQL generation,
-// and rollback SQL. The CLI shell (../billing-reconcile.mjs) supplies row
-// data from D1 and verification state from live Stripe.
+// rollback SQL, the credential-mode guard and the rollback-ordering guard.
+// The CLI shell (../billing-reconcile.mjs) supplies row data from D1 and
+// verification state from live Stripe. The only import is the app's pure
+// Stripe-environment module, so key-mode rules have exactly one definition.
+
+import { keyMode, resolveExpectedLivemode } from '../../functions/_lib/stripe-environment.js';
 //
 // Classifications (per the hotfix plan):
 //   LEGIT               — live entitled subscription (active/trialing/past_due/unpaid) + live customer
@@ -35,6 +39,16 @@
 //                         duplicate → identifiers cleared, ownership never
 //                         guessed, flagged for operator review
 //   FREE_CLEAN          — nothing to do (free row without stripe ids)
+//
+// dev0 voice plans: 'weekly' and 'monthly' are subscription-backed paid
+// plans and classify exactly like the legacy tiers. 'pack' (Interview Pack)
+// is a ONE-TIME purchase whose entitlement lives in voice credit columns
+// (voice_sessions_remaining / pack_expires_at), never in a subscription: a
+// pack row makes no subscription claim, so it is CUSTOMER_ONLY_KEEP /
+// FREE_CLEAN on its own, and when a pack row does need a repair (stale
+// subscription id, foreign customer) the repair clears only the
+// subscription claim and keeps plan='pack'. Credits are never touched:
+// none of the voice columns are BILLING_FIELDS.
 
 export const BILLING_FIELDS = [
   'plan',
@@ -51,7 +65,12 @@ export const BILLING_FIELDS = [
   'plan_updated_at'
 ];
 
-const PAID_PLANS = new Set(['essential', 'pro', 'premium']);
+// Subscription-backed paid plans (legacy tiers + dev0 voice subscriptions).
+// 'pack' is deliberately ABSENT: listing it would turn every pack buyer with
+// a Stripe customer into a CUSTOMER_ONLY_PAID_CLAIM and free them — a valid
+// pack purchase is never billing residue.
+const PAID_PLANS = new Set(['weekly', 'monthly', 'essential', 'pro', 'premium']);
+const PACK_PLAN = 'pack';
 // Mirrors the app's dunning policy (webhook + billing-ownership): these
 // statuses still represent, or may recover into, paid entitlement.
 const ENTITLED_STATUSES = new Set(['active', 'trialing', 'past_due', 'unpaid']);
@@ -183,6 +202,114 @@ export function classifyRow(row, stripeState) {
   return { class: 'AMBIGUOUS', reason: 'paid_claim_without_stripe_ids' };
 }
 
+// ── Credential mode guard (runs BEFORE any network access) ───────────────
+// prod requires a LIVE key (sk_live_/rk_live_); qa and dev require a TEST key
+// (sk_test_/rk_test_). A missing or mismatched key is refused up front so a
+// preflight/apply can never verify one environment's rows against the other
+// Stripe mode. Messages never include the key.
+export function assertCredentialModeForEnv(envName, key) {
+  const { expected, configError } = resolveExpectedLivemode({ ENVIRONMENT: envName });
+  if (configError) throw new Error(`unknown --env "${envName}" (expected prod|qa|dev)`);
+  const want = expected ? 'live' : 'test';
+  if (!key || typeof key !== 'string') {
+    throw new Error(`STRIPE_SECRET_KEY is required for --env=${envName}: a ${want}-mode secret or restricted key (sk_${want}_… / rk_${want}_…). Nothing was contacted.`);
+  }
+  const mode = keyMode({ STRIPE_SECRET_KEY: key });
+  if (mode !== want) {
+    throw new Error(`STRIPE_SECRET_KEY is not a ${want}-mode key: --env=${envName} requires sk_${want}_… or rk_${want}_… (got a ${mode || 'non-Stripe/unknown'} key). Refusing before any network access.`);
+  }
+  return { mode };
+}
+
+// ── Stripe account pin ───────────────────────────────────────────────────
+// Rows reference objects that exist in exactly one Stripe account (or
+// sandbox). Verifying them with a key for a DIFFERENT account makes every
+// valid object look missing (404), and "missing" is what the repair set is
+// built from. The operator therefore names the expected account and the CLI
+// compares it with GET /v1/account before any row is inspected; the report
+// and the allowlist carry the account so an allowlist can never be applied
+// under another one.
+export function assertSafeStripeAccountId(id) {
+  if (typeof id !== 'string' || !/^acct_[A-Za-z0-9]+$/.test(id)) {
+    throw new Error('--stripe-account must be the Stripe account id these rows belong to (acct_…)');
+  }
+  return id;
+}
+
+export function assertStripeAccountMatches(expected, actual) {
+  assertSafeStripeAccountId(expected);
+  if (typeof actual !== 'string' || !actual) {
+    throw new Error('could not read the Stripe account identity (GET /v1/account); refusing to inspect any row');
+  }
+  if (actual !== expected) {
+    throw new Error(`STRIPE_SECRET_KEY belongs to Stripe account ${actual} but --stripe-account expects ${expected}: verifying these rows against another account or sandbox would classify every valid object as missing — refusing before any row is inspected`);
+  }
+  return actual;
+}
+
+// Cross-account/mode smell: when (almost) every verified object is missing,
+// the key almost certainly belongs to a different account, sandbox or mode
+// than the rows. A 404 is never on its own authorization to downgrade.
+export function notFoundSignal(stripeStateByRowId, { minChecked = 5, threshold = 0.8 } = {}) {
+  let checked = 0;
+  let notFound = 0;
+  for (const state of Object.values(stripeStateByRowId || {})) {
+    for (const obj of [state?.subscription, state?.customer]) {
+      if (obj && typeof obj.found === 'boolean') {
+        checked += 1;
+        if (!obj.found) notFound += 1;
+      }
+    }
+  }
+  const ratio = checked > 0 ? notFound / checked : 0;
+  return { checked, notFound, ratio: Number(ratio.toFixed(3)), massNotFound: checked >= minChecked && ratio >= threshold };
+}
+
+// ── Rollback ordering guard ──────────────────────────────────────────────
+// Restoring before-images that carry Stripe ids while migration 023's unique
+// indexes exist fails on the first collision. The batch is atomic (nothing
+// lands), but the operator must follow the ordering: (1) roll code back if it
+// depends on unique ids, (2) DROP the 023 unique indexes and restore the
+// ordinary index, (3) run the data rollback, (4) keep 022. This computes the
+// post-rollback duplicate groups so the CLI can refuse early with that
+// instruction. currentRows must include every row that holds a Stripe id AND
+// every row the rollback touches (touched rows may hold NULLs now).
+export function findRollbackIdCollisions(auditRows, currentRows) {
+  const restoredById = new Map();
+  for (const a of (auditRows || []).filter((r) => r.mode === 'apply')) {
+    const old = JSON.parse(a.old_values_json);
+    restoredById.set(a.user_row_id, {
+      stripe_customer_id: old.stripe_customer_id ?? null,
+      stripe_subscription_id: old.stripe_subscription_id ?? null
+    });
+  }
+  const collisions = [];
+  for (const field of ['stripe_customer_id', 'stripe_subscription_id']) {
+    const holders = new Map();
+    for (const row of currentRows || []) {
+      const restored = restoredById.get(row.id);
+      const value = restored ? restored[field] : row[field];
+      if (!value) continue;
+      if (!holders.has(value)) holders.set(value, new Set());
+      holders.get(value).add(row.id);
+    }
+    for (const [value, ids] of holders) {
+      if (ids.size > 1) collisions.push({ field, valueLast4: String(value).slice(-4), rowIds: [...ids].sort((a, b) => a - b) });
+    }
+  }
+  return collisions;
+}
+
+export const ROLLBACK_ORDER_INSTRUCTIONS = [
+  '1) roll the CODE back first if the deployed build depends on unique Stripe ids',
+  "2) drop migration 023's unique indexes and restore the ordinary index:",
+  '   DROP INDEX IF EXISTS idx_users_stripe_customer_id_unique;',
+  '   DROP INDEX IF EXISTS idx_users_stripe_subscription_id_unique;',
+  '   CREATE INDEX IF NOT EXISTS idx_users_stripe_customer_id ON users(stripe_customer_id);',
+  '3) re-run this --rollback (the data restore)',
+  '4) keep migration 022 while any hotfix code is deployed (the webhook fails closed without the ledger)'
+];
+
 export function duplicateGroups(rows) {
   const byField = (field) => {
     const groups = new Map();
@@ -258,6 +385,11 @@ export function compareToAllowlist(classification, allowlist) {
 
 // ── Apply SQL generation ─────────────────────────────────────────────────
 
+function rowBeforeImagePredicate(row) {
+  return [`id = ${assertSafeRowId(row.id)}`, `auth_id IS ${sqlValue(row.auth_id)}`,
+    ...BILLING_FIELDS.map((f) => `${f} IS ${sqlValue(row[f] ?? null)}`)].join(' AND ');
+}
+
 function auditInsert(runId, mode, row, newValues, { reserveRunId = false } = {}) {
   const oldValues = {};
   for (const f of BILLING_FIELDS) oldValues[f] = row[f] ?? null;
@@ -267,15 +399,21 @@ function auditInsert(runId, mode, row, newValues, { reserveRunId = false } = {})
   // interleaving two applies under one id. The CLI's pre-check gives a clear
   // error early but cannot exclude a concurrent invocation on its own.
   const newJson = sqlValue(JSON.stringify(newValues));
-  const newValuesExpr = reserveRunId
-    ? `CASE WHEN EXISTS (SELECT 1 FROM billing_repair_audit WHERE run_id = ${sqlValue(runId)}) THEN NULL ELSE ${newJson} END`
+  const refusalConditions = [];
+  if (reserveRunId) refusalConditions.push(`EXISTS (SELECT 1 FROM billing_repair_audit WHERE run_id = ${sqlValue(runId)})`);
+  // Executed inside the same transaction as the update. A deleted row,
+  // changed owner, or newer billing write aborts every audit/update in this
+  // run instead of silently overwriting a post-preflight subscription.
+  if (mode === 'apply') refusalConditions.push(`NOT EXISTS (SELECT 1 FROM users WHERE ${rowBeforeImagePredicate(row)})`);
+  const newValuesExpr = refusalConditions.length
+    ? `CASE WHEN ${refusalConditions.join(' OR ')} THEN NULL ELSE ${newJson} END`
     : newJson;
   return `INSERT INTO billing_repair_audit (run_id, mode, user_row_id, auth_id, stripe_customer_id, stripe_subscription_id, old_values_json, new_values_json) VALUES (${sqlValue(runId)}, ${sqlValue(mode)}, ${assertSafeRowId(row.id)}, ${sqlValue(row.auth_id)}, ${sqlValue(row.stripe_customer_id)}, ${sqlValue(row.stripe_subscription_id)}, ${sqlValue(JSON.stringify(oldValues))}, ${newValuesExpr});`;
 }
 
-function updateStatement(rowId, newValues) {
+function updateStatement(rowId, newValues, beforeImage = null) {
   const sets = BILLING_FIELDS.map((f) => `${f} = ${sqlValue(newValues[f])}`).join(', ');
-  return `UPDATE users SET ${sets}, updated_at = datetime('now') WHERE id = ${assertSafeRowId(rowId)};`;
+  return `UPDATE users SET ${sets}, updated_at = datetime('now') WHERE ${beforeImage ? rowBeforeImagePredicate(beforeImage) : `id = ${assertSafeRowId(rowId)}`};`;
 }
 
 /**
@@ -325,7 +463,7 @@ export function buildApplySql(runId, rows, classification, allowlist, legitBackf
       plan_updated_at: runTimestampIso
     };
     statements.push(auditInsert(runId, 'apply', row, newValues, { reserveRunId: statements.length === 0 }));
-    statements.push(updateStatement(row.id, newValues));
+    statements.push(updateStatement(row.id, newValues, row));
   }
 
   for (const entry of allowlist.repair || []) {
@@ -336,7 +474,9 @@ export function buildApplySql(runId, rows, classification, allowlist, legitBackf
       || (classification.classes.CUSTOMER_ONLY_PAID_CLAIM || []).some((r) => r.id === entry.id)
       || (classification.classes.CUSTOMER_ONLY_KEEP || []).some((r) => r.id === entry.id);
     const newValues = {
-      plan: 'free',
+      // The pack label is credit-backed, not subscription-backed: a repair
+      // clears the subscription claim and leaves a pack buyer on 'pack'.
+      plan: row.plan === PACK_PLAN ? PACK_PLAN : 'free',
       subscription_status: null,
       stripe_customer_id: keepCustomer ? row.stripe_customer_id : null,
       stripe_subscription_id: null,
@@ -350,7 +490,7 @@ export function buildApplySql(runId, rows, classification, allowlist, legitBackf
       plan_updated_at: runTimestampIso
     };
     statements.push(auditInsert(runId, 'apply', row, newValues, { reserveRunId: statements.length === 0 }));
-    statements.push(updateStatement(row.id, newValues));
+    statements.push(updateStatement(row.id, newValues, row));
   }
 
   if (statements.length === 0) throw new Error('allowlist produced zero statements — nothing to apply');

@@ -127,13 +127,158 @@ explicitly authorized them.
     after Stripe's ~3-day retry window need operator resolution
     (reconciliation script or manual review).
 
-## Step 3 — Later (not part of this release)
+## Step 3 — dev0 integration (voice work preserved)
 
-21. Merge hotfix → `dev0`; resolve conflicts preserving voice work
-    (expected zones: webhook checkout handler, billing-utils plan maps;
-    migrations are 022/023 precisely so voice's 020/021 don't collide;
-    reconcile dev0's `stripe_event_log` with `stripe_event_ledger`);
-    apply 022+023 to dev D1; run billing + voice regression on dev0.
+21. Merge the production release (`main` = `ed00ca6`, PR #856) → `dev0` on
+    an integration branch, reviewed locally before any push. What the
+    integration branch does (all unit-tested; see `npm run test:billing`):
+    - **Webhook**: hotfix architecture (mode gate → ledger claim → staged
+      writes → one atomic batch) is the base; dev0's Interview Pack path is
+      ported as `stagePackGrant`. mode=payment sessions never reach plan
+      mapping; the credit UPDATE, the legacy `stripe_event_log` INSERT and
+      the ledger processed-mark commit together; an event the pre-ledger
+      webhook already granted (row in `stripe_event_log`, none in the
+      ledger) is recorded as processed and never re-granted. Both tables
+      stay: the ledger is the authoritative idempotency record, the legacy
+      log the pack-grant history.
+    - **Recipient-guarded processed-mark**: an event is never marked
+      processed when a staged users-row write found no row at commit time
+      (row deleted between `ensureUserRow` and the batch) — the whole batch
+      rolls back and Stripe retries (`recipient_row_missing`). Tombstoned
+      accounts stay deliberate no-ops; `subscription.deleted` and
+      `invoice.payment_failed` no-op explicitly when there is no row.
+    - **Fulfilment eligibility**: a Checkout Session grants entitlement only
+      when the re-fetched session is `status=complete` and `payment_status`
+      is `paid` or `no_payment_required` (100% promotion code). A completed
+      session still `unpaid` (delayed payment methods) is a recorded no-op;
+      `checkout.session.async_payment_succeeded` fulfils it (same handler,
+      its own ledger row) and `async_payment_failed` fulfils nothing. A
+      subscription-mode session fulfils only through its subscription and
+      only while that subscription is in an entitled status. **A fabricated
+      or replayed "completed" event for a session Stripe still shows open or
+      expired can never grant anything** — which is also why a synthetic
+      completion is not an acceptable smoke test of the deployed webhook.
+      Dev's Checkout offers card, Link, Cash App Pay, Amazon Pay and Klarna
+      (all immediate); if a delayed method is ever enabled, the endpoint
+      must subscribe to the two `async_payment_*` events.
+    - **Invoice shape**: this Stripe account's default API version and the
+      pinned endpoint versions (2025-07-30.basil) put the subscription id and
+      its metadata under `invoice.parent.subscription_details`; the webhook
+      reads both shapes. (The shipped hotfix reads only `invoice.subscription`,
+      so today production and QA record dunning from
+      `customer.subscription.updated` but never from `invoice.payment_failed`
+      — flagged for the next production release.)
+    - **Plan maps**: weekly/monthly are subscription plans wherever the
+      hotfix introduced a legacy-only list; `pack` is deliberately NOT a
+      subscription plan (pack rows classify KEEP/FREE_CLEAN, repairs keep
+      `plan='pack'`); voice credit columns are never `BILLING_FIELDS`.
+    - **KV markers** (`evtl:`/`processing:`) are scoped by ENVIRONMENT and
+      the **environment stamp/gate** (`metadata.environment` on Checkout
+      Sessions and the subscriptions they create; foreign-stamped events
+      acknowledged with zero writes) is **defence in depth only**: an
+      environment running code without the gate — QA today (`develop`,
+      unstamped hotfix webhook) — still processes the other environment's
+      objects. Verified by local replay: the unchanged webhook turns a dev
+      pack purchase into `plan=essential/active/no subscription` (creating
+      the user row) and a dev monthly subscription into `essential`.
+      Isolation therefore comes from configuration (below), not from this
+      code.
+    - **Reconciliation CLI**: `--stripe-account=acct_…` is required for
+      preflight/apply and verified against `GET /v1/account` before any row
+      is inspected; the report and allowlist record the account; `--apply`
+      refuses an allowlist made for another account, and refuses a set in
+      which (almost) every verified object is missing unless
+      `--acknowledge-mass-not-found` is passed for an explicitly reviewed
+      legacy reset — a cross-account 404 is never authorization to
+      downgrade. Credential MODE is enforced per target (prod live, qa/dev
+      test) before any network access. `--rollback` refuses to restore
+      duplicate ids while 023's unique indexes exist and prints the order.
+
+    **Dev isolation cutover (2026-09-06 takeover revision).** Keep this
+    sequence intact. A new Stripe account returning 404 for an old customer
+    is not evidence that the old subscription was invalid.
+
+    1. Verify live Pages configuration, deployed SHA, actual worker bindings
+       and schedules, D1 schema and Stripe account identity. Dev currently
+       uses D1 `c5c0eee5-a223-4ea2-974e-f4aee5a28bab`, has 99 users, and
+       lacks 022/023. Dev and QA share KV `5237372648c34aa6880f91e1a0c9708a`
+       and Stripe test account `acct_1RymDCApMPhcB1Y6`. The existing isolated
+       sandbox `acct_1RymDIAErdLV6piR` has three legacy prices, one customer,
+       no subscriptions and no endpoints. Audit it before reuse. Dedicated
+       dev KV `06a6323598244fc8a1b2daadeec8a043` is empty. The deployed dev
+       retention worker currently has no bindings or schedules; no dev
+       inactive-account worker exists. Do not activate cleanup jobs by
+       deploying repository configuration as part of this cutover.
+    2. Complete candidate tests and review the integration diff. Create a
+       PR to dev0 with `[skip-e2e]` in its initial body. Candidate billing,
+       migration and ATS jobs validate checked-out code. Hostname E2E runs
+       exercise the currently deployed app and can change storage, so run
+       them only after the cutover is consistent. The manual `ui` suite
+       contains marketing/auth navigation and terms checkpoints; it is UI
+       smoke, not read-only. Resume upload/scoring is excluded.
+    3. Freeze dev traffic before taking the final snapshot: protect the
+       custom hostname, the project pages.dev hostname, and old immutable
+       deployment/branch aliases. Verify denial on each. A middleware flag
+       in a new deployment does not protect old deployment URLs. Stop any
+       actual scheduled writers and allow in-flight work to finish. Record
+       pending Stripe deliveries; disable only the old account's dev
+       endpoint after accounting for them. QA and production endpoints and
+       shared-account customers/subscriptions remain untouched.
+    4. Export dev D1 and capture a Time Travel bookmark and configuration
+       before-images. Re-run reconciliation pinned to the OLD Stripe account
+       and review exact before/after rows. Preserve legitimate entitlements,
+       trial flags, payment history, voice credits and resume records. Apply
+       022 once, after verifying all its objects are absent, before deploying
+       any hotfix code. Apply the reviewed stale-billing repair with audit
+       records and dev-only cache invalidation; never invalidate shared KV.
+    5. Copy only proven dev-owned persistent KV records into dedicated dev
+       KV, preserving metadata/expiration. Derive resume ownership from D1
+       raw_text_location references; a shared Firebase uid alone is not
+       proof. Copy needed dictionary data and unambiguous dev counters and
+       trial gates. Rebuild deletion markers from dev tombstones with their
+       remaining lifetime. Do not copy old customer caches, billing caches,
+       webhook markers or QA-only records. Keep source KV unchanged.
+    6. Prepare sandbox products/prices, portal configuration and a dev-only
+       webhook including async payment success/failure. Recreate retained
+       dev customers and legitimate test subscriptions in the sandbox and
+       record an explicit old-to-new mapping. Preserve plan and remaining
+       entitlement/cancellation time. Audit the D1 remap atomically with
+       before-images and drift guards. Do not reset valid subscriptions to
+       free, cancel shared-account subscriptions, or infer invalidity from
+       cross-account 404s. Complete the remap before reopening dev traffic.
+    7. Update dev Pages Production to dedicated KV and sandbox secret key,
+       signing secret, both publishable-key variable names, all six price
+       variables and STRIPE_PORTAL_CONFIGURATION_ID_DEV. Keep previews
+       disabled. Deploy the reviewed dev0 merge with DEV_CUTOVER_PAUSED=true;
+       this flag returns 503 before any storage access on dev only. Verify
+       the deployed SHA/configuration and migration state. Reconcile against
+       the sandbox, verify zero duplicate groups, then apply 023 and verify
+       both partial unique indexes. All account mappings must be coherent
+       before the maintenance gates are removed.
+    8. Reopen only current dev traffic and retain protection of old aliases.
+       Exercise genuine sandbox Pack and Monthly Checkout payments. Match
+       actual Stripe delivery IDs to processed D1 ledger rows and resulting
+       credits/plans/periods. A distinct async/completed pair for one Session
+       grants a pack only once: the event record, Session fulfilment marker,
+       credit update and ledger processed mark share one transaction. Replay
+       a delivery and verify zero additional credit. Start a voice session
+       and verify credit consumption, test portal cancellation, then run UI
+       smoke (`target_env=dev`, `suite=ui`). Capture QA before/after evidence
+       and distinguish unrelated concurrent activity from dev-origin writes.
+
+    **Rollback:** keep dev traffic paused while restoring a consistent set
+    of code, D1 mappings, Stripe settings and KV bindings. Drop 023 unique
+    indexes before any restore that reintroduces duplicate Stripe IDs;
+    retain 022 while hotfix code is deployed. Re-enable the old dev endpoint
+    only with the old account configuration and matching D1 rows. After
+    reopening traffic, fresh writes in dev KV/D1 must be reconciled before
+    reverting bindings or using Time Travel; an old snapshot alone would
+    discard them. Preserve all evidence and new sandbox objects until the
+    rollback decision is complete.
+
+    Execution evidence and exact run IDs are recorded in the gitignored
+    `backups/dev0_integration_evidence/` directory. Only completed checks
+    belong in the final results; planned acceptance is not deployment proof.
 22. Voice release follows its own flow (dev0 → develop → QA → main).
 
 ---
@@ -143,12 +288,20 @@ explicitly authorized them.
 - **Code**: redeploy the previous `main` build (Pages "rollback to previous
   deployment") or `git revert` the merge. Safe: 022 is purely additive and
   old code never references the new objects.
-- **Schema (only if forced)**: roll code back FIRST, then
-  `DROP INDEX idx_users_stripe_customer_id_unique; DROP INDEX idx_users_stripe_subscription_id_unique;`
-  (023, restore the plain index), `ALTER TABLE users DROP COLUMN
-  current_period_start; DROP TABLE billing_repair_audit; DROP TABLE
-  stripe_event_ledger;` (022). **Never drop the ledger while hotfix code is
-  live.**
+- **Order when restoring data that contains duplicate Stripe ids**
+  (the repair dissolved duplicates, so a full data rollback re-creates them):
+  1. Roll the code back if the deployed build depends on the change.
+  2. Drop migration 023's unique indexes and restore the ordinary index:
+     `DROP INDEX IF EXISTS idx_users_stripe_customer_id_unique; DROP INDEX IF EXISTS idx_users_stripe_subscription_id_unique; CREATE INDEX IF NOT EXISTS idx_users_stripe_customer_id ON users(stripe_customer_id);`
+     With the indexes in place the restore batch is refused (atomically —
+     nothing lands); the CLI detects the collision first and prints this
+     order.
+  3. Run the data rollback (below).
+  4. Retain 022 while any hotfix code is deployed. Only after the code is
+     rolled back may 022 itself be dropped: `ALTER TABLE users DROP COLUMN
+     current_period_start; DROP TABLE billing_repair_audit; DROP TABLE
+     stripe_event_ledger;` **Never drop the ledger while hotfix code is
+     live.**
 - **Data**:
   `node app/scripts/billing-reconcile.mjs --rollback --run-id=<id> --env=prod`
   restores every touched row's before-image from `billing_repair_audit` and

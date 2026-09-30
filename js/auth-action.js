@@ -139,7 +139,7 @@ function hideMessages() {
 
 // Helper function to check if plan requires payment
 function planRequiresPayment(plan) {
-  return ['essential', 'pro', 'premium', 'trial'].includes(plan);
+  return ['essential', 'pro', 'premium', 'trial', 'weekly', 'monthly', 'pack'].includes(plan);
 }
 
 function getSelectedPlanFromStorage() {
@@ -268,13 +268,14 @@ async function routeAfterVerification() {
       const idToken = await user.getIdToken(true);
       console.log('🚀 Starting Stripe checkout for plan:', plan);
       
+      const analytics = await window.JHA?.cookieConsent?.getCheckoutAnalyticsContext?.();
       const res = await fetch('/api/stripe-checkout', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json', 
           ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) 
         },
-        body: JSON.stringify({ plan, startTrial: plan === 'trial', forceNew: plan === 'trial' })
+        body: JSON.stringify({ plan, startTrial: plan === 'trial', forceNew: plan === 'trial', ...(analytics ? { analytics } : {}) })
       });
       
       const data = await res.json();
@@ -306,7 +307,7 @@ async function routeAfterVerification() {
           }
         }, 500);
       }
-      window.location.replace('/pricing-a.html');
+      window.location.replace('/pricing');
     } catch (err) {
       console.error('Checkout error from email verification flow:', err);
       if (hasOpener) {
@@ -318,7 +319,7 @@ async function routeAfterVerification() {
           }
         }, 500);
       }
-      window.location.replace('/pricing-a.html');
+      window.location.replace('/pricing');
     }
   } else {
     // Free plan - redirect to dashboard

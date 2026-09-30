@@ -1,0 +1,4 @@
+{
+  "//": "Scope marker only — not a package. Declares /js as ESM so Node test suites can import these browser modules directly (same mechanism as app/functions/_lib/package.json). Browsers ignore package.json entirely, so this changes nothing at runtime. free-account-manager.js and stripe-integration.js assign module.exports behind a `typeof module !== 'undefined'` guard and are never loaded by Node, so they are unaffected.",
+  "type": "module"
+}

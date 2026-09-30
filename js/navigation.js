@@ -250,7 +250,7 @@ const IS_DEV_OR_QA_HOST = APP_BASE_URL === 'https://dev.jobhackai.io' || APP_BAS
 const VISITOR_HOME_HREF = IS_DEV_OR_QA_HOST ? 'index.html' : 'https://jobhackai.io/';
 const VISITOR_BLOG_HREF = IS_DEV_OR_QA_HOST ? 'index.html#blog' : 'https://jobhackai.io/blog';
 const VISITOR_FEATURES_HREF = IS_DEV_OR_QA_HOST ? 'features.html' : 'https://jobhackai.io/features';
-const VISITOR_PRICING_HREF = `${APP_BASE_URL}/pricing-a`;
+const VISITOR_PRICING_HREF = `${APP_BASE_URL}/pricing`;
 const VISITOR_LOGO_HREF = IS_DEV_OR_QA_HOST ? '/' : 'https://jobhackai.io/';
 
 // Cross-domain cookie helpers — only read on the MARKETING site (not the app subdomain).
@@ -307,7 +307,7 @@ const AUTH_HANDOFF_QUERY_PLAN = 'jhai_plan';
 const AUTH_HANDOFF_QUERY_TS = 'jhai_ts';
 const AUTH_HANDOFF_SESSION_KEY = 'jhai_auth_handoff';
 const AUTH_HANDOFF_MAX_AGE_MS = 5 * 60 * 1000;
-const AUTH_HANDOFF_ALLOWED_PLANS = ['free', 'trial', 'essential', 'pro', 'premium', 'pending'];
+const AUTH_HANDOFF_ALLOWED_PLANS = ['free', 'trial', 'essential', 'pro', 'premium', 'pending', 'weekly', 'monthly', 'pack'];
 
 function getHostnameSafe() {
   try { return (window.location.hostname || '').toLowerCase(); } catch (_) { return ''; }
@@ -1141,7 +1141,7 @@ function getAuthState() {
 
       // Validate plan values are in allowed list
       // SECURITY FIX: Include 'pending' as legitimate plan state for trial users waiting for webhook confirmation
-      const allowedPlans = ['free', 'trial', 'essential', 'pro', 'premium', 'visitor', 'pending'];
+      const allowedPlans = ['free', 'trial', 'essential', 'pro', 'premium', 'visitor', 'pending', 'weekly', 'monthly', 'pack'];
       // Prefer cookie/URL-handoff plan when present. On marketing hosts this is the
       // authoritative cross-domain signal during early hydration, while localStorage
       // may still contain stale defaults like "free" or "visitor".
@@ -1377,30 +1377,30 @@ const PLANS = {
     name: 'Free',
     color: '#6B7280',
     bgColor: '#F3F4F6',
-    icon: '🔒',
-    features: ['ats'],
-    description: '1 ATS score per month'
+    icon: '🆓',
+    features: ['ats', 'feedback', 'interview', 'rewriting', 'coverLetter', 'mockInterview', 'linkedin'],
+    description: 'All prep tools free, 1 voice interview included'
   },
   trial: {
     name: 'Trial',
     color: '#FF9100',
     bgColor: '#FFF7E6',
     icon: '⏰',
-    features: ['ats', 'feedback', 'interview']
+    features: ['ats', 'feedback', 'interview', 'rewriting', 'coverLetter', 'mockInterview', 'linkedin']
   },
   essential: {
     name: 'Essential',
     color: '#0077B5',
     bgColor: '#E3F2FD',
     icon: '📋',
-    features: ['ats', 'feedback', 'interview']
+    features: ['ats', 'feedback', 'interview', 'rewriting', 'coverLetter', 'mockInterview', 'linkedin']
   },
   pro: {
     name: 'Pro',
     color: '#388E3C',
     bgColor: '#E8F5E9',
     icon: '✅',
-    features: ['ats', 'feedback', 'interview', 'rewriting', 'coverLetter', 'mockInterview']
+    features: ['ats', 'feedback', 'interview', 'rewriting', 'coverLetter', 'mockInterview', 'linkedin']
   },
   premium: {
     name: 'Premium',
@@ -1408,6 +1408,27 @@ const PLANS = {
     bgColor: '#FFEBEE',
     icon: '⭐',
     features: ['ats', 'feedback', 'interview', 'rewriting', 'coverLetter', 'mockInterview', 'linkedin', 'priorityReview']
+  },
+  weekly: {
+    name: 'Weekly Pass',
+    color: '#388E3C',
+    bgColor: '#E8F5E9',
+    icon: '🎤',
+    features: ['ats', 'feedback', 'interview', 'rewriting', 'coverLetter', 'mockInterview', 'linkedin', 'voice']
+  },
+  monthly: {
+    name: 'Monthly',
+    color: '#388E3C',
+    bgColor: '#E8F5E9',
+    icon: '🎤',
+    features: ['ats', 'feedback', 'interview', 'rewriting', 'coverLetter', 'mockInterview', 'linkedin', 'voice']
+  },
+  pack: {
+    name: 'Interview Pack',
+    color: '#388E3C',
+    bgColor: '#E8F5E9',
+    icon: '🎟️',
+    features: ['ats', 'feedback', 'interview', 'rewriting', 'coverLetter', 'mockInterview', 'linkedin', 'voice']
   }
 };
 
@@ -1470,6 +1491,133 @@ if (typeof document !== 'undefined') {
 }
 
 // --- NAVIGATION CONFIGURATION ---
+// Repositioning: every signed-in plan sees the full prep-tool nav (the tools
+// are free with signup); the paid product is the Voice Mock Interview.
+const signedInNavItems = () => ([
+  { text: 'Home', href: VISITOR_HOME_HREF },
+  { text: 'Dashboard', href: APP_BASE_URL + '/dashboard.html' },
+  { text: 'Blog', href: VISITOR_BLOG_HREF },
+  {
+    text: 'Resume Tools',
+    isDropdown: true,
+    items: [
+      { text: 'Resume Feedback', href: APP_BASE_URL + '/resume-feedback-pro.html' },
+      { text: 'Cover Letter', href: APP_BASE_URL + '/cover-letter-generator.html' },
+    ]
+  },
+  {
+    text: 'Interview Prep',
+    isDropdown: true,
+    items: [
+      { text: 'Interview Questions', href: APP_BASE_URL + '/interview-questions.html' },
+      { text: 'Mock Interviews', href: APP_BASE_URL + '/mock-interview.html' },
+    ]
+  },
+  { text: 'LinkedIn Optimizer', href: APP_BASE_URL + '/linkedin-optimizer.html' }
+]);
+const signedInUserNav = () => ({
+  menuItems: [
+    { text: 'Account', href: APP_BASE_URL + '/account-setting.html' },
+    { text: 'Logout', href: '#', action: 'logout' }
+  ]
+});
+
+// --- Voice mock interview nav entry (flag-gated) ---
+// The Interview Prep dropdown gains 'Voice Mock Interview' (and the typed
+// item is renamed 'Typed Mock Interview' to distinguish them) ONLY when
+// /api/plan/me reports voice.enabled. With the flag off the dropdown stays
+// exactly as it is today. Voice state rides the shared PlanCache fetch —
+// no second /api/plan/me call is added.
+let _voiceNav = null;          // last-known voice block from /api/plan/me
+let _voiceNavFetching = false;
+
+function voiceNavBadgeText(voice) {
+  if (!voice || !voice.enabled) return null;
+  if (voice.unlimited) return Number.isFinite(voice.monthlyRemaining)
+    ? `${voice.monthlyRemaining} left this month` : 'Monthly session limit';
+  if (voice.mode === 'pack') return `${voice.sessionsRemaining} left`;
+  if (voice.canStart) return '1 free';
+  return null; // free session used: no badge, the page itself paywalls
+}
+
+function withVoiceNavItems(navItems) {
+  if (!_voiceNav || !_voiceNav.enabled || !Array.isArray(navItems)) return navItems;
+  return navItems.map((item) => {
+    if (item.isDropdown !== true || item.text !== 'Interview Prep') return item;
+    const items = item.items.map((sub) =>
+      sub.text === 'Mock Interviews' ? { ...sub, text: 'Typed Mock Interview' } : sub
+    );
+    items.push({
+      text: 'Voice Mock Interview',
+      href: APP_BASE_URL + '/voice-interview.html',
+      badge: voiceNavBadgeText(_voiceNav)
+    });
+    return { ...item, items };
+  });
+}
+
+function withVoiceNavConfig(navConfig) {
+  if (!_voiceNav || !_voiceNav.enabled || !navConfig || !Array.isArray(navConfig.navItems)) return navConfig;
+  return { ...navConfig, navItems: withVoiceNavItems(navConfig.navItems) };
+}
+
+// Reads the voice block via the shared PlanCache (30s TTL, deduplicated) and
+// schedules ONE nav rebuild when the value actually changes, so this cannot
+// loop with updateNavigation calling it on every render.
+function ensureVoiceNavState() {
+  try {
+    const user = (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function')
+      ? window.FirebaseAuthManager.getCurrentUser()
+      : null;
+    if (!user || typeof user.getIdToken !== 'function') {
+      _voiceNav = null;
+      return;
+    }
+    if (_voiceNavFetching || !window.PlanCache || typeof window.PlanCache.getPlan !== 'function') return;
+    _voiceNavFetching = true;
+    const requestUid = user.uid || null;
+    user.getIdToken()
+      .then((token) => window.PlanCache.getPlan(token))
+      .then((data) => {
+        // Discard responses that outlive an account switch: the plan data
+        // belongs to whoever was signed in when the fetch started, and must
+        // not stamp their entitlement onto the next account's nav.
+        const current = (window.FirebaseAuthManager && typeof window.FirebaseAuthManager.getCurrentUser === 'function')
+          ? window.FirebaseAuthManager.getCurrentUser()
+          : null;
+        if (!current || (current.uid || null) !== requestUid) return;
+        // getPlan resolves null on a failed fetch (it never rejects). That is
+        // indeterminate, not authoritative: keep the last-known voice state
+        // instead of tearing the nav entry out on a transient network blip.
+        if (!data) return;
+        const voice = data.voice || null;
+        const changed = JSON.stringify(voice) !== JSON.stringify(_voiceNav);
+        _voiceNav = voice;
+        if (changed) {
+          navLog('info', 'Voice nav state changed, refreshing navigation', { enabled: !!(voice && voice.enabled) });
+          scheduleUpdateNavigation(true);
+        }
+      })
+      .catch((err) => {
+        navLog('debug', 'Voice nav state fetch failed (non-critical)', { message: err?.message });
+      })
+      .finally(() => { _voiceNavFetching = false; });
+  } catch (err) {
+    navLog('debug', 'ensureVoiceNavState failed (non-critical)', { message: err?.message });
+  }
+}
+
+// Badge on a dropdown item (plan-badge family: #E8F5E9 tint + #388E3C text,
+// pill radius — same palette as the weekly/monthly/pack plan badges).
+function appendNavItemBadge(link, badgeText) {
+  if (!badgeText) return;
+  const badge = document.createElement('span');
+  badge.className = 'nav-dropdown-badge';
+  badge.textContent = badgeText;
+  badge.style.cssText = 'display:inline-block;margin-left:0.5rem;padding:0.1rem 0.55rem;border-radius:var(--radius-full, 9999px);background:#E8F5E9;color:#388E3C;font-size:0.75rem;font-weight:700;vertical-align:middle;';
+  link.appendChild(badge);
+}
+
 const NAVIGATION_CONFIG = {
   // Logged-out / Visitor
   visitor: {
@@ -1477,120 +1625,22 @@ const NAVIGATION_CONFIG = {
       { text: 'Home', href: VISITOR_HOME_HREF },
       { text: 'Blog', href: VISITOR_BLOG_HREF },
       { text: 'Features', href: VISITOR_FEATURES_HREF },
-      { text: 'Pricing', href: `${APP_BASE_URL}/pricing-a` },
+      { text: 'Pricing', href: `${APP_BASE_URL}/pricing` },
       { text: 'Login', href: `${APP_BASE_URL}/login` }
     ],
-    cta: { text: 'Start Free Trial', href: `${APP_BASE_URL}/login?plan=trial`, isCTA: true, planId: 'trial' }
+    cta: { text: 'Sign Up Free', href: `${APP_BASE_URL}/login?mode=signup`, isCTA: true, planId: 'free' }
   },
-  // Free Account (no plan)
-  free: {
-    navItems: [
-      { text: 'Home', href: VISITOR_HOME_HREF },
-      { text: 'Dashboard', href: APP_BASE_URL + '/dashboard.html' },
-      { text: 'Blog', href: VISITOR_BLOG_HREF },
-      { text: 'Resume Feedback', href: APP_BASE_URL + '/resume-feedback-pro.html', locked: true },
-      { text: 'Interview Questions', href: APP_BASE_URL + '/interview-questions.html', locked: true }
-    ],
-    userNav: {
-      menuItems: [
-        { text: 'Account', href: APP_BASE_URL + '/account-setting.html' },
-        { text: 'Logout', href: '#', action: 'logout' }
-      ]
-    }
-  },
-  // 3-Day Trial
-  trial: {
-    navItems: [
-      { text: 'Home', href: VISITOR_HOME_HREF },
-      { text: 'Dashboard', href: APP_BASE_URL + '/dashboard.html' },
-      { text: 'Blog', href: VISITOR_BLOG_HREF },
-      { text: 'Resume Feedback', href: APP_BASE_URL + '/resume-feedback-pro.html' },
-      { text: 'Interview Questions', href: APP_BASE_URL + '/interview-questions.html' }
-    ],
-    userNav: {
-      menuItems: [
-        { text: 'Account', href: APP_BASE_URL + '/account-setting.html' },
-        { text: 'Logout', href: '#', action: 'logout' }
-      ]
-    }
-  },
-  // Basic $29
-  essential: {
-    navItems: [
-      { text: 'Home', href: VISITOR_HOME_HREF },
-      { text: 'Dashboard', href: APP_BASE_URL + '/dashboard.html' },
-      { text: 'Blog', href: VISITOR_BLOG_HREF },
-      { text: 'Resume Feedback', href: APP_BASE_URL + '/resume-feedback-pro.html' },
-      { text: 'Interview Questions', href: APP_BASE_URL + '/interview-questions.html' }
-    ],
-    userNav: {
-      menuItems: [
-        { text: 'Account', href: APP_BASE_URL + '/account-setting.html' },
-        { text: 'Logout', href: '#', action: 'logout' }
-      ]
-    }
-  },
-  // Pro $59
-  pro: {
-    navItems: [
-      { text: 'Home', href: VISITOR_HOME_HREF },
-      { text: 'Dashboard', href: APP_BASE_URL + '/dashboard.html' },
-      { text: 'Blog', href: VISITOR_BLOG_HREF },
-      {
-        text: 'Resume Tools',
-        isDropdown: true,
-        items: [
-          { text: 'Resume Feedback', href: APP_BASE_URL + '/resume-feedback-pro.html' },
-          { text: 'Cover Letter', href: APP_BASE_URL + '/cover-letter-generator.html' },
-        ]
-      },
-      {
-        text: 'Interview Prep',
-        isDropdown: true,
-        items: [
-          { text: 'Interview Questions', href: APP_BASE_URL + '/interview-questions.html' },
-          { text: 'Mock Interviews', href: APP_BASE_URL + '/mock-interview.html' },
-        ]
-      }
-    ],
-    userNav: {
-      menuItems: [
-        { text: 'Account', href: APP_BASE_URL + '/account-setting.html' },
-        { text: 'Logout', href: '#', action: 'logout' }
-      ]
-    }
-  },
-  // Premium $99
-  premium: {
-    navItems: [
-      { text: 'Home', href: VISITOR_HOME_HREF },
-      { text: 'Dashboard', href: APP_BASE_URL + '/dashboard.html' },
-      { text: 'Blog', href: VISITOR_BLOG_HREF },
-      {
-        text: 'Resume Tools',
-        isDropdown: true,
-        items: [
-          { text: 'Resume Feedback', href: APP_BASE_URL + '/resume-feedback-pro.html' },
-          { text: 'Cover Letter', href: APP_BASE_URL + '/cover-letter-generator.html' },
-        ]
-      },
-      {
-        text: 'Interview Prep',
-        isDropdown: true,
-        items: [
-          { text: 'Interview Questions', href: APP_BASE_URL + '/interview-questions.html' },
-          { text: 'Mock Interviews', href: APP_BASE_URL + '/mock-interview.html' },
-        ]
-      },
-      { text: 'LinkedIn Optimizer', href: APP_BASE_URL + '/linkedin-optimizer.html' }
-    ],
-    userNav: {
-      menuItems: [
-        { text: 'Account', href: APP_BASE_URL + '/account-setting.html' },
-        { text: 'Logout', href: '#', action: 'logout' }
-      ]
-    }
-  }
+  // Free account: full prep-tool access (voice interview is the paid product)
+  free: { navItems: signedInNavItems(), userNav: signedInUserNav() },
+  // Voice plans (repositioning)
+  weekly: { navItems: signedInNavItems(), userNav: signedInUserNav() },
+  monthly: { navItems: signedInNavItems(), userNav: signedInUserNav() },
+  pack: { navItems: signedInNavItems(), userNav: signedInUserNav() },
+  // Legacy plans (grandfathered)
+  trial: { navItems: signedInNavItems(), userNav: signedInUserNav() },
+  essential: { navItems: signedInNavItems(), userNav: signedInUserNav() },
+  pro: { navItems: signedInNavItems(), userNav: signedInUserNav() },
+  premium: { navItems: signedInNavItems(), userNav: signedInUserNav() }
 };
 
 const CTA_PLAN_METADATA = {
@@ -1609,6 +1659,18 @@ const CTA_PLAN_METADATA = {
   premium: {
     planName: 'Premium Plan',
     price: '$99/mo'
+  },
+  weekly: {
+    planName: 'Weekly Pass',
+    price: '$17/wk'
+  },
+  monthly: {
+    planName: 'Monthly Plan',
+    price: '$34/mo'
+  },
+  pack: {
+    planName: 'Interview Pack',
+    price: '$39 one time'
   }
 };
 
@@ -1894,7 +1956,7 @@ function showUpgradeModal(targetPlan = 'premium') {
       window.upgradePlan(targetPlan, { source: 'nav-upgrade', returnUrl: window.location.href });
       return;
     }
-    window.location.href = `${APP_BASE_URL}/pricing-a?plan=${encodeURIComponent(targetPlan)}`;
+    window.location.href = `${APP_BASE_URL}/pricing?plan=${encodeURIComponent(targetPlan)}`;
   });
   // Close on background click
   modal.addEventListener('click', (e) => {
@@ -1954,7 +2016,10 @@ function updateNavigation() {
     url: window.location.href
   });
 
-  const navConfig = NAVIGATION_CONFIG[currentPlan] || NAVIGATION_CONFIG.visitor;
+  // Voice nav entry is flag-gated: refresh the entitlement (async, rebuilds
+  // once if it changed) and fold the current known state into the config.
+  ensureVoiceNavState();
+  const navConfig = withVoiceNavConfig(NAVIGATION_CONFIG[currentPlan] || NAVIGATION_CONFIG.visitor);
   navLog('info', 'Using navigation config', {
     plan: currentPlan,
     hasConfig: !!navConfig,
@@ -2124,6 +2189,7 @@ function updateNavigation() {
           const link = document.createElement('a');
           updateLink(link, dropdownItem.href);
           link.textContent = dropdownItem.text;
+          appendNavItemBadge(link, dropdownItem.badge);
           // Only add locked handler if explicitly marked as locked
           // Dropdown items should inherit unlocked state from parent plan config
           // CRITICAL: Use strict equality to prevent issues with truthy non-boolean values
@@ -2274,6 +2340,7 @@ function updateNavigation() {
           const link = document.createElement('a');
           updateLink(link, dropdownItem.href);
           link.textContent = dropdownItem.text;
+          appendNavItemBadge(link, dropdownItem.badge);
           // Only add locked handler if explicitly marked as locked
           // CRITICAL: Use strict equality to prevent issues with truthy non-boolean values
           if (dropdownItem.locked === true) {
@@ -3130,6 +3197,7 @@ function _buildVerifiedNavItems(container, navConfig, wrapHref) {
           link.href = wrapHref(sub.href);
         }
         link.textContent = sub.text;
+        appendNavItemBadge(link, sub.badge);
         menu.appendChild(link);
       });
 
@@ -3207,7 +3275,8 @@ function _buildUserMenu(navConfig, wrapHref) {
 function renderVerifiedNav(desktop, mobile) {
   if (!desktop) return;
   const currentPlan = getEffectivePlan();
-  const navConfig = NAVIGATION_CONFIG[currentPlan] || NAVIGATION_CONFIG.free;
+  ensureVoiceNavState();
+  const navConfig = withVoiceNavConfig(NAVIGATION_CONFIG[currentPlan] || NAVIGATION_CONFIG.free);
   const planForHandoff = normalizeHandoffPlan(localStorage.getItem('user-plan') || localStorage.getItem('dev-plan') || 'free') || 'free';
 
   const wrapHref = (href) => buildAuthHandoffHref(href, true, planForHandoff);

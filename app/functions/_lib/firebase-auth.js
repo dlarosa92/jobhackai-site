@@ -23,9 +23,3 @@ export async function verifyFirebaseIdToken(token, projectId) {
   if (!uid) throw new Error('missing uid');
   return { uid, payload };
 }
-
-// Re-export shared Firebase Auth deletion function
-// The actual implementation is in shared/firebase-auth-admin.js to allow both
-// app/functions and workers to import it.
-export { deleteFirebaseAuthUserAdmin } from '../../../shared/firebase-auth-admin.js';
-

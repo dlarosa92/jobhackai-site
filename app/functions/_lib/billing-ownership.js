@@ -4,7 +4,7 @@
 
 import { stripe } from './billing-utils.js';
 import { partitionCustomersByUidClaim } from './stripe-identity.js';
-import { redactId } from './stripe-environment.js';
+import { redactId, environmentStampFields } from './stripe-environment.js';
 
 // Subscription statuses that still represent (or may recover into) paid
 // entitlement. Includes 'unpaid': the webhook keeps the plan through
@@ -141,6 +141,8 @@ export function buildUpgradeCheckoutSessionBody(env, { uid, customerId, priceId,
     'metadata[firebaseUid]': uid,
     'metadata[plan]': targetPlan,
     'metadata[upgrade_source]': source,
-    'subscription_data[metadata][firebaseUid]': uid
+    'subscription_data[metadata][firebaseUid]': uid,
+    // Environment stamp (see stripe-environment.js): session + subscription.
+    ...environmentStampFields(env, { subscription: true })
   };
 }

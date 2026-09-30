@@ -85,3 +85,10 @@ const junk = readSubscriptionPeriod({ id: 'sub_x', items: { data: [{ price: { id
 assert.strictEqual(junk.error, 'missing_period_item');
 
 console.log('subscription-period.test.mjs: all assertions passed');
+
+// Cancellation and renewal dates must come from one current Stripe snapshot.
+const { readSubscriptionCancellation } = await import('../stripe-identity.js');
+assert.equal(readSubscriptionCancellation({cancel_at:1789800000,cancel_at_period_end:true},null),1789800000000);
+assert.equal(readSubscriptionCancellation({cancel_at:null,cancel_at_period_end:true},'2026-09-27T06:41:09.000Z'),Date.parse('2026-09-27T06:41:09.000Z'));
+assert.equal(readSubscriptionCancellation({cancel_at:null,cancel_at_period_end:false},'2026-09-27T06:41:09.000Z'),null);
+assert.equal(readSubscriptionCancellation({cancel_at_period_end:true},null),null);

@@ -69,7 +69,17 @@
   <link rel="stylesheet" href="css/footer.css">
   <link rel="stylesheet" href="css/marketing.css">
   <link rel="stylesheet" href="css/blog.css">
-  <script src="https://app.jobhackai.io/js/cookie-consent.js?v=20260506-1" defer></script>
+  <script src="/js/cookie-consent.js" defer></script>
+
+  <!-- Structured Data: WebSite -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "JobHackAI",
+    "url": "https://jobhackai.io"
+  }
+  </script>
 </head>
 <body>
   <!-- Component: components/header.html -->
@@ -159,6 +169,19 @@
 
         <!-- Post Grid (static fallback for crawlers; replaced by JS) -->
         <div class="blog-grid" id="blogGrid" aria-live="polite">
+          <a href="/blog/what-to-expect-from-a-voice-mock-interview" class="blog-card"><div class="blog-card-body"><span class="blog-card-category">Interview Prep</span><h3 class="blog-card-title">What to expect from a JobHackAI Voice Mock Interview</h3><p class="blog-card-excerpt">See how to choose your role, answer aloud, handle follow-up questions, and review feedback. Includes the free preview and paid full report.</p><div class="blog-card-meta"><span>September 29, 2026</span><span class="separator">&middot;</span><span>4 min read</span></div></div></a>
+          <a href="/blog/how-to-answer-tell-me-about-yourself" class="blog-card">
+            <div class="blog-card-body">
+              <span class="blog-card-category">Interview Prep</span>
+              <h3 class="blog-card-title">How to Answer “Tell Me About Yourself” in an Interview</h3>
+              <p class="blog-card-excerpt">Build an introduction around your current work, one relevant example and why this role fits. Includes two illustrative answers and a short practice exercise.</p>
+              <div class="blog-card-meta">
+                <span>September 29, 2026</span>
+                <span class="separator">&middot;</span>
+                <span>4 min read</span>
+              </div>
+            </div>
+          </a>
           <a href="/blog/below-1-0-leverage-gap-resume" class="blog-card">
             <div class="blog-card-body">
               <span class="blog-card-category">Resume</span>
@@ -210,12 +233,10 @@
           <a href="/blog/mock-interview-online" class="blog-card">
             <div class="blog-card-body">
               <span class="blog-card-category">Interview Prep</span>
-              <h3 class="blog-card-title">Mock Interview Online: Why Real-Time Practice Is Your Secret Weapon</h3>
-              <p class="blog-card-excerpt">Stop reading interview tips and start practicing. Real-time mock interview sessions build the structured communication skills that actually win job offers.</p>
+              <h3 class="blog-card-title">Mock Interview Online: How to Run a Useful Practice Session</h3>
+              <p class="blog-card-excerpt">Choose a relevant question, practice a specific example, and review one change at a time. A practical guide to typed and spoken interview preparation.</p>
               <div class="blog-card-meta">
                 <span>March 18, 2026</span>
-                <span class="separator">&middot;</span>
-                <span>9 min read</span>
               </div>
             </div>
           </a>
@@ -286,13 +307,13 @@
     </div>
   </footer>
 
-  <script src="js/component-loader.js?v=20260206-1"></script>
+  <script src="js/component-loader.js?v=20260920-marketing-2"></script>
   <script src="js/plan-cache.js"></script>
   <script type="module" src="js/firebase-auth.js?v=20260207-2"></script>
   <script src="js/auth-persistence.js"></script>
-  <script src="js/navigation.js?v=20260208-1"></script>
+  <script src="js/navigation.js?v=20260920-marketing-2"></script>
   <script src="js/universal-logout.js?v=20260208-1"></script>
-  <script src="js/blog-data.js?v=20260523-1"></script>
+  <script src="js/blog-data.js?v=20260929-voice"></script>
   <script>
     if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
       window.JobHackAINavigation.initializeNavigation();

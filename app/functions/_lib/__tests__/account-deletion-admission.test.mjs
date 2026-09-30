@@ -1,0 +1,115 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { webcrypto } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { sqliteD1 } from './sqlite-d1-helper.mjs';
+import { admitAccountOperation, settleAccountOperation, beginDeletionAdmission, assertDeletionQuiescent } from '../account-deletion-admission.js';
+if (!globalThis.crypto) globalThis.crypto = webcrypto;
+function setup(t) {
+ const db=sqliteD1();t.after(()=>db.close());
+ db.exec(readFileSync(new URL('../../../db/migrations/028_account_deletion_recovery.sql',import.meta.url),'utf8'));
+ return {db,env:{JOBHACKAI_DB:db}};
+}
+test('origin is mandatory and an automated retry cannot manufacture or downgrade user consent',async t=>{
+ const {env,db}=setup(t);
+ for(const origin of [undefined,null,'background','USER_REQUEST']) await assert.rejects(beginDeletionAdmission(env,{uid:'owner',origin}),/origin_invalid/);
+ assert.equal(await db.prepare('SELECT COUNT(*) AS n FROM account_deletion_admissions').first('n'),0);
+ const automatic=await beginDeletionAdmission(env,{uid:'owner',origin:'inactivity',email:'first@example.test'});
+ assert.equal(automatic.origin,'inactivity');
+ const explicit=await beginDeletionAdmission(env,{uid:'owner',origin:'user_request',email:'replacement@example.test'});
+ assert.equal(explicit.id,automatic.id);assert.equal(explicit.email,automatic.email);assert.equal(explicit.origin,'user_request');
+ assert.equal((await beginDeletionAdmission(env,{uid:'owner',origin:'inactivity'})).origin,'user_request');
+});
+test('intent blocks new writes while waiting for previously admitted work',async t=>{
+ const {env}=setup(t),claim=await admitAccountOperation(env,'owner','billing');
+ await beginDeletionAdmission(env,{origin:'user_request',uid:'owner'});
+ await assert.rejects(admitAccountOperation(env,'owner','account'),/deletion_pending/);
+ await assert.rejects(assertDeletionQuiescent(env,'owner'),/operations_pending/);
+ await settleAccountOperation(env,claim,'finished');
+ assert.ok(await assertDeletionQuiescent(env,'owner'));
+});
+test('the opposite ordering never admits an operation after deletion intent',async t=>{
+ const {env}=setup(t);await beginDeletionAdmission(env,{origin:'user_request',uid:'owner'});
+ await assert.rejects(admitAccountOperation(env,'owner','billing'),/deletion_pending/);
+ assert.ok(await assertDeletionQuiescent(env,'owner'));
+});
+test('a crash or uncertain external call does not expire into deletion readiness',async t=>{
+ const {env,db}=setup(t),claim=await admitAccountOperation(env,'owner','billing');
+ await beginDeletionAdmission(env,{origin:'user_request',uid:'owner'});
+ db.exec("UPDATE account_operation_claims SET created_at='2000-01-01',updated_at='2000-01-01'");
+ await assert.rejects(assertDeletionQuiescent(env,'owner'),/operations_pending/);
+ await settleAccountOperation(env,claim,'uncertain');
+ await assert.rejects(settleAccountOperation(env,claim,'finished'),/operation_conflict/);
+ await assert.rejects(assertDeletionQuiescent(env,'owner'),/operations_pending/);
+});
+test('admissions are isolated by verified UID and retries preserve the original intent',async t=>{
+ const {env}=setup(t),claim=await admitAccountOperation(env,'owner');
+ const original=await beginDeletionAdmission(env,{origin:'user_request',uid:'owner',email:'first@example.test'});
+ const retry=await beginDeletionAdmission(env,{origin:'user_request',uid:'owner',email:'replacement@example.test'});
+ assert.equal(retry.id,original.id);assert.equal(retry.email,'first@example.test');
+ await assert.rejects(settleAccountOperation(env,{...claim,uid:'other'},'finished'),/operation_conflict/);
+ const other=await admitAccountOperation(env,'other');assert.ok(other.id);
+ await assert.rejects(assertDeletionQuiescent(env,'other'),/admission_required/);
+});
+test('both simultaneous admission orderings are safe under the actual database statements',async t=>{
+ const {env}=setup(t);
+ for(const uid of ['first','second']) {
+  const operation=()=>admitAccountOperation(env,uid,'billing'),deletion=()=>beginDeletionAdmission(env,{origin:'user_request',uid});
+  const results=await Promise.allSettled(uid==='first'?[operation(),deletion()]:[deletion(),operation()]);
+  const admitted=results.find(r=>r.status==='fulfilled'&&r.value.kind==='billing');
+  if(admitted) await assert.rejects(assertDeletionQuiescent(env,uid),/operations_pending/);
+  else assert.ok(await assertDeletionQuiescent(env,uid));
+ }
+});
+test('missing schema refuses both operations and deletion instead of failing open',async t=>{
+ const {env,db}=setup(t);db.exec('DROP TABLE account_deletion_admissions');
+ await assert.rejects(admitAccountOperation(env,'owner','billing'));
+ await assert.rejects(beginDeletionAdmission(env,{origin:'user_request',uid:'owner'}));
+});
+
+test('an unresolved Analytics event cannot acquire a second claim, even under another UID or after a stale timestamp',async t=>{
+ const {env,db}=setup(t),options={analyticsEventKey:'purchase:ch_test'};
+ const claim=await admitAccountOperation(env,'owner','account',options);
+ assert.equal(await db.prepare('SELECT analytics_event_key FROM account_operation_claims').first('analytics_event_key'),options.analyticsEventKey);
+ db.exec("UPDATE account_operation_claims SET created_at='2000-01-01'");
+ await assert.rejects(admitAccountOperation(env,'owner','account',options),/analytics_delivery_unresolved/);
+ await assert.rejects(admitAccountOperation(env,'other','account',options),/analytics_delivery_unresolved/);
+ await settleAccountOperation(env,claim,'uncertain');
+ await assert.rejects(admitAccountOperation(env,'owner','account',options),/analytics_delivery_unresolved/);
+ assert.ok(await admitAccountOperation(env,'owner','account',{analyticsEventKey:'refund:re_test'}));
+});
+
+test('finished Analytics validation allows a fresh attempt and metadata is strictly validated',async t=>{
+ const {env}=setup(t),options={analyticsEventKey:'purchase:ch_test'};
+ const claim=await admitAccountOperation(env,'owner','account',options);
+ await settleAccountOperation(env,claim,'finished');
+ assert.ok(await admitAccountOperation(env,'owner','account',options));
+ for(const analyticsEventKey of ['owner@example.test','purchase:re_test',{},'refund:re_'+'x'.repeat(197)])
+  await assert.rejects(admitAccountOperation(env,'owner','account',{analyticsEventKey}),/analytics_event_invalid/);
+ await assert.rejects(admitAccountOperation(env,'owner','billing',options),/analytics_event_invalid/);
+});
+
+test('exclusive maintenance cannot overlap account, billing, Analytics or another maintenance operation',async t=>{
+ const {env}=setup(t);
+ const ordinary=await admitAccountOperation(env,'owner');
+ await assert.rejects(admitAccountOperation(env,'owner','maintenance'),/account_operation_busy/);
+ await settleAccountOperation(env,ordinary,'finished');
+ const maintenance=await admitAccountOperation(env,'owner','maintenance');
+ for(const kind of ['account','billing','maintenance'])
+  await assert.rejects(admitAccountOperation(env,'owner',kind),/account_operation_busy/);
+ await assert.rejects(admitAccountOperation(env,'owner','account',{analyticsEventKey:'purchase:ch_test'}),/account_operation_busy/);
+ assert.ok(await admitAccountOperation(env,'other'));
+ await beginDeletionAdmission(env,{origin:'user_request',uid:'owner'});
+ await assert.rejects(assertDeletionQuiescent(env,'owner'),/operations_pending/);
+ await settleAccountOperation(env,maintenance,'finished');
+ await assertDeletionQuiescent(env,'owner');
+});
+
+test('an uncertain maintenance claim never expires into permission for account writes or deletion',async t=>{
+ const {env,db}=setup(t),claim=await admitAccountOperation(env,'owner','maintenance');
+ await settleAccountOperation(env,claim,'uncertain');
+ db.exec("UPDATE account_operation_claims SET created_at='2000-01-01',updated_at='2000-01-01'");
+ await assert.rejects(admitAccountOperation(env,'owner'),/account_operation_busy/);
+ await beginDeletionAdmission(env,{origin:'user_request',uid:'owner'});
+ await assert.rejects(assertDeletionQuiescent(env,'owner'),/operations_pending/);
+});

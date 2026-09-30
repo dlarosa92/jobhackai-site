@@ -1,0 +1,326 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import vm from 'node:vm';
+import { readFileSync } from 'node:fs';
+import { assertStripeKeyMatchesEnvironment, isForeignEnvironmentStamp, canonicalEnvironmentName, canonicalizeEnvironmentStamp } from '../stripe-environment.js';
+const source = name => readFileSync(new URL(name, import.meta.url), 'utf8');
+const strip = code => code.replace(/^import .*;\n/gm, '').replaceAll('export async function', 'async function').replaceAll('export function', 'function');
+const customer = (id, owner='owner') => ({id, metadata:owner ? {firebaseUid:owner}: {}});
+const sub = (id, customer='cus_1', status='active') => ({id, customer, status, metadata:{environment:'qa'}});
+const checkout = (id='cs_1', customer='cus_1') => ({id,customer,status:'open',payment_status:'unpaid',mode:'payment',metadata:{firebaseUid:'owner',environment:'qa'}});
+const payment = (id='pi_1', status='succeeded', customer='cus_1') => ({id,status,customer,metadata:{}});
+function setup({ customers=[customer('cus_1')], subscriptions=[sub('sub_1')], sessions=[], payments=[], invoices=[], schedules=[], mapped='cus_1', override, conflict=false, kvFailure=false }={}) {
+  const calls=[];
+  const ctx={URL, Set, Map, encodeURIComponent, assertStripeKeyMatchesEnvironment, isForeignEnvironmentStamp, canonicalEnvironmentName, canonicalizeEnvironmentStamp,
+    kvCusKey:uid=>'cusByUid:'+uid,
+    assertNoCrossUserStripeIds:async()=>({ok:!conflict}),
+    stripe:async(_env,path,init={})=>{
+      calls.push({path,method:init.method||'GET'});
+      const custom=await override?.(path,init,calls);
+      if(custom) return custom;
+      const url=new URL('https://stripe.test'+path);
+      if(init.method==='DELETE') {
+        const s=subscriptions.find(s=>path.endsWith('/'+s.id));s.status='canceled';return Response.json(s);
+      }
+      if(init.method==='POST'&&url.pathname.endsWith('/expire')) {
+        const s=sessions.find(s=>url.pathname===`/checkout/sessions/${s.id}/expire`);s.status='expired';
+        const p=payments.find(p=>p.id===s.payment_intent);if(p)p.status='canceled';
+        return Response.json(s);
+      }
+      if(url.pathname==='/customers') return Response.json({data:customers,has_more:false});
+      if(url.pathname==='/subscriptions') return Response.json({data:subscriptions.filter(s=>s.customer===url.searchParams.get('customer')),has_more:false});
+      if(url.pathname==='/checkout/sessions') return Response.json({data:sessions.filter(s=>s.customer===url.searchParams.get('customer')),has_more:false});
+      if(url.pathname==='/payment_intents') return Response.json({data:payments.filter(p=>p.customer===url.searchParams.get('customer')),has_more:false});
+      if(url.pathname==='/invoices') return Response.json({data:invoices.filter(p=>p.customer===url.searchParams.get('customer')),has_more:false});
+      if(url.pathname==='/subscription_schedules') return Response.json({data:schedules.filter(p=>p.customer===url.searchParams.get('customer')),has_more:false});
+      return Response.json(customers.find(c=>path.endsWith('/'+c.id))||{}, {status:customers.some(c=>path.endsWith('/'+c.id))?200:404});
+    }
+  };
+  vm.createContext(ctx);vm.runInContext(strip(source('../account-deletion-billing.js'))+'\nglobalThis.guard=cancelBillingBeforeDeletion;globalThis.inactiveGuard=assertInactiveBillingClear;',ctx);
+  const env={STRIPE_SECRET_KEY:'sk_test_fixture_only',ENVIRONMENT:'qa',JOBHACKAI_KV:{get:async()=>{if(kvFailure)throw Error('cache unavailable');return null;}}};
+  const input={uid:'owner',email:'owner@example.test',user:{stripe_customer_id:mapped,email:'owner@example.test'}};
+  return {calls,ctx,env,input,run:()=>ctx.guard(env,input),runInactive:()=>ctx.inactiveGuard(env,input)};
+}
+
+for (const status of ['active','trialing','past_due','unpaid','paused','incomplete']) {
+  test(`inactivity cannot cancel a ${status} subscription`,async()=>{
+    const subscriptions=[sub('sub_1','cus_1',status)];
+    const h=setup({subscriptions});
+    await assert.rejects(h.runInactive(),/Subscription prevents inactivity deletion/);
+    assert.equal(subscriptions[0].status,status);
+    assert.ok(h.calls.every(call=>call.method==='GET'));
+  });
+}
+test('inactivity leaves an open checkout and its pending payment untouched',async()=>{
+  const sessions=[{...checkout(),payment_intent:'pi_1'}];
+  const payments=[payment('pi_1','requires_payment_method')];
+  const h=setup({subscriptions:[],sessions,payments});
+  await assert.rejects(h.runInactive(),/Checkout remains open/);
+  assert.equal(sessions[0].status,'open');
+  assert.equal(payments[0].status,'requires_payment_method');
+  assert.ok(h.calls.every(call=>call.method==='GET'));
+});
+test('inactivity permits settled history without changing provider records',async()=>{
+  const h=setup({subscriptions:[sub('sub_old','cus_1','canceled'),sub('sub_expired','cus_1','incomplete_expired')],
+    sessions:[{...checkout(),status:'complete',payment_status:'paid'}],payments:[payment()],
+    invoices:[{id:'in_paid',customer:'cus_1',status:'paid'}],
+    schedules:[{id:'sched_old',customer:'cus_1',status:'completed'}]});
+  assert.equal((await h.runInactive()).checkedCustomers,1);
+  assert.ok(h.calls.every(call=>call.method==='GET'));
+});
+test('inactivity checks later customer pages and cannot miss another paid subscription',async()=>{
+  const h=setup({subscriptions:[sub('sub_paid','cus_2')],override:path=>{
+    const u=new URL('https://x.test'+path);
+    if(u.pathname==='/customers') return Response.json({data:[customer(u.searchParams.has('starting_after')?'cus_2':'cus_1')],has_more:!u.searchParams.has('starting_after')});
+  }});
+  await assert.rejects(h.runInactive(),/Subscription prevents inactivity deletion/);
+  assert.ok(h.calls.some(call=>call.path.includes('starting_after=cus_1')));
+  assert.ok(h.calls.every(call=>call.method==='GET'));
+});
+test('inactivity fails closed on obligations, configuration, ownership, or unavailable evidence',async()=>{
+  const scenarios=[
+    {payments:[payment('pi_pending','processing')]},
+    {invoices:[{id:'in_open',customer:'cus_1',status:'open'}]},
+    {schedules:[{id:'sched_future',customer:'cus_1',status:'not_started'}]},
+    {customers:[customer('cus_1','other')]},
+    {conflict:true},
+    {kvFailure:true},
+    {override:path=>path.startsWith('/subscriptions?')?new Response('',{status:503}):null},
+  ];
+  for (const options of scenarios) {
+    const h=setup({subscriptions:[],...options});
+    await assert.rejects(h.runInactive());
+    assert.ok(h.calls.every(call=>call.method==='GET'));
+  }
+  for (const key of [undefined,'sk_live_fixture']) {
+    const h=setup({subscriptions:[]});h.env.STRIPE_SECRET_KEY=key;
+    await assert.rejects(h.runInactive());assert.equal(h.calls.length,0);
+  }
+});
+test('inactivity can clear an account with no customer only after a successful lookup',async()=>{
+  const h=setup({customers:[],subscriptions:[],mapped:null});
+  assert.equal((await h.runInactive()).checkedCustomers,0);
+  assert.ok(h.calls.some(call=>call.path.startsWith('/customers?')));
+  assert.ok(h.calls.every(call=>call.method==='GET'));
+});
+test('all owned duplicate customers and nonterminal statuses are canceled', async()=>{
+  const statuses=['active','trialing','past_due','unpaid','paused','incomplete','canceled','incomplete_expired'];
+  const subscriptions=statuses.map((status,i)=>sub('sub_'+i,i%2?'cus_2':'cus_1',status));
+  const h=setup({customers:[customer('cus_1'),customer('cus_2')],subscriptions});
+  assert.equal((await h.run()).canceledSubscriptions,6);
+  assert.equal(h.calls.filter(c=>c.method==='DELETE').length,6);
+});
+test('customer and subscription pagination both include later pages', async()=>{
+  const subscriptions=[sub('sub_1'),sub('sub_2'),sub('sub_3','cus_2')];
+  const h=setup({subscriptions,override:path=>{
+    const u=new URL('https://x.test'+path);
+    if(u.pathname==='/customers') return Response.json({data:[customer(u.searchParams.has('starting_after')?'cus_2':'cus_1')],has_more:!u.searchParams.has('starting_after')});
+    if(u.pathname==='/subscriptions'&&u.searchParams.get('customer')==='cus_1')return Response.json({data:[subscriptions[u.searchParams.has('starting_after')?1:0]],has_more:!u.searchParams.has('starting_after')});
+  }});
+  assert.equal((await h.run()).canceledSubscriptions,3);
+  assert.ok(h.calls.some(c=>c.path.includes('starting_after=cus_1')));
+  assert.ok(h.calls.some(c=>c.path.includes('starting_after=sub_1')));
+});
+for(const [name,options] of [
+  ['customer lookup fails',{override:path=>path.startsWith('/customers/')?new Response('',{status:503}):null}],
+  ['subscription lookup fails',{override:path=>path.startsWith('/subscriptions?')?new Response('',{status:503}):null}],
+  ['mapped customer belongs to another user',{customers:[customer('cus_1','other')]}],
+  ['email-only active customer has no ownership',{customers:[customer('cus_1',null)],mapped:null}],
+  ['database ownership conflicts',{conflict:true}],
+  ['cache lookup fails',{kvFailure:true}],
+  ['subscription ownership conflicts',{subscriptions:[{...sub('sub_1'),metadata:{firebaseUid:'other',environment:'qa'}}]}],
+  ['unknown subscription state',{subscriptions:[sub('sub_1','cus_1','new_unknown_state')]}],
+  ['malformed pagination',{override:path=>path.startsWith('/customers?')?Response.json({data:[],has_more:true}):null}],
+])test(name+' leaves every subscription untouched',async()=>{
+  const h=setup(options);await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method==='DELETE').length,0);
+});
+test('different explicitly owned email match is never canceled', async()=>{
+  const h=setup({customers:[customer('cus_1'),customer('cus_other','other')],subscriptions:[sub('sub_1'),sub('sub_other','cus_other')]});
+  assert.equal((await h.run()).canceledSubscriptions,1);assert.ok(!h.calls.some(c=>c.path.includes('cus_other')||c.path.includes('sub_other')));
+});
+test('a cancellation HTTP failure or success without canceled status cannot pass', async()=>{
+  for(const response of [new Response('',{status:500}),Response.json(sub('sub_1'))]) {
+    const h=setup({override:(_path,init)=>init.method==='DELETE'?response:null});await assert.rejects(h.run());
+  }
+});
+test('no billing credential fails before a lookup',async()=>{const h=setup();delete h.env.STRIPE_SECRET_KEY;await assert.rejects(h.run());assert.equal(h.calls.length,0);});
+
+test('missing or unusable cache cannot be treated as an empty billing history',async()=>{
+  for(const cache of [undefined,null,{}, {get:null}]) {
+    const h=setup({customers:[],subscriptions:[],mapped:null});
+    h.env.JOBHACKAI_KV=cache;
+    await assert.rejects(h.run(),/Billing cache unavailable/);
+    assert.equal(h.calls.length,0);
+  }
+});
+
+// Request/recovery behavior now runs against the actual processor and SQLite
+// in account-deletion-process.test.mjs, replacing the legacy best-effort route mocks.
+
+test('partial cancellation failure stops before further cancellation and can be retried',async()=>{
+  let failedOnce=false;
+  const subscriptions=[sub('sub_1'),sub('sub_2')];
+  const h=setup({subscriptions,override:(path,init)=>{
+    if(init.method==='DELETE'&&path.endsWith('sub_1')) subscriptions[0].status='canceled';
+    if(init.method==='DELETE'&&path.endsWith('sub_2')&&!failedOnce){failedOnce=true;return new Response('',{status:503});}
+  }});
+  await assert.rejects(h.run());assert.equal((await h.run()).canceledSubscriptions,1);
+  assert.equal(h.calls.filter(c=>c.method==='DELETE'&&c.path.endsWith('sub_1')).length,1);
+});
+test('later ambiguous customer aborts before canceling an earlier owned customer',async()=>{
+  const h=setup({customers:[customer('cus_1'),customer('cus_2',null)],subscriptions:[sub('sub_1'),sub('sub_2','cus_2')]});
+  await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method==='DELETE').length,0);
+});
+
+test('wrong or unknown Stripe mode never performs a billing request',async()=>{
+  for(const [environment,key] of [['qa','sk_live_fixture'],['dev','rk_live_fixture'],['production','sk_test_fixture'],['','sk_test_fixture'],['unknown','sk_test_fixture']]){
+    const h=setup();h.env.ENVIRONMENT=environment;h.env.STRIPE_SECRET_KEY=key;
+    await assert.rejects(h.run());assert.equal(h.calls.length,0);
+  }
+});
+test('foreign or unstamped nonproduction subscriptions abort all cancellation',async()=>{
+  for(const stamp of ['dev','production','unknown',null]){
+    const h=setup({subscriptions:[sub('sub_1'),{...sub('sub_2'),metadata:stamp?{environment:stamp}:{}}]});
+    await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method==='DELETE').length,0);
+  }
+});
+test('production retains legacy unstamped support with a matching live key',async()=>{
+  const h=setup({subscriptions:[{...sub('sub_1'),metadata:{}}]});
+  h.env.ENVIRONMENT='PROD';h.env.STRIPE_SECRET_KEY='rk_live_fixture_only';
+  assert.equal((await h.run()).canceledSubscriptions,1);
+});
+
+test('owned open checkout expires and its payment settles before subscription cancellation',async()=>{
+  const h=setup({sessions:[{...checkout(),payment_intent:'pi_1'}],payments:[payment('pi_1','requires_payment_method')]});
+  const result=await h.run();assert.equal(result.expiredCheckouts,1);assert.equal(result.canceledSubscriptions,1);
+  const expire=h.calls.findIndex(c=>c.method==='POST'),cancel=h.calls.findIndex(c=>c.method==='DELETE');
+  assert.ok(expire<cancel);assert.ok(h.calls.slice(expire+1,cancel).some(c=>c.path.startsWith('/payment_intents?')));
+});
+for(const [name,session] of [
+  ['foreign environment',{...checkout(),metadata:{firebaseUid:'owner',environment:'dev'}}],
+  ['missing environment',{...checkout(),metadata:{firebaseUid:'owner'}}],
+  ['foreign UID',{...checkout(),metadata:{firebaseUid:'other',environment:'qa'}}],
+  ['missing UID',{...checkout(),metadata:{environment:'qa'}}],
+  ['foreign client reference',{...checkout(),client_reference_id:'other'}],
+  ['setup mode',{...checkout(),mode:'setup'}],
+  ['unknown status',{...checkout(),status:'unknown'}],
+  ['unknown payment status',{...checkout(),payment_status:'unknown'}],
+  ['completed unpaid',{...checkout(),status:'complete'}],
+])test(`${name} checkout stops every billing mutation`,async()=>{
+  const h=setup({sessions:[session]});await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method!=='GET').length,0);
+});
+test('email-only customer with open checkout cannot be silently skipped',async()=>{
+  const h=setup({customers:[customer('cus_1',null)],mapped:null,subscriptions:[],sessions:[checkout()]});
+  await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method!=='GET').length,0);
+});
+for(const status of ['requires_payment_method','requires_confirmation','requires_action','processing','requires_capture','unknown']) {
+  test(`${status} unattached payment blocks identity eligibility without canceling a charge`,async()=>{
+    const h=setup({payments:[payment('pi_1',status)]});await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method!=='GET').length,0);
+  });
+}
+test('historical paid and expired checkout sessions and settled payments do not block deletion',async()=>{
+  const h=setup({sessions:[{...checkout('cs_old'),status:'complete',payment_status:'paid',metadata:{}},{...checkout('cs_expired'),status:'expired',metadata:{}}],payments:[payment(),payment('pi_canceled','canceled')]});
+  assert.equal((await h.run()).expiredCheckouts,0);
+});
+test('later customer ambiguity is discovered before expiring an earlier checkout',async()=>{
+  const h=setup({customers:[customer('cus_1'),customer('cus_2')],sessions:[checkout(),{...checkout('cs_2','cus_2'),metadata:{firebaseUid:'owner',environment:'dev'}}]});
+  await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method!=='GET').length,0);
+});
+test('an expiration HTTP error, timeout or mismatched success never reaches cancellation',async()=>{
+  for(const outcome of ['http','timeout','mismatch','open']) {
+    const h=setup({sessions:[checkout()],override:(_path,init)=>{
+      if(init.method!=='POST')return;
+      if(outcome==='timeout')throw Error('timeout');
+      if(outcome==='http')return new Response('',{status:409});
+      return Response.json({...checkout(outcome==='mismatch'?'cs_other':'cs_1'),status:outcome==='open'?'open':'expired'});
+    }});
+    await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method==='DELETE').length,0);
+  }
+});
+test('expiration response alone cannot hide a still-open session or unsettled payment',async()=>{
+  for(const lingering of ['session','payment']) {
+    const sessions=[{...checkout(),payment_intent:'pi_1'}],payments=[payment('pi_1','requires_payment_method')];
+    const h=setup({sessions,payments,override:(_path,init)=>{
+      if(init.method==='POST') {
+        if(lingering==='payment')sessions[0].status='expired';
+        return Response.json({...sessions[0],status:'expired'});
+      }
+    }});
+    await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method==='DELETE').length,0);
+  }
+});
+test('subscription appearing during checkout expiration is rescanned and canceled',async()=>{
+  const subscriptions=[],sessions=[checkout()];
+  const h=setup({subscriptions,sessions,override:(_path,init)=>{
+    if(init.method==='POST')subscriptions.push(sub('sub_raced'));
+  }});
+  assert.equal((await h.run()).canceledSubscriptions,1);assert.equal(subscriptions[0].status,'canceled');
+});
+test('final billing rescan rejects a new pending payment after subscription cancellation',async()=>{
+  const payments=[];
+  const h=setup({payments,override:(_path,init)=>{if(init.method==='DELETE')payments.push(payment('pi_late','processing'));}});
+  await assert.rejects(h.run(),/Payment remains unsettled/);assert.equal(h.calls.filter(c=>c.method==='DELETE').length,1);
+});
+test('checkout and payment pagination inspect later-page pending resources',async()=>{
+  for(const endpoint of ['/checkout/sessions','/payment_intents']) {
+    const h=setup({override:path=>{
+      const u=new URL('https://x.test'+path);if(u.pathname!==endpoint)return;
+      const later=u.searchParams.has('starting_after');
+      return Response.json({data:endpoint==='/checkout/sessions'?[{...checkout(later?'cs_pending':'cs_paid'),status:'complete',payment_status:later?'unpaid':'paid'}]:[payment(later?'pi_pending':'pi_paid',later?'processing':'succeeded')],has_more:!later});
+    }});
+    await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method!=='GET').length,0);assert.ok(h.calls.some(c=>c.path.includes('starting_after=')));
+  }
+});
+
+test('draft/open/uncollectible invoices block deletion before every mutation',async()=>{
+  for(const status of ['draft','open','uncollectible','unknown']) {
+    const h=setup({sessions:[checkout()],invoices:[{id:'in_1',customer:'cus_1',status}]});
+    await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method!=='GET').length,0);
+  }
+});
+test('future or active schedules block deletion even without a live subscription',async()=>{
+  for(const status of ['not_started','active','unknown']) {
+    const h=setup({subscriptions:[],schedules:[{id:'sub_sched_1',customer:'cus_1',status}]});
+    await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method!=='GET').length,0);
+  }
+});
+test('settled invoice/schedule history permits cancellation without financial-history mutation',async()=>{
+  const h=setup({invoices:['paid','void'].map((status,i)=>({id:'in_'+i,customer:'cus_1',status})),schedules:['completed','released','canceled'].map((status,i)=>({id:'sub_sched_'+i,customer:'cus_1',status}))});
+  assert.equal((await h.run()).canceledSubscriptions,1);
+  assert.deepEqual(h.calls.filter(c=>c.method!=='GET').map(c=>c.path),['/subscriptions/sub_1']);
+});
+test('later-page invoices and schedules are not skipped',async()=>{
+  for(const endpoint of ['/invoices','/subscription_schedules']) {
+    const h=setup({override:path=>{
+      const u=new URL('https://x.test'+path);if(u.pathname!==endpoint)return;
+      const later=u.searchParams.has('starting_after');
+      return Response.json({data:[{id:later?'later':'first',customer:'cus_1',status:endpoint==='/invoices'?(later?'open':'paid'):(later?'not_started':'canceled')}],has_more:!later});
+    }});
+    await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method!=='GET').length,0);
+    assert.ok(h.calls.some(c=>c.path.includes('starting_after=first')));
+  }
+});
+test('invoice or schedule API failure and foreign customer responses fail closed',async()=>{
+  for(const endpoint of ['/invoices','/subscription_schedules']) {
+    for(const mode of ['unavailable','wrong_customer','malformed']) {
+      const h=setup({override:path=>{
+        if(!path.startsWith(endpoint+'?'))return;
+        if(mode==='unavailable')return new Response('',{status:503});
+        if(mode==='malformed')return Response.json({data:[]});
+        return Response.json({data:[{id:'wrong',customer:'other',status:endpoint==='/invoices'?'paid':'canceled'}],has_more:false});
+      }});
+      await assert.rejects(h.run());assert.equal(h.calls.filter(c=>c.method!=='GET').length,0);
+    }
+  }
+});
+test('late invoice or schedule after cancellation still prevents identity eligibility',async()=>{
+  for(const kind of ['invoice','schedule']) {
+    const invoices=[],schedules=[];
+    const h=setup({invoices,schedules,override:(_path,init)=>{
+      if(init.method!=='DELETE')return;
+      if(kind==='invoice')invoices.push({id:'in_late',customer:'cus_1',status:'draft'});
+      else schedules.push({id:'sub_sched_late',customer:'cus_1',status:'not_started'});
+    }});
+    await assert.rejects(h.run(),/requires reconciliation/);assert.equal(h.calls.filter(c=>c.method==='DELETE').length,1);
+  }
+});

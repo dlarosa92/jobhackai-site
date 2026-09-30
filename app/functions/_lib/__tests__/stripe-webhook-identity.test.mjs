@@ -99,7 +99,8 @@ const cusStub = (uid, id = 'cus_A') =>
 {
   const db = createFakeD1({ users: [user()] });
   const env = makeEnv({ DB: db, JOBHACKAI_KV: createFakeKV(), GA4_MEASUREMENT_ID: 'G-TEST', GA4_API_SECRET: 's' });
-  const session = { id: 'cs_test_1', customer: 'cus_A', metadata: { plan: 'essential', firebaseUid: 'uid_A' }, customer_details: { email: 'a@example.com' } };
+  // (dev0 integration) the fulfilment gate reads status/payment_status/mode from the fetched session.
+  const session = { id: 'cs_test_1', mode: 'subscription', status: 'complete', payment_status: 'paid', customer: 'cus_A', metadata: { plan: 'essential', firebaseUid: 'uid_A' }, customer_details: { email: 'a@example.com' } };
   const stub = stubStripeFetch([
     { match: '/v1/checkout/sessions/cs_test_1', reply: { json: { ...session, line_items: { data: [{ price: { id: 'price_essential_test', unit_amount: 2900 } }] }, subscription: 'sub_co1', amount_total: 2900, currency: 'usd' } } },
     { match: '/v1/subscriptions/sub_co1', reply: { json: makeSubscription({ id: 'sub_co1', customer: 'cus_A', itemPeriodStart: START, itemPeriodEnd: END }) } },
@@ -117,7 +118,7 @@ const cusStub = (uid, id = 'cus_A') =>
   assert.strictEqual(row.current_period_start, startIso);
   assert.strictEqual(row.current_period_end, endIso);
   assert.strictEqual(row.has_ever_paid, 1);
-  assert.strictEqual(ga4Purchases.length, 1, 'exactly one GA4 purchase, sent post-commit');
+  assert.strictEqual(ga4Purchases.length, 0, 'entitlement changes must not emit unconsented or estimated GA purchases');
   assert.strictEqual(db.ledgerRow(event.id)?.status, 'processed');
 }
 

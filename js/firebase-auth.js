@@ -12,6 +12,7 @@ import { firebaseConfig } from './firebase-config.js';
 import UserProfileManager from './firestore-profiles.js';
 import { storeTokens, clearTokens, isAuthenticated as tokenManagerIsAuthenticated, getIdTokenSync } from './token-manager.js';
 import { apiFetchJSON } from './api-fetch.js';
+import { recordVerifiedSignup, recordLinkedInRedirectSignup } from './signup-analytics.js';
 // Import Firebase Auth functions
 import {
   getAuth,
@@ -20,6 +21,7 @@ import {
   signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
+  getAdditionalUserInfo,
   GoogleAuthProvider,
   onAuthStateChanged,
   signOut,
@@ -53,7 +55,7 @@ const PROD_COOKIE_HOSTS = ['app.jobhackai.io', 'jobhackai.io', 'www.jobhackai.io
 const VERIFICATION_ACTION_PATH = '/auth/action';
 const PROD_APP_ORIGIN = 'https://app.jobhackai.io';
 const FIREBASE_AUTH_STORAGE_KEY_PREFIX = 'firebase:authUser:';
-const AUTH_COOKIE_ALLOWED_PLANS = new Set(['free', 'trial', 'essential', 'pro', 'premium', 'pending']);
+const AUTH_COOKIE_ALLOWED_PLANS = new Set(['free', 'trial', 'essential', 'pro', 'premium', 'pending', 'weekly', 'monthly', 'pack']);
 const ACTION_SETTINGS_RECOVERABLE_CODES = new Set([
   'auth/invalid-continue-uri',
   'auth/missing-continue-uri',
@@ -642,8 +644,9 @@ class AuthManager {
         return;
       }
       console.log('✅ Google redirect sign-in result received');
-      await this._completeGoogleSignIn(result.user);
+      const completed = await this._completeGoogleSignIn(result.user);
       this._finishRedirectProcessing();
+      if (completed.success) await recordVerifiedSignup(result.user, getAdditionalUserInfo(result)?.isNewUser, 'google');
     } catch (error) {
       console.warn('Google redirect result handling failed:', error);
       this._clearGoogleRedirectInProgress();
@@ -1065,6 +1068,7 @@ class AuthManager {
 
         this.notifyAuthStateChange(null, null);
       }
+      await recordLinkedInRedirectSignup(effectiveUser);
     });
   }
 
@@ -1339,7 +1343,9 @@ class AuthManager {
   async signInWithGoogle() {
     try {
       const result = await signInWithPopup(auth, googleProvider);
-      return await this._completeGoogleSignIn(result.user);
+      const completed = await this._completeGoogleSignIn(result.user);
+      if (completed.success) await recordVerifiedSignup(result.user, getAdditionalUserInfo(result)?.isNewUser, 'google');
+      return completed;
     } catch (error) {
       console.error('Google sign in error:', error);
 
@@ -1569,6 +1575,7 @@ class AuthManager {
               }
             }
 
+            await recordVerifiedSignup({ uid }, event.data.isNewUser, 'linkedin');
             return resolve({ success: true, user: { uid, email } });
           } catch (error) {
             console.error('Error processing LinkedIn auth success:', error);

@@ -1,0 +1,19 @@
+{
+  "name": "jobhackai-voice-deadlines",
+  "private": true,
+  "type": "module",
+  "engines": {"node": ">=22.18.0"},
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "types": "wrangler types --env qa --strict-vars=false --include-runtime=false"
+  },
+  "overrides": {"sharp": "0.35.4", "@cloudflare/vitest-pool-workers": {"miniflare": "5.20260918.0-alpha"}},
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "0.22.0",
+    "@cloudflare/workers-types": "5.20260920.1",
+    "typescript": "7.0.2",
+    "vitest": "4.1.11",
+    "wrangler": "4.135.0"
+  }
+}

@@ -3,6 +3,7 @@ https://:preview.jobhackai-app-marketing-seo.pages.dev/*
 
 https://qa-marketing.jobhackai.io/*
   X-Robots-Tag: noindex, nofollow
+  Cache-Control: no-store
 
 /directory/*
   X-Content-Type-Options: nosniff

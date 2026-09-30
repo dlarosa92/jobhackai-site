@@ -1,0 +1,40 @@
+name: Inactive account safety
+on:
+  pull_request:
+    branches: [dev0, develop, main]
+    paths:
+      - 'app/scripts/lib/*reconcile-core.mjs'
+      - 'workers/inactive-account-cleaner/**'
+      - 'app/functions/_lib/**'
+      - 'shared/firebase-deletion-client.js'
+      - 'app/db/**'
+      - '.github/workflows/test-inactive-account-cleaner.yml'
+  push:
+    branches: [dev0, develop, main]
+    paths:
+      - 'app/scripts/lib/*reconcile-core.mjs'
+      - 'workers/inactive-account-cleaner/**'
+      - 'app/functions/_lib/**'
+      - 'shared/firebase-deletion-client.js'
+      - 'app/db/**'
+      - '.github/workflows/test-inactive-account-cleaner.yml'
+permissions:
+  contents: read
+jobs:
+  inactive-account-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --prefix app --ignore-scripts
+      - run: node --test workers/inactive-account-cleaner/tests/cleanup.test.mjs app/functions/_lib/__tests__/account-deletion-notifications.test.mjs
+      - name: Compile the actual scheduled worker without deployment
+        run: |
+          npx --yes wrangler@4.135.0 deploy --dry-run --env qa --config workers/inactive-account-cleaner/wrangler.toml --outdir /tmp/jobhackai-inactive-worker
+          cp /tmp/jobhackai-inactive-worker/index.js /tmp/jobhackai-inactive-worker/index.mjs
+      - name: Verify compiled warning, completion delivery and durable deletion with intercepted providers
+        env:
+          JOBHACKAI_INACTIVE_BUNDLE: /tmp/jobhackai-inactive-worker/index.mjs
+        run: node --test --test-name-pattern='scheduled handler|eligible warned account|scheduled ambiguous|scheduled completion|reconciled uncertain warning' workers/inactive-account-cleaner/tests/cleanup.test.mjs
