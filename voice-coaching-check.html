@@ -15,9 +15,9 @@
   <script type="module">
     import authManager from '/js/firebase-auth.js?v=20260207-2';
     const status = document.getElementById('status'), run = document.getElementById('run'), output = document.getElementById('results');
-    let fixtures = [], running = false;
-    async function api(id) {
-      const user = await authManager.waitForAuthReady();
+    let fixtures = [], running = false, authVersion = 0;
+    async function api(id, readyUser) {
+      const user = readyUser || await authManager.waitForAuthReady();
       if (!user || user._authPending || typeof user.getIdToken !== 'function') throw Error('sign_in_required');
       const response = await fetch('/api/voice/qa-coaching' + (id ? '?case=' + encodeURIComponent(id) : ''), {
         method: id ? 'POST' : 'GET', headers: { Authorization: 'Bearer ' + await user.getIdToken(true) },
@@ -41,11 +41,33 @@
         status.textContent = 'The check stopped. Completed results remain below. Reload to retry; completed model outputs may be cached.';
       }
     });
-    try {
-      if (!['qa.jobhackai.io', 'dev.jobhackai.io', 'localhost', '127.0.0.1'].includes(location.hostname)) throw Error('not_qa');
-      fixtures = (await api()).cases;
-      status.textContent = 'Ready. All input is fixed synthetic test data.'; run.disabled = false;
-    } catch { status.textContent = 'This check is unavailable or your account does not have operator access.'; }
+    async function loadAccess(user) {
+      if (running) return;
+      const version = ++authVersion;
+      fixtures = []; run.disabled = true;
+      if (!user || user._authPending || typeof user.getIdToken !== 'function') {
+        status.textContent = user?._authPending
+          ? 'Sign-in is still loading. The check will become available when it is ready.'
+          : 'Sign in on this QA tab first.';
+        return;
+      }
+      try {
+        const data = await api(null, user);
+        if (version !== authVersion) return;
+        fixtures = data.cases;
+        status.textContent = 'Ready. All input is fixed synthetic test data.'; run.disabled = false;
+      } catch {
+        if (version === authVersion) status.textContent = 'This check is unavailable or your account does not have operator access.';
+      }
+    }
+    if (!['qa.jobhackai.io', 'dev.jobhackai.io', 'localhost', '127.0.0.1'].includes(location.hostname)) {
+      status.textContent = 'This check is unavailable or your account does not have operator access.';
+    } else {
+      const version = authVersion;
+      authManager.onAuthStateChange(user => { void loadAccess(user); });
+      const user = await authManager.waitForAuthReady();
+      if (version === authVersion) await loadAccess(user);
+    }
   </script>
 </body>
 </html>

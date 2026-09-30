@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import vm from 'node:vm';
+import { readFileSync } from 'node:fs';
 import { createQaCoachingHandler } from '../../api/voice/qa-coaching.js';
 import { cases } from '../../../tests/voice-coaching/cases.mjs';
 
@@ -56,4 +58,52 @@ test('scorer failures do not expose provider or secret data', async () => {
   const response = await handler({ request: request('POST'), env });
   assert.equal(response.status, 502);
   assert.deepEqual(await response.json(), { error: 'synthetic_scoring_failed' });
+});
+
+const coachingPage = readFileSync(new URL('../../../../voice-coaching-check.html', import.meta.url), 'utf8');
+const coachingScript = coachingPage.match(/<script type="module">([\s\S]*?)<\/script>/)[1]
+  .replace(/import authManager from [^;]+;/, '');
+async function coachingClient(initialUser, { hostname = 'qa.jobhackai.io', response } = {}) {
+  const nodes = new Map(), calls = [], events = {};
+  const element = id => {
+    if (!nodes.has(id)) nodes.set(id, { disabled: true, textContent: '', addEventListener(type, fn) { this[type] = fn; } });
+    return nodes.get(id);
+  };
+  await vm.runInNewContext('(async()=>{' + coachingScript + '})()', {
+    document: { getElementById: element }, location: { hostname }, Date, AbortSignal,
+    authManager: { waitForAuthReady: async () => initialUser, onAuthStateChange(fn) { events.auth = fn; } },
+    async fetch(path, options) {
+      calls.push({ path, method: options.method });
+      return response ? await response : { ok: true, json: async () => ({ cases: [{ id: 'fixed-case' }] }) };
+    }
+  });
+  const flush = async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve)); };
+  return { element, calls, events, flush };
+}
+const readyOperator = { getIdToken: async () => 'test-only-token' };
+test('coaching page recovers from pending auth without refresh or automatically scoring', async () => {
+  const h = await coachingClient({ _authPending: true });
+  assert.equal(h.element('run').disabled, true);
+  assert.match(h.element('status').textContent, /still loading/);
+  assert.equal(h.calls.length, 0);
+  h.events.auth(readyOperator); await h.flush();
+  assert.equal(h.element('run').disabled, false);
+  assert.deepEqual(h.calls, [{ path: '/api/voice/qa-coaching', method: 'GET' }]);
+});
+test('late coaching access response cannot enable a signed-out account', async () => {
+  let finish;
+  const response = new Promise(resolve => { finish = resolve; });
+  const h = await coachingClient({ _authPending: true }, { response });
+  h.events.auth(readyOperator); await h.flush();
+  h.events.auth(null);
+  finish({ ok: true, json: async () => ({ cases: [{ id: 'fixed-case' }] }) });
+  await h.flush();
+  assert.equal(h.element('run').disabled, true);
+  assert.equal(h.element('status').textContent, 'Sign in on this QA tab first.');
+});
+test('production coaching page never subscribes to auth or requests evaluation access', async () => {
+  const h = await coachingClient(readyOperator, { hostname: 'app.jobhackai.io' });
+  assert.equal(h.events.auth, undefined);
+  assert.equal(h.calls.length, 0);
+  assert.equal(h.element('run').disabled, true);
 });
