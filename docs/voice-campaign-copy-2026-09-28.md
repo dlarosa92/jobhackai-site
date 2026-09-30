@@ -1,3 +1,7 @@
+> Historical preparation record. The published pages, final captions and six
+> scheduled versions are in [the September 30 publication record](voice-launch-publication-2026-09-30.md).
+> Do not publish the older draft IDs below.
+
 # Voice campaign copy
 
 Campaign: `voice_beta_2026_09`. All six versions below are saved Marblism drafts,
