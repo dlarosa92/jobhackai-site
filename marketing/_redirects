@@ -2,6 +2,8 @@
 # destination behind a first-party temporary redirect. This is an external CTA,
 # not an internal navigation link.
 /go/voice-x https://jobhackai.io/features?utm_source=x&utm_medium=organic_social&utm_campaign=voice_beta_2026_09&utm_content=voice_x_profile_01 302
+# Pinterest's public profile can omit query parameters from its website link.
+/go/voice-pinterest https://jobhackai.io/features?utm_source=pinterest&utm_medium=organic_social&utm_campaign=voice_beta_2026_09&utm_content=voice_pinterest_profile_01 302
 
 # Redirect legacy /pages/ URLs to clean URLs
 /pages/index.html   /  301
