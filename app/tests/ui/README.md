@@ -53,6 +53,9 @@ supported Chrome browser, open
 actual navigation script's two render paths and desktop/mobile DOM containers,
 all nine visitor/account plans, repeated rendering, and missing, pending,
 failed and disabled Voice plan responses. Expected: **72 passed; 0 failed**.
+For authenticated plans, each menu must have one top-level Voice shortcut and
+one Voice link as the first item inside Interview Prep, both pointing to the
+same app route. Visitors retain only the top-level Voice link.
 Each case also checks the actual auth-state and effective-plan APIs retain the
 selected plan. The fixture clears development overrides and uses `displayPlan`
 in its URL because the application's `plan` parameter would create an override.
@@ -63,6 +66,8 @@ the selected navigation and mobile-menu scripts, four header stylesheets, and
 the actual component-loader for the marketing copy. At 1440, 1200, 1024, 901 and
 390px widths, use **Show selected plan** and the hamburger to verify visibility,
 tap targets and overflow; DOM assertions alone do not prove responsive layout.
+Select each **Render path**, click **Show selected plan**, and open Interview
+Prep on desktop and inside the mobile drawer to verify the grouped Voice link.
 An open drawer should remain open from 390 to 1024px and close at 1440px.
 This local fixture does not verify production cookie-only authentication handoff.
 Restore the browser viewport and stop the loopback server after checking.

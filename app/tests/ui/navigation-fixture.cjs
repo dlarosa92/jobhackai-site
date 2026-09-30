@@ -48,6 +48,7 @@ fixtureCache('missing');
 <p>Actual candidate navigation; synthetic accounts. No remote requests or real sign-in. Do not follow product links.</p>
 <button class="fixture-button" id="run">Run DOM regression matrix</button>
 <label>Display plan <select id="display-plan">${plans.map(plan=>`<option${plan===displayPlan?' selected':''}>${plan}</option>`).join('')}</select></label>
+<label>Render path <select id="display-renderer"><option>updateNavigation</option><option>applyNavForUser</option></select></label>
 <button class="fixture-button" id="display">Show selected plan</button>
 <p id="result" role="status">Ready</p><pre id="details"></pre></main>
 ${copy==='marketing'?'<script src="/candidate-components.js"></script>':''}
@@ -64,13 +65,19 @@ function checkPlan(plan) {
 function checkContainer(container,plan) {
   const links=[...container.querySelectorAll('a')];
   const voice=links.filter(link=>link.textContent.trim()==='Voice Mock Interview');
-  assert(voice.length===1,'Voice link count '+voice.length);
-  assert(!voice[0].closest('.nav-dropdown,.mobile-nav-group,.mobile-submenu'),'Voice must be top-level');
-  assert(voice[0].getAttribute('aria-disabled')!=='true'&&!voice[0].classList.contains('locked-link'),'Voice must be clickable');
-  const target=new URL(voice[0].href);
+  const primary=voice.filter(link=>!link.closest('.nav-dropdown,.mobile-nav-group'));
+  assert(voice.length===(plan==='visitor'?1:2),'Voice link count '+voice.length);
+  assert(primary.length===1,'Exactly one Voice shortcut must be top-level');
+  for(const link of voice) assert(link.getAttribute('aria-disabled')!=='true'&&!link.classList.contains('locked-link'),'Voice must be clickable');
+  const target=new URL(primary[0].href);
   if(plan==='visitor') assert(target.href===new URL(${JSON.stringify(copy==='marketing'?'/features.html#voice-title':'https://app.jobhackai.io/voice-interview.html')},location.href).href,'Visitor target '+target.href);
   else {
     assert(target.origin===${JSON.stringify(copy==='marketing'?'https://dev.jobhackai.io':'https://app.jobhackai.io')}&&target.pathname==='/voice-interview.html','App target '+target.href);
+    const nested=voice.find(link=>link!==primary[0]);
+    const group=nested.closest('.nav-dropdown,.mobile-nav-group');
+    assert(group?.querySelector('.nav-dropdown-toggle,.mobile-nav-trigger')?.textContent.trim()==='Interview Prep','Voice must be under Interview Prep');
+    assert(group.querySelector('.nav-dropdown-menu a,.mobile-nav-submenu a')===nested,'Voice must be first under Interview Prep');
+    assert(nested.href===primary[0].href,'Both Voice entry points must share the app target');
     for(const label of ['Resume Feedback','Cover Letter','Interview Questions','Typed Mock Interview','LinkedIn Optimizer']) {
       const link=links.find(item=>item.textContent.trim()===label);
       assert(link,'Missing '+label);
@@ -87,7 +94,7 @@ function renderAndCheck(plan,renderer) {
 }
 document.getElementById('display').onclick=()=> {
   fixtureSetPlan(document.getElementById('display-plan').value);
-  fixtureCache('missing'); window.JobHackAINavigation.updateNavigation();
+  fixtureCache('missing'); renderAndCheck(fixtureState.plan,document.getElementById('display-renderer').value);
 };
 document.getElementById('run').onclick=async()=> {
   const rows=[];let passed=0,failed=0;

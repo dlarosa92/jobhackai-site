@@ -1510,6 +1510,7 @@ const signedInNavItems = () => ([
     text: 'Interview Prep',
     isDropdown: true,
     items: [
+      { text: 'Voice Mock Interview', href: APP_BASE_URL + '/voice-interview.html' },
       { text: 'Interview Questions', href: APP_BASE_URL + '/interview-questions.html' },
       { text: 'Typed Mock Interview', href: APP_BASE_URL + '/mock-interview.html' },
     ]
