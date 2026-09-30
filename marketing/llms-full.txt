@@ -6,13 +6,13 @@ JobHackAI (https://jobhackai.io) is an AI interview prep platform. The app runs 
 
 The voice mock interview is a realistic spoken interview with an AI interviewer, run in the browser over a live audio connection. You pick a target role and can paste a job description. The interviewer asks role specific behavioral and technical questions, listens to your spoken answers, and asks natural follow ups.
 
-After the session you get:
+Paid plans include:
 - A scorecard with ratings across communication, structure, content depth, and role fit
 - Your top strength and your most important improvement area
 - Specific feedback quotes tied to moments in your interview
 - A full transcript of the session
 
-Every account gets exactly 1 full voice interview free. After that, sessions require a plan:
+Every account gets one lifetime voice interview free with a feedback preview: one strength and one area to improve. Full reports, transcripts and further practice require a paid plan:
 - Weekly Pass: 17 USD per week, up to 60 voice interviews per calendar month (UTC) while subscribed, cancel anytime. For people with an interview this week.
 - Monthly: 34 USD per month, up to 60 voice interviews per calendar month (UTC) while subscribed. For an active job search.
 - Interview Pack: 39 USD one time for 5 sessions, valid 90 days. For one big interview.
