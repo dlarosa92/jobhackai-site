@@ -20,7 +20,7 @@ function fixtureSetPlan(plan) {
   for(const store of [localStorage,sessionStorage]) {
     store.removeItem('logout-intent'); store.removeItem('force-logged-out');
     store.setItem('user-authenticated',String(!!fixtureState.user));
-    store.setItem('user-plan',plan); store.setItem('dev-plan',plan);
+    store.setItem('user-plan',plan); store.removeItem('dev-plan');
     store.removeItem('firebase:authUser:navigation-fixture:[DEFAULT]');
     if(fixtureState.user) store.setItem('firebase:authUser:navigation-fixture:[DEFAULT]',JSON.stringify(fixtureState.user));
   }
@@ -54,6 +54,13 @@ ${copy==='marketing'?'<script src="/candidate-components.js"></script>':''}
 <script src="/candidate-navigation.js?copy=${copy}"></script>
 <script src="/candidate-mobile-menu.js?copy=${copy}"></script><script>
 function assert(condition,message) {if(!condition) throw new Error(message);}
+function checkPlan(plan) {
+  const state=window.JobHackAINavigation.getAuthState();
+  assert(state.isAuthenticated===(plan!=='visitor'),'Authentication changed for '+plan);
+  assert(state.userPlan===(plan==='visitor'?null:plan),'Stored plan '+plan+' became '+state.userPlan);
+  const effective=window.JobHackAINavigation.getEffectivePlan();
+  assert(effective===plan,'Effective plan '+plan+' became '+effective);
+}
 function checkContainer(container,plan) {
   const links=[...container.querySelectorAll('a')];
   const voice=links.filter(link=>link.textContent.trim()==='Voice Mock Interview');
@@ -72,6 +79,7 @@ function checkContainer(container,plan) {
   }
 }
 function renderAndCheck(plan,renderer) {
+  checkPlan(plan);
   if(renderer==='updateNavigation') window.JobHackAINavigation.updateNavigation();
   else window.applyNavForUser(fixtureState.user);
   checkContainer(document.querySelector('.nav-links'),plan);
@@ -93,6 +101,7 @@ document.getElementById('run').onclick=async()=> {
         try {
           renderAndCheck(plan,renderer); renderAndCheck(plan,renderer);
           await Promise.resolve();
+          checkPlan(plan);
           checkContainer(document.querySelector('.nav-links'),plan);
           checkContainer(document.getElementById('mobileNav'),plan);
           passed++;rows.push('PASS '+mode+' / '+plan+' / '+renderer+' / desktop+mobile repeated');
@@ -114,7 +123,7 @@ function startNavigationFixture({port=43181}={}) {
   const server=http.createServer((req,res)=> {
     const url=new URL(req.url,'http://localhost');
     const copy=url.searchParams.get('copy')==='marketing'?'marketing':'root';
-    const plan=plans.includes(url.searchParams.get('plan'))?url.searchParams.get('plan'):'monthly';
+    const plan=plans.includes(url.searchParams.get('displayPlan'))?url.searchParams.get('displayPlan'):'monthly';
     res.setHeader('Cache-Control','no-store');
     res.setHeader('Content-Security-Policy',"default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; base-uri 'none'");
     if(req.method!=='GET') {res.writeHead(405);return res.end();}
@@ -130,7 +139,7 @@ function startNavigationFixture({port=43181}={}) {
     if(!file||!fs.existsSync(file)) {res.writeHead(404);return res.end('Not found');}
     res.setHeader('Content-Type',type);res.end(fs.readFileSync(file));
   });
-  server.listen(port,'127.0.0.1',()=>console.log('Navigation fixture: http://localhost:'+server.address().port+'/navigation-fixture.html?copy=root&plan=monthly'));
+  server.listen(port,'127.0.0.1',()=>console.log('Navigation fixture: http://localhost:'+server.address().port+'/navigation-fixture.html?copy=root&displayPlan=monthly'));
   return server;
 }
 module.exports={startNavigationFixture};

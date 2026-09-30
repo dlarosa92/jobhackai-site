@@ -51,7 +51,7 @@ const AUTH_PENDING = Object.freeze({ _authPending: true });
 // Restricted to prod hosts only to prevent dev/qa cookie bleed.
 const PROD_COOKIE_HOSTS = ['app.jobhackai.io', 'jobhackai.io', 'www.jobhackai.io'];
 const FIREBASE_AUTH_STORAGE_KEY_PREFIX = 'firebase:authUser:';
-const AUTH_COOKIE_ALLOWED_PLANS = new Set(['free', 'trial', 'essential', 'pro', 'premium', 'pending']);
+const AUTH_COOKIE_ALLOWED_PLANS = new Set(['free', 'trial', 'essential', 'pro', 'premium', 'pending', 'weekly', 'monthly', 'pack']);
 
 function isProdHost() {
   try { return PROD_COOKIE_HOSTS.includes(window.location.hostname || ''); } catch (_) { return false; }

@@ -48,11 +48,14 @@ out of source control.
 
 Run `node app/tests/ui/navigation-fixture.cjs` from the repository root. In the
 supported Chrome browser, open
-`http://localhost:43181/navigation-fixture.html?copy=root&plan=monthly`, then click
+`http://localhost:43181/navigation-fixture.html?copy=root&displayPlan=monthly`, then click
 **Run DOM regression matrix**. Repeat with `copy=marketing`. Each run checks the
 actual navigation script's two render paths and desktop/mobile DOM containers,
 all nine visitor/account plans, repeated rendering, and missing, pending,
 failed and disabled Voice plan responses. Expected: **72 passed; 0 failed**.
+Each case also checks the actual auth-state and effective-plan APIs retain the
+selected plan. The fixture clears development overrides and uses `displayPlan`
+in its URL because the application's `plan` parameter would create an override.
 
 The fixture stubs authentication/HTTP only and prevents remote connections with
 CSP. It does not load analytics, use real accounts, or start interviews. It serves

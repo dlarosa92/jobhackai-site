@@ -1130,7 +1130,7 @@ function getAuthState() {
 
       // Validate plan values are in allowed list
       // SECURITY FIX: Include 'pending' as legitimate plan state for trial users waiting for webhook confirmation
-      const allowedPlans = ['free', 'trial', 'essential', 'pro', 'premium', 'visitor', 'pending'];
+      const allowedPlans = ['free', 'trial', 'essential', 'pro', 'premium', 'visitor', 'pending', 'weekly', 'monthly', 'pack'];
       // Prefer cookie/URL-handoff plan when present. On marketing hosts this is the
       // authoritative cross-domain signal during early hydration, while localStorage
       // may still contain stale defaults like "free" or "visitor".
