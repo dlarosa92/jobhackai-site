@@ -12,6 +12,7 @@ on:
       - "marketing/js/navigation.js"
       - "marketing/js/logo-link-env.js"
       - "scripts/check-nav-guardrails.sh"
+      - "marketing/tests/auth-plan-runtime.test.mjs"
       - ".github/workflows/nav-guardrails.yml"
       - "app/public/dashboard.html"
   pull_request:
@@ -25,6 +26,7 @@ on:
       - "marketing/js/navigation.js"
       - "marketing/js/logo-link-env.js"
       - "scripts/check-nav-guardrails.sh"
+      - "marketing/tests/auth-plan-runtime.test.mjs"
       - ".github/workflows/nav-guardrails.yml"
       - "app/public/dashboard.html"
 
@@ -35,5 +37,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - name: Validate navigation/auth guardrails
         run: bash scripts/check-nav-guardrails.sh
+
+      - name: Preserve current and legacy plans across browser auth state
+        run: node --test marketing/tests/auth-plan-runtime.test.mjs
