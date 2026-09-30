@@ -106,6 +106,7 @@ export function groundedCompetencies(competencies, transcript) {
     if (c.status !== 'not_assessed' && groundedMoments([c], transcript).length) return c;
     return { name: c.name, status: 'not_assessed', quote: '', feedback: 'This sample does not contain a verified answer excerpt to assess this area. Practice a specific example next time.' };
   });
+}
 
 // Old clients and reconnects can submit session controls as candidate turns.
 // Keep those out of both the model input and quote validation. Whole-turn
