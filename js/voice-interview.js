@@ -412,6 +412,9 @@
     if (typeof text !== 'string') return false;
     var lower = text.toLowerCase().replace(/[‘’]/g, "'");
     if (lower.length < 8 || lower.length > 240) return false;
+    // Keep the exact standalone request in sync with voice-lifecycle.js.
+    if (/^(?:(?:ok|okay|alright|all right)[, ]+)?i(?: would|'d) like to (?:end|stop|finish) this (?:right now|now|here)(?: please)?[.!]?$/i.test(lower.trim())) return true;
+    if (/^(?:(?:ok|okay|alright|all right)[, ]+)?i(?: would|'d) like to leave(?: now| please)*[.!]?$/i.test(lower.trim())) return true;
     // A short, standalone stop command observed in live QA. Do not broaden
     // this to future-tense stories or instructions about how to finish.
     if (/^(?:(?:ok|okay|alright|all right)[, ]+)?i(?:'ll| will) end (?:this|the) interview(?: now| here| please)*[.!]?$/i.test(lower.trim())) return true;
