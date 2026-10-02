@@ -52,6 +52,7 @@ on:
       - 'js/firebase-auth.js'
       - 'app/functions/api/auth/linkedin/callback.js'
       - 'app/functions/_lib/__tests__/signup-analytics.test.mjs'
+      - 'app/functions/_lib/__tests__/signup-navigation.test.mjs'
       - 'js/firebase-config.js'
       - 'marketing/js/firebase-config.js'
       - 'app/functions/_lib/__tests__/analytics-consent.test.mjs'
@@ -109,6 +110,7 @@ on:
       - 'js/firebase-auth.js'
       - 'app/functions/api/auth/linkedin/callback.js'
       - 'app/functions/_lib/__tests__/signup-analytics.test.mjs'
+      - 'app/functions/_lib/__tests__/signup-navigation.test.mjs'
       - 'js/firebase-config.js'
       - 'marketing/js/firebase-config.js'
       - 'app/functions/_lib/__tests__/analytics-consent.test.mjs'
@@ -122,7 +124,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - run: node --test app/functions/_lib/__tests__/signup-analytics.test.mjs app/functions/_lib/__tests__/checkout-attribution.test.mjs app/functions/_lib/__tests__/upgrade-checkout-attribution.test.mjs app/functions/_lib/__tests__/analytics-consent.test.mjs app/functions/_lib/__tests__/tool-campaign-tracking.test.mjs app/functions/_lib/__tests__/analytics-diagnostic.test.mjs app/functions/_lib/__tests__/consent-api.test.mjs
+      - run: node --test app/functions/_lib/__tests__/signup-navigation.test.mjs app/functions/_lib/__tests__/signup-analytics.test.mjs app/functions/_lib/__tests__/checkout-attribution.test.mjs app/functions/_lib/__tests__/upgrade-checkout-attribution.test.mjs app/functions/_lib/__tests__/analytics-consent.test.mjs app/functions/_lib/__tests__/tool-campaign-tracking.test.mjs app/functions/_lib/__tests__/analytics-diagnostic.test.mjs app/functions/_lib/__tests__/consent-api.test.mjs
 
   revenue-delivery:
     runs-on: ubuntu-latest
