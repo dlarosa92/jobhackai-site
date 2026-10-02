@@ -13,6 +13,19 @@
   const VALID_CLIENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const hostname = (window.location.hostname || '').toLowerCase();
   const productionHost = ['jobhackai.io', 'www.jobhackai.io', 'app.jobhackai.io'].includes(hostname);
+  // Explicit, temporary staff validation mode. This is a browser preference,
+  // never an inferred customer identity or a replacement for analytics consent.
+  const STAFF_TEST_COOKIE = 'jha_staff_test_prod';
+  let staffTest = false;
+  if (productionHost) {
+    try {
+      const mode = new URL(window.location.href).searchParams.get('jha_staff_test');
+      if (mode === '1' || mode === '0') {
+        document.cookie = `${STAFF_TEST_COOKIE}=${mode}; Max-Age=${mode === '1' ? 43200 : 0}; Path=/; Domain=.jobhackai.io; SameSite=Lax; Secure`;
+      }
+      staffTest = mode === '1' || (mode !== '0' && document.cookie.split(';').some(c => c.trim() === STAFF_TEST_COOKIE + '=1'));
+    } catch (_) { /* validation preferences must not affect the product */ }
+  }
   const qaHosts = ['qa.jobhackai.io', 'qa-marketing.jobhackai.io', 'directory-qa.jobhackai-app-marketing-seo.pages.dev'];
   const qaHost = qaHosts.includes(hostname);
   const CLIENT_ID_COOKIE = productionHost ? 'jha_client_id' : qaHost ? 'jha_client_id_qa' : 'jha_client_id_dev';
@@ -583,6 +596,7 @@
       if (!hasAnalyticsConsent() || window['ga-disable-' + GA_MEASUREMENT_ID]) return;
       if (args[0] === 'event') {
         const params = { ...(args[2] || {}) };
+    if (staffTest) params.debug_mode = true;
         if ('page_location' in params) params.page_location = analyticsUrl(params.page_location, true);
         if ('page_referrer' in params) params.page_referrer = analyticsUrl(params.page_referrer);
         if ('page_path' in params) params.page_path = String(params.page_path).split(/[?#]/)[0];
@@ -598,7 +612,7 @@
     gtag('js', new Date());
     gtag('config', GA_MEASUREMENT_ID, {
       send_page_view: false,
-      ...(!productionHost ? { debug_mode: true } : {}),
+      ...(!productionHost || staffTest ? { debug_mode: true } : {}),
       page_location: analyticsUrl(window.location.href, true),
       page_referrer: document.referrer ? analyticsUrl(document.referrer) : '',
       cookie_domain: hostname.endsWith('.jobhackai.io') || hostname === 'jobhackai.io' ? 'jobhackai.io' : hostname,
@@ -851,6 +865,7 @@
   function withCampaignContext(args) {
     if (args[0] !== 'event') return args;
     const params = { ...(args[2] || {}) };
+    if (staffTest) params.debug_mode = true;
     const campaign = readCampaign();
     for (const prefix of ['first', 'last']) {
       for (const field of ['source', 'medium', 'campaign', 'asset', 'id']) {

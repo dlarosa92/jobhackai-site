@@ -756,3 +756,29 @@ test('marketing footer reopens its own consent controls after a prior rejection'
   button.events.click();h.node('jha-toggle-analytics').checked=false;h.node('jha-save-preferences').onclick();
   assert.equal(h.cookies.has('jha_campaign_qa_v2'),false);
 });
+
+test('explicit staff validation is temporary, crosses production subdomains and never grants consent',async()=>{
+  const cookies=new Map();
+  const staff=harness({host:'jobhackai.io',search:'?jha_staff_test=1',cookies});
+  await staff.init();staff.runTimers();
+  assert.equal(staff.ctx.dataLayer.find(a=>a[0]==='config')[2].debug_mode,true);
+  const app=harness({cookies});await app.init();app.runTimers();
+  app.ctx.JHA.trackEventSafe('voice_session_complete',{mode:'free'});
+  assert.equal(app.events('voice_session_complete')[0][2].debug_mode,true);
+  const denied=harness({search:'?jha_staff_test=1',consent:false});await denied.init();denied.runTimers();
+  assert.equal(denied.scripts.length,0);
+  const stop=harness({search:'?jha_staff_test=0',cookies});await stop.init();stop.runTimers();
+  assert.equal(stop.ctx.dataLayer.find(a=>a[0]==='config')[2].debug_mode,undefined);
+  assert.equal(cookies.has('jha_staff_test_prod'),false);
+  const qa=harness({host:'qa.jobhackai.io',search:'?jha_staff_test=1',cookies});await qa.init();qa.runTimers();
+  assert.equal(cookies.has('jha_staff_test_prod'),false);
+  const ordinary=harness();await ordinary.init();ordinary.runTimers();
+  assert.equal(ordinary.ctx.dataLayer.find(a=>a[0]==='config')[2].debug_mode,undefined);
+});
+
+for (const runtime of [source, directoryConsentSource]) test('staff validation applies on the shared app and Local runtimes', async () => {
+  const h=harness({runtime,host:'jobhackai.io',search:'?jha_staff_test=1'});
+  await h.init();h.ctx.JHA.gtagSafe('event','staff_runtime_check',{});
+  assert.equal(h.events('staff_runtime_check')[0][2].debug_mode,true);
+  assert.equal(h.cookies.get('jha_staff_test_prod'),'1');
+});
