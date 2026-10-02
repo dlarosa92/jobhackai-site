@@ -532,6 +532,36 @@ for (const status of [401, 500]) {
   });
 }
 
+for (const review of [false, true]) {
+  test('saved interview counts once while provider closure remains pending; review=' + review, async () => {
+    let attempts = 0;
+    const h = await liveInterviewWithOneAnswer({ routes: { ...LIVE_ROUTES,
+      '/api/voice/session/': url => url.includes('/complete')
+        ? (++attempts === 1 ? { __status: 202, saved: true, connectionClosed: false, closureNeedsReview: review }
+          : { status: 'completed', saved: true, connectionClosed: true })
+        : { scorecardReady: false }
+    } });
+    try {
+      await h.click('vi-end-btn');
+      assert.equal(h.analyticsEvents.filter(e => e.name === 'voice_session_complete').length, 1);
+      if (!review) {
+        await h.click('vi-save-retry');
+        assert.equal(h.analyticsEvents.filter(e => e.name === 'voice_session_complete').length, 1);
+      }
+    } finally { h.dispose(); }
+  });
+}
+
+test('pending closure without a saved interview does not count as completion', async () => {
+  const h = await liveInterviewWithOneAnswer({ routes: { ...LIVE_ROUTES,
+    '/api/voice/session/': url => url.includes('/complete')
+      ? { __status: 202, saved: false, connectionClosed: false, closureNeedsReview: true }
+      : { scorecardReady: false }
+  } });
+  try { await h.click('vi-end-btn'); assert.equal(h.analyticsEvents.filter(e => e.name === 'voice_session_complete').length, 0); }
+  finally { h.dispose(); }
+});
+
 for (const mode of ['free', 'pack', 'subscription']) {
   test('voice funnel preserves Google session identity and reports ' + mode + ' completion', async () => {
     const h = await liveInterviewWithOneAnswer({ routes: { ...LIVE_ROUTES,

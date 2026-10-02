@@ -59,6 +59,7 @@
     ending: false,
     pendingCompletion: null,
     completionSaved: false,
+    analyticsCompletedSessionId: null,
     reportPollingStarted: false,
     savingCompletion: false,
     connected: false,
@@ -125,6 +126,12 @@
         window.JHA.trackEventSafe(eventName, payload);
       }
     } catch (_) {}
+  }
+
+  function trackSavedCompletion(pending) {
+    if (!pending.sessionId || state.analyticsCompletedSessionId === pending.sessionId) return;
+    state.analyticsCompletedSessionId = pending.sessionId;
+    track('voice_session_complete', { duration_seconds: pending.durationSeconds, reason: pending.reason });
   }
 
   // ---------- entitlement banner ----------
@@ -1747,6 +1754,9 @@
       if (!saved.ok) throw new Error((saved.data && saved.data.error) || 'save_failed');
       if (saved.status === 202 || (saved.data && saved.data.connectionClosed === false)) {
         state.completionSaved = !!(saved.data && saved.data.saved);
+        // A persisted interview is complete even while provider closure is
+        // pending. A later closure retry must not count it a second time.
+        if (state.completionSaved) trackSavedCompletion(pending);
         var closureNeedsReview = !!(saved.data && saved.data.closureNeedsReview);
         if (saveStatus) saveStatus.textContent = state.completionSaved
           ? (closureNeedsReview
@@ -1783,7 +1793,7 @@
         if (!isSafetyEnd && $('vi-done-status')) $('vi-done-status').textContent = 'Interview stopped before it started. No interview credit was used.';
         return;
       }
-      track('voice_session_complete', { duration_seconds: pending.durationSeconds, reason: pending.reason });
+      trackSavedCompletion(pending);
       if (isSafetyEnd) { historyLiveClear(true); return; }
       var doneStatus = $('vi-done-status');
       if (doneStatus) doneStatus.textContent = 'Interview saved. Preparing your report...';
