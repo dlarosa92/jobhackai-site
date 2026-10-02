@@ -420,6 +420,33 @@ function gaIdentifiers(h) {
     if(command === 'get') callback(field === 'client_id' ? '123456.1789800000' : '1789800000');
   };
 }
+test('a checkout clicked during account consent restoration waits for the verified grant and GA identifiers',async()=>{
+  const h=harness({accountAuthPage:true,pendingServer:true,search:tagged});await h.init();
+  const restoring=h.authReady({getIdToken:async()=>'fixture-auth-token'});
+  let settled=false;
+  const checkout=h.ctx.JHA.cookieConsent.getCheckoutAnalyticsContext().then(value=>{settled=true;return value;});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(settled,false,'pending account consent is not an immediate unattributed checkout');
+  assert.equal(h.scripts.length,0,'no Analytics before the authoritative grant');
+  h.finishServer(true);await restoring;await new Promise(resolve=>setImmediate(resolve));
+  for(const args of h.ctx.dataLayer||[])if(args[0]==='get')args[3](args[2]==='client_id'?'123456.1789800000':'1789800000');
+  const context=await checkout;
+  assert.equal(context.gaClientId,'123456.1789800000');assert.equal(context.gaSessionId,'1789800000');
+  assert.equal(context.lastTouch.campaign,'voice_beta_2026_09');
+});
+test('checkout consent restoration is bounded and cannot override a rejection',async()=>{
+  for(const decision of ['timeout','server-reject','local-reject']){
+    const h=harness({accountAuthPage:true,pendingServer:true,search:tagged});await h.init();
+    const restoring=h.authReady({getIdToken:async()=>'fixture-auth-token'});
+    const checkout=h.ctx.JHA.cookieConsent.getCheckoutAnalyticsContext();
+    await new Promise(resolve=>setImmediate(resolve));
+    if(decision==='timeout')h.runTimers();
+    else if(decision==='local-reject')h.setConsent(false);
+    h.finishServer(decision!=='server-reject');await restoring;
+    assert.equal(await checkout,null);
+    if(decision!=='timeout')assert.equal(h.scripts.length,0);
+  }
+});
 test('campaign capture waits for consent and stores only controlled tags', async()=>{
   const h=harness({consent:null,search:tagged+'&email=private@example.com&oobCode=secret'});
   await h.init();assert.equal(h.cookies.has('jha_campaign_prod'),false);

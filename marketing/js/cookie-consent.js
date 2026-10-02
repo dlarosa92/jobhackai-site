@@ -372,7 +372,10 @@
   }
 
   async function getCheckoutAnalyticsContext() {
-    if (!hasAnalyticsConsent()) return null;
+    // Checkout has restored authentication, but the initial consent fetch can
+    // still be pending. Reconcile it below instead of dropping a saved grant.
+    // Explicit local rejection and unresolved identity remain private.
+    if (!consentIdentityReady() || (getPendingConsent() || getConsent())?.analytics === false) return null;
     const revision = consentRevision;
     // Reconcile account-wide withdrawal before allowing a cached grant to be
     // persisted at checkout. A deliberate unsaved choice is retried instead.
@@ -381,6 +384,7 @@
       : fetchConsentFromServer();
     const latest = await Promise.race([receipt, new Promise(resolve => window.setTimeout(() => resolve(undefined), 1500))]);
     if (latest === undefined || latest === false || revision !== consentRevision || !hasAnalyticsConsent()) return null;
+    loadGAScript(); // Queue identifier reads even when initialization is still finishing.
     // Missing GA identifiers remain missing. Never invent a server/client ID.
     const getGaValue = (field) => new Promise(resolve => {
       let settled = false;
