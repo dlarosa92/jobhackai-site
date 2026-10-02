@@ -184,6 +184,6 @@ Brief section 4 (funnel tracking).
 1. [ ] Stripe live mode products created, prod env keys set
 2. [ ] PR 4 and PR 8: promote `develop` to `main`
 3. [ ] Flip `VOICE_INTERVIEW_ENABLED` in prod
-4. [ ] Live smoke test: real checkout on Weekly Pass, run a session, verify scorecard and entitlement, then refund
+4. [ ] In Stripe sandbox/test mode, complete checkout on Weekly Pass, run a session, and verify scorecard, entitlement and refund handling. In production, inspect checkout without submitting payment; reconcile the first genuine eligible customer payment through Stripe, D1 and GA4. Do not make a live purchase or refund for testing ([Stripe testing guidance](https://docs.stripe.com/testing)).
 5. [ ] Verify GA4 events flowing in prod
 6. [ ] Hand the distribution playbook (brief section 5) to Sunny and the sales agent
