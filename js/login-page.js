@@ -157,7 +157,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Check for password reset success flag (don't remove yet, need to use it later)
     const resetPasswordSuccess = sessionStorage.getItem('resetPasswordSuccess');
 
-    // Prevent auto-redirect races when user is actively logging in
+    // The submit handler owns navigation until profile/verification work and
+    // consented signup analytics finish. Firebase emits auth before those do.
     let loginInProgress = false;
     // Get DOM elements
     const loginForm = document.getElementById('loginForm');
@@ -318,7 +319,7 @@ document.addEventListener('DOMContentLoaded', async function() {
       if (user && user.email) {
         // Double-check logout intent before redirecting
         const logoutIntentCheck = sessionStorage.getItem('logout-intent');
-        if (logoutIntentCheck === '1') {
+        if (loginInProgress || logoutIntentCheck === '1') {
           console.log('[LOGIN] checkAuth: Logout in progress, preventing redirect to dashboard');
           return false;
         }
@@ -391,6 +392,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   // Listen for auth state changes in case user gets authenticated after page load
   const unsubscribe = authManager.onAuthStateChange((user) => {
     if (user) {
+      if (loginInProgress) return;
       // Check for logout-intent flag - if logout is in progress, don't redirect
       const logoutIntent = sessionStorage.getItem('logout-intent');
       if (logoutIntent === '1') {
@@ -414,7 +416,7 @@ document.addEventListener('DOMContentLoaded', async function() {
       setTimeout(() => {
         // Final check before redirect
         const finalLogoutIntent = sessionStorage.getItem('logout-intent');
-        if (finalLogoutIntent === '1') {
+        if (loginInProgress || finalLogoutIntent === '1') {
           console.log('🚫 Logout in progress, canceling redirect to dashboard');
           return;
         }
@@ -660,6 +662,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   // ===== EMAIL/PASSWORD LOGIN =====
   loginForm?.addEventListener('submit', async function(e) {
     e.preventDefault();
+    if (loginInProgress) return;
     hideError(loginError);
     
     const email = document.getElementById('loginEmail').value.trim();
@@ -679,6 +682,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     // Show loading state
     const originalText = submitBtn.textContent;
+    loginInProgress = true;
     submitBtn.textContent = 'Signing in...';
     submitBtn.disabled = true;
     
@@ -704,12 +708,13 @@ document.addEventListener('DOMContentLoaded', async function() {
       showError(loginError, 'An unexpected error occurred. Please try again.');
       submitBtn.textContent = originalText;
       submitBtn.disabled = false;
-    }
+    } finally { loginInProgress = false; }
   });
   
   // ===== EMAIL/PASSWORD SIGNUP =====
   signupForm?.addEventListener('submit', async function(e) {
     e.preventDefault();
+    if (loginInProgress) return;
     hideError(signupError);
     const termsError = document.getElementById('termsError');
     if (termsError) { termsError.style.display = 'none'; }
@@ -770,6 +775,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     // Show loading state
     const originalText = submitBtn.textContent;
+    loginInProgress = true;
     submitBtn.textContent = 'Creating account...';
     submitBtn.disabled = true;
     
@@ -845,7 +851,7 @@ document.addEventListener('DOMContentLoaded', async function() {
       showError(signupError, 'An unexpected error occurred. Please try again.');
       submitBtn.textContent = originalText;
       submitBtn.disabled = false;
-    }
+    } finally { loginInProgress = false; }
   });
   
   // ===== FORGOT PASSWORD (MODAL) =====
