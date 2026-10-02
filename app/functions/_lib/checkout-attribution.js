@@ -38,7 +38,9 @@ export async function saveCheckoutAttribution(env, { request, session, uid, cust
   // Classification only: this never grants consent, entitlement, or access.
   // Freeze it at checkout so expiry of the browser cookie cannot turn a later
   // paid staff validation or refund into customer revenue in Analytics.
-  const staffTest = environment === 'prod' && new URL(request.url).hostname === 'app.jobhackai.io'
+  const staffIds = typeof env.ANALYTICS_STAFF_AUTH_IDS === 'string'
+    ? env.ANALYTICS_STAFF_AUTH_IDS.split(',').map(value => value.trim()).filter(Boolean) : [];
+  const staffTest = environment === 'prod' && staffIds.includes(uid) && new URL(request.url).hostname === 'app.jobhackai.io'
     && (request.headers.get('Cookie') || '').split(';').some(value => value.trim() === 'jha_staff_test_prod=1');
   if (!context || !environment || !CLIENT_ID.test(clientId || '') || session?.status !== 'open'
     || !/^cs_[a-z0-9_]+$/i.test(session?.id || '') || session.customer !== customerId) return false;

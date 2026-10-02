@@ -104,7 +104,7 @@ test('server selects only the configured environment cookie without changing pro
 });
 
 test('explicit production staff marker survives checkout without granting consent or changing campaign fields',async t=>{
-  const h=setup(t);h.env.ENVIRONMENT='prod';
+  const h=setup(t);h.env.ENVIRONMENT='prod';h.env.ANALYTICS_STAFF_AUTH_IDS=' another-staff-id, owner ';
   h.input.request=new Request('https://app.jobhackai.io/api/stripe-checkout',{headers:{Cookie:`jha_client_id=${clientId}; jha_staff_test_prod=1`}});
   h.input.analytics.staffTest=false;
   assert.equal(await h.save(),true);
@@ -123,6 +123,16 @@ test('explicit production staff marker survives checkout without granting consen
   assert.equal(await h.save({session:{...h.input.session,id:'cs_account_rejected'}}),false);
 });
 
+test('a customer cannot self-classify server-side purchases as staff with a public cookie or body flag',async t=>{
+  for(const roster of [undefined,'','someone-else','owner-suffix','prefix-owner']){
+    const h=setup(t);h.env.ENVIRONMENT='prod';h.env.ANALYTICS_STAFF_AUTH_IDS=roster;
+    h.input.request=new Request('https://app.jobhackai.io/api/stripe-checkout',{headers:{Cookie:`jha_client_id=${clientId}; jha_staff_test_prod=1`}});
+    h.input.analytics.staffTest=true;
+    assert.equal(await h.save(),true);
+    assert.equal((await h.rows())[0].staff_test,0);
+  }
+});
+
 test('staff classification requires the exact production cookie and host',async t=>{
   for(const [environment,host,cookie] of [
     ['qa','qa.jobhackai.io','jha_staff_test_prod=1'],
@@ -131,7 +141,7 @@ test('staff classification requires the exact production cookie and host',async 
     ['prod','app.jobhackai.io','jha_staff_test_prod=true'],
     ['prod','app.jobhackai.io','jha_staff_test_qa=1']
   ]) {
-    const h=setup(t);h.env.ENVIRONMENT=environment;
+    const h=setup(t);h.env.ENVIRONMENT=environment;h.env.ANALYTICS_STAFF_AUTH_IDS='owner';
     const clientCookie=environment==='prod'?'jha_client_id':'jha_client_id_qa';
     h.input.request=new Request(`https://${host}/api/stripe-checkout`,{headers:{Cookie:`${clientCookie}=${clientId}; ${cookie}`}});
     assert.equal(await h.save(),true);
