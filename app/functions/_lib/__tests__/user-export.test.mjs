@@ -8,7 +8,7 @@ function setup(t) {
   const db = sqliteD1(); t.after(() => db.close());
   db.exec(`CREATE TABLE users(id INTEGER PRIMARY KEY,auth_id TEXT,email TEXT,plan TEXT,created_at TEXT,updated_at TEXT,last_login_at TEXT,last_activity_at TEXT);
     INSERT INTO users VALUES(1,'owner','owner@example.test','free',NULL,NULL,NULL,NULL),(2,'other','other@example.test','monthly',NULL,NULL,NULL,NULL);`);
-  for (const name of ['020_add_voice_entitlements.sql','021_add_voice_end_reason.sql','024_collected_payments.sql','025_checkout_attribution.sql','026_payment_campaign_links.sql','027_analytics_delivery.sql','029_voice_usage_evidence.sql']) {
+  for (const name of ['020_add_voice_entitlements.sql','021_add_voice_end_reason.sql','024_collected_payments.sql','025_checkout_attribution.sql','026_payment_campaign_links.sql','027_analytics_delivery.sql','029_voice_usage_evidence.sql','032_checkout_staff_test.sql']) {
     db.exec(readFileSync(new URL('../../../db/migrations/'+name,import.meta.url),'utf8'));
   }
   db.exec(`INSERT INTO voice_sessions(id,user_id,status,entitlement_mode,transcript_json,scorecard_json,jd_excerpt,started_at)

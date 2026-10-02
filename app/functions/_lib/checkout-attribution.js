@@ -35,6 +35,11 @@ export async function saveCheckoutAttribution(env, { request, session, uid, cust
   const now = Date.now(), context = normalizeCheckoutAnalytics(analytics, now);
   const clientId = analyticsClientId(request, env);
   const environment = canonicalEnvironmentName(env);
+  // Classification only: this never grants consent, entitlement, or access.
+  // Freeze it at checkout so expiry of the browser cookie cannot turn a later
+  // paid staff validation or refund into customer revenue in Analytics.
+  const staffTest = environment === 'prod' && new URL(request.url).hostname === 'app.jobhackai.io'
+    && (request.headers.get('Cookie') || '').split(';').some(value => value.trim() === 'jha_staff_test_prod=1');
   if (!context || !environment || !CLIENT_ID.test(clientId || '') || session?.status !== 'open'
     || !/^cs_[a-z0-9_]+$/i.test(session?.id || '') || session.customer !== customerId) return false;
   try {
@@ -45,8 +50,8 @@ export async function saveCheckoutAttribution(env, { request, session, uid, cust
     // rejection on the same browser also vetoes it.
     const result = await db.prepare(`INSERT INTO checkout_attributions
       (checkout_session_id, user_id, client_id, stripe_customer_id, environment,
-       ga_client_id, ga_session_id, first_touch_json, last_touch_json, captured_at, expires_at)
-      SELECT ?1, u.id, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10
+       ga_client_id, ga_session_id, first_touch_json, last_touch_json, captured_at, expires_at, staff_test)
+      SELECT ?1, u.id, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?12
       FROM users u JOIN cookie_consents c ON c.user_id = u.id
       WHERE u.auth_id = ?11
         AND CASE WHEN json_valid(c.consent_json) THEN
@@ -58,7 +63,7 @@ export async function saveCheckoutAttribution(env, { request, session, uid, cust
       ON CONFLICT(checkout_session_id) DO NOTHING`)
       .bind(session.id, clientId, customerId, environment, context.gaClientId, context.gaSessionId,
         context.first ? JSON.stringify(context.first) : null, context.last ? JSON.stringify(context.last) : null,
-        now, now + WINDOW_MS, uid).run();
+        now, now + WINDOW_MS, uid, staffTest ? 1 : 0).run();
     return Number(result?.meta?.changes || 0) > 0;
   } catch (_) {
     console.warn('[ATTRIBUTION] checkout context unavailable; payment remains unattributed');

@@ -14,6 +14,7 @@ function setup(t) {
     CREATE TABLE cookie_consents(id INTEGER PRIMARY KEY,user_id INTEGER,client_id TEXT,consent_json TEXT);
     INSERT INTO cookie_consents(user_id,consent_json) VALUES(42,'{"version":1,"analytics":true}');`);
   db.exec(migration);
+  db.exec(readFileSync(new URL('../../../db/migrations/032_checkout_staff_test.sql', import.meta.url), 'utf8'));
   const env={DB:db,ENVIRONMENT:'qa'};
   const touch={at:Date.now()-1000,source:'linkedin',medium:'organic_social',campaign:'voice_beta_2026_09',asset:'intro_01'};
   const input={request:new Request('https://qa.jobhackai.io/api/stripe-checkout',{headers:{Cookie:'jha_client_id_qa='+clientId}}),
@@ -100,4 +101,40 @@ test('server selects only the configured environment cookie without changing pro
   assert.equal(analyticsClientId(request,{ENVIRONMENT:'qa'}),otherClient);
   assert.equal(analyticsClientId(request,{ENVIRONMENT:'dev'}),null);
   assert.equal(analyticsClientId(request,{ENVIRONMENT:'unknown'}),null);
+});
+
+test('explicit production staff marker survives checkout without granting consent or changing campaign fields',async t=>{
+  const h=setup(t);h.env.ENVIRONMENT='prod';
+  h.input.request=new Request('https://app.jobhackai.io/api/stripe-checkout',{headers:{Cookie:`jha_client_id=${clientId}; jha_staff_test_prod=1`}});
+  h.input.analytics.staffTest=false;
+  assert.equal(await h.save(),true);
+  const original=(await h.rows())[0];
+  assert.equal(original.staff_test,1);
+  assert.equal(JSON.parse(original.last_touch_json).campaign,'voice_beta_2026_09');
+  h.input.request=new Request('https://app.jobhackai.io/api/stripe-checkout',{headers:{Cookie:`jha_client_id=${clientId}`}});
+  assert.equal(await h.save(),false);
+  assert.equal((await h.rows())[0].staff_test,1,'original checkout classification cannot change on retry');
+  h.input.analytics.staffTest=true;
+  assert.equal(await h.save({session:{...h.input.session,id:'cs_ordinary'}}),true);
+  assert.equal((await h.rows()).find(r=>r.checkout_session_id==='cs_ordinary').staff_test,0,'request body cannot classify staff');
+  h.input.request=new Request('https://app.jobhackai.io/api/stripe-checkout',{headers:{Cookie:`jha_client_id=${clientId}; jha_staff_test_prod=1`}});
+  assert.equal(await h.save({session:{...h.input.session,id:'cs_no_consent'},analytics:{analyticsConsent:false}}),false);
+  h.db.exec("UPDATE cookie_consents SET consent_json='{\"version\":1,\"analytics\":false}'");
+  assert.equal(await h.save({session:{...h.input.session,id:'cs_account_rejected'}}),false);
+});
+
+test('staff classification requires the exact production cookie and host',async t=>{
+  for(const [environment,host,cookie] of [
+    ['qa','qa.jobhackai.io','jha_staff_test_prod=1'],
+    ['prod','preview.pages.dev','jha_staff_test_prod=1'],
+    ['prod','app.jobhackai.io','jha_staff_test_prod=0'],
+    ['prod','app.jobhackai.io','jha_staff_test_prod=true'],
+    ['prod','app.jobhackai.io','jha_staff_test_qa=1']
+  ]) {
+    const h=setup(t);h.env.ENVIRONMENT=environment;
+    const clientCookie=environment==='prod'?'jha_client_id':'jha_client_id_qa';
+    h.input.request=new Request(`https://${host}/api/stripe-checkout`,{headers:{Cookie:`${clientCookie}=${clientId}; ${cookie}`}});
+    assert.equal(await h.save(),true);
+    assert.equal((await h.rows())[0].staff_test,0);
+  }
 });
