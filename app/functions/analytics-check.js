@@ -61,4 +61,4 @@ const HTML = String.raw`<!doctype html><html lang="en"><head><meta charset="utf-
   window.addEventListener('load', refresh);
   window.addEventListener('cookie-consent-granted', refresh);
 })();
-</script><script src="/js/cookie-consent.js?v=20260930-tracking-1" defer></script></body></html>`;
+</script><script src="/js/cookie-consent.js?v=20261001-checkout-2" defer></script></body></html>`;
