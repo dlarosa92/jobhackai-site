@@ -12,6 +12,8 @@ Migration 027 must precede the enriched Stripe webhook. It adds a verified tax b
 
 Only actual saved GA client IDs are used. A session ID is included for a purchase only within 24 hours of that session beginning. Renewals retain the consented checkout's custom first/last campaign fields while eligible; this is not a guarantee of Google's native channel/session attribution. No fabricated engagement duration or browser ID is sent.
 
+Migration 032 preserves the explicit production staff-test cookie as a checkout classification. The delivery worker adds `debug_mode` only to that checkout's purchase/refund events (or the isolated QA stream). The active production developer-traffic exclusion keeps these staff events available in DebugView while excluding them from acquisition and revenue reports. Financial records remain accurate and unchanged. The marker grants neither consent nor product access; ordinary production purchases omit it. Apply the migration before deploying either the checkout handler or the worker. Existing contexts are not retrospectively relabeled.
+
 Context and its joins/outbox expire after 90 days. Campaign touches expire by their own timestamp, independently of the later checkout. Withdrawal erases context through the consent API and cascades its marketing links. Financial payments, refunds and their non-personal tax breakdown remain for reconciliation.
 
 ## Delivery states and review

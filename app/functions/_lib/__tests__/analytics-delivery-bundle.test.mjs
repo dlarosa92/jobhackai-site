@@ -11,7 +11,7 @@ const worker = (await import(pathToFileURL(bundle))).default;
 test('compiled scheduled Analytics Worker holds deletion through collection and never treats acceptance as verified revenue', async t => {
   const db = sqliteD1(); t.after(() => db.close());
   db.exec("CREATE TABLE users(id INTEGER PRIMARY KEY,auth_id TEXT UNIQUE); INSERT INTO users VALUES(1,'owner'); CREATE TABLE deleted_auth_ids(auth_id TEXT PRIMARY KEY); CREATE TABLE cookie_consents(user_id INTEGER,client_id TEXT,consent_json TEXT);");
-  for (const name of ['024_collected_payments','025_checkout_attribution','026_payment_campaign_links','027_analytics_delivery','028_account_deletion_recovery']) {
+  for (const name of ['024_collected_payments','025_checkout_attribution','026_payment_campaign_links','027_analytics_delivery','028_account_deletion_recovery','032_checkout_staff_test']) {
     db.exec(readFileSync(new URL('../../../db/migrations/' + name + '.sql', import.meta.url), 'utf8'));
   }
   const now = Date.now(), seconds = Math.floor(now / 1000);

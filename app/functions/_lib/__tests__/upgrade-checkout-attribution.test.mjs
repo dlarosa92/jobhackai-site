@@ -73,6 +73,7 @@ function routeHarness(t, { subscription = null, beforeSave = async () => {} } = 
     CREATE TABLE cookie_consents(id INTEGER PRIMARY KEY, user_id INTEGER, client_id TEXT, consent_json TEXT);
     INSERT INTO cookie_consents(user_id,consent_json) VALUES(42,'{"version":1,"analytics":true}');`);
   db.exec(migration);
+  db.exec(readFileSync(new URL('../../../db/migrations/032_checkout_staff_test.sql', import.meta.url), 'utf8'));
   const env = { DB: db, ENVIRONMENT: 'qa', FIREBASE_PROJECT_ID: 'fixture', STRIPE_SECRET_KEY: 'sk_test_fixture',
     FRONTEND_URL: 'https://qa.jobhackai.io', STRIPE_PRICE_WEEKLY: 'price_weekly', STRIPE_PRICE_MONTHLY: 'price_monthly',
     STRIPE_PRICE_ESSENTIAL: 'price_essential', JOBHACKAI_KV: { get: async () => 'cus_owner', put: async () => {} } };

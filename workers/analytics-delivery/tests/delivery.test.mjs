@@ -9,7 +9,7 @@ const NOW=1789888000000;
 function setup(t){
   const db=sqliteD1();t.after(()=>db.close());
   db.exec('CREATE TABLE users(id INTEGER PRIMARY KEY,auth_id TEXT UNIQUE NOT NULL); INSERT INTO users VALUES(1,\'owner\'); CREATE TABLE deleted_auth_ids(auth_id TEXT PRIMARY KEY); CREATE TABLE cookie_consents(user_id INTEGER,client_id TEXT,consent_json TEXT);');
-  for(const file of ['024_collected_payments.sql','025_checkout_attribution.sql','026_payment_campaign_links.sql','027_analytics_delivery.sql','028_account_deletion_recovery.sql'])
+  for(const file of ['024_collected_payments.sql','025_checkout_attribution.sql','026_payment_campaign_links.sql','027_analytics_delivery.sql','028_account_deletion_recovery.sql','032_checkout_staff_test.sql'])
     db.exec(readFileSync(new URL('../../../app/db/migrations/'+file,import.meta.url),'utf8'));
   db.exec('ALTER TABLE users ADD COLUMN voice_followup_email_sent_at TEXT; ALTER TABLE users ADD COLUMN deletion_warning_sent_at TEXT;');
   const env={DB:db,ENVIRONMENT:'qa',DELIVERY_ENABLED:'true',GA4_MEASUREMENT_ID:'G-VH888WWY3M',GA4_API_SECRET:'test-only',DEBUG_EVENTS:'true'};
@@ -104,6 +104,19 @@ test('production rejects QA destinations, debug events, test payments and foreig
     else await f.run();
     assert.equal(f.calls.length,0);
   }
+});
+test('staff production purchase and refund stay debug-classified while real money stays in the ledger',async t=>{
+  const f=setup(t);f.env.ENVIRONMENT='prod';f.env.GA4_MEASUREMENT_ID='G-SQYSWPFM5X';f.env.DEBUG_EVENTS='false';
+  f.db.exec("UPDATE stripe_collected_payments SET environment='prod',livemode=1; UPDATE checkout_attributions SET environment='prod',staff_test=1");
+  f.refund();await f.run();await f.run();
+  const sent=f.calls.filter(c=>!c.url.includes('/debug/'));
+  assert.deepEqual(sent.map(c=>[c.body.events[0].name,c.body.events[0].params.debug_mode]),[['purchase',true],['refund',true]]);
+  assert(sent.every(c=>new URL(c.url).searchParams.get('measurement_id')==='G-SQYSWPFM5X'));
+  assert.equal(sent[0].body.events[0].params.transaction_id,'ch_test');
+  assert.equal(sent[0].body.events[0].params.value,39);
+  assert.equal(sent[0].body.events[0].params.jha_first_campaign,'voice_beta');
+  assert.equal(await f.db.prepare('SELECT net_collected FROM stripe_collected_payment_totals').first('net_collected'),3800);
+  assert.equal(await f.db.prepare('SELECT verified_at FROM analytics_delivery LIMIT 1').first('verified_at'),null);
 });
 test('missing actual browser ID or financial breakdown cannot invent an Analytics purchase',async t=>{
   for(const sql of ['UPDATE checkout_attributions SET ga_client_id=NULL','DELETE FROM stripe_payment_analytics_values']){

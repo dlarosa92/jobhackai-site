@@ -13,6 +13,7 @@ type Row = {
   item_id: string | null; refund_amount: number | null; refund_status: string | null;
   ga_client_id: string | null; ga_session_id: string | null;
   first_touch_json: string | null; last_touch_json: string | null;
+  staff_test: number;
 };
 type Payload = {client_id: string; timestamp_micros: number; events: {name: string; params: Record<string, unknown>}[]};
 type State = 'pending' | 'accepted_unverified' | 'rejected' | 'uncertain' | 'expired' | 'ineligible';
@@ -79,7 +80,7 @@ export async function enqueue(db: D1Database, environment: string, now: number) 
 
 async function eligible(db: D1Database, key: string, env: Env, now: number) {
   return db.prepare(`SELECT d.*,u.auth_id,p.amount_captured,p.currency,m.captured_minor,m.value_minor,m.tax_minor,m.item_id,
-      r.amount refund_amount,r.status refund_status,a.ga_client_id,a.ga_session_id,a.first_touch_json,a.last_touch_json
+      r.amount refund_amount,r.status refund_status,a.ga_client_id,a.ga_session_id,a.first_touch_json,a.last_touch_json,a.staff_test
     FROM analytics_delivery d JOIN stripe_collected_payments p ON p.charge_id=d.charge_id
     JOIN stripe_payment_attributions l ON l.charge_id=p.charge_id AND l.checkout_session_id=d.checkout_session_id
     JOIN checkout_attributions a ON a.checkout_session_id=d.checkout_session_id
@@ -128,7 +129,7 @@ export function payload(row: Row, now: number, debug: boolean): Payload | string
   const session=Number(row.ga_session_id);
   if (row.event_name==='purchase' && /^\d{1,12}$/.test(row.ga_session_id||'') && Number.isSafeInteger(session)
     && session<=row.event_at && now/1000-session<24*3600) params.session_id=session;
-  if (debug) params.debug_mode=true;
+  if (debug || row.staff_test === 1) params.debug_mode=true;
   return {client_id:row.ga_client_id!,timestamp_micros:row.event_at*1000000,events:[{name:row.event_name,params}]};
 }
 
