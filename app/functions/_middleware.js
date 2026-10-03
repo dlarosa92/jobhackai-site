@@ -10,6 +10,7 @@ import { isDevCutoverPaused } from './_lib/dev-cutover.js';
 // ENVIRONMENT blocks them instead of exposing them).
 const NON_PRODUCTION_ONLY_DEBUG_PATHS = new Set([
   '/api/ats-health',
+  '/api/kv-test',
   '/api/test-openai',
   '/auth-test',
   '/auth-test.html',
