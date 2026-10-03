@@ -17,6 +17,26 @@ function generateUniqueSignupEmail() {
 }
 
 test.describe('Authentication', () => {
+  test('signup CTA opens the signup form for a signed-out visitor', async ({ browser, baseURL }) => {
+    const context = await browser.newContext({ baseURL, storageState: undefined });
+    try {
+      const page = await context.newPage();
+      await page.addInitScript(() => {
+        localStorage.clear();
+        sessionStorage.clear();
+      });
+      await page.goto('/login?mode=signup&utm_source=pinterest', { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('#signupForm')).toBeVisible({ timeout: 20000 });
+      await expect(page.locator('#loginForm')).toBeHidden();
+
+      await page.locator('#showLoginLink').click();
+      await expect(page.locator('#loginForm')).toBeVisible();
+      await expect(page.locator('#signupForm')).toBeHidden();
+    } finally {
+      await context.close();
+    }
+  });
+
   test('should login and redirect to dashboard', async ({ browser, baseURL }) => {
     // Create new unauthenticated context to test actual login flow
     // (not re-login with existing session)

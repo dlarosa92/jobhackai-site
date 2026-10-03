@@ -115,3 +115,29 @@ test('an ordinary restored login still redirects without reporting a signup', ()
   assert.deepEqual(h.redirects, ['dashboard.html']);
   assert.equal(h.events.filter(x => x[0] === 'sign_up').length, 0);
 });
+
+function initialFormFor(search) {
+  const shown = [];
+  const storage = { getItem: () => null, setItem() {}, removeItem() {} };
+  const ctx = {
+    URLSearchParams, Date,
+    window: { location: { search } },
+    sessionStorage: storage, localStorage: storage,
+    resetPasswordSuccess: null,
+    console: { log() {}, warn() {} },
+    hideSelectedPlanBanner: () => {},
+    showSelectedPlanBanner: () => {},
+    showSignupForm: (...args) => shown.push(['signup', ...args]),
+    showLoginForm: () => shown.push(['login']),
+    getStoredFirebaseAuthRecord: () => null
+  };
+  vm.runInNewContext(section('  // === PLAN DETECTION', '  // === AUTH CHECK'), ctx);
+  return shown;
+}
+
+test('signup CTA mode opens signup without a plan, preserving plan precedence', () => {
+  assert.deepEqual(initialFormFor('?mode=signup&utm_source=pinterest'), [['signup']]);
+  assert.deepEqual(initialFormFor('?mode=signup&plan=free'), [['signup', 'free', true]]);
+  assert.deepEqual(initialFormFor('?mode=login'), [['login']]);
+  assert.deepEqual(initialFormFor(''), [['login']]);
+});
