@@ -186,6 +186,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   // Show banner immediately without waiting for auth to improve UX
   const urlParams = new URLSearchParams(window.location.search);
   const planParam = urlParams.get('plan');
+  const modeParam = urlParams.get('mode');
   
   // Check sessionStorage for plan (pricing page stores it here as JSON)
   let storedPlanData = null;
@@ -259,9 +260,13 @@ document.addEventListener('DOMContentLoaded', async function() {
       showLoginForm();
     }
   } else {
-    // No explicit plan selected: hide banner and show Login by default
+    // Honor signup CTAs that do not select a plan (including voice and nav links).
     hideSelectedPlanBanner();
-    showLoginForm();
+    if (modeParam === 'signup') {
+      showSignupForm();
+    } else {
+      showLoginForm();
+    }
   }
   
   // Clean up if no plan
