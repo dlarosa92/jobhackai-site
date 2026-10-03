@@ -23,6 +23,10 @@ jobs:
           cache-dependency-path: app/package-lock.json
       - run: npm ci --no-audit --no-fund
         working-directory: app
+      - run: npx playwright install --with-deps chromium
+        working-directory: app
+      - run: npm run test:ui:pricing-navigation
+        working-directory: app
       - run: npm run test:ui:free-tools
         working-directory: app
       - run: npm run build
