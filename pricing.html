@@ -455,6 +455,47 @@
         pack: { planName: 'Interview Pack', price: '$39 one time', value: 39 }
       };
 
+      var SIGNUP_NAVIGATION_RECOVERY_MS = 5000;
+      var checkoutRecoveryTimers = new WeakMap();
+
+      function restoreCheckoutButton(button) {
+        if (!button) return;
+        var timer = checkoutRecoveryTimers.get(button);
+        if (timer) {
+          window.clearTimeout(timer);
+          checkoutRecoveryTimers.delete(button);
+        }
+        if (button.dataset.checkoutPending !== 'true') return;
+
+        button.disabled = false;
+        button.textContent = button.dataset.checkoutOriginalText || button.textContent;
+        delete button.dataset.checkoutPending;
+        delete button.dataset.checkoutOriginalText;
+        delete button.dataset.checkoutPhase;
+      }
+
+      function restorePendingCheckoutButtons() {
+        document.querySelectorAll('.vp-buy[data-checkout-phase="navigation"]').forEach(restoreCheckoutButton);
+      }
+
+      function markCheckoutNavigationPending(button) {
+        button.dataset.checkoutPhase = 'navigation';
+      }
+
+      function armSignupNavigationRecovery(button) {
+        markCheckoutNavigationPending(button);
+        var timer = window.setTimeout(function () {
+          restoreCheckoutButton(button);
+        }, SIGNUP_NAVIGATION_RECOVERY_MS);
+        checkoutRecoveryTimers.set(button, timer);
+      }
+
+      // A page returned from signup or checkout may come from the back-forward
+      // cache with its disabled CTA DOM intact. Clear only the transient
+      // navigation state; plan availability and unrelated disabled buttons stay
+      // as rendered by the page.
+      window.addEventListener('pageshow', restorePendingCheckoutButtons);
+
       function rememberSelection(planId) {
         var meta = PLAN_META[planId] || { planName: 'Selected Plan', price: '' };
         var payload = {
@@ -470,14 +511,19 @@
 
       var packCheckoutAttemptId = null;
       async function startCheckout(plan, button) {
+        if (!button || button.disabled || button.dataset.checkoutPending === 'true') return;
         var meta = PLAN_META[plan];
         var original = button.textContent;
+        button.dataset.checkoutOriginalText = original;
+        button.dataset.checkoutPending = 'true';
+        button.dataset.checkoutPhase = 'request';
         button.disabled = true;
         button.textContent = 'Opening checkout...';
         trackBeginCheckout(plan, meta ? meta.value : null);
 
         if (!isAuthenticated()) {
           rememberSelection(plan);
+          armSignupNavigationRecovery(button);
           window.location.href = 'login.html?plan=' + encodeURIComponent(plan);
           return;
         }
@@ -505,6 +551,7 @@
 
           if (data && data.ok && data.url) {
             packCheckoutAttemptId = null;
+            markCheckoutNavigationPending(button);
             window.location.href = data.url;
             return;
           }
@@ -512,10 +559,22 @@
           if (data && data.code === 'ALREADY_SUBSCRIBED') {
             // Existing subscribers manage plan changes from billing
             if (typeof window.upgradePlan === 'function' && (plan === 'weekly' || plan === 'monthly')) {
-              await window.upgradePlan(plan, { source: 'pricing-page', returnUrl: window.location.href, button: button, skipConfirmation: false });
+              var upgradeNavigationStarted = false;
+              await window.upgradePlan(plan, {
+                source: 'pricing-page',
+                returnUrl: window.location.href,
+                button: button,
+                skipConfirmation: false,
+                onNavigation: function () {
+                  upgradeNavigationStarted = true;
+                  markCheckoutNavigationPending(button);
+                }
+              });
+              if (!upgradeNavigationStarted) restoreCheckoutButton(button);
               return;
             }
             alert('You already have an active plan. Manage it from Account Settings.');
+            markCheckoutNavigationPending(button);
             window.location.href = 'account-setting.html';
             return;
           }
@@ -524,13 +583,13 @@
         } catch (err) {
           if (err && err.message === 'not_authenticated') {
             rememberSelection(plan);
+            armSignupNavigationRecovery(button);
             window.location.href = 'login.html?plan=' + encodeURIComponent(plan);
             return;
           }
           console.error('[PRICING] Checkout error:', err);
           alert('Unable to start checkout. Please try again or contact support.');
-          button.disabled = false;
-          button.textContent = original;
+          restoreCheckoutButton(button);
         }
       }
 

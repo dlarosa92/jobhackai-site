@@ -937,6 +937,15 @@ async function upgradePlan(targetPlan, options = {}) {
   const source = options.source || 'unknown';
   const returnUrl = options.returnUrl || window.location.href;
   const button = options.button || null;
+  let navigationStarted = false;
+  const notifyNavigation = () => {
+    navigationStarted = true;
+    try {
+      if (typeof options.onNavigation === 'function') options.onNavigation();
+    } catch (_) {
+      // A caller's UI-state hook must not block a billing navigation.
+    }
+  };
   let restoreButton = null;
   let originalText = null;
   if (button) {
@@ -970,6 +979,7 @@ async function upgradePlan(targetPlan, options = {}) {
   try {
     const user = window.FirebaseAuthManager?.getCurrentUser?.();
     if (!user) {
+      notifyNavigation();
       window.location.href = 'login.html';
       return;
     }
@@ -987,6 +997,7 @@ async function upgradePlan(targetPlan, options = {}) {
       });
       const data = await res.json().catch(() => ({}));
       if (data?.ok && data?.url) {
+        notifyNavigation();
         window.location.href = data.url;
         return;
       }
@@ -1033,6 +1044,7 @@ async function upgradePlan(targetPlan, options = {}) {
     }
 
     if (data?.action === 'redirect' && data?.url) {
+      notifyNavigation();
       window.location.href = data.url;
       return;
     }
@@ -1099,7 +1111,7 @@ async function upgradePlan(targetPlan, options = {}) {
     }
   } finally {
     if (hideLoading) hideLoading();
-    if (restoreButton) restoreButton();
+    if (restoreButton && !navigationStarted) restoreButton();
   }
 }
 
