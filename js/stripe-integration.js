@@ -938,12 +938,29 @@ async function upgradePlan(targetPlan, options = {}) {
   const returnUrl = options.returnUrl || window.location.href;
   const button = options.button || null;
   let navigationStarted = false;
+  let navigationRecoveryTimer = null;
+  const restoreAfterNavigation = () => {
+    window.clearTimeout(navigationRecoveryTimer);
+    window.removeEventListener('pageshow', restoreAfterNavigation);
+    if (restoreButton) restoreButton();
+  };
   const notifyNavigation = () => {
     navigationStarted = true;
     try {
-      if (typeof options.onNavigation === 'function') options.onNavigation();
+      if (typeof options.onNavigation === 'function') {
+        // Pricing owns its original label and navigation recovery state.
+        options.onNavigation();
+        return;
+      }
     } catch (_) {
       // A caller's UI-state hook must not block a billing navigation.
+    }
+    if (restoreButton) {
+      // Standalone callers (including Account Settings) also need to recover
+      // after Back/Forward or a redirect that never leaves this document.
+      // Register only after billing has answered; pending requests stay locked.
+      window.addEventListener('pageshow', restoreAfterNavigation);
+      navigationRecoveryTimer = window.setTimeout(restoreAfterNavigation, 5000);
     }
   };
   let restoreButton = null;

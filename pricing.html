@@ -455,7 +455,7 @@
         pack: { planName: 'Interview Pack', price: '$39 one time', value: 39 }
       };
 
-      var SIGNUP_NAVIGATION_RECOVERY_MS = 5000;
+      var CHECKOUT_NAVIGATION_RECOVERY_MS = 5000;
       var checkoutRecoveryTimers = new WeakMap();
 
       function restoreCheckoutButton(button) {
@@ -480,13 +480,11 @@
 
       function markCheckoutNavigationPending(button) {
         button.dataset.checkoutPhase = 'navigation';
-      }
-
-      function armSignupNavigationRecovery(button) {
-        markCheckoutNavigationPending(button);
+        var previousTimer = checkoutRecoveryTimers.get(button);
+        if (previousTimer) window.clearTimeout(previousTimer);
         var timer = window.setTimeout(function () {
           restoreCheckoutButton(button);
-        }, SIGNUP_NAVIGATION_RECOVERY_MS);
+        }, CHECKOUT_NAVIGATION_RECOVERY_MS);
         checkoutRecoveryTimers.set(button, timer);
       }
 
@@ -523,7 +521,7 @@
 
         if (!isAuthenticated()) {
           rememberSelection(plan);
-          armSignupNavigationRecovery(button);
+          markCheckoutNavigationPending(button);
           window.location.href = 'login.html?plan=' + encodeURIComponent(plan);
           return;
         }
@@ -583,7 +581,7 @@
         } catch (err) {
           if (err && err.message === 'not_authenticated') {
             rememberSelection(plan);
-            armSignupNavigationRecovery(button);
+            markCheckoutNavigationPending(button);
             window.location.href = 'login.html?plan=' + encodeURIComponent(plan);
             return;
           }

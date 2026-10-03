@@ -5,6 +5,8 @@ on:
     paths:
       - 'interview-questions.html'
       - 'resume-feedback-pro.html'
+      - 'pricing.html'
+      - 'js/stripe-integration.js'
       - 'app/tests/ui/**'
       - 'app/package*.json'
       - '.github/workflows/test-free-tools-ui.yml'
