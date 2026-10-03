@@ -159,3 +159,67 @@ test('compiled managed voice route keeps its cutover gate, verifies JWT ownershi
   assert.equal(plan.status,200,await plan.clone().text());const planData=await plan.json();await flush();
   assert.equal(planData.voice.transport,'managed');assert.equal(planData.voice.freeSessionUsed,true);
 });
+
+test('compiled KV diagnostic routing blocks production and private keys before storage access', async t => {
+  const db = sqliteD1();
+  t.after(() => db.close());
+  db.exec(readFileSync(new URL('../../../db/migrations/028_account_deletion_recovery.sql', import.meta.url), 'utf8'));
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const providerCalls = [], reads = [], writes = [];
+  globalThis.fetch = async input => {
+    const url = String(input instanceof Request ? input.url : input);
+    providerCalls.push(url);
+    assert.equal(url, 'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com');
+    return Response.json({ keys: [jwk] });
+  };
+  const env = {
+    DB: db, FIREBASE_PROJECT_ID: 'fixture', ENVIRONMENT: 'production',
+    JOBHACKAI_KV: {
+      get: async key => {
+        reads.push(key);
+        return JSON.stringify(key === 'config:ats' ? { enabled: true } : { uid: 'other', text: 'PRIVATE_RESUME_FIXTURE' });
+      },
+      put: async (...args) => { writes.push(args); }
+    },
+    ASSETS: { fetch: async () => new Response('fixture asset') }
+  };
+  const waits = [];
+  const context = { waitUntil(p) { waits.push(p); }, passThroughOnException() { throw Error('fail open forbidden'); } };
+  const run = (path, bearer = token, method = 'GET') => worker.fetch(new Request('https://app.jobhackai.io' + path, {
+    method, headers: { Authorization: 'Bearer ' + bearer }
+  }), env, context);
+  for (const environment of ['production', 'prod', '', 'prd']) {
+    env.ENVIRONMENT = environment;
+    for (const path of ['/api/kv-test', '/api/kv-test/', '/api/kv-test?key=resume:other:123']) {
+      for (const method of ['GET', 'OPTIONS']) {
+        const response = await run(path, token, method);
+        assert.equal(response.status, 404, `${environment} ${method} ${path}`);
+        assert.match(response.headers.get('cache-control'), /no-store/);
+        assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+      }
+    }
+  }
+  assert.deepEqual(providerCalls, []);
+  assert.deepEqual(reads, []);
+  assert.deepEqual(writes, []);
+  assert.equal(await db.prepare('SELECT COUNT(*) AS n FROM account_operation_claims').first('n'), 0);
+
+  env.ENVIRONMENT = 'qa';
+  assert.equal((await run('/api/kv-test', 'invalid')).status, 401);
+  for (const key of ['resume:other:123', 'user:other:lastResume', 'test:arbitrary']) {
+    const response = await run('/api/kv-test?key=' + encodeURIComponent(key));
+    assert.equal(response.status, 400);
+    assert.doesNotMatch(await response.text(), /PRIVATE_RESUME_FIXTURE/);
+  }
+  assert.deepEqual(reads, []);
+  assert.deepEqual(writes, []);
+  for (const path of ['/api/kv-test', '/api/kv-test?key=config%3Aats']) {
+    const response = await run(path);
+    assert.equal(response.status, 200, await response.clone().text());
+    assert.deepEqual((await response.json()).kvValueParsed, { enabled: true });
+  }
+  assert.deepEqual(reads, ['config:ats', 'config:ats']);
+  assert.deepEqual(writes, []);
+  await Promise.all(waits);
+});

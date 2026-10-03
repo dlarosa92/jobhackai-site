@@ -80,6 +80,9 @@ jobs:
       - name: Environment / mode-gate unit tests
         run: node app/functions/_lib/__tests__/stripe-environment.test.mjs
 
+      - name: KV diagnostics environment and storage access boundaries
+        run: node --conditions=workerd --test app/functions/_lib/__tests__/kv-test.test.mjs
+
       - name: Subscription period rule tests
         run: node app/functions/_lib/__tests__/subscription-period.test.mjs
 

@@ -1,7 +1,11 @@
-// KV test endpoint to verify KV namespace binding
+// Read-only, non-production diagnostic for the KV namespace binding.
 // GET /api/kv-test?key=config:ats
 
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
+import { isExplicitNonProductionEnvironment, notFoundInProductionResponse } from '../_lib/debug-access.js';
+
+// Never accept account data keys or caller-controlled write targets.
+const ALLOWED_DIAGNOSTIC_KEYS = new Set(['config:ats']);
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -38,6 +42,10 @@ export async function onRequest(context) {
   const { request, env } = context;
   const origin = request.headers.get('Origin') || '';
 
+  if (!isExplicitNonProductionEnvironment(env)) {
+    return notFoundInProductionResponse();
+  }
+
   if (request.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders(origin, env) });
   }
@@ -53,11 +61,19 @@ export async function onRequest(context) {
       return json({ success: false, error: 'Unauthorized' }, 401, origin, env);
     }
 
-    const { uid } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
+    let uid;
+    try {
+      ({ uid } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID));
+    } catch {
+      return json({ success: false, error: 'Unauthorized' }, 401, origin, env);
+    }
 
     // Get key from query params
     const url = new URL(request.url);
     const testKey = url.searchParams.get('key') || 'config:ats';
+    if (!ALLOWED_DIAGNOSTIC_KEYS.has(testKey)) {
+      return json({ success: false, error: 'Unsupported diagnostic key' }, 400, origin, env);
+    }
 
     // Check KV binding
     const kvAvailable = !!env.JOBHACKAI_KV;
@@ -82,18 +98,6 @@ export async function onRequest(context) {
       console.error('[KV-TEST] KV read error:', err);
     }
 
-    // Test write (optional - only if key doesn't exist)
-    let writeSuccess = false;
-    if (!kvValue && testKey.startsWith('test:')) {
-      try {
-        await env.JOBHACKAI_KV.put(testKey, JSON.stringify({ test: true, timestamp: Date.now() }));
-        writeSuccess = true;
-        kvValue = await env.JOBHACKAI_KV.get(testKey);
-      } catch (err) {
-        console.error('[KV-TEST] KV write error:', err);
-      }
-    }
-
     return json({
       success: true,
       kvBindingExists: true,
@@ -107,7 +111,7 @@ export async function onRequest(context) {
         }
       })() : null,
       kvError: kvError || null,
-      writeSuccess,
+      writeSuccess: false,
       uid,
       timestamp: new Date().toISOString()
     }, 200, origin, env);
@@ -121,4 +125,3 @@ export async function onRequest(context) {
     }, 500, origin, env);
   }
 }
-
