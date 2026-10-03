@@ -38,7 +38,7 @@ function harness({runtime = source, host = 'app.jobhackai.io', consent = true, c
     JHA_CONFIG: config, URL, CustomEvent: class {constructor(type){this.type=type;}}, HTMLScriptElement: class {},
     localStorage:{getItem:k=>store.get(k)??null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)},
     setTimeout:fn=>{timers.push(fn);return timers.length;}, performance:{now:()=>0},
-    dispatchEvent(){}, console:{log(){},warn(){}},
+    addEventListener(type,fn){listeners['window:'+type]=fn;}, dispatchEvent(){}, console:{log(){},warn(){}},
     fetch:async(url,options)=>{requests.push({url,options}); if(options.method==='GET'&&pendingServer)return server; if(options.method==='POST'&&pendingPost)return post; return {ok:true,json:async()=>({ok:true})};}
   };
   ctx.window=ctx;

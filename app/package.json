@@ -16,6 +16,7 @@
     "test:e2e:dev": "cross-env TEST_ENV=dev playwright test --config tests/playwright.config.js",
     "test:e2e:qa": "cross-env TEST_ENV=qa playwright test --config tests/playwright.config.js",
     "test:e2e:prod": "cross-env TEST_ENV=prod playwright test --config tests/playwright.config.js",
+    "test:ui:pricing-navigation": "playwright test --config tests/ui/pricing-navigation.config.cjs",
     "test:e2e:full-app-check": "playwright test --config tests/playwright.config.js tests/e2e/full-app-check.spec.js",
     "test:e2e:full-app-check:dev": "cross-env TEST_ENV=dev playwright test --config tests/playwright.config.js tests/e2e/full-app-check.spec.js",
     "test:e2e:full-app-check:qa": "cross-env TEST_ENV=qa playwright test --config tests/playwright.config.js tests/e2e/full-app-check.spec.js",
