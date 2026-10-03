@@ -4,11 +4,11 @@ const path = require('node:path');
 
 const repositoryRoot = path.resolve(__dirname, '../../..');
 const pricingHtml = fs.readFileSync(path.join(repositoryRoot, 'pricing.html'), 'utf8')
-  // Keep the production inline checkout handler while preventing auth, analytics,
-  // and third-party browser dependencies from loading in this offline fixture.
-  .replace(/<script\b(?=[^>]*\bsrc\s*=)[^>]*>[\s\S]*?<\/script>/gi, '')
-  .replace(/<link\b(?=[^>]*\bhref\s*=\s*["']https?:)[^>]*>/gi, '')
-  .replace('</body>', '<script src="/js/stripe-integration.js"></script></body>');
+  // Preserve the page's actual shared-upgrade dependency and inline handler.
+  // Never inject missing production wiring; strip only auth/third-party scripts.
+  .replace(/<script\b(?=[^>]*\bsrc\s*=)[^>]*>[\s\S]*?<\/script>/gi, script =>
+    /\bsrc\s*=\s*["']\/?js\/stripe-integration\.js(?:\?[^"']*)?["']/i.test(script) ? script : '')
+  .replace(/<link\b(?=[^>]*\bhref\s*=\s*["']https?:)[^>]*>/gi, '');
 
 const upgradeHtml = `<!doctype html><html><body>
   <button id="upgrade">Upgrade plan</button>
