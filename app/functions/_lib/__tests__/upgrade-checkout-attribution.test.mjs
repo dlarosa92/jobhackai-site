@@ -42,6 +42,21 @@ function clientHarness({ context = analytics(), missing = false, throws = false,
   return { ctx, calls, events, lookups, run: () => ctx.upgradePlan('monthly', { source: 'pricing-page' }) };
 }
 
+test('shared upgrade keeps the caller button locked after notifying a redirect', async () => {
+  const h = clientHarness();
+  const button = { disabled: true, textContent: 'Opening checkout...' };
+  let navigationNotified = false;
+  await h.ctx.upgradePlan('monthly', {
+    source: 'pricing-page',
+    button,
+    onNavigation: () => { navigationNotified = true; }
+  });
+  assert.equal(navigationNotified, true);
+  assert.equal(h.ctx.window.location.href, 'https://checkout.example.test/fixture');
+  assert.equal(button.disabled, true);
+  assert.equal(button.textContent, 'Processing...');
+});
+
 test('shared upgrade flow forwards consented campaign context once without a second checkout event', async () => {
   const context = analytics(), h = clientHarness({ context }); await h.run();
   assert.equal(h.lookups.length, 1); assert.equal(h.calls.length, 1);
