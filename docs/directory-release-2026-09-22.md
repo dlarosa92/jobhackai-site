@@ -56,7 +56,7 @@ voice or unrelated migrations/configuration changes are part of this release.
 - Public smoke verified, then actual launch timestamp and day28 date recorded.
 - Existing automations updated once for weekly/day28 reviews; no duplicate schedule.
 
-Launch timestamp and review date: unset. Social package remains draft-only.
+Verified public launch: September22,2026 at13:03:21UTC /09:03 Eastern. Day28 review: October20,2026 after09:03 Eastern. Social package remains draft-only.
 
 ## Staging evidence, September 22 (UTC)
 
@@ -92,3 +92,39 @@ Launch timestamp and review date: unset. Social package remains draft-only.
   applicable PR947 CI passed. Deployed-base E2E was skipped, not treated as candidate proof.
 - Rollback baselines: marketing dfdce215-701c-45fe-94b9-74a386431d16; app
   f40d2415-4946-414f-8e00-099e67b80a85, both ed00ca62d1bed102747085d736dad931e0a651c3.
+
+## Production release evidence
+
+- PR947 merged to main as4b4b6c0d4b1f22de4c153c12b3471c0bb9049c3a after all
+  applicable CI passed. Only directory functionality and the modest discovery link
+  were released; voice, billing, authentication and career homepage remain baseline.
+- Production app e61a0bc4-b6d3-42b2-ba41-6b927b0ba91c deployed13:02:41UTC;
+  marketing d01c7d95-cd88-443d-802f-00ace8d48f36 deployed13:02:52UTC.
+  Both canonical deployments independently match the merge revision.
+- Migration030 applied only to production directory table/indexes; schema verified
+  and zero rows before the synthetic smoke submission. No other migration applied.
+- Public directory hub, six details and Get listed return200, canonical production
+  URLs and no noindex. Sitemap exact-matches candidate. Existing Cloudflare Rocket
+  Loader changes delivered HTML script attributes; runtime works in real Chrome.
+- Production preflight204, QA-origin403, invalid payload400, unauthenticated recovery401.
+- Production labeled synthetic form saved exactly one private row with one accepted
+  notification; actual support inbox receipt verified at09:04 Eastern. No business
+  contacted and no synthetic public listing created. Exclude test from interest counts.
+- Production existing-consent grant persisted without the preview sync notice. Tag
+  destination G-SQYSWPFM5X confirmed; no Clarity script loaded on directory.
+- Google production Realtime directly shows directory_contact_click,
+  directory_listing_view, directory_request_saved and directory page views.
+  Existing enhanced measurement also reports generic click/scroll; these must not
+  be added to the contact-intent numerator or misrepresented as leads/revenue.
+- Production exploration MRa7w10USY-iG8auzYJECg /property523348532 configured with
+  session-scope canonical directory URL denominator, identical numerator plus exact
+  directory_contact_click, exclusions for Session medium=qa OR Page location
+  containing utm_medium=qa, Sessions metric and source/medium+campaign breakdown.
+  Processed report is still awaiting latency: live receipt is proven; populated
+  session totals/rate are not yet accepted. Follow-up must verify actual rows.
+- Existing hourly jobhackai-decisions automation updated (no duplicate) to review
+  September29,October6,October13 and mandatory day28October20 after13:03UTC.
+  It observes private intake/notification status and actual accessible inbox evidence.
+  This remains hourly polling, not real-time customer-support integration.
+- Public guide/social assets remain drafts. Exact company LinkedIn destination,
+  Instagram clickable route and final copy approval remain required before posting.
