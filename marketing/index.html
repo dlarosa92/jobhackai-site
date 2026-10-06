@@ -97,7 +97,8 @@
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/header.css?v=20260930-voice-nav-1">
   <link rel="stylesheet" href="css/footer.css">
-  <link rel="stylesheet" href="css/marketing.css">
+  <link rel="stylesheet" href="css/marketing.css?v=20261005-pricing-layout-1">
+  <script src="js/subscription-reset.js?v=20261005-1" defer></script>
 </head>
 <body>
   <!-- Component: components/header.html -->
@@ -210,27 +211,30 @@
           <h2 class="section-title" id="plans-heading">Start free. Choose how you keep practicing.</h2>
           <p class="section-lead">One lifetime free voice interview with a feedback preview. These options include full reports and transcripts.</p>
         </div>
-        <div class="card-grid">
-          <article class="card">
+        <div class="card-grid plan-grid">
+          <article class="card plan-card">
             <h3>Weekly Pass</h3>
             <p><strong>$17 per week</strong></p>
             <p>Recurring subscription. Up to 60 interviews per calendar month while subscribed. Cancel anytime.</p>
             <a class="btn btn-ghost" href="https://app.jobhackai.io/pricing" data-cta="home-weekly">View Weekly Pass</a>
           </article>
-          <article class="card">
+          <article class="card plan-card">
             <h3>Monthly</h3>
             <p><strong>$34 per month</strong></p>
             <p>Recurring subscription. Up to 60 interviews per calendar month while subscribed. Cancel anytime.</p>
             <a class="btn btn-primary" href="https://app.jobhackai.io/pricing" data-cta="home-monthly">View Monthly</a>
           </article>
-          <article class="card">
+          <article class="card plan-card">
             <h3>Interview Pack</h3>
             <p><strong>$39 one time</strong></p>
             <p>Five voice interviews, valid for 90 days. No subscription.</p>
             <a class="btn btn-ghost" href="https://app.jobhackai.io/pricing" data-cta="home-pack">View Interview Pack</a>
           </article>
         </div>
-        <p class="section-lead">Subscription limits reset on the first of each month at 00:00 UTC, not each billing date. Ending an interview early still uses a session; reconnecting to the same session does not use another.</p>
+        <div class="plan-limits">
+          <p>Subscription limits reset monthly, separate from your billing date. <span id="subscription-reset">The next reset is at midnight UTC on the first of the month.</span></p>
+          <p>Ending an interview early still uses a session. Reconnecting to the same session does not use another.</p>
+        </div>
       </section>
 
       <section class="section" id="lead-magnet-section">
