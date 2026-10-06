@@ -209,6 +209,41 @@ main .container {
   list-style: disc;
 }
 
+.plan-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  text-align: center;
+}
+
+.plan-card h3 {
+  margin: 0;
+}
+
+.plan-card .btn {
+  margin-top: auto;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 48px;
+  text-align: center;
+  position: relative;
+  z-index: 1;
+}
+
+.plan-limits {
+  margin-top: var(--space-md);
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+.plan-limits p {
+  margin: 0;
+}
+
+.plan-limits p + p {
+  margin-top: var(--space-xs);
+}
+
 .steps {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
