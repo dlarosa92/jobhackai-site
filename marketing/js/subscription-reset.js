@@ -2,8 +2,11 @@
 (() => {
   const resetLabel = document.getElementById('subscription-reset');
   if (!resetLabel) return;
+  const fallbackText = resetLabel.textContent;
+  let refreshTimer;
 
   function renderReset() {
+    window.clearTimeout(refreshTimer);
     const now = new Date();
     const nextReset = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
 
@@ -18,8 +21,12 @@
       }).format(nextReset);
       resetLabel.textContent = `Next reset: ${localReset} (your local time).`;
     } catch (_) {
-      // Keep the static UTC explanation if local formatting is unavailable.
+      resetLabel.textContent = fallbackText;
     }
+
+    // Check daily for clock/timezone changes and at the UTC month boundary.
+    // A bounded delay also avoids browsers' maximum timeout length.
+    refreshTimer = window.setTimeout(renderReset, Math.min(nextReset - now + 1000, 86400000));
   }
 
   renderReset();
