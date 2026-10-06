@@ -66,13 +66,11 @@ function checkContainer(container,plan) {
   const links=[...container.querySelectorAll('a')];
   const voice=links.filter(link=>link.textContent.trim()==='Voice Mock Interview');
   const primary=voice.filter(link=>!link.closest('.nav-dropdown,.mobile-nav-group'));
-  const marketingCopy=${JSON.stringify(copy==='marketing')};
-  assert(voice.length===(plan==='visitor'?(marketingCopy?0:1):(marketingCopy?1:2)),'Voice link count '+voice.length);
-  assert(primary.length===(marketingCopy?0:1),'Unexpected top-level Voice shortcut');
+  assert(voice.length===(plan==='visitor'?0:1),'Voice link count '+voice.length);
+  assert(primary.length===0,'Unexpected top-level Voice shortcut');
   for(const link of voice) assert(link.getAttribute('aria-disabled')!=='true'&&!link.classList.contains('locked-link'),'Voice must be clickable');
   if(plan==='visitor') {
-    if(marketingCopy) assert(links.some(link=>link.textContent.trim()==='Features'),'Features remains discoverable');
-    else assert(new URL(primary[0].href).href==='https://app.jobhackai.io/voice-interview.html','Visitor target');
+    assert(links.some(link=>link.textContent.trim()==='Features'),'Features remains discoverable');
   }
   else {
     const target=new URL(voice[0].href);
