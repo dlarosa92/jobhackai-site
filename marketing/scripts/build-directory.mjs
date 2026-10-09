@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { buildAdditionalCategories } from './directory-categories.mjs';
+import { withAgentDiscovery } from './agent-discovery.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const data = JSON.parse(readFileSync(join(root, 'data/directory/mobile-detailing.json'), 'utf8'));
@@ -27,7 +28,7 @@ mkdirSync(join(out, data.category), { recursive: true });
 const path = listing => `/directory/${data.category}/${listing.id}`;
 const price = p => p ? `<strong>${p.to ? `$${p.from}–$${p.to}` : `From $${p.from}`}</strong><span>${esc(p.package)}</span><p>${esc(p.scope)}</p>` : '<strong>Request a quote</strong><p>No comparable package price recorded.</p>';
 const mail = (subject, body) => `mailto:support@jobhackai.io?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-const shell = (title, description, body, listing = '', canonical = listing ? `/directory/${data.category}/${listing}` : '/directory/', category = data.category, noun = 'detailer') => `<!doctype html>
+const shell = (title, description, body, listing = '', canonical = listing ? `/directory/${data.category}/${listing}` : '/directory/', category = data.category, noun = 'detailer') => withAgentDiscovery(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(title)} | JobHackAI Local</title><meta name="description" content="${esc(description)}">
 <link rel="canonical" href="https://jobhackai.io${canonical}"><link rel="stylesheet" href="/css/tokens.css"><link rel="stylesheet" href="${assets['directory.css']}"><link rel="stylesheet" href="${assets['consent.css']}">
@@ -36,7 +37,7 @@ const shell = (title, description, body, listing = '', canonical = listing ? `/d
 </head><body data-listing="${esc(listing)}" data-directory-category="${esc(category)}" data-provider-noun="${esc(noun)}" data-category-page="${!listing && canonical !== '/directory/get-listed'}"><a class="skip" href="#main">Skip to content</a>
 <header><a class="brand" href="/directory">JobHackAI <span>LOCAL</span></a><nav aria-label="Directory"><a href="/directory">Mobile detailing</a><a href="/directory/junk-removal/">Junk removal</a><a href="/directory/ev-charger-installation/">EV charger installation</a><a href="/directory/get-listed${category ? `?category=${esc(category)}` : ''}">Get listed</a></nav></header>
 <main id="main" tabindex="-1">${body}</main><footer><p>A local directory experiment from <a href="/">JobHackAI</a>. No paid placements.</p><p><a href="https://app.jobhackai.io/privacy">Privacy</a> · <a href="https://app.jobhackai.io/cookies">Cookies</a> · <a href="/directory/get-listed${category ? `?category=${esc(category)}` : ''}">Suggest a correction</a></p><button type="button" id="open-cookie-preferences">Cookie preferences</button></footer>
-<script src="${assets['directory.js']}" defer></script></body></html>`;
+<script src="${assets['directory.js']}" defer></script></body></html>`, `https://jobhackai.io${canonical}`);
 const cards = data.listings.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(l => `<article class="listing" data-region="${esc(l.regions.join('|'))}" data-service="${esc(l.services.join('|'))}" data-utilities="${esc(l.waterPower)}"><div><span class="eyebrow">Mobile service</span><h2><a href="${path(l)}">${esc(l.name)}</a></h2><p>${esc(l.regions.join(' · '))}</p></div><div class="price">${price(l.interiorPrice)}</div><p>${esc(l.waterPowerNote)}</p><a class="more" href="${path(l)}">See packages &amp; booking details <span aria-hidden="true">→</span></a></article>`).join('\n');
 writeFileSync(join(out, 'index.html'), shell('Mobile detailing in Northern Kentucky & Cincinnati', 'Compare local mobile detailers by package scope, starting prices, and water and power requirements.', `
 <section class="hero"><span class="eyebrow">Northern Kentucky + Cincinnati · Directory pilot</span><h1>A cleaner car.<br>Fewer tabs to open.</h1><p class="lead">Compare mobile detailers by what they actually include, what they charge to start, and what they need at your home.</p><p>Browse freely. Book directly with the provider.</p></section>
