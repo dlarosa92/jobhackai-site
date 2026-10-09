@@ -140,7 +140,10 @@ consented analytics and billing attribution for AI referral visits, signup and
 collected purchases. Do not add browser analytics scripts to Markdown responses
 or infer purchases from bot activity.
 
-## Local validation — October 9, 2026
+## Production-content validation — October 9, 2026
+
+This earlier validation used the production-based implementation preserved in
+local commit `cc1960b`. It is not the current `dev0` candidate.
 
 - All 48 individual Markdown pages are current and discoverable: 25 product/job
   search pages and 23 Local pages, each in exactly one full bundle.
@@ -168,4 +171,56 @@ or infer purchases from bot activity.
   returned HTTP 403 from Cloudflare. Their URLs are unchanged. Verify browser
   access on the hosted preview before release; no remote setting was changed.
 
-No commit, push, deployment, or remote configuration change was performed.
+No commit, push, deployment, or remote configuration change was performed during
+that initial validation. The user subsequently authorized the `dev0` pipeline.
+
+
+## Dev0 integration
+
+The feature is ported onto `dev0` commit `7856cc2`, without importing unrelated
+production or application changes. This branch has 24 sitemap-listed public
+pages; its Local directory remains a noindex prototype outside the sitemap.
+The generator preserves that publication boundary: 23 product/job-search mirrors, one
+Local comparison article, and no Markdown discovery links on excluded prototype
+pages. The same
+generator covers all 48 pages when integrated with current production content.
+The original production-based implementation is retained on the local
+`codex/agent-markdown` branch.
+
+- 92 applicable dev0 marketing, analytics, CTA and generator tests passed,
+  including clean and trailing-slash hub URLs.
+- Marketing build, shared-asset consistency and Markdown freshness checks passed.
+- Dev0 HTML content and scripts are preserved, apart from the intended discovery
+  blocks and removal of unsupported role metadata dates.
+- Existing no-build Pages previews can serve the checked-in generated mirrors.
+  They do not prove the clean `dist` publishing configuration; that configuration
+  must still be coordinated before production promotion.
+
+The repository's deployed-app E2E suite targets the already-live base environment
+and changes billing/test-account state. Use its documented `[skip-e2e]` gate for
+this static marketing PR; verify the actual candidate marketing deployment
+separately.
+
+## Production release candidate — October 9, 2026
+
+Dev0 PR #997 and QA PR #998 are merged and deployed. This release applies the same
+generator and clean-hub fix to current production content at `7763115`, preserving
+its newer pages and directory generator. It does not promote unrelated dev0 or QA
+application changes.
+
+- All 48 sitemap-listed pages have current Markdown mirrors.
+- 142 applicable tests pass, including the four clean/trailing-slash hub cases.
+- All 51 existing HTML files retain their content apart from discovery blocks
+  and the intended role metadata date removal. All 35 JavaScript/CSS files are
+  byte-identical to the production baseline; all 95 existing public files remain
+  present in the publishing output.
+- CI uploads the clean `marketing-dist` artifact. Cloudflare's marketing project
+  is to use `npm ci --ignore-scripts && npm run build`, root `marketing`, output
+  `dist`. Verify a preview built with these settings before merging to `main`.
+
+The approved release includes that publishing configuration change. The rollback
+reference is production deployment `c09364a0-71de-4633-b134-2f7f52ec4533` at
+`7763115e278b72f9270d4880b5eed77f3810d3b1`, with an empty build command and output
+`.` under root `marketing`. Restore the deployment and build settings together
+if rollback is necessary. Verify deployed commit, all manifest hashes, existing
+assets/redirects and HTML indexing headers after the production deployment.

@@ -254,6 +254,30 @@ test('every current public page belongs to exactly one complete bundle', () => {
   }
 });
 
+for (const hub of ['/directory', '/interview-questions']) {
+  for (const suffix of ['', '/']) {
+    test(`directory-backed hub ${hub}${suffix} resolves its index file and discovery links`, t => {
+      const root = fixture(t);
+      const url = `https://jobhackai.io${hub}${suffix}`;
+      mkdirSync(join(root, hub), { recursive: true });
+      const source = join(root, hub, 'index.html');
+      writeFileSync(source, html(url));
+      const sitemap = readFileSync(join(root, 'sitemap.xml'), 'utf8').replace('</urlset>', `<url><loc>${url}</loc></url></urlset>`);
+      writeFileSync(join(root, 'sitemap.xml'), sitemap);
+      buildAgentMarkdown({ root });
+      const manifest = JSON.parse(readFileSync(join(root, 'agent-index.json'), 'utf8'));
+      const page = manifest.pages.find(page => page.url === url);
+      assert.equal(page.path, `${hub}/index.md`);
+      assert.ok(existsSync(join(root, page.path)));
+      const $ = load(readFileSync(source, 'utf8'));
+      assert.equal($('link[rel="alternate"]').attr('href'), page.path);
+      assert.equal($('link[rel="canonical"]').attr('href'), url);
+      assert.ok(readFileSync(join(root, agentIndexPath(url)), 'utf8').includes(page.markdown));
+      assert.equal(buildAgentMarkdown({ root, check: true }).changed, 0);
+    });
+  }
+}
+
 test('editorial dates must be real, nonfuture dates in chronological order', () => {
   const today = '2026-10-09';
   assert.deepEqual(editorialDates({}, 'fixture', today), {});

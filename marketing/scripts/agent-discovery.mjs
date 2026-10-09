@@ -16,6 +16,7 @@ export function agentIndexPath(url) {
 
 export function markdownPath(url) {
   const path = new URL(url).pathname;
+  if (['/directory', '/interview-questions'].includes(path)) return `${path}/index.md`;
   return path.endsWith('/') ? `${path}index.md` : `${path.replace(/\.html$/, '')}.md`;
 }
 
