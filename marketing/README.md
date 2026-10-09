@@ -17,3 +17,11 @@ Marketing and app navigation are intentionally different:
 - `css/` holds the reset, design tokens, and marketing layout styles.
 - `components/` contains shared HTML partials (header, footer, cookie banner).
 - `pages/` contains the marketing pages for the static site.
+
+## Markdown for AI agents
+
+Public Markdown is generated from sitemap-listed HTML. Run `npm run build:agents`
+from the repository root after updating public content. CI rejects stale copies.
+`npm run build:marketing` also creates a clean `marketing/dist/` publishing
+directory. See [the build and release guide](../docs/agent-markdown.md) for
+discovery, deployment settings and verification.

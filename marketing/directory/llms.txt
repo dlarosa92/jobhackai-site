@@ -1,0 +1,15 @@
+# JobHackAI Local
+
+## Directory
+
+
+
+## Comparisons
+
+- [Comparing mobile detailers in Cincinnati and Northern Kentucky | JobHackAI Local](https://jobhackai.io/blog/compare-mobile-detailing-cincinnati-nky.md): Compare mobile detailing in Cincinnati and Northern Kentucky: package scope, starting prices, water and power requirements, and questions to ask before booking. [HTML](https://jobhackai.io/blog/compare-mobile-detailing-cincinnati-nky)
+
+## Optional
+
+- [Full Local content](https://jobhackai.io/directory/llms-full.txt): all Local listings and comparisons in one document.
+- [JobHackAI interview preparation](https://jobhackai.io/llms.txt): the product and job search guides.
+- [Page manifest](https://jobhackai.io/agent-index.json): all canonical URLs, Markdown URLs, and content hashes.

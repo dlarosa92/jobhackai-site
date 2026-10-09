@@ -1,33 +1,48 @@
 # JobHackAI
 
-> JobHackAI is an AI interview prep platform for job seekers. The core product is a realistic voice mock interview: you talk to an AI interviewer about your target role, then get a detailed scorecard with strengths, improvement areas, and a full transcript. The prep tools (interview question generator, resume feedback and rewrite, cover letter generator) are free with a signup.
+> Talk through questions for your target role with an AI interviewer. Get feedback on your answers and find something specific to improve before the real conversation.
 
-JobHackAI is built for active job seekers who have interviews coming up and want to practice out loud before the real thing. It works in the browser on desktop and mobile. No app install.
+Your free interview includes a feedback preview: one strength and one area to improve. A paid plan or pack unlocks the full report and transcript, plus more practice.
 
-## What you can do
+## Product
 
-- Voice Mock Interview: a realistic spoken interview tailored to your target role and job description, with a scored feedback report and transcript. Every account gets 1 full voice interview free. Further sessions are paid.
-- Interview Questions: free generator for role specific interview questions with sample answers.
-- Resume Feedback and Rewrite: free ATS style scoring, detailed feedback, and AI rewriting of your resume.
-- Cover Letter Generator: free tailored cover letters from your resume and a job description.
-- Typed Mock Interview: free practice answering questions in writing with AI scoring.
+- [JobHackAI | Practice Your Next Interview Out Loud](https://jobhackai.io/index.md): Practice a live voice mock interview for your target role. Your first interview is free with a feedback preview. Continue with $17/week, $34/month, or five interviews for $39. [HTML](https://jobhackai.io/)
+- [JobHackAI Features | Smarter Resume + LinkedIn Feedback](https://jobhackai.io/features.md): Explore JobHackAI features: ATS scoring, resume feedback, LinkedIn optimization, and interview prep tools built for modern job seekers. [HTML](https://jobhackai.io/features)
 
-## Pricing
+## Account and pricing
 
-- Free: all prep tools plus 1 full voice mock interview (signup required).
-- Weekly Pass: 17 USD per week, up to 60 voice interviews per calendar month (UTC) while subscribed. Cancel anytime.
-- Monthly: 34 USD per month, up to 60 voice interviews per calendar month (UTC) while subscribed. Most popular.
-- Interview Pack: 39 USD one time, 5 voice interview sessions, valid 90 days.
+- [Pricing](https://app.jobhackai.io/pricing): current plans and billing terms.
+- [Sign up](https://app.jobhackai.io/login?mode=signup): create an account to use the tools.
 
-## Key pages
+## Interview questions by role
 
-- [Homepage](https://jobhackai.io/): product overview
-- [Features](https://jobhackai.io/features): all tools explained
-- [Blog](https://jobhackai.io/blog): interview prep guides and original data
-- [Pricing](https://app.jobhackai.io/pricing): plans and FAQ
-- [Sign up](https://app.jobhackai.io/login): create a free account
-- [Interview questions by role](https://jobhackai.io/interview-questions/): role specific question guides
+- [Interview Questions by Role (2026): Real Questions and Sample Answers | JobHackAI](https://jobhackai.io/interview-questions/index.md): Free role specific interview question guides: what interviewers really ask, why they ask it, and worked sample answers. Then practice answering out loud with a voice mock interview. [HTML](https://jobhackai.io/interview-questions/)
+- [Customer Success Manager Interview Questions (2026): 12 Real Questions and Sample Answers | JobHackAI](https://jobhackai.io/interview-questions/customer-success-manager.md): 12 customer success manager interview questions for 2026: churn saves, renewals, expansion, and angry customers, with two worked sample answers. Practice out loud with a free AI voice mock interview. [HTML](https://jobhackai.io/interview-questions/customer-success-manager)
+- [Data Analyst Interview Questions (2026): 12 Real Questions and Sample Answers | JobHackAI](https://jobhackai.io/interview-questions/data-analyst.md): 12 data analyst interview questions for 2026 covering SQL, metrics judgment, stakeholder pushback, and messy data, plus two worked sample answers. Rehearse them out loud with a free AI voice mock interview. [HTML](https://jobhackai.io/interview-questions/data-analyst)
+- [Financial Analyst Interview Questions (2026): 12 Real Questions and Sample Answers | JobHackAI](https://jobhackai.io/interview-questions/financial-analyst.md): 12 financial analyst interview questions for 2026: modeling, variance analysis, forecasting misses, and business partnering, with two worked sample answers. Rehearse out loud with a free AI voice mock interview. [HTML](https://jobhackai.io/interview-questions/financial-analyst)
+- [Marketing Manager Interview Questions (2026): 12 Real Questions and Sample Answers | JobHackAI](https://jobhackai.io/interview-questions/marketing-manager.md): 12 marketing manager interview questions for 2026: campaign performance, budget defense, attribution, and brand vs growth, with two worked sample answers. Practice out loud with a free AI voice mock interview. [HTML](https://jobhackai.io/interview-questions/marketing-manager)
+- [Product Manager Interview Questions (2026): 12 Real Questions and Sample Answers | JobHackAI](https://jobhackai.io/interview-questions/product-manager.md): 12 product manager interview questions for 2026: prioritization, metrics, stakeholder conflict, and product sense, with two worked sample answers. Practice them out loud with a free AI voice mock interview. [HTML](https://jobhackai.io/interview-questions/product-manager)
+- [Project Manager Interview Questions (2026): 12 Real Questions and Sample Answers | JobHackAI](https://jobhackai.io/interview-questions/project-manager.md): 12 project manager interview questions for 2026: slipped timelines, scope creep, stakeholder conflict, and risk, with two worked sample answers. Rehearse out loud with a free AI voice mock interview. [HTML](https://jobhackai.io/interview-questions/project-manager)
+- [Registered Nurse Interview Questions (2026): 12 Real Questions and Sample Answers | JobHackAI](https://jobhackai.io/interview-questions/registered-nurse.md): 12 registered nurse interview questions for 2026: patient safety, prioritization, escalation, and difficult families, with two worked sample answers. Practice answering out loud with a free AI voice mock interview. [HTML](https://jobhackai.io/interview-questions/registered-nurse)
+- [Sales Development Representative Interview Questions (2026): 12 Real Questions and Sample Answers | JobHackAI](https://jobhackai.io/interview-questions/sales-development-representative.md): 12 SDR interview questions for 2026: cold calling, rejection, quota misses, and live pitch roleplays, with two worked sample answers. Drill them out loud with a free AI voice mock interview. [HTML](https://jobhackai.io/interview-questions/sales-development-representative)
+- [Software Engineer Interview Questions (2026): 12 Real Questions and Sample Answers | JobHackAI](https://jobhackai.io/interview-questions/software-engineer.md): 12 software engineer interview questions for 2026, with what interviewers are really probing for and two worked sample answers. Practice answering out loud with a free AI voice mock interview. [HTML](https://jobhackai.io/interview-questions/software-engineer)
+- [UX Designer Interview Questions (2026): 12 Real Questions and Sample Answers | JobHackAI](https://jobhackai.io/interview-questions/ux-designer.md): 12 UX designer interview questions for 2026: portfolio walkthroughs, design critique, research tradeoffs, and AI tools, with two worked sample answers. Practice presenting out loud with a free AI voice mock interview. [HTML](https://jobhackai.io/interview-questions/ux-designer)
 
-## More detail
+## Interview preparation and job search articles
 
-- [Expanded tool descriptions](https://jobhackai.io/llms-full.txt)
+- [JobHackAI Blog | Job Search Tips, Resume & LinkedIn Guides](https://jobhackai.io/blog.md): Actionable job search tips, resume optimization guides, LinkedIn strategies, and interview prep from the JobHackAI team. Published weekly. [HTML](https://jobhackai.io/blog)
+- [68.5 Days of Nothing: The Psychological Toll of the 2026 Response Gap | JobHackAI Blog](https://jobhackai.io/blog/68-5-days-response-gap-job-search-burnout.md): Long hiring timelines can drain job seekers before interviews even begin. Learn how to protect momentum, improve ATS alignment, and prepare while you wait. [HTML](https://jobhackai.io/blog/68-5-days-response-gap-job-search-burnout)
+- [The 7-Day Interview Prep Routine That Builds Real Confidence | JobHackAI Blog](https://jobhackai.io/blog/7-day-interview-prep-routine.md): Stop cramming the night before. This structured 7-day interview prep routine builds the deep fluency that lets you answer any question naturally — not robotically — and walk in with genuine confidence. [HTML](https://jobhackai.io/blog/7-day-interview-prep-routine)
+- [The ATS Optimization Playbook: Get Your Resume Past the Bots | JobHackAI Blog](https://jobhackai.io/blog/ats-optimization-playbook.md): Most resumes are rejected by ATS before a human reads them. This step-by-step playbook shows you exactly how to optimize your resume for ATS filters without losing your voice. [HTML](https://jobhackai.io/blog/ats-optimization-playbook)
+- [Behavioral Interview Anxiety: Why 85% of Job Seekers Feel Unprepared (And the Fix) | JobHackAI Blog](https://jobhackai.io/blog/behavioral-interview-anxiety.md): 85% of job seekers feel unprepared for behavioral interviews. Learn the SAO framework and text-based practice method that closes the Experience Gap and beats anxiety. [HTML](https://jobhackai.io/blog/behavioral-interview-anxiety)
+- [Below 1.0: How the New Leverage Gap Is Rewriting the Rules of Your Resume | JobHackAI Blog](https://jobhackai.io/blog/below-1-0-leverage-gap-resume.md): The job market has tilted back toward employers. Learn why generic resumes get filtered out faster and how ATS-friendly resume optimization helps candidates adapt. [HTML](https://jobhackai.io/blog/below-1-0-leverage-gap-resume)
+- [The Credibility Deficit: How We Lost Our Voice in the Age of Autocomplete | JobHackAI Blog](https://jobhackai.io/blog/credibility-deficit-age-of-autocomplete.md): When AI writes everyone's resume, the polished version of you becomes a liability in the interview. Learn how to stand out by being unmistakably human. [HTML](https://jobhackai.io/blog/credibility-deficit-age-of-autocomplete)
+- [LinkedIn Profile Optimization: Turn Your Profile Into a Recruiter Magnet | JobHackAI Blog](https://jobhackai.io/blog/linkedin-profile-optimization.md): A weak LinkedIn headline costs you interviews every week. Learn how to optimize your LinkedIn profile so recruiters find you, message you, and move you to the top of their shortlists. [HTML](https://jobhackai.io/blog/linkedin-profile-optimization)
+- [Mock Interview Online: How to Run a Useful Practice Session | JobHackAI Blog](https://jobhackai.io/blog/mock-interview-online.md): Choose a relevant question, practice a specific example, and review one change at a time. A practical guide to typed and spoken interview preparation. [HTML](https://jobhackai.io/blog/mock-interview-online)
+- [The 2% Rule: 98% of Job Applications Are Ghosted in 2026. | JobHackAI Blog](https://jobhackai.io/blog/the-2-percent-rule.md): Only 2% of generic job applications get a response. Learn why tailored resumes, AI-optimized cover letters, and LinkedIn branding get you into the 5% interview club. [HTML](https://jobhackai.io/blog/the-2-percent-rule)
+
+## Optional
+
+- [Full product and job search content](https://jobhackai.io/llms-full.txt): the product pages, interview guides, and job search articles in one document.
+- [JobHackAI Local](https://jobhackai.io/directory/llms.txt): local service listings and comparisons, with a separate full-content document.
+- [Page manifest](https://jobhackai.io/agent-index.json): all canonical URLs, Markdown URLs, and content hashes.
