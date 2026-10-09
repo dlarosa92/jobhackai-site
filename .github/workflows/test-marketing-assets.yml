@@ -9,6 +9,7 @@ on:
       - 'css/main.css'
       - 'app/functions/_lib/__tests__/blog-cta.test.mjs'
       - '.github/workflows/test-marketing-assets.yml'
+      - 'package.json'
   push:
     branches: [dev0, develop, main]
     paths:
@@ -17,6 +18,7 @@ on:
       - 'js/blog-cta.js'
       - 'css/main.css'
       - '.github/workflows/test-marketing-assets.yml'
+      - 'package.json'
 permissions:
   contents: read
 jobs:
@@ -27,6 +29,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: npm
+          cache-dependency-path: marketing/package-lock.json
+      - run: npm --prefix marketing ci --ignore-scripts
+      - run: npm run test:agents
+      - run: npm run check:agents
+      - run: npm run build:marketing
+      - uses: actions/upload-artifact@v4
+        with:
+          name: marketing-dist
+          path: marketing/dist/
+          if-no-files-found: error
       - run: node marketing/scripts/sync-shared-assets.mjs --check
       - run: node --test app/functions/_lib/__tests__/blog-cta.test.mjs app/functions/_lib/__tests__/analytics-consent.test.mjs
       - run: node --test marketing/tests/directory-consent.test.mjs marketing/tests/instagram-entry.test.mjs

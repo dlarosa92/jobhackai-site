@@ -22,6 +22,9 @@
 /pricing.html https://app.jobhackai.io/pricing  301
 /pricing      https://app.jobhackai.io/pricing  301
 
+# Agents may append .md to an existing .html link.
+/*.html.md /:splat.md 301
+
 # Blog post clean URLs are handled automatically by Cloudflare Pages' pretty URLs feature.
 # Do NOT add rewrite rules here for blog posts — they cause redirect loops (308 loop).
 # Simply place the HTML file in /blog/ (e.g., /blog/my-post.html) and Cloudflare will

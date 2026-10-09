@@ -8,3 +8,45 @@ https://qa-marketing.jobhackai.io/*
 /directory/*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
+
+# BEGIN AGENT MARKDOWN
+
+/*
+  Link: </llms.txt>; rel="describedby"; type="text/markdown"
+
+/directory/*
+  Link: </directory/llms.txt>; rel="describedby"; type="text/markdown"
+
+/blog/compare-mobile-detailing-cincinnati-nky*
+  Link: </directory/llms.txt>; rel="describedby"; type="text/markdown"
+
+/*.md
+  Content-Type: text/markdown; charset=utf-8
+  X-Content-Type-Options: nosniff
+  X-Robots-Tag: noindex
+  Cache-Control: public, max-age=0, must-revalidate
+
+/llms.txt
+  Content-Type: text/markdown; charset=utf-8
+  Cache-Control: public, max-age=0, must-revalidate
+
+/directory/llms.txt
+  Content-Type: text/markdown; charset=utf-8
+  Cache-Control: public, max-age=0, must-revalidate
+
+/llms-full.txt
+  Content-Type: text/markdown; charset=utf-8
+  Cache-Control: public, max-age=0, must-revalidate
+  X-Robots-Tag: noindex
+
+/directory/llms-full.txt
+  Content-Type: text/markdown; charset=utf-8
+  Cache-Control: public, max-age=0, must-revalidate
+  X-Robots-Tag: noindex
+
+/agent-index.json
+  Content-Type: application/json; charset=utf-8
+  X-Robots-Tag: noindex
+  Cache-Control: public, max-age=0, must-revalidate
+
+# END AGENT MARKDOWN

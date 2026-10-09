@@ -1,0 +1,486 @@
+{
+  "version": 1,
+  "generator": "jobhackai-agent-markdown",
+  "pages": [
+    {
+      "url": "https://jobhackai.io/",
+      "markdown": "https://jobhackai.io/index.md",
+      "path": "/index.md",
+      "title": "JobHackAI | Practice Your Next Interview Out Loud",
+      "description": "Practice a live voice mock interview for your target role. Your first interview is free with a feedback preview. Continue with $17/week, $34/month, or five interviews for $39.",
+      "source_sha256": "ff0f8294a76bff740ea377d0bad3f3de5b9948e86814ed33720b7bdea2bb996e",
+      "markdown_sha256": "3c044f8dd09cf4577420828aa26881a10c1ee9175669986d2eaaa8d7272ab980",
+      "bytes": 5591
+    },
+    {
+      "url": "https://jobhackai.io/blog",
+      "markdown": "https://jobhackai.io/blog.md",
+      "path": "/blog.md",
+      "title": "JobHackAI Blog | Job Search Tips, Resume & LinkedIn Guides",
+      "description": "Actionable job search tips, resume optimization guides, LinkedIn strategies, and interview prep from the JobHackAI team. Published weekly.",
+      "source_sha256": "d7a9d4d51d4422a518ba40ccb1df853ca34dae4efe4660dc3c4738018ccf93b1",
+      "markdown_sha256": "c316195b94ecaec89ae3e9ebd42295bd09d9a820b2d4ab4abd49cb88655e6de5",
+      "bytes": 5153
+    },
+    {
+      "url": "https://jobhackai.io/blog/68-5-days-response-gap-job-search-burnout",
+      "markdown": "https://jobhackai.io/blog/68-5-days-response-gap-job-search-burnout.md",
+      "path": "/blog/68-5-days-response-gap-job-search-burnout.md",
+      "title": "68.5 Days of Nothing: The Psychological Toll of the 2026 Response Gap | JobHackAI Blog",
+      "description": "Long hiring timelines can drain job seekers before interviews even begin. Learn how to protect momentum, improve ATS alignment, and prepare while you wait.",
+      "source_sha256": "824df4096c6c3c5c832731180871468454c125f315acd56b82f907564aac1011",
+      "markdown_sha256": "5cc3b7d98267e0dcbc909c2d045d2b5031f9c7d38dfaebbb68c3600b88f11d72",
+      "bytes": 8240
+    },
+    {
+      "url": "https://jobhackai.io/blog/7-day-interview-prep-routine",
+      "markdown": "https://jobhackai.io/blog/7-day-interview-prep-routine.md",
+      "path": "/blog/7-day-interview-prep-routine.md",
+      "title": "The 7-Day Interview Prep Routine That Builds Real Confidence | JobHackAI Blog",
+      "description": "Stop cramming the night before. This structured 7-day interview prep routine builds the deep fluency that lets you answer any question naturally — not robotically — and walk in with genuine confidence.",
+      "source_sha256": "9ed041ffe7fbb73b3c6798497fa1c1ba7cbfd3e40a31434134a76742e88787f4",
+      "markdown_sha256": "36726596791079a40d92dadc759f14b668b115623a2011fd856b97f6b31fa08d",
+      "bytes": 8673
+    },
+    {
+      "url": "https://jobhackai.io/blog/ats-optimization-playbook",
+      "markdown": "https://jobhackai.io/blog/ats-optimization-playbook.md",
+      "path": "/blog/ats-optimization-playbook.md",
+      "title": "The ATS Optimization Playbook: Get Your Resume Past the Bots | JobHackAI Blog",
+      "description": "Most resumes are rejected by ATS before a human reads them. This step-by-step playbook shows you exactly how to optimize your resume for ATS filters without losing your voice.",
+      "source_sha256": "6979fff3f9c682b62be561b385adc5c3018a671eeed5e9e2aa425044566cd15a",
+      "markdown_sha256": "cb8ac0a145f76ecc34fdaf27c0549271b9fb1551e6652a2c437fb3992dda0b8f",
+      "bytes": 7405
+    },
+    {
+      "url": "https://jobhackai.io/blog/behavioral-interview-anxiety",
+      "markdown": "https://jobhackai.io/blog/behavioral-interview-anxiety.md",
+      "path": "/blog/behavioral-interview-anxiety.md",
+      "title": "Behavioral Interview Anxiety: Why 85% of Job Seekers Feel Unprepared (And the Fix) | JobHackAI Blog",
+      "description": "85% of job seekers feel unprepared for behavioral interviews. Learn the SAO framework and text-based practice method that closes the Experience Gap and beats anxiety.",
+      "source_sha256": "1855261014141d734237c3a04526a6e896fde0e7288bce465e301f4337e80ffd",
+      "markdown_sha256": "42f05a19ee20cfe6ca3d8073fdf627972da0146ca0a36a8c5ea3cf2f0ca59adb",
+      "bytes": 11241
+    },
+    {
+      "url": "https://jobhackai.io/blog/below-1-0-leverage-gap-resume",
+      "markdown": "https://jobhackai.io/blog/below-1-0-leverage-gap-resume.md",
+      "path": "/blog/below-1-0-leverage-gap-resume.md",
+      "title": "Below 1.0: How the New Leverage Gap Is Rewriting the Rules of Your Resume | JobHackAI Blog",
+      "description": "The job market has tilted back toward employers. Learn why generic resumes get filtered out faster and how ATS-friendly resume optimization helps candidates adapt.",
+      "source_sha256": "964049674452bb49297d34e6690efb87d3dbedff42106ea214a62f56de0d3907",
+      "markdown_sha256": "c7652cfdc9f1167eea9bb6abfd55904af12ff05d1762caca38066716911135d9",
+      "bytes": 9346
+    },
+    {
+      "url": "https://jobhackai.io/blog/compare-mobile-detailing-cincinnati-nky",
+      "markdown": "https://jobhackai.io/blog/compare-mobile-detailing-cincinnati-nky.md",
+      "path": "/blog/compare-mobile-detailing-cincinnati-nky.md",
+      "title": "Comparing mobile detailers in Cincinnati and Northern Kentucky | JobHackAI Local",
+      "description": "Compare mobile detailing in Cincinnati and Northern Kentucky: package scope, starting prices, water and power requirements, and questions to ask before booking.",
+      "source_sha256": "bbb72d73e848b727cbe3f8d8b90a4edf860a596484ac93573e943d5080990cb2",
+      "markdown_sha256": "74b22dd9acc3d71013dccbf845054e12f945b1ca8eeddac14847008b75ef12ad",
+      "bytes": 4846
+    },
+    {
+      "url": "https://jobhackai.io/blog/credibility-deficit-age-of-autocomplete",
+      "markdown": "https://jobhackai.io/blog/credibility-deficit-age-of-autocomplete.md",
+      "path": "/blog/credibility-deficit-age-of-autocomplete.md",
+      "title": "The Credibility Deficit: How We Lost Our Voice in the Age of Autocomplete | JobHackAI Blog",
+      "description": "When AI writes everyone's resume, the polished version of you becomes a liability in the interview. Learn how to stand out by being unmistakably human.",
+      "source_sha256": "74c992250ccfaae5cd2138eab86090efe91f642125b35acf69d849466fb8bf51",
+      "markdown_sha256": "6d5dc1afdab15baade003c856e0b6026d562a7b9ad464c2d803bc9607fa60881",
+      "bytes": 11657
+    },
+    {
+      "url": "https://jobhackai.io/blog/how-to-answer-tell-me-about-yourself",
+      "markdown": "https://jobhackai.io/blog/how-to-answer-tell-me-about-yourself.md",
+      "path": "/blog/how-to-answer-tell-me-about-yourself.md",
+      "title": "How to Answer “Tell Me About Yourself” in an Interview | JobHackAI Blog",
+      "description": "Build an introduction around your current work, one relevant example and why this role fits. Includes two illustrative answers and a short practice exercise.",
+      "source_sha256": "7dcbe1f5714876314f4230c2331d2459f145295069ecadafe80bcac171e5b886",
+      "markdown_sha256": "735968d827a65ec41283b1f4da9a9731c243f053cd42e9c217121068375d8762",
+      "bytes": 5783
+    },
+    {
+      "url": "https://jobhackai.io/blog/linkedin-profile-optimization",
+      "markdown": "https://jobhackai.io/blog/linkedin-profile-optimization.md",
+      "path": "/blog/linkedin-profile-optimization.md",
+      "title": "LinkedIn Profile Optimization: Turn Your Profile Into a Recruiter Magnet | JobHackAI Blog",
+      "description": "A weak LinkedIn headline costs you interviews every week. Learn how to optimize your LinkedIn profile so recruiters find you, message you, and move you to the top of their shortlists.",
+      "source_sha256": "a6295f2adefc97c134807dedb2f16304d9e2c64032bf78e580f5748fca737003",
+      "markdown_sha256": "1ef4f6424c311bad4fe1aaf53d0a20c6e6c4c5302b737f6b9b277aafad3ebe87",
+      "bytes": 7314
+    },
+    {
+      "url": "https://jobhackai.io/blog/mock-interview-online",
+      "markdown": "https://jobhackai.io/blog/mock-interview-online.md",
+      "path": "/blog/mock-interview-online.md",
+      "title": "Mock Interview Online: How to Run a Useful Practice Session | JobHackAI Blog",
+      "description": "Choose a relevant question, practice a specific example, and review one change at a time. A practical guide to typed and spoken interview preparation.",
+      "source_sha256": "a6bf5186a1c7c08a916a4135e67c6706c20c13fa72b1202d373edcdfa42182c5",
+      "markdown_sha256": "e94d3ce69538c9913a201c1e38aef41fb56cfea1c97454c09fc7defc31928170",
+      "bytes": 6452
+    },
+    {
+      "url": "https://jobhackai.io/blog/the-2-percent-rule",
+      "markdown": "https://jobhackai.io/blog/the-2-percent-rule.md",
+      "path": "/blog/the-2-percent-rule.md",
+      "title": "The 2% Rule: 98% of Job Applications Are Ghosted in 2026. | JobHackAI Blog",
+      "description": "Only 2% of generic job applications get a response. Learn why tailored resumes, AI-optimized cover letters, and LinkedIn branding get you into the 5% interview club.",
+      "source_sha256": "0ae88cd39a844ad1875d60c06964f545de3874991f8b400e6905be93e434b6b1",
+      "markdown_sha256": "1db41302766904eb2502066f73ec25cabf865a99ca2b690564de518551500595",
+      "bytes": 10945
+    },
+    {
+      "url": "https://jobhackai.io/blog/what-to-expect-from-a-voice-mock-interview",
+      "markdown": "https://jobhackai.io/blog/what-to-expect-from-a-voice-mock-interview.md",
+      "path": "/blog/what-to-expect-from-a-voice-mock-interview.md",
+      "title": "What to expect from a JobHackAI Voice Mock Interview | JobHackAI Blog",
+      "description": "See how to choose your role, answer aloud, handle follow-up questions, and review feedback. Includes the free preview and paid full report.",
+      "source_sha256": "e5ad9ec07ba6f371fcff27506d9331f695b09b40040fcecb9372e2bdceb3389d",
+      "markdown_sha256": "b7e242176566b951062e91e2c306394a7945665f01c24661a22dd10e56b285d1",
+      "bytes": 5468
+    },
+    {
+      "url": "https://jobhackai.io/directory/",
+      "markdown": "https://jobhackai.io/directory/index.md",
+      "path": "/directory/index.md",
+      "title": "Mobile detailing in Northern Kentucky & Cincinnati | JobHackAI Local",
+      "description": "Compare local mobile detailers by package scope, starting prices, and water and power requirements.",
+      "source_sha256": "3b9605b333c8d35d006350edf056afcfb5ad5149413c3c60c914fe6bbd1d3c4e",
+      "markdown_sha256": "54252c80a434bb429744136234861a88ddd6b926d5e1767f7325b78ba2688a86",
+      "bytes": 4182
+    },
+    {
+      "url": "https://jobhackai.io/directory/ev-charger-installation/",
+      "markdown": "https://jobhackai.io/directory/ev-charger-installation/index.md",
+      "path": "/directory/ev-charger-installation/index.md",
+      "title": "Home Level 2 EV charger installation in Northern Kentucky & Cincinnati | JobHackAI Local",
+      "description": "Compare local home Level 2 EV charger installers by panel assessment, charger supply, permits, service area and written quote scope.",
+      "source_sha256": "cc54d628740061b8d67672aa611bb4e264e0d879bc83de0db215357ad499e858",
+      "markdown_sha256": "642e905591b2f4eedad2a66222dfc1eaafa6ffc3ecbedeb414c26f848bfaec55",
+      "bytes": 10199
+    },
+    {
+      "url": "https://jobhackai.io/directory/ev-charger-installation/apollo-home",
+      "markdown": "https://jobhackai.io/directory/ev-charger-installation/apollo-home.md",
+      "path": "/directory/ev-charger-installation/apollo-home.md",
+      "title": "Apollo Home | Home Level 2 EV charger installation | JobHackAI Local",
+      "description": "Published service and quote details for Apollo Home. Confirm availability, scope and current credentials directly.",
+      "source_sha256": "6e95ce070f6d71ef6728236aeae3e5ca5b17092418f4aa9b09cac3aaacb45731",
+      "markdown_sha256": "1d2fd0561aec88ba5861bee1582f0788979411aaa9b7fd6cec33de0455d2eebf",
+      "bytes": 2657
+    },
+    {
+      "url": "https://jobhackai.io/directory/ev-charger-installation/arlinghaus",
+      "markdown": "https://jobhackai.io/directory/ev-charger-installation/arlinghaus.md",
+      "path": "/directory/ev-charger-installation/arlinghaus.md",
+      "title": "Arlinghaus | Home Level 2 EV charger installation | JobHackAI Local",
+      "description": "Published service and quote details for Arlinghaus. Confirm availability, scope and current credentials directly.",
+      "source_sha256": "7dd15d185b216cabb7205518224d8c341cc617e265f4703f54da3bcb526c6448",
+      "markdown_sha256": "da75a095d1ebb9ce0c4acd50fc04354e9336c057233787e73f8d406258976896",
+      "bytes": 2622
+    },
+    {
+      "url": "https://jobhackai.io/directory/ev-charger-installation/gronotte-electric",
+      "markdown": "https://jobhackai.io/directory/ev-charger-installation/gronotte-electric.md",
+      "path": "/directory/ev-charger-installation/gronotte-electric.md",
+      "title": "Gronotte Electric | Home Level 2 EV charger installation | JobHackAI Local",
+      "description": "Published service and quote details for Gronotte Electric. Confirm availability, scope and current credentials directly.",
+      "source_sha256": "5e0be9419d900645922e9b424f01dbeecb37642af95a43555e451048e3821c59",
+      "markdown_sha256": "fd4b1b0e2fd539c2d06e5e32a0ed4c280ed6a6d610026201b380b6cd61699923",
+      "bytes": 2680
+    },
+    {
+      "url": "https://jobhackai.io/directory/ev-charger-installation/ground-zero-electric",
+      "markdown": "https://jobhackai.io/directory/ev-charger-installation/ground-zero-electric.md",
+      "path": "/directory/ev-charger-installation/ground-zero-electric.md",
+      "title": "Ground Zero Electric | Home Level 2 EV charger installation | JobHackAI Local",
+      "description": "Published service and quote details for Ground Zero Electric. Confirm availability, scope and current credentials directly.",
+      "source_sha256": "26c14de6ec76b4c61f20f97637b8152f0d7f6680c38f3f5dcc0227eb3bc0c2a9",
+      "markdown_sha256": "b5756401a6f732993a47c95c7edece78e8b2d894dc889b591f436ce3dbb7204d",
+      "bytes": 2700
+    },
+    {
+      "url": "https://jobhackai.io/directory/ev-charger-installation/nabi-electric",
+      "markdown": "https://jobhackai.io/directory/ev-charger-installation/nabi-electric.md",
+      "path": "/directory/ev-charger-installation/nabi-electric.md",
+      "title": "Nabi Electric | Home Level 2 EV charger installation | JobHackAI Local",
+      "description": "Published service and quote details for Nabi Electric. Confirm availability, scope and current credentials directly.",
+      "source_sha256": "7a7002475db0f0a9a5db9a9df7ba2ca6d45e57dd4429a5edb43e0fdb826dc872",
+      "markdown_sha256": "0a65c986a461014535fe4cebd76cea4d4c00415529fc431ca570f29227bbde46",
+      "bytes": 2795
+    },
+    {
+      "url": "https://jobhackai.io/directory/ev-charger-installation/velasco-electric",
+      "markdown": "https://jobhackai.io/directory/ev-charger-installation/velasco-electric.md",
+      "path": "/directory/ev-charger-installation/velasco-electric.md",
+      "title": "Velasco Electric | Home Level 2 EV charger installation | JobHackAI Local",
+      "description": "Published service and quote details for Velasco Electric. Confirm availability, scope and current credentials directly.",
+      "source_sha256": "8cc6ee4af3c47b607e670c6c0fb14b6192ed85017c4b4a8dd6eb92091230db1f",
+      "markdown_sha256": "639b2cfa42dd619afac30753105478029b808360a39773239a8e548bce8ab5df",
+      "bytes": 2680
+    },
+    {
+      "url": "https://jobhackai.io/directory/get-listed",
+      "markdown": "https://jobhackai.io/directory/get-listed.md",
+      "path": "/directory/get-listed.md",
+      "title": "Get listed | JobHackAI Local",
+      "description": "Suggest a local business for private editorial review.",
+      "source_sha256": "ea2f80d186135458973b6cfc2bcce8d58cd779c14e44e4395d8082f36f968df6",
+      "markdown_sha256": "af40bacc67fe22461e21617f702348789a007452640dfb4578d488825c32dfe3",
+      "bytes": 796
+    },
+    {
+      "url": "https://jobhackai.io/directory/junk-removal/",
+      "markdown": "https://jobhackai.io/directory/junk-removal/index.md",
+      "path": "/directory/junk-removal/index.md",
+      "title": "Junk removal in Northern Kentucky & Cincinnati | JobHackAI Local",
+      "description": "Compare local junk removal by accepted items, loading, service area and quote method. Check municipal pickup before paying for a haul.",
+      "source_sha256": "64bf1ef05111b5595fbefc4a5ffc87e840310b1d11ca8fd7a774b7af3bbad4eb",
+      "markdown_sha256": "158749770ec7b58c437371145c2dcb811049c87bcfabc3cb0fad26bc592710ab",
+      "bytes": 7667
+    },
+    {
+      "url": "https://jobhackai.io/directory/junk-removal/1-800-got-junk",
+      "markdown": "https://jobhackai.io/directory/junk-removal/1-800-got-junk.md",
+      "path": "/directory/junk-removal/1-800-got-junk.md",
+      "title": "1-800-GOT-JUNK? Cincinnati / Northern Kentucky | Junk removal | JobHackAI Local",
+      "description": "Published service and quote details for 1-800-GOT-JUNK? Cincinnati / Northern Kentucky. Confirm availability, scope and current credentials directly.",
+      "source_sha256": "f0de435050f34518fbbbf25e6e0f21761649c11ed44d6745ef982399941057c3",
+      "markdown_sha256": "ab943f481d85372aa43d066b459cafb13c146fc5fc19828f3cc30cf6ae1dca4b",
+      "bytes": 2163
+    },
+    {
+      "url": "https://jobhackai.io/directory/junk-removal/all-in-1-junk-removal",
+      "markdown": "https://jobhackai.io/directory/junk-removal/all-in-1-junk-removal.md",
+      "path": "/directory/junk-removal/all-in-1-junk-removal.md",
+      "title": "All-In-1 Junk Removal and Demo | Junk removal | JobHackAI Local",
+      "description": "Published service and quote details for All-In-1 Junk Removal and Demo. Confirm availability, scope and current credentials directly.",
+      "source_sha256": "7040b4e1f8a533cc5d0d2b3ac282fafafdfb91e3e3c202372a598c0fa094d69d",
+      "markdown_sha256": "cd67c61bcf05e4f6a4ab82c189d4e999b6da6007fa1c37b686c1aaa2bd1407d6",
+      "bytes": 2004
+    },
+    {
+      "url": "https://jobhackai.io/directory/junk-removal/cincy-junk-busters",
+      "markdown": "https://jobhackai.io/directory/junk-removal/cincy-junk-busters.md",
+      "path": "/directory/junk-removal/cincy-junk-busters.md",
+      "title": "Cincy Junk Busters | Junk removal | JobHackAI Local",
+      "description": "Published service and quote details for Cincy Junk Busters. Confirm availability, scope and current credentials directly.",
+      "source_sha256": "65d4d10856da761b6f126af0585b292b62932fd860bd86450d4e80ecd7779b28",
+      "markdown_sha256": "238ae16b09f284e801a165942aa4a56a40efbd8ec44f86eb7a057b760048ecd1",
+      "bytes": 2018
+    },
+    {
+      "url": "https://jobhackai.io/directory/junk-removal/goodfellas-junk-removal",
+      "markdown": "https://jobhackai.io/directory/junk-removal/goodfellas-junk-removal.md",
+      "path": "/directory/junk-removal/goodfellas-junk-removal.md",
+      "title": "GoodFellas Junk Removal | Junk removal | JobHackAI Local",
+      "description": "Published service and quote details for GoodFellas Junk Removal. Confirm availability, scope and current credentials directly.",
+      "source_sha256": "26a456a96a1db8497047d86e33de5c842b3340a14ec1df8582ec20125b194ac1",
+      "markdown_sha256": "b1af9b282e9f8bad31bdbfb888aab21f0e9befb3636193ea177ccaf8661a74cd",
+      "bytes": 2030
+    },
+    {
+      "url": "https://jobhackai.io/directory/junk-removal/junk-king-northern-kentucky",
+      "markdown": "https://jobhackai.io/directory/junk-removal/junk-king-northern-kentucky.md",
+      "path": "/directory/junk-removal/junk-king-northern-kentucky.md",
+      "title": "Junk King Northern Kentucky | Junk removal | JobHackAI Local",
+      "description": "Published service and quote details for Junk King Northern Kentucky. Confirm availability, scope and current credentials directly.",
+      "source_sha256": "e8f7a8601b7f2b3ad6698ac0463844235e0216c03563a0831412c5d6c83dcc50",
+      "markdown_sha256": "7d6d9c677606fc44630b2fa4ba8cfb70421d2ee876daaa7b28f9622b342fbf79",
+      "bytes": 2067
+    },
+    {
+      "url": "https://jobhackai.io/directory/junk-removal/rumpke-haul-it-away",
+      "markdown": "https://jobhackai.io/directory/junk-removal/rumpke-haul-it-away.md",
+      "path": "/directory/junk-removal/rumpke-haul-it-away.md",
+      "title": "Rumpke Haul-it-Away | Junk removal | JobHackAI Local",
+      "description": "Published service and quote details for Rumpke Haul-it-Away. Confirm availability, scope and current credentials directly.",
+      "source_sha256": "08a49a732679098f7e8d4251462d8ffa748e06f1860c1aa32cf2de16ee819a54",
+      "markdown_sha256": "f822e9a788658cfdcc2041564016fd99e60f5515f8a4ac4a7046f768012e308e",
+      "bytes": 2053
+    },
+    {
+      "url": "https://jobhackai.io/directory/mobile-detailing/513-auto-clean",
+      "markdown": "https://jobhackai.io/directory/mobile-detailing/513-auto-clean.md",
+      "path": "/directory/mobile-detailing/513-auto-clean.md",
+      "title": "513 Auto Clean — mobile detailing | JobHackAI Local",
+      "description": "Package details and booking requirements for 513 Auto Clean in Northern Kentucky and Cincinnati.",
+      "source_sha256": "f92c0356d44660e7dd366c18e53b3c7927ad694317471e3a8237e8981f8e2c8b",
+      "markdown_sha256": "9df7af1dd0bb5794c8f5e322b8cf462615032b43f6e7d68d5e316f0051d0bcad",
+      "bytes": 1589
+    },
+    {
+      "url": "https://jobhackai.io/directory/mobile-detailing/deets-mobile-detailing",
+      "markdown": "https://jobhackai.io/directory/mobile-detailing/deets-mobile-detailing.md",
+      "path": "/directory/mobile-detailing/deets-mobile-detailing.md",
+      "title": "deets mobile detailing — mobile detailing | JobHackAI Local",
+      "description": "Package details and booking requirements for deets mobile detailing in Northern Kentucky and Cincinnati.",
+      "source_sha256": "450932643421f70eb55bd0fca8b1e81770dd4f8a1e02e27afc6d074015a52754",
+      "markdown_sha256": "1da251bd7d85ac979f7e778fd7e5debcaa50edc77b317e7aa3f29f15754aa4de",
+      "bytes": 1620
+    },
+    {
+      "url": "https://jobhackai.io/directory/mobile-detailing/detlings-detailing",
+      "markdown": "https://jobhackai.io/directory/mobile-detailing/detlings-detailing.md",
+      "path": "/directory/mobile-detailing/detlings-detailing.md",
+      "title": "Detling's Detailing — mobile detailing | JobHackAI Local",
+      "description": "Package details and booking requirements for Detling's Detailing in Northern Kentucky and Cincinnati.",
+      "source_sha256": "8b8a8fa684d9082438e2346ff6dbe8280968a926529be56faef2d66d7eee177a",
+      "markdown_sha256": "a0423871b0fd08135abb160b786a0480d23130123b46c698a8e0fa3f6483e332",
+      "bytes": 1542
+    },
+    {
+      "url": "https://jobhackai.io/directory/mobile-detailing/og-mobile-detailing",
+      "markdown": "https://jobhackai.io/directory/mobile-detailing/og-mobile-detailing.md",
+      "path": "/directory/mobile-detailing/og-mobile-detailing.md",
+      "title": "OG Mobile Detailing — mobile detailing | JobHackAI Local",
+      "description": "Package details and booking requirements for OG Mobile Detailing in Northern Kentucky and Cincinnati.",
+      "source_sha256": "5be80b2ca8cb090b446943a356b91a83e6b385942cb5275fd62cf8c86aa9cb79",
+      "markdown_sha256": "0035af34514108f6f28e2eb99dc63b0432651b3a6ce29ea40774d28502a56866",
+      "bytes": 1570
+    },
+    {
+      "url": "https://jobhackai.io/directory/mobile-detailing/pearls-auto-recon",
+      "markdown": "https://jobhackai.io/directory/mobile-detailing/pearls-auto-recon.md",
+      "path": "/directory/mobile-detailing/pearls-auto-recon.md",
+      "title": "Pearl's Auto Recon — mobile detailing | JobHackAI Local",
+      "description": "Package details and booking requirements for Pearl's Auto Recon in Northern Kentucky and Cincinnati.",
+      "source_sha256": "9318be43d2b39650c611c3038476fc6e057c8fd937d8858a7232cbfb82d25c5f",
+      "markdown_sha256": "f01e703b9eb373dcd2c2e8c54ec32893a2076c6d177bd93db655f9a82622fe6d",
+      "bytes": 1631
+    },
+    {
+      "url": "https://jobhackai.io/directory/mobile-detailing/precision-gloss",
+      "markdown": "https://jobhackai.io/directory/mobile-detailing/precision-gloss.md",
+      "path": "/directory/mobile-detailing/precision-gloss.md",
+      "title": "Precision Gloss — mobile detailing | JobHackAI Local",
+      "description": "Package details and booking requirements for Precision Gloss in Northern Kentucky and Cincinnati.",
+      "source_sha256": "563458f53bd3c73c1df23e9e4b7b7b46a3d4fb5f0b25a65a32ae5b49696e09fa",
+      "markdown_sha256": "99afb90ba759039b5ab9f38c75f807b482228fef0c6fffc118225cbc60e2da0d",
+      "bytes": 1496
+    },
+    {
+      "url": "https://jobhackai.io/features",
+      "markdown": "https://jobhackai.io/features.md",
+      "path": "/features.md",
+      "title": "Voice Mock Interview & Preparation Tools | JobHackAI Features",
+      "description": "Choose your role, answer aloud, handle follow-up questions, and review feedback. See the free interview preview and paid full report in JobHackAI.",
+      "source_sha256": "96524b0956f99eb7ea64001bee61e039f2ae14f2ce73ff2d926988efd5ef329f",
+      "markdown_sha256": "bba45384aa390cf6eff59a441a65b60fc77feaf84106993ed2ac3c4d18e836c5",
+      "bytes": 4384
+    },
+    {
+      "url": "https://jobhackai.io/interview-questions/",
+      "markdown": "https://jobhackai.io/interview-questions/index.md",
+      "path": "/interview-questions/index.md",
+      "title": "Interview Questions by Role (2026): Real Questions and Sample Answers | JobHackAI",
+      "description": "Free role specific interview question guides: what interviewers really ask, why they ask it, and worked sample answers. Then practice answering out loud with a voice mock interview.",
+      "source_sha256": "e7c38993cf8a3d752b9cab2bad82360f72e16d3e31e18dbc0c1933fe1124a9bc",
+      "markdown_sha256": "e020d621157f35360bfede23e6eb704b6a3de208d32045a1e29f0cb76b7f3f6e",
+      "bytes": 2516
+    },
+    {
+      "url": "https://jobhackai.io/interview-questions/customer-success-manager",
+      "markdown": "https://jobhackai.io/interview-questions/customer-success-manager.md",
+      "path": "/interview-questions/customer-success-manager.md",
+      "title": "Customer Success Manager Interview Questions (2026): 12 Real Questions and Sample Answers | JobHackAI",
+      "description": "12 customer success manager interview questions for 2026: churn saves, renewals, expansion, and angry customers, with two worked sample answers. Practice out loud with a free AI voice mock interview.",
+      "source_sha256": "2f3d66317fc3dadf9677f9ce1d9781b30cdace7c9b3e31a9e7322691167ce7b4",
+      "markdown_sha256": "42b477ee06d7d6893554b8e0bc87f20bcffe8c82a81c1f094a20e44dfa972430",
+      "bytes": 13701
+    },
+    {
+      "url": "https://jobhackai.io/interview-questions/data-analyst",
+      "markdown": "https://jobhackai.io/interview-questions/data-analyst.md",
+      "path": "/interview-questions/data-analyst.md",
+      "title": "Data Analyst Interview Questions (2026): 12 Real Questions and Sample Answers | JobHackAI",
+      "description": "12 data analyst interview questions for 2026 covering SQL, metrics judgment, stakeholder pushback, and messy data, plus two worked sample answers. Rehearse them out loud with a free AI voice mock interview.",
+      "source_sha256": "24817e05565cabf385a1693650cbb6722b2538d79e24581d743d097269cdeae2",
+      "markdown_sha256": "7535d01c0c187d4dc47430369932fc024ff5d5e9618f4760a8970f9bfccc9ec2",
+      "bytes": 13479
+    },
+    {
+      "url": "https://jobhackai.io/interview-questions/financial-analyst",
+      "markdown": "https://jobhackai.io/interview-questions/financial-analyst.md",
+      "path": "/interview-questions/financial-analyst.md",
+      "title": "Financial Analyst Interview Questions (2026): 12 Real Questions and Sample Answers | JobHackAI",
+      "description": "12 financial analyst interview questions for 2026: modeling, variance analysis, forecasting misses, and business partnering, with two worked sample answers. Rehearse out loud with a free AI voice mock interview.",
+      "source_sha256": "d8667eb10c073b02ee3e923ee861affd21ca2d1768325d86f87ea45ecee700f7",
+      "markdown_sha256": "a65a1145fbd4566d049c1c24cede1ce0a754eb867da6f12faa1cc7bbc41af463",
+      "bytes": 14303
+    },
+    {
+      "url": "https://jobhackai.io/interview-questions/marketing-manager",
+      "markdown": "https://jobhackai.io/interview-questions/marketing-manager.md",
+      "path": "/interview-questions/marketing-manager.md",
+      "title": "Marketing Manager Interview Questions (2026): 12 Real Questions and Sample Answers | JobHackAI",
+      "description": "12 marketing manager interview questions for 2026: campaign performance, budget defense, attribution, and brand vs growth, with two worked sample answers. Practice out loud with a free AI voice mock interview.",
+      "source_sha256": "1915c36a8a022c41e476a16750d47d4e2de1db605a52634a621fa143421a9377",
+      "markdown_sha256": "64347831b7d817e192e6eb76ed280137126cd4e496f0328a296fa63dea3da9dc",
+      "bytes": 13952
+    },
+    {
+      "url": "https://jobhackai.io/interview-questions/product-manager",
+      "markdown": "https://jobhackai.io/interview-questions/product-manager.md",
+      "path": "/interview-questions/product-manager.md",
+      "title": "Product Manager Interview Questions (2026): 12 Real Questions and Sample Answers | JobHackAI",
+      "description": "12 product manager interview questions for 2026: prioritization, metrics, stakeholder conflict, and product sense, with two worked sample answers. Practice them out loud with a free AI voice mock interview.",
+      "source_sha256": "54bad921626b53eab3fadbea6865e7912cd06fd03983e639e853f579e71e6da7",
+      "markdown_sha256": "007b34d990e10fb220f4d3ba22c29f002cecf282505e5df9bb1dd81d800e53ae",
+      "bytes": 13764
+    },
+    {
+      "url": "https://jobhackai.io/interview-questions/project-manager",
+      "markdown": "https://jobhackai.io/interview-questions/project-manager.md",
+      "path": "/interview-questions/project-manager.md",
+      "title": "Project Manager Interview Questions (2026): 12 Real Questions and Sample Answers | JobHackAI",
+      "description": "12 project manager interview questions for 2026: slipped timelines, scope creep, stakeholder conflict, and risk, with two worked sample answers. Rehearse out loud with a free AI voice mock interview.",
+      "source_sha256": "1c6ace60021c1f46340a14ab2bf85bd86a870ac896876cb108feddc69f3987e7",
+      "markdown_sha256": "4dcd3ad73af6a84dbd9668975561b5c3b75b678f53fd6a9df5404c622a34a438",
+      "bytes": 13472
+    },
+    {
+      "url": "https://jobhackai.io/interview-questions/registered-nurse",
+      "markdown": "https://jobhackai.io/interview-questions/registered-nurse.md",
+      "path": "/interview-questions/registered-nurse.md",
+      "title": "Registered Nurse Interview Questions (2026): 12 Real Questions and Sample Answers | JobHackAI",
+      "description": "12 registered nurse interview questions for 2026: patient safety, prioritization, escalation, and difficult families, with two worked sample answers. Practice answering out loud with a free AI voice mock interview.",
+      "source_sha256": "5e258c8492da5231176b78864425c402126f8f9a6a21f7f715628ae857e58968",
+      "markdown_sha256": "43d0cc85501e339a3ac54326c0c8f7b598941749e14461734f25f6fb9e460dd0",
+      "bytes": 13544
+    },
+    {
+      "url": "https://jobhackai.io/interview-questions/sales-development-representative",
+      "markdown": "https://jobhackai.io/interview-questions/sales-development-representative.md",
+      "path": "/interview-questions/sales-development-representative.md",
+      "title": "Sales Development Representative Interview Questions (2026): 12 Real Questions and Sample Answers | JobHackAI",
+      "description": "12 SDR interview questions for 2026: cold calling, rejection, quota misses, and live pitch roleplays, with two worked sample answers. Drill them out loud with a free AI voice mock interview.",
+      "source_sha256": "87ab941326ed6703063fe32ce3b5fdcc2a39fe033bf83135adfa58fd2252ffb7",
+      "markdown_sha256": "1ba368e434c41dcbf76da63125c9106221f682b021f80a66f70973cc0e29892c",
+      "bytes": 13426
+    },
+    {
+      "url": "https://jobhackai.io/interview-questions/software-engineer",
+      "markdown": "https://jobhackai.io/interview-questions/software-engineer.md",
+      "path": "/interview-questions/software-engineer.md",
+      "title": "Software Engineer Interview Questions (2026): 12 Real Questions and Sample Answers | JobHackAI",
+      "description": "12 software engineer interview questions for 2026, with what interviewers are really probing for and two worked sample answers. Practice answering out loud with a free AI voice mock interview.",
+      "source_sha256": "516eccf6bc063ac7e3e30b891223478db62a3ecd85ed19e77a24cee7b8d26898",
+      "markdown_sha256": "bce7a4385878d232e701638c7266008c44523b847eee5f1007b673a0d0c694e4",
+      "bytes": 13380
+    },
+    {
+      "url": "https://jobhackai.io/interview-questions/ux-designer",
+      "markdown": "https://jobhackai.io/interview-questions/ux-designer.md",
+      "path": "/interview-questions/ux-designer.md",
+      "title": "UX Designer Interview Questions (2026): 12 Real Questions and Sample Answers | JobHackAI",
+      "description": "12 UX designer interview questions for 2026: portfolio walkthroughs, design critique, research tradeoffs, and AI tools, with two worked sample answers. Practice presenting out loud with a free AI voice mock interview.",
+      "source_sha256": "f2f1ac81e87ffe824e182c35923eb11013b143f4c8254cb8da1fe69ec9fe98ee",
+      "markdown_sha256": "b0fbca70966e5955f61116ad37ce4ce1da5b5cfef75feb446699f84614386725",
+      "bytes": 14562
+    }
+  ]
+}
