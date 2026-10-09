@@ -1,0 +1,19 @@
+{
+  "name": "jobhackai-marketing",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.18.1"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:agents": "node scripts/build-agent-markdown.mjs",
+    "check:agents": "node scripts/build-agent-markdown.mjs --check",
+    "test:agents": "node --test tests/agent-markdown.test.mjs"
+  },
+  "devDependencies": {
+    "cheerio": "1.2.0",
+    "turndown": "7.2.4",
+    "turndown-plugin-gfm": "1.0.2"
+  }
+}
