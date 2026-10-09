@@ -5,6 +5,10 @@
     "jose": "^5.0.0"
   },
   "scripts": {
+    "build:marketing": "npm --prefix marketing run build",
+    "build:agents": "npm --prefix marketing run build:agents",
+    "check:agents": "npm --prefix marketing run check:agents",
+    "test:agents": "npm --prefix marketing run test:agents",
     "build:roles": "node marketing/scripts/build-role-pages.mjs",
     "build:directory": "node marketing/scripts/build-directory.mjs",
     "test:voice:transcripts:smoke": "node app/tests/voice-transcripts/run-evals.mjs --mode smoke",
