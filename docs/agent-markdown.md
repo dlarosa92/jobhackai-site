@@ -187,7 +187,8 @@ generator covers all 48 pages when integrated with current production content.
 The original production-based implementation is retained on the local
 `codex/agent-markdown` branch.
 
-- 88 applicable dev0 marketing, analytics, CTA and generator tests passed.
+- 92 applicable dev0 marketing, analytics, CTA and generator tests passed,
+  including clean and trailing-slash hub URLs.
 - Marketing build, shared-asset consistency and Markdown freshness checks passed.
 - Dev0 HTML content and scripts are preserved, apart from the intended discovery
   blocks and removal of unsupported role metadata dates.

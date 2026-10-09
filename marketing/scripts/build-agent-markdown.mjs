@@ -114,12 +114,12 @@ function sitemapPages(root) {
     const parsed = new URL(url);
     const path = parsed.pathname;
     if (parsed.origin !== SITE || parsed.search || parsed.hash || !/^\/[a-z0-9/-]*$/.test(path) ||
-        !(/^\/$|^\/features$|^\/blog(?:\/|$)|^\/interview-questions\/|^\/directory\//.test(path))) {
+        !(/^\/$|^\/features$|^\/blog(?:\/|$)|^\/interview-questions(?:\/|$)|^\/directory(?:\/|$)/.test(path))) {
       throw new Error(`Sitemap entry is not an allowed public marketing URL: ${url}`);
     }
     if (seen.has(url)) throw new Error(`Duplicate sitemap entry: ${url}`);
     seen.add(url);
-    const source = path.endsWith('/') ? `${path}index.html` : `${path}.html`;
+    const source = markdownPath(url).replace(/\.md$/, '.html');
     const html = readFileSync(localPath(root, source), 'utf8');
     const page = convertPage(html, url);
     return { url, source, html, path: markdownPath(url), ...page };
@@ -141,7 +141,7 @@ function agentIndex(pages) {
   text += '## Product\n\n' + pageList(pages.filter(page => ['/', '/features'].includes(new URL(page.url).pathname)));
   text += '## Account and pricing\n\n- [Pricing](https://app.jobhackai.io/pricing): current plans and billing terms.\n- [Sign up](https://app.jobhackai.io/login?mode=signup): create an account to use the tools.\n\n';
   const groups = [
-    ['Interview questions by role', page => page.url.includes('/interview-questions/')],
+    ['Interview questions by role', page => /^\/interview-questions(?:\/|$)/.test(new URL(page.url).pathname)],
     ['Interview preparation and job search articles', page => page.url.includes('/blog')]
   ];
   for (const [heading, matches] of groups) {
@@ -152,9 +152,9 @@ function agentIndex(pages) {
 }
 
 function localIndex(pages) {
-  const home = pages.find(page => page.url === `${SITE}/directory/`);
+  const home = pages.find(page => ['/directory', '/directory/'].includes(new URL(page.url).pathname));
   let text = `# JobHackAI Local\n\n${home ? `> ${inline(home.description)}\n\n` : ''}`;
-  text += '## Directory\n\n' + pageList(pages.filter(page => new URL(page.url).pathname.startsWith('/directory/')));
+  text += '## Directory\n\n' + pageList(pages.filter(page => /^\/directory(?:\/|$)/.test(new URL(page.url).pathname)));
   text += '## Comparisons\n\n' + pageList(pages.filter(page => new URL(page.url).pathname === LOCAL_ARTICLE));
   text += `## Optional\n\n- [Full Local content](${SITE}/directory/llms-full.txt): all Local listings and comparisons in one document.\n- [JobHackAI interview preparation](${SITE}/llms.txt): the product and job search guides.\n- [Page manifest](${SITE}/agent-index.json): all canonical URLs, Markdown URLs, and content hashes.\n`;
   return text;
