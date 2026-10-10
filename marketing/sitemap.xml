@@ -160,6 +160,12 @@
   </url>
   <!-- END ROLE PAGES -->
   <url><loc>https://jobhackai.io/blog/what-to-expect-from-a-voice-mock-interview</loc><lastmod>2026-09-29</lastmod></url>
+  <url>
+    <loc>https://jobhackai.io/blog/how-to-prepare-a-salary-range-and-a-private-minimum</loc>
+    <lastmod>2026-10-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
 
   <!-- DIRECTORY CATEGORIES START -->
   <url><loc>https://jobhackai.io/directory/junk-removal/</loc><changefreq>weekly</changefreq></url>
