@@ -20,6 +20,9 @@ https://qa-marketing.jobhackai.io/*
 /blog/compare-mobile-detailing-cincinnati-nky*
   Link: </directory/llms.txt>; rel="describedby"; type="text/markdown"
 
+/blog/local-services*
+  Link: </directory/llms.txt>; rel="describedby"; type="text/markdown"
+
 /*.md
   Content-Type: text/markdown; charset=utf-8
   X-Content-Type-Options: nosniff

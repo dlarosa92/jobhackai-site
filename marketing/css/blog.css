@@ -12,6 +12,9 @@
 }
 
 .blog-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
   padding: 0.4rem 1rem;
   border-radius: var(--radius-full);
   border: 1px solid var(--color-divider);
@@ -82,6 +85,7 @@
 
 .blog-featured-meta {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-sm);
   font-size: var(--font-size-xs);
@@ -91,6 +95,19 @@
 .blog-featured-meta .separator {
   color: var(--color-divider);
 }
+
+/* Category pages also provide ordinary links for readers and crawlers. */
+.local-services-intro {
+  margin-bottom: var(--space-xl);
+  padding: var(--space-md);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-card);
+  background: var(--color-card-bg);
+}
+.local-services-intro h2 { margin: 0 0 var(--space-sm); }
+.local-service-links { display: flex; flex-wrap: wrap; gap: 0.75rem 1.5rem; }
+.local-service-links a, .local-back-link a { color: var(--color-cta-green); text-decoration: underline; }
+.local-back-link { margin-top: var(--space-lg); }
 
 .blog-featured-visual {
   background: linear-gradient(135deg, rgba(0, 122, 48, 0.10), rgba(0, 123, 255, 0.10));

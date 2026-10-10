@@ -27,9 +27,10 @@
 - [Pearl's Auto Recon — mobile detailing | JobHackAI Local](https://jobhackai.io/directory/mobile-detailing/pearls-auto-recon.md): Package details and booking requirements for Pearl's Auto Recon in Northern Kentucky and Cincinnati. [HTML](https://jobhackai.io/directory/mobile-detailing/pearls-auto-recon)
 - [Precision Gloss — mobile detailing | JobHackAI Local](https://jobhackai.io/directory/mobile-detailing/precision-gloss.md): Package details and booking requirements for Precision Gloss in Northern Kentucky and Cincinnati. [HTML](https://jobhackai.io/directory/mobile-detailing/precision-gloss)
 
-## Comparisons
+## Local service guides
 
 - [Comparing mobile detailers in Cincinnati and Northern Kentucky | JobHackAI Local](https://jobhackai.io/blog/compare-mobile-detailing-cincinnati-nky.md): Compare mobile detailing in Cincinnati and Northern Kentucky: package scope, starting prices, water and power requirements, and questions to ask before booking. [HTML](https://jobhackai.io/blog/compare-mobile-detailing-cincinnati-nky)
+- [Local Services in Cincinnati & Northern Kentucky | JobHackAI](https://jobhackai.io/blog/local-services.md): Explore local service directories and practical comparison guides for mobile detailing, junk removal and EV charger installation in Cincinnati and Northern Kentucky. [HTML](https://jobhackai.io/blog/local-services)
 
 ## Optional
 

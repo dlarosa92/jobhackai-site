@@ -13,6 +13,16 @@
 
 window.BLOG_POSTS = [
   {
+    "slug": "behavioral-interview-answers-real-evidence",
+    "title": "Behavioral Interview Answers: Show Real Impact With the Evidence You Have",
+    "excerpt": "Prepare behavioral interview answers with a practical evidence worksheet, a fictional worked example and follow-up questions, even without impressive metrics.",
+    "category": "Interview Prep",
+    "date": "2026-10-10",
+    "readTime": 8,
+    "author": "JobHackAI",
+    "featured": true
+  },
+  {
     "slug": "how-to-prepare-a-salary-range-and-a-private-minimum",
     "title": "How to Prepare a Salary Range and a Private Minimum for an Interview",
     "excerpt": "Prepare two numbers before the salary conversation: a defensible range to share and a private minimum to keep. Includes early-screen and later-stage answer examples.",
@@ -46,7 +56,7 @@ window.BLOG_POSTS = [
     "slug": "compare-mobile-detailing-cincinnati-nky",
     "title": "Comparing mobile detailers in Cincinnati and Northern Kentucky",
     "excerpt": "A practical guide to comparing mobile detailing quotes in Cincinnati and Northern Kentucky: what packages include, how vehicle condition and on-site requirements change the price, and the questions to ask before you book.",
-    "category": "Local Directory",
+    "category": "Local Services",
     "date": "2026-09-22",
     "readTime": 3,
     "author": "JobHackAI Local",
@@ -60,7 +70,7 @@ window.BLOG_POSTS = [
     date: '2026-05-23',
     readTime: 7,
     author: 'JobHackAI Team',
-    featured: true,
+    featured: false,
   },
   {
     slug: 'below-1-0-leverage-gap-resume',
@@ -104,8 +114,8 @@ window.BLOG_POSTS = [
   },
   {
     slug: 'mock-interview-online',
-    title: 'Mock Interview Online: Why Real-Time Practice Is Your Secret Weapon',
-    excerpt: 'Stop reading interview tips and start practicing. Real-time mock interview sessions build the structured communication skills that actually win job offers.',
+    title: 'Mock Interview Online: How to Run a Useful Practice Session',
+    excerpt: 'Choose a relevant question, practice a specific example, and review one change at a time. A practical guide to typed and spoken interview preparation.',
     category: 'Interview Prep',
     date: '2026-03-18',
     readTime: 9,
