@@ -13,6 +13,16 @@
 
 window.BLOG_POSTS = [
   {
+    "slug": "how-to-prepare-a-salary-range-and-a-private-minimum",
+    "title": "How to Prepare a Salary Range and a Private Minimum for an Interview",
+    "excerpt": "Prepare two numbers before the salary conversation: a defensible range to share and a private minimum to keep. Includes early-screen and later-stage answer examples.",
+    "category": "Interview Prep",
+    "date": "2026-10-09",
+    "readTime": 7,
+    "author": "JobHackAI",
+    "featured": false
+  },
+  {
     "slug": "what-to-expect-from-a-voice-mock-interview",
     "title": "What to expect from a JobHackAI Voice Mock Interview",
     "excerpt": "See how to choose your role, answer aloud, handle follow-up questions, and review feedback. Includes the free preview and paid full report.",
