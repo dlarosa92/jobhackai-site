@@ -18,9 +18,9 @@
       "path": "/blog.md",
       "title": "JobHackAI Blog | Job Search Tips, Resume & LinkedIn Guides",
       "description": "Actionable job search tips, resume optimization guides, LinkedIn strategies, and interview prep from the JobHackAI team. Published weekly.",
-      "source_sha256": "d7a9d4d51d4422a518ba40ccb1df853ca34dae4efe4660dc3c4738018ccf93b1",
-      "markdown_sha256": "c316195b94ecaec89ae3e9ebd42295bd09d9a820b2d4ab4abd49cb88655e6de5",
-      "bytes": 5153
+      "source_sha256": "1610fdb662288dbfe91404f2f4c086bd910cda1bbdf14186270ed585c0bf3c66",
+      "markdown_sha256": "e150f5531c281a553cd91e7e6951ea29f44140df309a8a0c04d41b2bb12ab31f",
+      "bytes": 6259
     },
     {
       "url": "https://jobhackai.io/blog/68-5-days-response-gap-job-search-burnout",
@@ -51,6 +51,16 @@
       "source_sha256": "6979fff3f9c682b62be561b385adc5c3018a671eeed5e9e2aa425044566cd15a",
       "markdown_sha256": "cb8ac0a145f76ecc34fdaf27c0549271b9fb1551e6652a2c437fb3992dda0b8f",
       "bytes": 7405
+    },
+    {
+      "url": "https://jobhackai.io/blog/behavioral-interview-answers-real-evidence",
+      "markdown": "https://jobhackai.io/blog/behavioral-interview-answers-real-evidence.md",
+      "path": "/blog/behavioral-interview-answers-real-evidence.md",
+      "title": "Behavioral Interview Answers: Use Real Evidence | JobHackAI Blog",
+      "description": "Prepare behavioral interview answers with a practical evidence worksheet, a fictional worked example and follow-up questions, even without impressive metrics.",
+      "source_sha256": "7120ba2380a3c28a910777cc086838af6997e0e6ec20a7deb6d6ae922a74b7e1",
+      "markdown_sha256": "9dbc68283427016fc5ccee71d421d1fbf858a8166b43555d9b12a602159f397c",
+      "bytes": 13017
     },
     {
       "url": "https://jobhackai.io/blog/behavioral-interview-anxiety",
@@ -121,6 +131,16 @@
       "source_sha256": "a6295f2adefc97c134807dedb2f16304d9e2c64032bf78e580f5748fca737003",
       "markdown_sha256": "1ef4f6424c311bad4fe1aaf53d0a20c6e6c4c5302b737f6b9b277aafad3ebe87",
       "bytes": 7314
+    },
+    {
+      "url": "https://jobhackai.io/blog/local-services",
+      "markdown": "https://jobhackai.io/blog/local-services.md",
+      "path": "/blog/local-services.md",
+      "title": "Local Services in Cincinnati & Northern Kentucky | JobHackAI",
+      "description": "Explore local service directories and practical comparison guides for mobile detailing, junk removal and EV charger installation in Cincinnati and Northern Kentucky.",
+      "source_sha256": "dcea1833cbeb8b8771520b268efec64639623301981626d5e34174eab64eb131",
+      "markdown_sha256": "293a0893d628a9b9a8bc11aa5b4710b7bfd7f36292dd9d192afc00e24592f712",
+      "bytes": 2882
     },
     {
       "url": "https://jobhackai.io/blog/mock-interview-online",

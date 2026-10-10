@@ -16,17 +16,29 @@ Practical guides on resumes, LinkedIn, and interview prep — published weekly b
 
 Featured
 
-## The Credibility Deficit: How We Lost Our Voice in the Age of Autocomplete
+## Behavioral Interview Answers: Show Real Impact With the Evidence You Have
 
-AI-polished resumes get past ATS filters but fail in the interview. Learn how to break the autocomplete trap and stand out as a real, verifiable person.
+Prepare behavioral interview answers with a practical evidence worksheet, a fictional worked example and follow-up questions, even without impressive metrics.
 
-May 23, 2026 · 7 min read · Resume
+October 10, 20268 min readInterview Prep
 
 
 
-](https://jobhackai.io/blog/credibility-deficit-age-of-autocomplete)
+](https://jobhackai.io/blog/behavioral-interview-answers-real-evidence)
 
 [
+
+Interview Prep
+
+### How to Prepare a Salary Range and a Private Minimum for an Interview
+
+Prepare two numbers before the salary conversation: a defensible range to share and a private minimum to keep. Includes early-screen and later-stage answer examples.
+
+October 9, 20267 min read
+
+
+
+](https://jobhackai.io/blog/how-to-prepare-a-salary-range-and-a-private-minimum)[
 
 Interview Prep
 
@@ -34,7 +46,7 @@ Interview Prep
 
 See how to choose your role, answer aloud, handle follow-up questions, and review feedback. Includes the free preview and paid full report.
 
-September 29, 2026·4 min read
+September 29, 20264 min read
 
 
 
@@ -46,11 +58,35 @@ Interview Prep
 
 Build an introduction around your current work, one relevant example and why this role fits. Includes two illustrative answers and a short practice exercise.
 
-September 29, 2026 · 4 min read
+September 29, 20264 min read
 
 
 
 ](https://jobhackai.io/blog/how-to-answer-tell-me-about-yourself)[
+
+Local Services
+
+### Comparing mobile detailers in Cincinnati and Northern Kentucky
+
+A practical guide to comparing mobile detailing quotes in Cincinnati and Northern Kentucky: what packages include, how vehicle condition and on-site requirements change the price, and the questions to ask before you book.
+
+September 22, 20263 min read
+
+
+
+](https://jobhackai.io/blog/compare-mobile-detailing-cincinnati-nky)[
+
+Resume
+
+### The Credibility Deficit: How We Lost Our Voice in the Age of Autocomplete
+
+AI-polished resumes get past ATS filters but fail in the interview. Learn how to break the autocomplete trap and stand out as a real, verifiable person.
+
+May 23, 20267 min read
+
+
+
+](https://jobhackai.io/blog/credibility-deficit-age-of-autocomplete)[
 
 Resume
 
@@ -58,7 +94,7 @@ Resume
 
 The job market has tilted back toward employers. Learn why generic resumes get filtered out faster and how ATS-friendly resume optimization helps candidates adapt.
 
-April 28, 2026 · 6 min read
+April 28, 20266 min read
 
 
 
@@ -70,7 +106,7 @@ Job Search
 
 Long hiring timelines can drain job seekers before interviews even begin. Learn how to protect your momentum, improve ATS alignment, and prepare while you wait.
 
-April 28, 2026 · 6 min read
+April 28, 20266 min read
 
 
 
@@ -82,7 +118,7 @@ Interview Prep
 
 The gap between your achievements and your ability to articulate them under pressure is where careers stall. Learn the SAO framework and text-based practice method that closes the Experience Gap.
 
-April 5, 2026 · 7 min read
+April 5, 20267 min read
 
 
 
@@ -94,7 +130,7 @@ Job Search
 
 For every 100 generic applications, only two people get an interview. Learn why tailored resumes and AI-optimized cover letters get you into the 5% interview club.
 
-April 5, 2026 · 8 min read
+April 5, 20268 min read
 
 
 
@@ -106,7 +142,7 @@ Interview Prep
 
 Choose a relevant question, practice a specific example, and review one change at a time. A practical guide to typed and spoken interview preparation.
 
-March 18, 2026
+March 18, 20269 min read
 
 
 
@@ -118,7 +154,7 @@ Resume
 
 Most resumes are rejected before a human ever reads them. Here is the exact framework to align your resume with ATS filters without losing your voice or authenticity.
 
-February 24, 2026 · 8 min read
+February 24, 20268 min read
 
 
 
@@ -130,7 +166,7 @@ LinkedIn
 
 A weak LinkedIn headline costs you interviews every week. Learn how to position your profile so recruiters find you, message you, and move you to the top of the pile.
 
-February 17, 2026 · 7 min read
+February 17, 20267 min read
 
 
 
@@ -142,7 +178,7 @@ Interview Prep
 
 Most candidates cram the night before. This structured 7-day routine builds the kind of deep fluency that lets you answer any question naturally, not robotically.
 
-February 10, 2026 · 6 min read
+February 10, 20266 min read
 
 
 

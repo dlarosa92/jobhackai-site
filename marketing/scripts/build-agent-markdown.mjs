@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { load } from 'cheerio';
 import TurndownService from 'turndown';
 import { gfm } from 'turndown-plugin-gfm';
-import { SITE, LOCAL_ARTICLE, isLocalPage, markdownPath, withAgentDiscovery, withoutDiscovery } from './agent-discovery.mjs';
+import { SITE, LOCAL_ARTICLE, LOCAL_BLOG_INDEX, isLocalPage, markdownPath, withAgentDiscovery, withoutDiscovery } from './agent-discovery.mjs';
 
 const GENERATOR = 'jobhackai-agent-markdown';
 const HEADER_BEGIN = '# BEGIN AGENT MARKDOWN';
@@ -155,7 +155,7 @@ function localIndex(pages) {
   const home = pages.find(page => ['/directory', '/directory/'].includes(new URL(page.url).pathname));
   let text = `# JobHackAI Local\n\n${home ? `> ${inline(home.description)}\n\n` : ''}`;
   text += '## Directory\n\n' + pageList(pages.filter(page => /^\/directory(?:\/|$)/.test(new URL(page.url).pathname)));
-  text += '## Comparisons\n\n' + pageList(pages.filter(page => new URL(page.url).pathname === LOCAL_ARTICLE));
+  text += '## Local service guides\n\n' + pageList(pages.filter(page => [LOCAL_BLOG_INDEX, LOCAL_ARTICLE].includes(new URL(page.url).pathname)));
   text += `## Optional\n\n- [Full Local content](${SITE}/directory/llms-full.txt): all Local listings and comparisons in one document.\n- [JobHackAI interview preparation](${SITE}/llms.txt): the product and job search guides.\n- [Page manifest](${SITE}/agent-index.json): all canonical URLs, Markdown URLs, and content hashes.\n`;
   return text;
 }
@@ -173,6 +173,7 @@ function headers(original) {
     // Pages joins matching Link headers; Local responses advertise both guides.
     `/directory/*\n${localDiscovery}`,
     `${LOCAL_ARTICLE}*\n${localDiscovery}`,
+    `${LOCAL_BLOG_INDEX}*\n${localDiscovery}`,
     '/*.md\n  Content-Type: text/markdown; charset=utf-8\n  X-Content-Type-Options: nosniff\n  X-Robots-Tag: noindex\n  Cache-Control: public, max-age=0, must-revalidate',
     ...['/llms.txt', '/directory/llms.txt'].map(path => `${path}\n${markdownHeaders}`),
     ...['/llms-full.txt', '/directory/llms-full.txt'].map(path => `${path}\n${markdownHeaders}\n  X-Robots-Tag: noindex`),
