@@ -18,7 +18,7 @@
       "path": "/blog.md",
       "title": "JobHackAI Blog | Job Search Tips, Resume & LinkedIn Guides",
       "description": "Actionable job search tips, resume optimization guides, LinkedIn strategies, and interview prep from the JobHackAI team. Published weekly.",
-      "source_sha256": "1d26c398f0811c11be5f2307f4df1fd43226ce75585a42b968023e2320eb9a23",
+      "source_sha256": "1610fdb662288dbfe91404f2f4c086bd910cda1bbdf14186270ed585c0bf3c66",
       "markdown_sha256": "e150f5531c281a553cd91e7e6951ea29f44140df309a8a0c04d41b2bb12ab31f",
       "bytes": 6259
     },
@@ -138,9 +138,9 @@
       "path": "/blog/local-services.md",
       "title": "Local Services in Cincinnati & Northern Kentucky | JobHackAI",
       "description": "Explore local service directories and practical comparison guides for mobile detailing, junk removal and EV charger installation in Cincinnati and Northern Kentucky.",
-      "source_sha256": "475955dcf3e5a5ee0a20a24034379c458804f565172c3fa29ec4534dcdb7c7a0",
-      "markdown_sha256": "775ba7af09b959ff52191bc820c966b4be4351d13a65b3aec699964fbe79247d",
-      "bytes": 2687
+      "source_sha256": "dcea1833cbeb8b8771520b268efec64639623301981626d5e34174eab64eb131",
+      "markdown_sha256": "293a0893d628a9b9a8bc11aa5b4710b7bfd7f36292dd9d192afc00e24592f712",
+      "bytes": 2882
     },
     {
       "url": "https://jobhackai.io/blog/mock-interview-online",
