@@ -74,19 +74,95 @@
       ],
       "services": [
         "interior",
-        "exterior"
+        "exterior",
+        "full-detail"
       ],
-      "waterPower": "confirm",
-      "waterPowerNote": "Provider asks customers to discuss water or power questions when booking; self-contained equipment is not confirmed.",
+      "waterPower": "self-contained",
+      "waterPowerNote": "Provider brings water, power, tools and products. Customers only need to provide a place to park.",
       "interiorPrice": {
         "from": 125,
         "currency": "USD",
         "package": "Basic Interior",
-        "scope": "Basic cleanup; excludes upholstery shampoo/extraction and deep stain treatment. Larger or heavily soiled vehicles may vary."
+        "scope": "Basic cleanup; excludes upholstery shampoo/extraction and deep stain treatment. Estimated time: 2 hours. Larger or heavily soiled vehicles may vary."
       },
-      "fullPrice": null,
+      "fullPrice": {
+        "from": 315,
+        "currency": "USD",
+        "package": "Full Interior + Basic Exterior",
+        "scope": "$340 when booked separately; $25 off automatically when booked together. Confirm vehicle size, condition, travel and add-ons."
+      },
       "petHair": "add-on",
-      "petHairNote": "Pet hair work is available; package scope and additional treatment depend on severity."
+      "petHairNote": "Pet hair removal is a $50 add-on. The quote may change after inspection for heavily embedded hair.",
+      "checkedAt": "2026-10-10",
+      "sourceNote": "Provider website and corrections supplied by Elijah Thacker of 513 Auto Clean on October 10, 2026.",
+      "packageGroups": [
+        {
+          "title": "Interior packages",
+          "items": [
+            {
+              "name": "Basic Interior",
+              "price": "$125",
+              "duration": "2 hours"
+            },
+            {
+              "name": "Full Interior",
+              "price": "$215",
+              "duration": "4 hours"
+            },
+            {
+              "name": "Showroom Ready",
+              "price": "$395+",
+              "duration": "7\u20138 hours"
+            }
+          ]
+        },
+        {
+          "title": "Exterior packages",
+          "items": [
+            {
+              "name": "Express Exterior",
+              "price": "$75",
+              "duration": "1 hour 15 minutes"
+            },
+            {
+              "name": "Basic Exterior",
+              "price": "$125",
+              "duration": "2 hours"
+            },
+            {
+              "name": "Full Exterior",
+              "price": "$245",
+              "duration": "4 hours"
+            }
+          ]
+        }
+      ],
+      "packageNote": "Published starting prices; larger or heavily soiled vehicles may vary. Confirm the final scope and quote before booking.",
+      "multiVehicleNote": "Provider offers 10% off everything when booking two or more vehicles together. Confirm how discounts apply to your booking.",
+      "travelNote": "The first 10 minutes of drive time are free. Beyond that, the actual drive is quoted from your address before booking.",
+      "serviceAreaNote": "Greater Cincinnati, Northern Kentucky and Southeast Indiana. Confirm service at your address.",
+      "hoursNote": "Available seven days a week, 7 AM\u201310 PM; confirm appointment availability.",
+      "serviceDetails": [
+        "Interior detailing",
+        "Exterior detailing",
+        "Headlight restoration",
+        "Engine bay detailing",
+        "Wheel and tire service",
+        "Paint decontamination",
+        "Clay bar/towel",
+        "Ceramic wax sealant",
+        "Hard water spot removal",
+        "Ozone odor treatment",
+        "Full vehicle steam treatment",
+        "Seat removal",
+        "Stain treatment"
+      ],
+      "guaranteeNote": "Provider says that if anything is off after the appointment, it will come back and fix it. Confirm the guarantee terms directly.",
+      "reviewNote": "Provider reports a 5.0 rating across 32 Google reviews as of October 10, 2026. This rating has not been independently verified by JobHackAI; review counts can change.",
+      "bookingUrl": "https://513autoclean.com/book.html",
+      "phone": "(513) 279-2915",
+      "phoneUrl": "tel:+15132792915",
+      "contactEmail": "513autoclean@gmail.com"
     },
     {
       "id": "og-mobile-detailing",

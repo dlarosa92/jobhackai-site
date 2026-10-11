@@ -215,7 +215,7 @@ Compare mobile detailers by what they actually include, what they charge to star
 
 Browse freely. Book directly with the provider.
 
-These are provider-published details, checked 2026-09-22. A listing is not a service-quality endorsement. Prices cover different jobs; confirm your address, vehicle condition and final quote before booking.
+These are provider-published details. Each provider page records its source and check date. A listing is not a service-quality endorsement. Prices cover different jobs; confirm your address, vehicle condition and final quote before booking.
 
 6 detailers · alphabetical order
 
@@ -229,9 +229,9 @@ Northern Kentucky · Cincinnati
 
 Basic Interior
 
-Basic cleanup; excludes upholstery shampoo/extraction and deep stain treatment. Larger or heavily soiled vehicles may vary.
+Basic cleanup; excludes upholstery shampoo/extraction and deep stain treatment. Estimated time: 2 hours. Larger or heavily soiled vehicles may vary.
 
-Provider asks customers to discuss water or power questions when booking; self-contained equipment is not confirmed.
+Provider brings water, power, tools and products. Customers only need to provide a place to park.
 
 [See packages & booking details](https://jobhackai.io/directory/mobile-detailing/513-auto-clean)
 
@@ -1633,39 +1633,110 @@ Mobile detailing, booked directly with the provider.
 
 [Visit provider & request a quote](https://513autoclean.com/)
 
-Details from the provider’s website, checked 2026-09-22. Confirm availability and service at your address. No paid placement or partnership is implied.
+Details from the provider’s website and provider-supplied corrections, checked 2026-10-10. Confirm availability and service at your address. No paid placement or partnership is implied.
 
-## Interior package
+## Interior packages
 
-**From $125**
+-   ### Basic Interior
 
-Basic Interior
+    **$125**2 hours
 
-Basic cleanup; excludes upholstery shampoo/extraction and deep stain treatment. Larger or heavily soiled vehicles may vary.
+-   ### Full Interior
+
+    **$215**4 hours
+
+-   ### Showroom Ready
+
+    **$395+**7–8 hours
+
+
+## Exterior packages
+
+-   ### Express Exterior
+
+    **$75**1 hour 15 minutes
+
+-   ### Basic Exterior
+
+    **$125**2 hours
+
+-   ### Full Exterior
+
+    **$245**4 hours
+
 
 ## Full detail package
 
-**Request a quote**
+**From $315**
 
-No comparable package price recorded.
+Full Interior + Basic Exterior
+
+$340 when booked separately; $25 off automatically when booked together. Confirm vehicle size, condition, travel and add-ons.
+
+Provider offers 10% off everything when booking two or more vehicles together. Confirm how discounts apply to your booking.
+
+Published starting prices; larger or heavily soiled vehicles may vary. Confirm the final scope and quote before booking.
 
 ## Before the appointment
 
 **Water, power & parking**
 
-Provider asks customers to discuss water or power questions when booking; self-contained equipment is not confirmed.
+Provider brings water, power, tools and products. Customers only need to provide a place to park.
+
+**Travel**
+
+The first 10 minutes of drive time are free. Beyond that, the actual drive is quoted from your address before booking.
 
 **Pet hair**
 
-Pet hair work is available; package scope and additional treatment depend on severity.
+Pet hair removal is a $50 add-on. The quote may change after inspection for heavily embedded hair.
+
+**Service area**
+
+Greater Cincinnati, Northern Kentucky and Southeast Indiana. Confirm service at your address.
+
+**Availability**
+
+Available seven days a week, 7 AM–10 PM; confirm appointment availability.
 
 **Services mentioned**
 
-interior, exterior
+-   Interior detailing
+-   Exterior detailing
+-   Headlight restoration
+-   Engine bay detailing
+-   Wheel and tire service
+-   Paint decontamination
+-   Clay bar/towel
+-   Ceramic wax sealant
+-   Hard water spot removal
+-   Ozone odor treatment
+-   Full vehicle steam treatment
+-   Seat removal
+-   Stain treatment
+
+**Provider’s make-it-right guarantee**
+
+Provider says that if anything is off after the appointment, it will come back and fix it. Confirm the guarantee terms directly.
+
+**Provider-reported reviews**
+
+Provider reports a 5.0 rating across 32 Google reviews as of October 10, 2026. This rating has not been independently verified by JobHackAI; review counts can change.
 
 **Information source**
 
-[Provider website](https://513autoclean.com/) · checked 2026-09-22
+[Provider website](https://513autoclean.com/) · checked 2026-10-10
+
+Provider website and corrections supplied by Elijah Thacker of 513 Auto Clean on October 10, 2026.
+
+## Contact & booking
+
+Contact the provider directly to confirm your quote and appointment.
+
+[View provider’s booking page](https://513autoclean.com/book.html)
+
+-   [(513) 279-2915 — call or text](tel:+15132792915)
+-   [513autoclean@gmail.com](mailto:513autoclean@gmail.com)
 
 [Suggest a correction by email](mailto:support@jobhackai.io?subject=Directory%20correction%3A%20513%20Auto%20Clean&body=Business%3A%20513%20Auto%20Clean%0AListing%3A%20https%3A%2F%2Fjobhackai.io%2Fdirectory%2Fmobile-detailing%2F513-auto-clean%0ACorrection%20and%20source%20URL%3A%0A)
 

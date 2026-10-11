@@ -14,7 +14,7 @@ Compare mobile detailers by what they actually include, what they charge to star
 
 Browse freely. Book directly with the provider.
 
-These are provider-published details, checked 2026-09-22. A listing is not a service-quality endorsement. Prices cover different jobs; confirm your address, vehicle condition and final quote before booking.
+These are provider-published details. Each provider page records its source and check date. A listing is not a service-quality endorsement. Prices cover different jobs; confirm your address, vehicle condition and final quote before booking.
 
 6 detailers · alphabetical order
 
@@ -28,9 +28,9 @@ Northern Kentucky · Cincinnati
 
 Basic Interior
 
-Basic cleanup; excludes upholstery shampoo/extraction and deep stain treatment. Larger or heavily soiled vehicles may vary.
+Basic cleanup; excludes upholstery shampoo/extraction and deep stain treatment. Estimated time: 2 hours. Larger or heavily soiled vehicles may vary.
 
-Provider asks customers to discuss water or power questions when booking; self-contained equipment is not confirmed.
+Provider brings water, power, tools and products. Customers only need to provide a place to park.
 
 [See packages & booking details](https://jobhackai.io/directory/mobile-detailing/513-auto-clean)
 
