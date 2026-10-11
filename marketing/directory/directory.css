@@ -21,3 +21,20 @@ select,.request-panel input{min-height:48px}
 .request-panel select{font-size:16px}
 @media(max-width:700px){header{align-items:flex-start;flex-direction:column;padding-top:18px;padding-bottom:18px}nav{justify-content:flex-start;gap:8px 16px}nav a{min-height:44px;display:inline-flex;align-items:center}}
 @media(prefers-reduced-motion:reduce){button,.button,.more{transition:none}button:active,.button:active,.more:active{transform:none}}
+
+/* Expanded provider menus retain the directory's card spacing and colors. */
+.package-list{list-style:none;margin:0;padding:0}
+.package-list li{padding:18px 0;border-top:1px solid var(--color-divider)}
+.package-list li:last-child{padding-bottom:0}
+.package-list h3{font-size:16px;line-height:1.4;margin:0 0 8px}
+.package-list p{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0}
+.package-list strong{font-size:22px;color:var(--color-text-main)}
+.package-list span{font-size:14px;color:var(--color-text-secondary)}
+.package-combined,.package-note{grid-column:1/-1}
+.package-note{margin:0}
+.service-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 24px;margin:12px 0 0;padding-left:20px}
+.provider-contact{border-top:1px solid var(--color-divider);margin:32px 0;padding-top:16px}
+.provider-contact ul{list-style:none;margin:16px 0 0;padding:0}
+.provider-contact li{margin:12px 0}
+.provider-contact a{overflow-wrap:anywhere;max-width:100%}
+@media(max-width:580px){.service-list{grid-template-columns:1fr}.provider-contact .button{width:100%}}
