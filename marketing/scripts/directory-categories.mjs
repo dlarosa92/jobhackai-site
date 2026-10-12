@@ -3,7 +3,7 @@ import {join} from 'node:path';
 
 export const categoryDefinitions = {
   'junk-removal': {
-    title:'Junk removal in Northern Kentucky & Cincinnati', label:'Junk removal', noun:'provider',
+    title:'Junk removal in Greater Cincinnati', label:'Junk removal', noun:'provider',
     headline:'Clear the space.<br>Know what the quote covers.',
     description:'Compare local junk removal by accepted items, loading, service area and quote method. Check municipal pickup before paying for a haul.',
     serviceLabel:'Items to remove', services:['furniture','appliances','yard-waste','construction-debris','electronics'],
@@ -20,7 +20,7 @@ export const categoryDefinitions = {
       <p>Elsewhere in Northern Kentucky or Greater Cincinnati, check your municipality and regular hauler. These two programs are not region-wide services. Rules checked September 23, 2026.</p></section>`
   },
   'ev-charger-installation': {
-    title:'Home Level 2 EV charger installation in Northern Kentucky & Cincinnati',label:'Home Level 2 EV charger installation',noun:'installer',
+    title:'Home Level 2 EV charger installation in Greater Cincinnati',label:'Home Level 2 EV charger installation',noun:'installer',
     headline:'Plan home charging.<br>Compare the whole installation.',
     description:'Compare local home Level 2 EV charger installers by panel assessment, charger supply, permits, service area and written quote scope.',
     serviceLabel:'Additional work mentioned',services:['panel-upgrade','multi-vehicle','indoor-outdoor'],
@@ -38,12 +38,12 @@ export const categoryDefinitions = {
 };
 
 export function validateCategory(data,definition) {
-  if(!definition || !Array.isArray(data.listings) || data.listings.length<6 || data.listings.length>10) throw Error('Expected 6 to 10 category listings');
+  if(!definition || !Array.isArray(data.listings) || data.listings.length<1) throw Error('Expected at least one category listing');
   const seen=new Set();
   for(const l of data.listings){
     if(!/^[a-z0-9-]+$/.test(l.id) || seen.has(l.id) || !l.name) throw Error('Invalid or duplicate listing');
     seen.add(l.id);
-    if(!l.regions?.length || l.regions.some(r=>!['Cincinnati','Northern Kentucky'].includes(r))) throw Error('Invalid service region');
+    if(!l.regions?.length || l.regions.some(r=>!['Cincinnati','Northern Kentucky','Southeast Indiana'].includes(r))) throw Error('Invalid service region');
     if(!Array.isArray(l.services) || l.services.some(s=>!definition.services.includes(s))) throw Error('Invalid service filter');
     for(const key of Object.keys(definition.fields)) if(l.details?.[key]!==null && (typeof l.details?.[key]!=='string' || !l.details[key].trim())) throw Error('Missing comparison field: '+key);
     if(!l.sources?.length) throw Error('Missing provider sources');
@@ -72,10 +72,10 @@ export function buildAdditionalCategories({root,out,shell,esc}) {
     const details=l=>Object.entries(d.fields).map(([key,label])=>`<dt>${esc(label)}</dt><dd>${text(l.details[key])}</dd>`).join('');
     const rows=data.listings.slice().sort((a,b)=>a.name.localeCompare(b.name));
     const cards=rows.map(l=>`<article class="listing" data-region="${esc(l.regions.join('|'))}" data-service="${esc(l.services.join('|'))}" data-loading="${esc((l.loading||[]).join('|'))}"><span class="eyebrow">${esc(d.label)}</span><h2><a href="${path(l)}">${esc(l.name)}</a></h2><p>${esc(l.regions.join(' · '))}</p><dl>${details(l)}</dl><a class="more" href="${path(l)}">Compare provider details <span aria-hidden="true">→</span></a></article>`).join('\n');
-    const filters=`<form id="filters" class="filters" role="search" aria-label="Filter ${esc(d.noun)}s"><label>Service area<select name="region"><option value="">All published service areas</option><option>Cincinnati</option><option>Northern Kentucky</option></select></label><label>${esc(d.serviceLabel)}<select name="service"><option value="">Any listed service</option>${options(d.services)}</select></label>${category==='junk-removal'?`<label>Loading options<select name="loading"><option value="">Any loading arrangement</option>${options(['full-service','curbside','self-load'])}</select></label>`:''}<button type="reset">Reset filters</button></form>`;
+    const filters=`<form id="filters" class="filters" role="search" aria-label="Filter ${esc(d.noun)}s"><label>Service area<select name="region"><option value="">All published service areas</option><option>Cincinnati</option><option>Northern Kentucky</option><option>Southeast Indiana</option></select></label><label>${esc(d.serviceLabel)}<select name="service"><option value="">Any listed service</option>${options(d.services)}</select></label>${category==='junk-removal'?`<label>Loading options<select name="loading"><option value="">Any loading arrangement</option>${options(['full-service','curbside','self-load'])}</select></label>`:''}<button type="reset">Reset filters</button></form>`;
     const disclaimer=`<aside class="notice">Provider-published information checked ${esc(data.checkedAt)}. Listings are alphabetical, unpaid and not endorsements. Service quality and current credentials have not been independently verified. Confirm your address, scope and final quote directly.</aside>`;
     const questions=`<section class="guide"><h2>Before you request a quote</h2><ol>${d.questions.map(q=>`<li>${esc(q)}</li>`).join('')}</ol></section>`;
-    writeFileSync(join(out,category,'index.html'),shell(d.title,d.description,`<section class="hero"><span class="eyebrow">Northern Kentucky + Cincinnati · ${esc(d.label)}</span><h1>${d.headline}</h1><p class="lead">${esc(d.description)}</p><p>Browse freely. Contact providers directly.</p><a href="#${category==='junk-removal'?'municipal-pickup':'installation-checklist'}">${category==='junk-removal'?'Check municipal pickup options':'Read the installation checklist'}</a></section>${disclaimer}${filters}<p id="result-count" role="status" aria-live="polite">${rows.length} ${d.noun}s · alphabetical order</p><p class="small">Filters show only services and areas mentioned in the checked sources. Unknown does not mean unavailable.</p><div class="grid">${cards}</div><p id="no-results" hidden>No providers match those filters. Try a broader service or area.</p>${d.guide}${questions}<section class="business"><h2>Provide this service locally?</h2><p>Suggest your business or a correction for private editorial review.</p><a class="button" href="/directory/get-listed?category=${category}">Get listed</a></section>`,'',hub,category,d.noun));
+    writeFileSync(join(out,category,'index.html'),shell(d.title,d.description,`<section class="hero"><span class="eyebrow">Greater Cincinnati tri-state · ${esc(d.label)}</span><h1>${d.headline}</h1><p class="lead">${esc(d.description)}</p><p>Browse freely. Contact providers directly.</p><a href="#${category==='junk-removal'?'municipal-pickup':'installation-checklist'}">${category==='junk-removal'?'Check municipal pickup options':'Read the installation checklist'}</a></section>${disclaimer}${filters}<p id="result-count" role="status" aria-live="polite">${rows.length} ${d.noun}s · alphabetical order</p><p class="small">Filters show only services and areas mentioned in the checked sources. Unknown does not mean unavailable.</p><div class="grid">${cards}</div><nav id="directory-pagination" class="pagination" aria-label="Directory pages" hidden><button type="button" data-page="previous">Previous</button><span data-page-status aria-live="polite"></span><button type="button" data-page="next">Next</button></nav><p id="no-results" hidden>No providers match those filters. Try a broader service or area.</p>${d.guide}${questions}<section class="business"><h2>Provide this service locally?</h2><p>Suggest your business or a correction for private editorial review.</p><a class="button" href="/directory/get-listed?category=${category}">Get listed</a></section>`,'',hub,category,d.noun));
     urls.push(hub);
     for(const l of rows){
       const body=`<p class="breadcrumb"><a href="${hub}">All ${d.noun}s</a> / ${esc(l.name)}</p><section class="hero compact"><span class="eyebrow">${esc(d.label)}</span><h1>${esc(l.name)}</h1><p class="lead">${esc(l.regions.join(' + '))}</p><a class="button" href="${esc(l.website)}" rel="noopener noreferrer" data-directory-contact="${esc(l.id)}">Visit provider &amp; request a quote <span aria-hidden="true">↗</span></a></section>${disclaimer}<section class="details"><h2>Compare the scope</h2><dl>${details(l)}</dl><h2>Sources and check dates</h2>${sourceList(l)}<p><a href="/directory/get-listed?category=${category}">Suggest a correction for review</a></p></section>${questions}<p><a href="${hub}#${category==='junk-removal'?'municipal-pickup':'installation-checklist'}">${category==='junk-removal'?'Check municipal pickup eligibility':'Check licensing, permits and inspection guidance'}</a></p>`;

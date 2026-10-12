@@ -254,6 +254,461 @@
       "fullPrice": null,
       "petHair": "add-on",
       "petHairNote": "Published pet hair add-on range is $30 to $80; confirm the final quote."
+    },
+    {
+      "id": "raad-detailing",
+      "name": "RAAD Detailing",
+      "website": "https://www.raaddetailing.com/",
+      "source": "https://www.raaddetailing.com/",
+      "checkedAt": "2026-10-11",
+      "regions": [
+        "Cincinnati",
+        "Northern Kentucky"
+      ],
+      "services": [
+        "interior",
+        "exterior",
+        "full-detail"
+      ],
+      "waterPower": "confirm",
+      "waterPowerNote": "Confirm water, power and parking requirements directly with the provider.",
+      "interiorPrice": null,
+      "fullPrice": null,
+      "petHair": "confirm",
+      "petHairNote": "Ask the provider to confirm pet-hair scope and pricing.",
+      "serviceAreaNote": "Mobile service in Cincinnati, Northern Kentucky and nearby Indiana is stated; confirm the address before booking.",
+      "contactEmail": "Raaddetailing@gmail.com"
+    },
+    {
+      "id": "sammys-suds",
+      "name": "Sammy's Suds",
+      "website": "https://www.cincyautodetailing.com/",
+      "source": "https://www.cincyautodetailing.com/",
+      "checkedAt": "2026-10-11",
+      "regions": [
+        "Cincinnati"
+      ],
+      "services": [
+        "interior",
+        "exterior",
+        "full-detail"
+      ],
+      "waterPower": "confirm",
+      "waterPowerNote": "Confirm water, power and parking requirements directly with the provider.",
+      "interiorPrice": null,
+      "fullPrice": null,
+      "petHair": "confirm",
+      "petHairNote": "Ask the provider to confirm pet-hair scope and pricing.",
+      "serviceAreaNote": "Mobile service in Cincinnati; confirm the address before booking.",
+      "contactEmail": "sammys.suds.detailing@gmail.com"
+    },
+    {
+      "id": "avalon-mobile-detailing",
+      "name": "Avalon Mobile Detailing",
+      "website": "https://www.avalondetailing.com/",
+      "source": "https://www.avalondetailing.com/",
+      "checkedAt": "2026-10-11",
+      "regions": [
+        "Cincinnati"
+      ],
+      "services": [
+        "interior",
+        "exterior",
+        "full-detail"
+      ],
+      "waterPower": "confirm",
+      "waterPowerNote": "Confirm water, power and parking requirements directly with the provider.",
+      "interiorPrice": null,
+      "fullPrice": null,
+      "petHair": "confirm",
+      "petHairNote": "Ask the provider to confirm pet-hair scope and pricing.",
+      "serviceAreaNote": "Northern Cincinnati and communities along the I-71/I-75 corridor; confirm the address before booking.",
+      "contactEmail": "avalonmobiledetailing@gmail.com"
+    },
+    {
+      "id": "detail-dr",
+      "name": "Detail Dr.",
+      "website": "https://www.detaildrmobile.com/",
+      "source": "https://www.detaildrmobile.com/",
+      "checkedAt": "2026-10-11",
+      "regions": [
+        "Cincinnati"
+      ],
+      "services": [
+        "interior",
+        "exterior"
+      ],
+      "waterPower": "confirm",
+      "waterPowerNote": "Confirm water, power and parking requirements directly with the provider.",
+      "interiorPrice": null,
+      "fullPrice": null,
+      "petHair": "confirm",
+      "petHairNote": "Ask the provider to confirm pet-hair scope and pricing.",
+      "serviceAreaNote": "Mobile service at homes, apartments and workplaces in Greater Cincinnati; confirm the address before booking."
+    },
+    {
+      "id": "dds-detailing-auto-care",
+      "name": "DDS Detailing & Auto Care",
+      "website": "https://www.ddsautocare.com/",
+      "source": "https://www.ddsautocare.com/",
+      "checkedAt": "2026-10-11",
+      "regions": [
+        "Cincinnati",
+        "Northern Kentucky"
+      ],
+      "services": [
+        "interior",
+        "exterior"
+      ],
+      "waterPower": "confirm",
+      "waterPowerNote": "Confirm water, power and parking requirements directly with the provider.",
+      "interiorPrice": null,
+      "fullPrice": null,
+      "petHair": "confirm",
+      "petHairNote": "Ask the provider to confirm pet-hair scope and pricing.",
+      "serviceAreaNote": "Provider offers mobile and drop-off detailing in Northern Kentucky and Cincinnati; confirm mobile service at your address."
+    },
+    {
+      "id": "true-colors-detailing",
+      "name": "True Colors Detailing",
+      "website": "https://www.truecolorsdetailing.com/",
+      "source": "https://www.truecolorsdetailing.com/",
+      "checkedAt": "2026-10-11",
+      "regions": [
+        "Cincinnati",
+        "Northern Kentucky"
+      ],
+      "services": [
+        "interior",
+        "exterior",
+        "full-detail"
+      ],
+      "waterPower": "self-contained",
+      "waterPowerNote": "Provider says its mobile service brings water, power and equipment.",
+      "interiorPrice": null,
+      "fullPrice": null,
+      "petHair": "confirm",
+      "petHairNote": "Ask the provider to confirm pet-hair scope and pricing.",
+      "serviceAreaNote": "Mobile service within 20 miles of ZIP 41017, including parts of Northern Kentucky and downtown Cincinnati; a travel fee may apply.",
+      "contactEmail": "truecolorsautodetailing@gmail.com"
+    },
+    {
+      "id": "perfect-touch-mobile-detailing",
+      "name": "Perfect Touch Mobile Detailing",
+      "website": "https://jaminsperfecttouch.com/",
+      "source": "https://jaminsperfecttouch.com/",
+      "checkedAt": "2026-10-11",
+      "regions": [
+        "Cincinnati"
+      ],
+      "services": [
+        "interior",
+        "exterior"
+      ],
+      "waterPower": "self-contained",
+      "waterPowerNote": "Provider says it brings water, power and equipment; no hookups needed.",
+      "interiorPrice": null,
+      "fullPrice": null,
+      "petHair": "confirm",
+      "petHairNote": "Ask the provider to confirm pet-hair scope and pricing.",
+      "serviceAreaNote": "West Chester and Mason area, plus cities within about 30 minutes of West Chester; confirm the address before booking.",
+      "contactEmail": "jaminsperfecttouch@gmail.com"
+    },
+    {
+      "id": "her-majestys-detail",
+      "name": "Her Majesty's Detail",
+      "website": "https://www.hmdetailcincy.com/",
+      "source": "https://www.hmdetailcincy.com/",
+      "checkedAt": "2026-10-11",
+      "regions": [
+        "Cincinnati",
+        "Northern Kentucky",
+        "Southeast Indiana"
+      ],
+      "services": [
+        "interior",
+        "exterior",
+        "full-detail",
+        "boats",
+        "rvs",
+        "fleets"
+      ],
+      "waterPower": "confirm",
+      "waterPowerNote": "Confirm water, power and parking requirements directly with the provider.",
+      "interiorPrice": null,
+      "fullPrice": null,
+      "petHair": "confirm",
+      "petHairNote": "Ask the provider to confirm pet-hair scope and pricing.",
+      "serviceAreaNote": "Provider lists Cincinnati, Northern Kentucky and Southeast Indiana, including Lawrenceburg and Greendale. Confirm the address before booking."
+    },
+    {
+      "id": "ocg-auto-detailing",
+      "name": "OCG Auto Detailing",
+      "website": "https://www.ocgautodetailing.com/",
+      "source": "https://www.ocgautodetailing.com/",
+      "checkedAt": "2026-10-11",
+      "regions": [
+        "Cincinnati"
+      ],
+      "services": [
+        "interior",
+        "exterior"
+      ],
+      "waterPower": "confirm",
+      "waterPowerNote": "Confirm water, power and parking requirements directly with the provider.",
+      "interiorPrice": null,
+      "fullPrice": null,
+      "petHair": "confirm",
+      "petHairNote": "Ask the provider to confirm pet-hair scope and pricing.",
+      "serviceAreaNote": "Liberty Township, Mason, West Chester and surrounding Greater Cincinnati communities; confirm the address before booking.",
+      "contactEmail": "ocgautodetailing@gmail.com"
+    },
+    {
+      "id": "cincy-car-spa",
+      "name": "Cincy Car Spa",
+      "website": "https://cincycarspa.com/",
+      "source": "https://cincycarspa.com/",
+      "checkedAt": "2026-10-11",
+      "regions": [
+        "Cincinnati"
+      ],
+      "services": [
+        "interior",
+        "exterior"
+      ],
+      "waterPower": "customer-required",
+      "waterPowerNote": "Provider says it needs access to a water spigot and electrical outlet at the service location.",
+      "interiorPrice": null,
+      "fullPrice": null,
+      "petHair": "confirm",
+      "petHairNote": "Ask the provider to confirm pet-hair scope and pricing.",
+      "serviceAreaNote": "Fairfield-based mobile service throughout Greater Cincinnati; confirm the address before booking.",
+      "contactEmail": "hello@cincycarspa.com"
+    },
+    {
+      "id": "a-good-mobile-detailing",
+      "name": "A GOOD Mobile Detailing",
+      "website": "https://www.agoodmobiledetailing.com/",
+      "source": "https://www.agoodmobiledetailing.com/",
+      "checkedAt": "2026-10-11",
+      "regions": [
+        "Cincinnati",
+        "Northern Kentucky"
+      ],
+      "services": [
+        "interior",
+        "exterior"
+      ],
+      "waterPower": "confirm",
+      "waterPowerNote": "Confirm water, power and parking requirements directly with the provider.",
+      "interiorPrice": null,
+      "fullPrice": null,
+      "petHair": "confirm",
+      "petHairNote": "Ask the provider to confirm pet-hair scope and pricing.",
+      "serviceAreaNote": "Provider lists Cincinnati and Northern Kentucky communities; confirm the address before booking.",
+      "contactEmail": "AGOODDETAILING@gmail.com"
+    },
+    {
+      "id": "jackson-bros-detail",
+      "name": "Jackson Bros",
+      "website": "https://www.jacksonbrosdetail.com/",
+      "source": "https://www.jacksonbrosdetail.com/",
+      "checkedAt": "2026-10-11",
+      "regions": [
+        "Cincinnati"
+      ],
+      "services": [
+        "interior",
+        "exterior",
+        "full-detail"
+      ],
+      "waterPower": "confirm",
+      "waterPowerNote": "Confirm water, power and parking requirements directly with the provider.",
+      "interiorPrice": null,
+      "fullPrice": null,
+      "petHair": "confirm",
+      "petHairNote": "Ask the provider to confirm pet-hair scope and pricing.",
+      "serviceAreaNote": "West Chester, Cincinnati and surrounding Ohio suburbs including Hamilton, Liberty Township and Fairfield; confirm the address before booking.",
+      "contactEmail": "brosjackson75@gmail.com"
+    },
+    {
+      "id": "apex-detailing",
+      "name": "Apex Detailing",
+      "website": "https://apexdetails.co/",
+      "source": "https://apexdetails.co/",
+      "checkedAt": "2026-10-11",
+      "regions": [
+        "Cincinnati",
+        "Northern Kentucky"
+      ],
+      "services": [
+        "interior",
+        "exterior"
+      ],
+      "waterPower": "self-contained",
+      "waterPowerNote": "Provider says its mobile unit has its own water and power.",
+      "interiorPrice": null,
+      "fullPrice": null,
+      "petHair": "confirm",
+      "petHairNote": "Ask the provider to confirm pet-hair scope and pricing.",
+      "serviceAreaNote": "Greater Cincinnati and Northern Kentucky, with service areas listed on its website; confirm the address before booking.",
+      "contactEmail": "Apexdetailsoh@gmail.com"
+    },
+    {
+      "id": "northern-kentucky-auto-detail",
+      "name": "Northern KY Auto Detail",
+      "website": "https://nkyautodetail.com/",
+      "source": "https://nkyautodetail.com/",
+      "checkedAt": "2026-10-11",
+      "regions": [
+        "Northern Kentucky"
+      ],
+      "services": [
+        "interior",
+        "exterior"
+      ],
+      "waterPower": "self-contained",
+      "waterPowerNote": "Provider says it brings water and electric equipment for mobile appointments.",
+      "interiorPrice": null,
+      "fullPrice": null,
+      "petHair": "add-on",
+      "petHairNote": "Provider lists pet-hair removal as a $45 add-on; confirm the current quote.",
+      "serviceAreaNote": "Mobile service across listed Northern Kentucky communities including Florence, Erlanger, Hebron and Burlington; confirm the address before booking."
+    },
+    {
+      "id": "stang-detailing",
+      "name": "Stang Detailing",
+      "website": "https://stangdetailing.com/",
+      "source": "https://stangdetailing.com/",
+      "checkedAt": "2026-10-11",
+      "regions": [
+        "Cincinnati"
+      ],
+      "services": [
+        "interior",
+        "exterior",
+        "full-detail"
+      ],
+      "waterPower": "customer-required",
+      "waterPowerNote": "Provider says it brings equipment but asks customers for a water spigot and electrical outlet.",
+      "interiorPrice": null,
+      "fullPrice": null,
+      "petHair": "confirm",
+      "petHairNote": "Ask the provider to confirm pet-hair scope and pricing.",
+      "serviceAreaNote": "Mobile detailing in Cincinnati and the greater tri-state area; confirm the address before booking.",
+      "contactEmail": "stangdetailing@gmail.com"
+    },
+    {
+      "id": "car-detailing-direct",
+      "name": "Car Detailing Direct",
+      "website": "https://www.cardetailingdirect.com/",
+      "source": "https://www.cardetailingdirect.com/",
+      "checkedAt": "2026-10-11",
+      "regions": [
+        "Cincinnati"
+      ],
+      "services": [
+        "interior",
+        "exterior",
+        "full-detail"
+      ],
+      "waterPower": "confirm",
+      "waterPowerNote": "Confirm water, power and parking requirements directly with the provider.",
+      "interiorPrice": null,
+      "fullPrice": null,
+      "petHair": "confirm",
+      "petHairNote": "Ask the provider to confirm pet-hair scope and pricing.",
+      "serviceAreaNote": "Doorstep mobile detailing in Cincinnati and the surrounding tri-state area; confirm the address before booking.",
+      "contactEmail": "bookus@cardetailingdirect.com"
+    },
+    {
+      "id": "onyx-pristine-co",
+      "name": "Onyx Pristine Co.",
+      "website": "https://onyxpristineco.com/pages/detailing",
+      "source": "https://onyxpristineco.com/pages/detailing",
+      "checkedAt": "2026-10-11",
+      "regions": [
+        "Cincinnati"
+      ],
+      "services": [
+        "interior",
+        "exterior",
+        "full-detail"
+      ],
+      "waterPower": "self-contained",
+      "waterPowerNote": "Provider says it brings water, power and products to the appointment.",
+      "interiorPrice": null,
+      "fullPrice": null,
+      "petHair": "confirm",
+      "petHairNote": "Ask the provider to confirm pet-hair scope and pricing.",
+      "serviceAreaNote": "Mobile service across Greater Cincinnati and the 513 area; confirm the address before booking.",
+      "contactEmail": "OnyxPristineCo@gmail.com"
+    },
+    {
+      "id": "cincy-auto-care",
+      "name": "Cincy Auto Care",
+      "website": "https://cincyautocare.com/",
+      "source": "https://cincyautocare.com/",
+      "checkedAt": "2026-10-11",
+      "regions": [
+        "Cincinnati"
+      ],
+      "services": [
+        "interior",
+        "exterior"
+      ],
+      "waterPower": "confirm",
+      "waterPowerNote": "Confirm water, power and parking requirements directly with the provider.",
+      "interiorPrice": null,
+      "fullPrice": null,
+      "petHair": "confirm",
+      "petHairNote": "Ask the provider to confirm pet-hair scope and pricing.",
+      "serviceAreaNote": "Cincinnati-area mobile detailing; confirm the address before booking."
+    },
+    {
+      "id": "diamond-cut-details",
+      "name": "Diamond Cut Details",
+      "website": "https://www.diamondcutdetails.com/",
+      "source": "https://www.diamondcutdetails.com/",
+      "checkedAt": "2026-10-11",
+      "regions": [
+        "Cincinnati"
+      ],
+      "services": [
+        "interior",
+        "exterior",
+        "full-detail"
+      ],
+      "waterPower": "confirm",
+      "waterPowerNote": "Confirm water, power and parking requirements directly with the provider.",
+      "interiorPrice": null,
+      "fullPrice": null,
+      "petHair": "confirm",
+      "petHairNote": "Ask the provider to confirm pet-hair scope and pricing.",
+      "serviceAreaNote": "Professional mobile detailing throughout Greater Cincinnati; confirm the address before booking.",
+      "contactEmail": "DiamondCutDetails@gmail.com"
+    },
+    {
+      "id": "every-detail-car-detailing",
+      "name": "Every Detail Car Detailing",
+      "website": "https://www.eddetailing.com/",
+      "source": "https://www.eddetailing.com/",
+      "checkedAt": "2026-10-11",
+      "regions": [
+        "Cincinnati"
+      ],
+      "services": [
+        "interior",
+        "exterior",
+        "full-detail"
+      ],
+      "waterPower": "confirm",
+      "waterPowerNote": "Confirm water, power and parking requirements directly with the provider.",
+      "interiorPrice": null,
+      "fullPrice": null,
+      "petHair": "confirm",
+      "petHairNote": "Ask the provider to confirm pet-hair scope and pricing.",
+      "serviceAreaNote": "Fully mobile service in Cincinnati and Greater Cincinnati; confirm the address before booking."
     }
   ]
 }

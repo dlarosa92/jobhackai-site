@@ -1,7 +1,7 @@
 {
   "category": "junk-removal",
-  "market": "Northern Kentucky and Cincinnati",
-  "checkedAt": "2026-09-23",
+  "market": "Greater Cincinnati tri-state",
+  "checkedAt": "2026-10-11",
   "verification": "Provider-published services and service areas checked against linked sources. No service-quality, active-license, insurance or partnership endorsement. Null fields mean not established in the checked sources.",
   "listings": [
     {
@@ -194,6 +194,521 @@
       "loading": [
         "full-service",
         "self-load"
+      ]
+    },
+    {
+      "id": "junk-king-cincinnati",
+      "name": "Junk King Cincinnati",
+      "website": "https://www.junk-king.com/locations/cincinnati",
+      "regions": [
+        "Cincinnati",
+        "Southeast Indiana"
+      ],
+      "services": [
+        "furniture",
+        "appliances",
+        "yard-waste",
+        "construction-debris"
+      ],
+      "details": {
+        "items": "Furniture, appliances, yard waste and property cleanouts.",
+        "loading": "The crew carries and loads items after an on-site estimate.",
+        "area": "Greater Cincinnati, including Hamilton and Lawrenceburg, IN.",
+        "quote": "Book online or call for a free estimate.",
+        "exclusions": null
+      },
+      "sources": [
+        {
+          "url": "https://www.junk-king.com/locations/cincinnati",
+          "label": "Provider service page",
+          "checkedAt": "2026-10-11"
+        }
+      ],
+      "loading": [
+        "full-service"
+      ]
+    },
+    {
+      "id": "sen-hauling-junk-removal",
+      "name": "SEN Hauling & Junk Removal",
+      "website": "https://senjunk.com/",
+      "regions": [
+        "Cincinnati",
+        "Northern Kentucky"
+      ],
+      "services": [
+        "furniture",
+        "appliances",
+        "yard-waste",
+        "construction-debris",
+        "electronics"
+      ],
+      "details": {
+        "items": "Furniture, appliances, mattresses, electronics, yard waste and construction debris.",
+        "loading": "The crew lifts, loads and hauls from homes and businesses.",
+        "area": "Cincinnati and nearby Ohio communities, plus Northern Kentucky including Covington and Bellevue.",
+        "quote": "Book online or call; an on-site quote precedes work.",
+        "exclusions": null
+      },
+      "sources": [
+        {
+          "url": "https://senjunk.com/",
+          "label": "Provider service page",
+          "checkedAt": "2026-10-11"
+        }
+      ],
+      "loading": [
+        "full-service"
+      ]
+    },
+    {
+      "id": "evict-my-junk",
+      "name": "Evict My Junk",
+      "website": "https://evictmyjunk.com/junk-removal-cincinnati/",
+      "regions": [
+        "Cincinnati",
+        "Northern Kentucky"
+      ],
+      "services": [
+        "furniture",
+        "appliances",
+        "construction-debris"
+      ],
+      "details": {
+        "items": "Residential and commercial junk hauling; confirm individual items before booking.",
+        "loading": "Full-service hauling is described for homes and businesses.",
+        "area": "Greater Cincinnati, Southwest Ohio and Northern Kentucky including Florence, Covington and Newport.",
+        "quote": "Request a quote through the provider site.",
+        "exclusions": null
+      },
+      "sources": [
+        {
+          "url": "https://evictmyjunk.com/junk-removal-cincinnati/",
+          "label": "Provider service page",
+          "checkedAt": "2026-10-11"
+        }
+      ],
+      "loading": [
+        "full-service"
+      ]
+    },
+    {
+      "id": "bright-hauling-junk-removal",
+      "name": "Bright Hauling and Junk Removal",
+      "website": "https://brightjunkremoval.com/",
+      "regions": [
+        "Southeast Indiana"
+      ],
+      "services": [
+        "furniture"
+      ],
+      "details": {
+        "items": "Junk removal and separate dumpster rentals; confirm which individual items can be picked up.",
+        "loading": "Provider says it handles the heavy lifting for pickup jobs.",
+        "area": "Based in Lawrenceburg, IN; confirm service at your address.",
+        "quote": "Call or use the provider quote form.",
+        "exclusions": null
+      },
+      "sources": [
+        {
+          "url": "https://brightjunkremoval.com/",
+          "label": "Provider service page",
+          "checkedAt": "2026-10-11"
+        }
+      ],
+      "loading": [
+        "full-service",
+        "self-load"
+      ]
+    },
+    {
+      "id": "college-hunks-florence",
+      "name": "College HUNKS Hauling Junk & Moving \u2014 Florence",
+      "website": "https://www.collegehunkshaulingjunk.com/florence/",
+      "regions": [
+        "Northern Kentucky"
+      ],
+      "services": [
+        "furniture",
+        "appliances"
+      ],
+      "details": {
+        "items": "Residential and commercial junk removal, plus donation pickup.",
+        "loading": "The Florence crew describes loading and hauling items.",
+        "area": "Florence, KY and nearby Northern Kentucky communities.",
+        "quote": "Call the Florence location or request a quote online.",
+        "exclusions": null
+      },
+      "sources": [
+        {
+          "url": "https://www.collegehunkshaulingjunk.com/florence/",
+          "label": "Provider service page",
+          "checkedAt": "2026-10-11"
+        }
+      ],
+      "loading": [
+        "full-service"
+      ]
+    },
+    {
+      "id": "royal-flush-enterprises",
+      "name": "Royal Flush Enterprises",
+      "website": "https://royalflushjunkremoval.com/florence",
+      "regions": [
+        "Cincinnati",
+        "Northern Kentucky"
+      ],
+      "services": [
+        "furniture",
+        "construction-debris"
+      ],
+      "details": {
+        "items": "Full-service junk haul-away, single-item pickup, property cleanouts and separate dumpster rentals.",
+        "loading": "The provider describes full-service haul-away; dumpster rentals are separate.",
+        "area": "Cincinnati\u2013Dayton corridor and Northern Kentucky, including Florence.",
+        "quote": "Call or request a quote online before scheduling.",
+        "exclusions": null
+      },
+      "sources": [
+        {
+          "url": "https://royalflushjunkremoval.com/florence",
+          "label": "Provider service page",
+          "checkedAt": "2026-10-11"
+        }
+      ],
+      "loading": [
+        "full-service",
+        "self-load"
+      ]
+    },
+    {
+      "id": "junk-removal-guys",
+      "name": "Junk Removal Guys",
+      "website": "https://junkremovalguys.net/",
+      "regions": [
+        "Cincinnati",
+        "Northern Kentucky",
+        "Southeast Indiana"
+      ],
+      "services": [
+        "furniture",
+        "appliances",
+        "yard-waste",
+        "electronics"
+      ],
+      "details": {
+        "items": "Furniture, appliances, electronics, hot tubs and yard waste.",
+        "loading": "Provider describes handling the heavy lifting for single items through property cleanouts.",
+        "area": "Greater Cincinnati, Northern Kentucky and Southeast Indiana.",
+        "quote": "Call, text or request a quote online.",
+        "exclusions": null
+      },
+      "sources": [
+        {
+          "url": "https://junkremovalguys.net/",
+          "label": "Provider service page",
+          "checkedAt": "2026-10-11"
+        }
+      ],
+      "loading": [
+        "full-service"
+      ]
+    },
+    {
+      "id": "ak-site-services",
+      "name": "AK Site Services",
+      "website": "https://www.aksiteservices.com/",
+      "regions": [
+        "Cincinnati",
+        "Southeast Indiana"
+      ],
+      "services": [
+        "construction-debris",
+        "yard-waste"
+      ],
+      "details": {
+        "items": "Junk pickup, demolition cleanup and site debris removal.",
+        "loading": "Provider offers junk pickup and demolition cleanup; exact loading arrangement depends on the job.",
+        "area": "Greater Cincinnati, Southwest Ohio and Southeast Indiana, including Brookville and Lawrenceburg.",
+        "quote": "Call, text or email a location, photos and job description for an estimate.",
+        "exclusions": null
+      },
+      "sources": [
+        {
+          "url": "https://www.aksiteservices.com/",
+          "label": "Provider service page",
+          "checkedAt": "2026-10-11"
+        }
+      ],
+      "loading": [
+        "full-service"
+      ]
+    },
+    {
+      "id": "blue-koi-hauling",
+      "name": "Blue Koi Hauling and Junk Removal",
+      "website": "https://bluekoihauling.com/services/",
+      "regions": [
+        "Cincinnati"
+      ],
+      "services": [
+        "furniture",
+        "appliances",
+        "yard-waste",
+        "construction-debris"
+      ],
+      "details": {
+        "items": "Furniture, appliances, yard waste and remodeling debris.",
+        "loading": "The provider offers residential and commercial full-service removal and curbside pickup.",
+        "area": "Greater Cincinnati, based in West Chester, OH.",
+        "quote": "Call, text photos or use the website form for an estimate.",
+        "exclusions": null
+      },
+      "sources": [
+        {
+          "url": "https://bluekoihauling.com/services/",
+          "label": "Provider service page",
+          "checkedAt": "2026-10-11"
+        }
+      ],
+      "loading": [
+        "full-service",
+        "curbside"
+      ]
+    },
+    {
+      "id": "clutter-box-junk-removal",
+      "name": "Clutter Box Junk Removal",
+      "website": "https://clutterboxjunkremoval.com/about-us/",
+      "regions": [
+        "Cincinnati"
+      ],
+      "services": [
+        "furniture",
+        "appliances",
+        "construction-debris"
+      ],
+      "details": {
+        "items": "Single-item pickups, home and office cleanouts and light demolition.",
+        "loading": "The provider describes removing items from attics, basements, garages and yards.",
+        "area": "West Chester Township and the Cincinnati metro.",
+        "quote": "Call, text or use the quote form; an on-site quote precedes removal.",
+        "exclusions": null
+      },
+      "sources": [
+        {
+          "url": "https://clutterboxjunkremoval.com/about-us/",
+          "label": "Provider service page",
+          "checkedAt": "2026-10-11"
+        }
+      ],
+      "loading": [
+        "full-service"
+      ]
+    },
+    {
+      "id": "larrys-junk-removal",
+      "name": "Larry\u2019s Junk Removal",
+      "website": "https://www.larrysjunkremoval.com/Hamilton-County-Ohio-Junk-Removal-p/hamilton_county_ohio.htm",
+      "regions": [
+        "Cincinnati",
+        "Northern Kentucky"
+      ],
+      "services": [
+        "furniture",
+        "appliances",
+        "construction-debris"
+      ],
+      "details": {
+        "items": "Furniture, appliance and construction-debris removal, plus estate cleanouts.",
+        "loading": "Provider describes professional junk removal; confirm the handling arrangement for your job.",
+        "area": "Cincinnati and surrounding Southwest Ohio; provider also lists Northern Kentucky.",
+        "quote": "Call or request a free quote online.",
+        "exclusions": null
+      },
+      "sources": [
+        {
+          "url": "https://www.larrysjunkremoval.com/Hamilton-County-Ohio-Junk-Removal-p/hamilton_county_ohio.htm",
+          "label": "Provider service page",
+          "checkedAt": "2026-10-11"
+        }
+      ],
+      "loading": [
+        "full-service"
+      ]
+    },
+    {
+      "id": "haulaway-pro",
+      "name": "HaulAway Pro",
+      "website": "https://haulawaypro.com/",
+      "regions": [
+        "Cincinnati",
+        "Northern Kentucky"
+      ],
+      "services": [
+        "furniture",
+        "appliances",
+        "construction-debris",
+        "electronics"
+      ],
+      "details": {
+        "items": "Furniture, appliances, construction debris, electronics and property cleanouts.",
+        "loading": "The crew handles lifting and loading after an upfront quote.",
+        "area": "Greater Cincinnati and Northern Kentucky.",
+        "quote": "Call or use the estimate form.",
+        "exclusions": null
+      },
+      "sources": [
+        {
+          "url": "https://haulawaypro.com/",
+          "label": "Provider service page",
+          "checkedAt": "2026-10-11"
+        }
+      ],
+      "loading": [
+        "full-service"
+      ]
+    },
+    {
+      "id": "junk-junkies-llc",
+      "name": "Junk Junkies LLC",
+      "website": "https://www.junkjunkiesllc.com/",
+      "regions": [
+        "Cincinnati"
+      ],
+      "services": [
+        "furniture"
+      ],
+      "details": {
+        "items": "Junk hauling from single bulky items through garage cleanouts; confirm specific materials.",
+        "loading": "Provider says its crew handles the heavy lifting.",
+        "area": "Hamilton, OH and the Greater Cincinnati area.",
+        "quote": "Call, text or use the online quote form.",
+        "exclusions": null
+      },
+      "sources": [
+        {
+          "url": "https://www.junkjunkiesllc.com/",
+          "label": "Provider service page",
+          "checkedAt": "2026-10-11"
+        }
+      ],
+      "loading": [
+        "full-service"
+      ]
+    },
+    {
+      "id": "nky-junk-dads",
+      "name": "NKY Junk Dads",
+      "website": "https://nkyjunkdads.com/",
+      "regions": [
+        "Northern Kentucky"
+      ],
+      "services": [
+        "furniture",
+        "construction-debris"
+      ],
+      "details": {
+        "items": "Single-item pickup, estate and garage cleanouts, commercial junk removal and construction debris.",
+        "loading": "The crew sorts, carries and loads items, then sweeps the space.",
+        "area": "Boone, Kenton and Campbell counties in Northern Kentucky.",
+        "quote": "Request an estimate online or call; price is quoted before work.",
+        "exclusions": null
+      },
+      "sources": [
+        {
+          "url": "https://nkyjunkdads.com/",
+          "label": "Provider service page",
+          "checkedAt": "2026-10-11"
+        }
+      ],
+      "loading": [
+        "full-service"
+      ]
+    },
+    {
+      "id": "beckett-services",
+      "name": "Beckett Services",
+      "website": "https://beckett-services.com/",
+      "regions": [
+        "Cincinnati"
+      ],
+      "services": [
+        "yard-waste",
+        "construction-debris"
+      ],
+      "details": {
+        "items": "Junk removal, property cleanouts, yard cleanup and light demolition.",
+        "loading": "Provider says it handles removal without requiring the customer to load a dumpster.",
+        "area": "Brown, Clermont and Hamilton counties in Ohio.",
+        "quote": "Call or schedule a callback for an estimate.",
+        "exclusions": null
+      },
+      "sources": [
+        {
+          "url": "https://beckett-services.com/",
+          "label": "Provider service page",
+          "checkedAt": "2026-10-11"
+        }
+      ],
+      "loading": [
+        "full-service"
+      ]
+    },
+    {
+      "id": "latham-junk-removal",
+      "name": "Latham Junk Removal",
+      "website": "https://www.lathamjunkremoval.org/junk-removal-in-hamilton-ohio",
+      "regions": [
+        "Cincinnati"
+      ],
+      "services": [],
+      "details": {
+        "items": "Junk hauling for homes, businesses and property managers; confirm individual items.",
+        "loading": "The provider describes lifting and hauling unwanted items.",
+        "area": "Hamilton, OH and nearby Greater Cincinnati communities; confirm your address.",
+        "quote": "Request a free estimate through the provider site.",
+        "exclusions": null
+      },
+      "sources": [
+        {
+          "url": "https://www.lathamjunkremoval.org/junk-removal-in-hamilton-ohio",
+          "label": "Provider service page",
+          "checkedAt": "2026-10-11"
+        }
+      ],
+      "loading": [
+        "full-service"
+      ]
+    },
+    {
+      "id": "swat-junk-removal",
+      "name": "S.W.A.T. Junk Removal",
+      "website": "https://swatjunkremoval.net/contact-junk-removal",
+      "regions": [
+        "Cincinnati"
+      ],
+      "services": [
+        "furniture",
+        "appliances",
+        "construction-debris"
+      ],
+      "details": {
+        "items": "Estate and property cleanouts and junk hauling.",
+        "loading": "Provider describes hauling and property cleanout work; confirm job scope.",
+        "area": "Based in Hamilton, OH, serving Cincinnati and Southwest Ohio.",
+        "quote": "Call or use the provider contact form.",
+        "exclusions": null
+      },
+      "sources": [
+        {
+          "url": "https://swatjunkremoval.net/contact-junk-removal",
+          "label": "Provider service page",
+          "checkedAt": "2026-10-11"
+        }
+      ],
+      "loading": [
+        "full-service"
       ]
     }
   ]

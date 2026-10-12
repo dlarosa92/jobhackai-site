@@ -18,6 +18,7 @@ select,.request-panel input{min-height:48px}
 .listing dl{margin:0 0 24px;font-size:14px}
 .listing dt{margin-top:14px}
 .listing dd{margin-top:4px}
+.pagination{display:flex;align-items:center;justify-content:center;gap:16px;margin:-24px 0 40px}.pagination span{font-size:14px;color:var(--color-text-secondary)}.pagination button:disabled{opacity:.45;cursor:not-allowed}
 .request-panel select{font-size:16px}
 @media(max-width:700px){header{align-items:flex-start;flex-direction:column;padding-top:18px;padding-bottom:18px}nav{justify-content:flex-start;gap:8px 16px}nav a{min-height:44px;display:inline-flex;align-items:center}}
 @media(prefers-reduced-motion:reduce){button,.button,.more{transition:none}button:active,.button:active,.more:active{transform:none}}

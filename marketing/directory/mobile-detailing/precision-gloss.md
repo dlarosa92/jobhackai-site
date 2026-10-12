@@ -1,6 +1,6 @@
 ---
 title: "Precision Gloss — mobile detailing | JobHackAI Local"
-description: "Package details and booking requirements for Precision Gloss in Northern Kentucky and Cincinnati."
+description: "Package details and booking requirements for Precision Gloss in the Greater Cincinnati tri-state area."
 url: "https://jobhackai.io/directory/mobile-detailing/precision-gloss"
 language: "en"
 generated_by: "jobhackai-agent-markdown"
