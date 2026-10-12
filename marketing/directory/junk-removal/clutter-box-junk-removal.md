@@ -12,9 +12,9 @@ Junk removal
 
 Cincinnati
 
-[Visit provider & request a quote](https://clutterboxjunkremoval.com/about-us/)
+[Visit provider & request a quote](https://clutterboxjunkremoval.com/about-us/?utm_source=jobhackai_local&utm_medium=referral&utm_campaign=directory_junk_removal_nky_2026_09&utm_content=clutter-box-junk-removal_profile_website)
 
-Provider-published information checked 2026-10-11. Listings are alphabetical, unpaid and not endorsements. Service quality and current credentials have not been independently verified. Confirm your address, scope and final quote directly.
+Provider-published information. Each provider page records its sources and check dates. Listings are alphabetical, unpaid and not endorsements. Service quality and current credentials have not been independently verified. Confirm your address, scope and final quote directly.
 
 ## Compare the scope
 
@@ -40,7 +40,7 @@ Unknown in the checked sources. Ask the provider to confirm in writing.
 
 ## Sources and check dates
 
--   [Provider service page](https://clutterboxjunkremoval.com/about-us/), checked 2026-10-11
+-   [Provider service page](https://clutterboxjunkremoval.com/about-us/?utm_source=jobhackai_local&utm_medium=referral&utm_campaign=directory_junk_removal_nky_2026_09&utm_content=clutter-box-junk-removal_profile_source), checked 2026-10-11
 
 [Suggest a correction for review](https://jobhackai.io/directory/get-listed?category=junk-removal)
 

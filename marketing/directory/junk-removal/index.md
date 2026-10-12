@@ -16,7 +16,7 @@ Browse freely. Contact providers directly.
 
 [Check municipal pickup options](https://jobhackai.io/directory/junk-removal/#municipal-pickup)
 
-Provider-published information checked 2026-10-11. Listings are alphabetical, unpaid and not endorsements. Service quality and current credentials have not been independently verified. Confirm your address, scope and final quote directly.
+Provider-published information. Each provider page records its sources and check dates. Listings are alphabetical, unpaid and not endorsements. Service quality and current credentials have not been independently verified. Confirm your address, scope and final quote directly.
 
 23 providers · alphabetical order
 

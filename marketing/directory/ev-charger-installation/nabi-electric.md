@@ -12,9 +12,9 @@ Home Level 2 EV charger installation
 
 Cincinnati + Northern Kentucky
 
-[Visit provider & request a quote](https://www.nabielectric.com/contact/ev-charger-installation-service-area/cincinnati-oh)
+[Visit provider & request a quote](https://www.nabielectric.com/contact/ev-charger-installation-service-area/cincinnati-oh?utm_source=jobhackai_local&utm_medium=referral&utm_campaign=directory_ev_charger_installation_nky_2026_09&utm_content=nabi-electric_profile_website)
 
-Provider-published information checked 2026-10-11. Listings are alphabetical, unpaid and not endorsements. Service quality and current credentials have not been independently verified. Confirm your address, scope and final quote directly.
+Provider-published information. Each provider page records its sources and check dates. Listings are alphabetical, unpaid and not endorsements. Service quality and current credentials have not been independently verified. Confirm your address, scope and final quote directly.
 
 ## Compare the scope
 
@@ -48,7 +48,7 @@ Website lists Ohio 24614 and Kentucky ME63606. Current status, contractor author
 
 ## Sources and check dates
 
--   [Provider service page](https://www.nabielectric.com/contact/ev-charger-installation-service-area/cincinnati-oh), checked 2026-09-23
+-   [Provider service page](https://www.nabielectric.com/contact/ev-charger-installation-service-area/cincinnati-oh?utm_source=jobhackai_local&utm_medium=referral&utm_campaign=directory_ev_charger_installation_nky_2026_09&utm_content=nabi-electric_profile_source), checked 2026-09-23
 
 [Suggest a correction for review](https://jobhackai.io/directory/get-listed?category=ev-charger-installation)
 

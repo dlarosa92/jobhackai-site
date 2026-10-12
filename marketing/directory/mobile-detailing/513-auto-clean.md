@@ -12,7 +12,7 @@ Northern Kentucky + Cincinnati
 
 Mobile detailing, booked directly with the provider.
 
-[Visit provider & request a quote](https://513autoclean.com/)
+[Visit provider & request a quote](https://513autoclean.com/?utm_source=jobhackai_local&utm_medium=referral&utm_campaign=directory_mobile_detailing_nky_2026_09&utm_content=513-auto-clean_profile_website)
 
 Details from the provider’s website and provider-supplied corrections, checked 2026-10-10. Confirm availability and service at your address. No paid placement or partnership is implied.
 
@@ -106,7 +106,7 @@ Provider reports a 5.0 rating across 32 Google reviews as of October 10, 2026. T
 
 **Information source**
 
-[Provider website](https://513autoclean.com/) · checked 2026-10-10
+[Provider website](https://513autoclean.com/?utm_source=jobhackai_local&utm_medium=referral&utm_campaign=directory_mobile_detailing_nky_2026_09&utm_content=513-auto-clean_profile_source) · checked 2026-10-10
 
 Provider website and corrections supplied by Elijah Thacker of 513 Auto Clean on October 10, 2026.
 
@@ -114,7 +114,7 @@ Provider website and corrections supplied by Elijah Thacker of 513 Auto Clean on
 
 Contact the provider directly to confirm your quote and appointment.
 
-[View provider’s booking page](https://513autoclean.com/book.html)
+[View provider’s booking page](https://513autoclean.com/book.html?utm_source=jobhackai_local&utm_medium=referral&utm_campaign=directory_mobile_detailing_nky_2026_09&utm_content=513-auto-clean_profile_booking)
 
 -   [(513) 279-2915 — call or text](tel:+15132792915)
 -   [513autoclean@gmail.com](mailto:513autoclean@gmail.com)

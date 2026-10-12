@@ -12,9 +12,9 @@ Junk removal
 
 Cincinnati + Northern Kentucky
 
-[Visit provider & request a quote](https://www.1800gotjunk.com/us_en/locations/junk-removal-cincinnati/us02030)
+[Visit provider & request a quote](https://www.1800gotjunk.com/us_en/locations/junk-removal-cincinnati/us02030?utm_source=jobhackai_local&utm_medium=referral&utm_campaign=directory_junk_removal_nky_2026_09&utm_content=1-800-got-junk_profile_website)
 
-Provider-published information checked 2026-10-11. Listings are alphabetical, unpaid and not endorsements. Service quality and current credentials have not been independently verified. Confirm your address, scope and final quote directly.
+Provider-published information. Each provider page records its sources and check dates. Listings are alphabetical, unpaid and not endorsements. Service quality and current credentials have not been independently verified. Confirm your address, scope and final quote directly.
 
 ## Compare the scope
 
@@ -40,7 +40,7 @@ The provider excludes hazardous items. Confirm acceptance of your specific mater
 
 ## Sources and check dates
 
--   [Provider service page](https://www.1800gotjunk.com/us_en/locations/junk-removal-cincinnati/us02030), checked 2026-09-23
+-   [Provider service page](https://www.1800gotjunk.com/us_en/locations/junk-removal-cincinnati/us02030?utm_source=jobhackai_local&utm_medium=referral&utm_campaign=directory_junk_removal_nky_2026_09&utm_content=1-800-got-junk_profile_source), checked 2026-09-23
 
 [Suggest a correction for review](https://jobhackai.io/directory/get-listed?category=junk-removal)
 

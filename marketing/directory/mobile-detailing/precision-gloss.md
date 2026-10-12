@@ -12,7 +12,7 @@ Northern Kentucky + Cincinnati
 
 Mobile detailing, booked directly with the provider.
 
-[Visit provider & request a quote](https://precisionglossdetailing.com/)
+[Visit provider & request a quote](https://precisionglossdetailing.com/?utm_source=jobhackai_local&utm_medium=referral&utm_campaign=directory_mobile_detailing_nky_2026_09&utm_content=precision-gloss_profile_website)
 
 Details from the provider’s website, checked 2026-09-22. Confirm availability and service at your address. No paid placement or partnership is implied.
 
@@ -46,6 +46,6 @@ interior, exterior
 
 **Information source**
 
-[Provider website](https://precisionglossdetailing.com/) · checked 2026-09-22
+[Provider website](https://precisionglossdetailing.com/?utm_source=jobhackai_local&utm_medium=referral&utm_campaign=directory_mobile_detailing_nky_2026_09&utm_content=precision-gloss_profile_source) · checked 2026-09-22
 
 [Suggest a correction by email](mailto:support@jobhackai.io?subject=Directory%20correction%3A%20Precision%20Gloss&body=Business%3A%20Precision%20Gloss%0AListing%3A%20https%3A%2F%2Fjobhackai.io%2Fdirectory%2Fmobile-detailing%2Fprecision-gloss%0ACorrection%20and%20source%20URL%3A%0A)

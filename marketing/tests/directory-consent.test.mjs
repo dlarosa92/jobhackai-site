@@ -18,7 +18,7 @@ function setup({ consent = false, visible = true, listing = 'pearls', owner = tr
   return { calls,
     consent(value) { consent = value; windowListeners['cookie-consent-granted'](); },
     visible(value) { document.visibilityState = value ? 'visible' : 'hidden'; documentListeners.visibilitychange(); },
-    click(dataset) { documentListeners.click({ target: { closest: () => ({ dataset }) } }); }
+    click(dataset, href = 'https://provider.example/') { documentListeners.click({ target: { closest: () => ({ dataset, getAttribute: name => name === 'href' ? href : null }) } }); }
   };
 }
 test('unconsented interactions are dropped, not replayed after acceptance', () => {
@@ -59,4 +59,29 @@ test('category views and contact events carry the correct category and do not re
   assert.ok(h.calls.every(c=>c[2].directory_category===category.replaceAll('-','_')));
   h.consent(false);h.consent(true);assert.equal(h.calls.length,2);
  }
+});
+
+test('actual contact destinations are separate, versioned and contain no contact PII', () => {
+  const h = setup({ consent: true });
+  for (const [href, method] of [
+    ['https://provider.example/book?private=value', 'provider_website'],
+    ['http://provider.example/', 'provider_website'],
+    [' TEL:+15555550123 ', 'phone'],
+    ['mailto:business@example.com?subject=Hello', 'email']
+  ]) {
+    h.click({ directoryContact: 'provider' }, href);
+    const event = h.calls.at(-1);
+    assert.equal(event[1], 'directory_contact_click');
+    assert.equal(event[2].contact_method, method);
+    assert.equal(event[2].listing_id, 'provider');
+    assert.equal(event[2].directory_tracking_version, '2');
+    assert.doesNotMatch(JSON.stringify(event), /555555|business@|private=value/);
+  }
+  const count = h.calls.length;
+  for (const href of ['', '#contact', '/directory', 'javascript:alert(1)']) h.click({ directoryContact: 'provider' }, href);
+  assert.equal(h.calls.length, count, 'internal or unsupported destinations are not provider contacts');
+  h.consent(false);
+  h.click({ directoryContact: 'provider' }, 'tel:+15555550123');
+  h.click({ directoryContact: 'provider' }, 'mailto:business@example.com');
+  assert.equal(h.calls.length, count);
 });

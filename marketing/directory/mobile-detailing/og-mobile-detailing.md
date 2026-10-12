@@ -12,7 +12,7 @@ Northern Kentucky + Cincinnati
 
 Mobile detailing, booked directly with the provider.
 
-[Visit provider & request a quote](https://www.ogmobiledetailing.net/)
+[Visit provider & request a quote](https://www.ogmobiledetailing.net/?utm_source=jobhackai_local&utm_medium=referral&utm_campaign=directory_mobile_detailing_nky_2026_09&utm_content=og-mobile-detailing_profile_website)
 
 Details from the provider’s website, checked 2026-09-22. Confirm availability and service at your address. No paid placement or partnership is implied.
 
@@ -48,6 +48,6 @@ interior, exterior, full detail, boats, rvs, fleets
 
 **Information source**
 
-[Provider website](https://www.ogmobiledetailing.net/) · checked 2026-09-22
+[Provider website](https://www.ogmobiledetailing.net/?utm_source=jobhackai_local&utm_medium=referral&utm_campaign=directory_mobile_detailing_nky_2026_09&utm_content=og-mobile-detailing_profile_source) · checked 2026-09-22
 
 [Suggest a correction by email](mailto:support@jobhackai.io?subject=Directory%20correction%3A%20OG%20Mobile%20Detailing&body=Business%3A%20OG%20Mobile%20Detailing%0AListing%3A%20https%3A%2F%2Fjobhackai.io%2Fdirectory%2Fmobile-detailing%2Fog-mobile-detailing%0ACorrection%20and%20source%20URL%3A%0A)
