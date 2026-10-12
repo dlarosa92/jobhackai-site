@@ -323,3 +323,10 @@ test('role output omits unsupported dates and remains identical across rebuild d
   assert.equal(readFileSync(output, 'utf8'), beforeInvalid);
   assert.equal(readFileSync(join(root, 'sitemap.xml'), 'utf8'), sitemap);
 });
+
+test('agent feeds retain original provider URLs without human handoff attribution', () => {
+ const content='<h1>Provider</h1><a data-directory-contact="provider" data-directory-original-href="https://example.com/quote?service=ev&amp;utm_source=provider#start" href="https://example.com/quote?utm_source=jobhackai_local&amp;utm_medium=referral">Provider</a>';
+ const md=convertPage(html(url,content),url).markdown;
+ assert.match(md,/https:\/\/example.com\/quote\?service=ev&utm_source=provider#start/);
+ assert.doesNotMatch(md,/jobhackai_local|utm_medium=referral/);
+});

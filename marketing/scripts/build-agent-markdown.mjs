@@ -52,7 +52,10 @@ export function convertPage(html, url) {
   const base = safeUrl($('base[href]').attr('href') || url, url) || url;
   main.find('a[href], img[src]').each((_, el) => {
     const attr = el.tagName === 'img' ? 'src' : 'href';
-    const absolute = safeUrl($(el).attr(attr), base);
+    // Agent feeds use the provider's original source URL, not browser referral tags.
+    const original = el.tagName === 'a' && $(el).attr('data-directory-contact')
+      ? $(el).attr('data-directory-original-href') : null;
+    const absolute = safeUrl(original || $(el).attr(attr), base);
     if (el.tagName === 'img' && (!absolute || !$(el).attr('alt')?.trim())) $(el).remove();
     else if (absolute) $(el).attr(attr, absolute);
     else $(el).removeAttr(attr);

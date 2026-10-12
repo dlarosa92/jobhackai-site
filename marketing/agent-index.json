@@ -178,7 +178,7 @@
       "path": "/directory/index.md",
       "title": "Mobile detailing in Greater Cincinnati | JobHackAI Local",
       "description": "Compare local mobile detailers by package scope, starting prices, and water and power requirements.",
-      "source_sha256": "1629fcd9816d4b181ba80c0441ed3aa5ab9d15c92ab65dd709d4a0a32ed80b45",
+      "source_sha256": "3489c61aaa807c3b97bff29b0682fcbe37e7eefe322f9a8b99cd68ec98fd9fcb",
       "markdown_sha256": "d07ef63e180ccbc3b94a251de26354d9762d12b55d999d5d37832976918b3fb6",
       "bytes": 11585
     },
@@ -188,9 +188,9 @@
       "path": "/directory/ev-charger-installation/index.md",
       "title": "Home Level 2 EV charger installation in Greater Cincinnati | JobHackAI Local",
       "description": "Compare local home Level 2 EV charger installers by panel assessment, charger supply, permits, service area and written quote scope.",
-      "source_sha256": "7c723b95102196bab783b81b660fb3678739cbf0ce4bd4383fe8efc92e1e8942",
-      "markdown_sha256": "2ca473c55736c956389fa4b06d575d729d6e0eaf3fc25d76502501061e7e64c3",
-      "bytes": 25661
+      "source_sha256": "9f354fe73089f37b470b5f91f4e826d6c4008ae05c71325a18b1e9454abe8b0b",
+      "markdown_sha256": "8b2ebd39777bc0f51061858d6aed28c8ca2b7075bfad18f27891d66d4c368774",
+      "bytes": 25698
     },
     {
       "url": "https://jobhackai.io/directory/ev-charger-installation/afw-electric",
@@ -198,9 +198,9 @@
       "path": "/directory/ev-charger-installation/afw-electric.md",
       "title": "AFW Electric LLC | Home Level 2 EV charger installation | JobHackAI Local",
       "description": "Published service and quote details for AFW Electric LLC. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "64397dd2a72fa56ea05ea666695d52a03ccc7ab120452fd51653cb80fa04f876",
-      "markdown_sha256": "5821af2e4826ce6f8cb35f401f8ecbf660a9d86d952c2eb3d3cf3d01450bc96a",
-      "bytes": 2481
+      "source_sha256": "071d30abd561d641b8a5b79f48a9e63ed815aa27fbaa73bf0ea3f906a25118de",
+      "markdown_sha256": "e233f41301ab6f9bf7b19cc56fcf3679f0f543d4accd91d7bb6b315f16a8276c",
+      "bytes": 2518
     },
     {
       "url": "https://jobhackai.io/directory/ev-charger-installation/anyweather-heating-and-air",
@@ -208,9 +208,9 @@
       "path": "/directory/ev-charger-installation/anyweather-heating-and-air.md",
       "title": "AnyWeather Heating & Air | Home Level 2 EV charger installation | JobHackAI Local",
       "description": "Published service and quote details for AnyWeather Heating & Air. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "4d7534b0661bc2a81b74a49f12c49cbd53aa7cfe187d77c990d3512dbc805dc5",
-      "markdown_sha256": "cb1c3a3dfc577e8c18969f3d4912158b24a9e8304cb17f46d908213cf714e710",
-      "bytes": 2664
+      "source_sha256": "e1b9fd79834512f8c32477b480f8f943e8cfac9832b38e9985a0f2bf99795545",
+      "markdown_sha256": "8ca93c4be533b54273b4ba30274385b6655ce83541ed41f0259f3fa93dbe3acd",
+      "bytes": 2701
     },
     {
       "url": "https://jobhackai.io/directory/ev-charger-installation/apollo-home",
@@ -218,9 +218,9 @@
       "path": "/directory/ev-charger-installation/apollo-home.md",
       "title": "Apollo Home | Home Level 2 EV charger installation | JobHackAI Local",
       "description": "Published service and quote details for Apollo Home. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "cc2545ba9298c4b2f9293017a011172a03fcf0948bea5ae6df2b8fb78449f0e4",
-      "markdown_sha256": "5d30f16f450ff862a4e985227c4e9929d7db5e0030ed5407145f35cce6400b48",
-      "bytes": 2657
+      "source_sha256": "57a3a789dd0cb95f48092de4dc3c38f64937a86209765727cb7bd535685640f1",
+      "markdown_sha256": "dbd446c2290743d91e76602ef4c7db72a9e212bc291af36851a0d5ce6836c910",
+      "bytes": 2694
     },
     {
       "url": "https://jobhackai.io/directory/ev-charger-installation/arlinghaus",
@@ -228,9 +228,9 @@
       "path": "/directory/ev-charger-installation/arlinghaus.md",
       "title": "Arlinghaus | Home Level 2 EV charger installation | JobHackAI Local",
       "description": "Published service and quote details for Arlinghaus. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "44c9b7a7f2557dcb295b50cc7c9397e563ab7c3615b60a597c19fbd8af910b90",
-      "markdown_sha256": "4acb1e118fe2e4f781a6e244695725b9c459a5dbeed16bce541ab50064959c39",
-      "bytes": 2622
+      "source_sha256": "c2f414d390f118b2a4593e992d7bbbcf1ee42ce556a8369823b3a61a399e0779",
+      "markdown_sha256": "2f1d8843e81377626f230285570ea31efccf396418d6fed4e40161b87998b395",
+      "bytes": 2659
     },
     {
       "url": "https://jobhackai.io/directory/ev-charger-installation/baker-electric",
@@ -238,9 +238,9 @@
       "path": "/directory/ev-charger-installation/baker-electric.md",
       "title": "Baker Electric LLC | Home Level 2 EV charger installation | JobHackAI Local",
       "description": "Published service and quote details for Baker Electric LLC. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "c46fe860d913b24b73835899f24260ca7480e02f184d183a52c4441fc76b0a4a",
-      "markdown_sha256": "50ea87261ca0817b037e8fbe0424ac2a0bad919d7da232acc3f4fdfa02f2c3b4",
-      "bytes": 2545
+      "source_sha256": "00fbda80a0cd6a749a73c80f35d4d731e70c8f9fb0225a64eb64d6439c4a0dda",
+      "markdown_sha256": "14aee2100135a1cd1362785e2e43eb85b1cf85392d064badbdd003b961538e00",
+      "bytes": 2582
     },
     {
       "url": "https://jobhackai.io/directory/ev-charger-installation/brodbeck-electric",
@@ -248,9 +248,9 @@
       "path": "/directory/ev-charger-installation/brodbeck-electric.md",
       "title": "Brodbeck Electric LLC | Home Level 2 EV charger installation | JobHackAI Local",
       "description": "Published service and quote details for Brodbeck Electric LLC. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "ca99d64579c94aaae8b9194c0312c511c1c2df98fc4fbf947fafd65f22b02372",
-      "markdown_sha256": "e1e4a59db9203c2b5506f1eb2b6b75b7a6ab42389ce3075d96535eb2a8b11214",
-      "bytes": 2473
+      "source_sha256": "71aac762f4c675188b06634c718cb75716386713990fdebceefdaa3e0b926e8c",
+      "markdown_sha256": "a5258c54985ac53f4eef577384f60f8cb425246bb2bda681a01a3ee25771b1d6",
+      "bytes": 2510
     },
     {
       "url": "https://jobhackai.io/directory/ev-charger-installation/cdi-electric",
@@ -258,9 +258,9 @@
       "path": "/directory/ev-charger-installation/cdi-electric.md",
       "title": "CDI Electric Inc. | Home Level 2 EV charger installation | JobHackAI Local",
       "description": "Published service and quote details for CDI Electric Inc.. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "782a265db4bce202df36025271f952bb549d7ff4b6209cb9b5f30f4d1aea7fc8",
-      "markdown_sha256": "ab2bdabf7d574553e744be2b91339df6c921f620f8aae496aad56c94f50c4932",
-      "bytes": 2573
+      "source_sha256": "4dc7f59d4c7289f0a0b25e20cb56c79227755ab0f4cc024077bf3a3b836727ca",
+      "markdown_sha256": "950073a951ede801e804d262d805c4e0338a3157ba258ef0c5c3c42b7ec70bca",
+      "bytes": 2610
     },
     {
       "url": "https://jobhackai.io/directory/ev-charger-installation/elite-electrical-solutions",
@@ -268,9 +268,9 @@
       "path": "/directory/ev-charger-installation/elite-electrical-solutions.md",
       "title": "Elite Electrical Solutions LLC | Home Level 2 EV charger installation | JobHackAI Local",
       "description": "Published service and quote details for Elite Electrical Solutions LLC. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "540e51fb6d410c833837f78cd678df9c33b1cd473fa13f27018899b51a759055",
-      "markdown_sha256": "e32369d168ef12a7b7fa4428053d76a07e60a5f0ebab5a184416fcd8b9c711a8",
-      "bytes": 2625
+      "source_sha256": "d5c696917ef150589837946e4f21fb7e7c7c681578657f1cc1b02dc924e60539",
+      "markdown_sha256": "43d0236a8e547b48c9417a1307c25f9aec39bd9ee0ce3d8f7ed0336787086d22",
+      "bytes": 2662
     },
     {
       "url": "https://jobhackai.io/directory/ev-charger-installation/gronotte-electric",
@@ -278,9 +278,9 @@
       "path": "/directory/ev-charger-installation/gronotte-electric.md",
       "title": "Gronotte Electric | Home Level 2 EV charger installation | JobHackAI Local",
       "description": "Published service and quote details for Gronotte Electric. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "7b6eefc7c1a803e76f3eae43623a1611cd7fb84e682ec5b9cb27e55ff2f05bf3",
-      "markdown_sha256": "1204bd33fe03b1333a635c48f588b0384cd70269e6a4d860f9502f0a70f22c7b",
-      "bytes": 2680
+      "source_sha256": "0a5feea95cc283aeb3628d7a00b5b3d5d3ac019e368db7c3771d0323260fd753",
+      "markdown_sha256": "7dc4f1d49609ef4224a6324c515a86d0958f0d582a264a7183a98e6ba9adac78",
+      "bytes": 2717
     },
     {
       "url": "https://jobhackai.io/directory/ev-charger-installation/ground-zero-electric",
@@ -288,9 +288,9 @@
       "path": "/directory/ev-charger-installation/ground-zero-electric.md",
       "title": "Ground Zero Electric | Home Level 2 EV charger installation | JobHackAI Local",
       "description": "Published service and quote details for Ground Zero Electric. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "e97cb67b90a5354ae4d6f6b484c4cedbfbdfa8bca76e10b96aacfce5dea8209c",
-      "markdown_sha256": "3e734dd1c37c3a9457064b0e37b0e23f4176001407ce50db29140ae67b278c6a",
-      "bytes": 2700
+      "source_sha256": "6bfcd070e23c6f20857d48231ec95cf76a1f26a95e5e55c6a753747fd77ef898",
+      "markdown_sha256": "79a3ffde688b91026fa7383a13ac33e46f67426942658a290d35e456a0f0d4fe",
+      "bytes": 2737
     },
     {
       "url": "https://jobhackai.io/directory/ev-charger-installation/jolly",
@@ -298,9 +298,9 @@
       "path": "/directory/ev-charger-installation/jolly.md",
       "title": "Jolly | Home Level 2 EV charger installation | JobHackAI Local",
       "description": "Published service and quote details for Jolly. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "8564560fd486b17ad36eb693ac1a35bad5edf7f6bfa82c852db27792d1981d92",
-      "markdown_sha256": "61fba68e5b8148dbb5a676ee678163f7f7ce94c3fda88fc7bf0fb4c2f2bc2ba1",
-      "bytes": 2575
+      "source_sha256": "982a4f86793e010ae221a21ed7d146c2644c0636ce7dd9e8863758822f20402e",
+      "markdown_sha256": "df3a3cf93effc8094f5a3b136538647ffcb2bc45829dd0ad927bb84afb49ee0a",
+      "bytes": 2612
     },
     {
       "url": "https://jobhackai.io/directory/ev-charger-installation/lcs-electric",
@@ -308,9 +308,9 @@
       "path": "/directory/ev-charger-installation/lcs-electric.md",
       "title": "LCS Electric & Home Improvement Services | Home Level 2 EV charger installation | JobHackAI Local",
       "description": "Published service and quote details for LCS Electric & Home Improvement Services. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "5e8b0abe1b3fbbedc58d84562ab89999e1ed5ab87cd55c526ec4c99585d5a721",
-      "markdown_sha256": "e2cf69a3e32692472192fbccadabae6cc022955aa83793d56de79b2a3c0205ef",
-      "bytes": 2576
+      "source_sha256": "7c730f5bdc902c7e0719c1b2e90b2c24db54b20667eb1b2f71492471e492a948",
+      "markdown_sha256": "cdaf858bb4551b63ee8a8185ac7b599fc3466e38463917e09440ce80f97bf392",
+      "bytes": 2613
     },
     {
       "url": "https://jobhackai.io/directory/ev-charger-installation/leitner-electric",
@@ -318,9 +318,9 @@
       "path": "/directory/ev-charger-installation/leitner-electric.md",
       "title": "Leitner Electric Co. | Home Level 2 EV charger installation | JobHackAI Local",
       "description": "Published service and quote details for Leitner Electric Co.. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "1fbcba5499cbdc6f1e0fea62e1b8d20030bb610c4a4cc3d2c4130a91b14d7caf",
-      "markdown_sha256": "1ef8e94625543507ddcc5f0b1338b88479ea9bb4159099dd0894f22ede8998a9",
-      "bytes": 2596
+      "source_sha256": "8eaabc2e058806b7464e6a32637050a1113607cf83450a2c63b355f21c947f90",
+      "markdown_sha256": "b3182bc90945a6133d6ff351d03d4c498e3150f856ea71eee1b3b07b068e2ea2",
+      "bytes": 2633
     },
     {
       "url": "https://jobhackai.io/directory/ev-charger-installation/mm-custom-wiring",
@@ -328,9 +328,9 @@
       "path": "/directory/ev-charger-installation/mm-custom-wiring.md",
       "title": "MM Custom Wiring | Home Level 2 EV charger installation | JobHackAI Local",
       "description": "Published service and quote details for MM Custom Wiring. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "e2d7b6d20b24bd0ba82271052e43de731a2511c459bff29f0c3fcf0aab875eba",
-      "markdown_sha256": "b9b8d94b1fb1e9468e2baa1510098b6cae9879f8406bd0f4e4c512a79539e617",
-      "bytes": 2486
+      "source_sha256": "73585c8c40d2b17623dfa80135b8d3dc211650172856822102a5641ef2cb9f06",
+      "markdown_sha256": "db0ba6ead4d405a27d9c84d5a12da1b1d8369ce8a1df5602b52d4f68d9bb0d5d",
+      "bytes": 2523
     },
     {
       "url": "https://jobhackai.io/directory/ev-charger-installation/mr-electric-hamilton",
@@ -338,9 +338,9 @@
       "path": "/directory/ev-charger-installation/mr-electric-hamilton.md",
       "title": "Mr. Electric — Hamilton | Home Level 2 EV charger installation | JobHackAI Local",
       "description": "Published service and quote details for Mr. Electric — Hamilton. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "e7d1e085938c0ca7a2dafd92b2bf5a5b1a412291f3da01a7ff69ef8e4e2513af",
-      "markdown_sha256": "4203238686c8870f862bb20b9fdf465abf1a1c4c2f3b837e7d798974a251ce75",
-      "bytes": 2594
+      "source_sha256": "28f5846815c395de3edae2e6c6d8c1e0456ae91ee655d0afc4ac4b4bf80dc908",
+      "markdown_sha256": "3387b2ddf305249a600aaf62cbbeb269e2ee68fd2e705c8dcc447d380107f94a",
+      "bytes": 2631
     },
     {
       "url": "https://jobhackai.io/directory/ev-charger-installation/nabi-electric",
@@ -348,9 +348,9 @@
       "path": "/directory/ev-charger-installation/nabi-electric.md",
       "title": "Nabi Electric | Home Level 2 EV charger installation | JobHackAI Local",
       "description": "Published service and quote details for Nabi Electric. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "c59a33c615500b92f968b9320e81623c800b5aad76ba34de812e500e786d83ec",
-      "markdown_sha256": "d0a4a34a37610b3730d7a85aaf09b9b7cc5a2bfcecd1c5a177f880a2120e9772",
-      "bytes": 2795
+      "source_sha256": "aa9a80ef5ef5e319498ae02df38fefd91a6f42e29dd4714e00a00cb4de456aa8",
+      "markdown_sha256": "e89a066c2e950f93ce62c1fe39af99e42bf0519ae792e2f0feb95e07a7726162",
+      "bytes": 2832
     },
     {
       "url": "https://jobhackai.io/directory/ev-charger-installation/pulsar-electrical-services",
@@ -358,9 +358,9 @@
       "path": "/directory/ev-charger-installation/pulsar-electrical-services.md",
       "title": "Pulsar Electrical Services | Home Level 2 EV charger installation | JobHackAI Local",
       "description": "Published service and quote details for Pulsar Electrical Services. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "6d698e210445145852eb625145fad91c46a1a3754c7756b40aabdb50d756360b",
-      "markdown_sha256": "500663e3c63571b6e52a92ec11832eda8766f8fdf309ed9f6645490dc339d283",
-      "bytes": 2508
+      "source_sha256": "f3dd36941b0943fbfd4f3ddf1a671e4a456bc583b20dc4607616e6abc577c39f",
+      "markdown_sha256": "8dadbfc67fcf2e36002972b873c12a1e56953f21ae247dccb60a2c2951259356",
+      "bytes": 2545
     },
     {
       "url": "https://jobhackai.io/directory/ev-charger-installation/qei-electrical",
@@ -368,9 +368,9 @@
       "path": "/directory/ev-charger-installation/qei-electrical.md",
       "title": "QEI Electrical Service LLC | Home Level 2 EV charger installation | JobHackAI Local",
       "description": "Published service and quote details for QEI Electrical Service LLC. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "2c652655cd51be70afdcd215fbc9d6a0816a0905270767f157fcbc244be7f2ac",
-      "markdown_sha256": "477bccbd64c874c313715753080b5d4f1f886b0c0ad55e895d8a97fafa0f1f85",
-      "bytes": 2555
+      "source_sha256": "8263cd93b1f3835e293ef9282d46e243f7ae7f530d2a33edd120d8a86aeacc03",
+      "markdown_sha256": "20cf7520aeba52f543ef00a5a9e5955ad8419a6ffd4bada8eb547249f0adebb9",
+      "bytes": 2592
     },
     {
       "url": "https://jobhackai.io/directory/ev-charger-installation/risen-electric",
@@ -378,9 +378,9 @@
       "path": "/directory/ev-charger-installation/risen-electric.md",
       "title": "Risen Electric | Home Level 2 EV charger installation | JobHackAI Local",
       "description": "Published service and quote details for Risen Electric. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "9e4460c370be9900b5bc271000a40cbb53e921ac616b96f67704068a9a55fd2e",
-      "markdown_sha256": "1f839f31ed930097d235e151accf7a14c274f320e018b0db5b0a0b32738b5f5e",
-      "bytes": 2690
+      "source_sha256": "a201f11bc5c812597bfb95e38f939479b7b5b3660a885ad4d9662927e9c15293",
+      "markdown_sha256": "6fcf127dee13607b746a4ca60cf5ae76f5bdb1badf446c83c8ee7577e6de780b",
+      "bytes": 2727
     },
     {
       "url": "https://jobhackai.io/directory/ev-charger-installation/thomas-and-galbraith",
@@ -388,9 +388,9 @@
       "path": "/directory/ev-charger-installation/thomas-and-galbraith.md",
       "title": "Thomas & Galbraith | Home Level 2 EV charger installation | JobHackAI Local",
       "description": "Published service and quote details for Thomas & Galbraith. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "a5a3fc7304025c685975c5b012a726fb53f98c56cfc6bc8ff852c796dc603176",
-      "markdown_sha256": "c93df22766d68ec85a09493f8ee83276e6e1b4372b89949adb91b9a8810152e4",
-      "bytes": 2490
+      "source_sha256": "a2d4fb0a258bd6f632b5c1fab016048be4a8c39172daa3af2e0490f2539e7ff1",
+      "markdown_sha256": "509237c4cf2ac280f097145e8b0d78fec718e3aa90ec1fd54b420398b32b27d9",
+      "bytes": 2527
     },
     {
       "url": "https://jobhackai.io/directory/ev-charger-installation/velasco-electric",
@@ -398,9 +398,9 @@
       "path": "/directory/ev-charger-installation/velasco-electric.md",
       "title": "Velasco Electric | Home Level 2 EV charger installation | JobHackAI Local",
       "description": "Published service and quote details for Velasco Electric. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "9c13f608f764505a18dc380fe3a722e340e924a821dacb905becea2f53dc96e5",
-      "markdown_sha256": "49a054902fe9c2e8b8581d18981484cb641dc102b12807231ac18fd2758c7e18",
-      "bytes": 2680
+      "source_sha256": "e26b4cd4e2afe62648c981f0ac5dee65fef3b6f4522389f19be96cbb7208e74c",
+      "markdown_sha256": "714cfeda6f64629d02c046cd9b2c93159bba24639f09cfb3b352186a99051259",
+      "bytes": 2717
     },
     {
       "url": "https://jobhackai.io/directory/ev-charger-installation/veneman-electric",
@@ -408,9 +408,9 @@
       "path": "/directory/ev-charger-installation/veneman-electric.md",
       "title": "Veneman Electric | Home Level 2 EV charger installation | JobHackAI Local",
       "description": "Published service and quote details for Veneman Electric. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "8ec052e00fe0e4ee89016543209b8c129cf204b5bb45db03b324def51a9bd7d0",
-      "markdown_sha256": "e2e7031145625758c9a39c8d284e66a729ced209b367604c732a257cc54784c8",
-      "bytes": 2533
+      "source_sha256": "98852fa055ce85622f4dddfeb03763ebb9f404e87db6aa270a47357d7dd56f89",
+      "markdown_sha256": "83b3e763c374bfb46bb4b698a3cc20b2c9d8a9d6f53d8c6a6f4e216ba2b9eb87",
+      "bytes": 2570
     },
     {
       "url": "https://jobhackai.io/directory/get-listed",
@@ -418,7 +418,7 @@
       "path": "/directory/get-listed.md",
       "title": "Get listed | JobHackAI Local",
       "description": "Suggest a local business for private editorial review.",
-      "source_sha256": "18ae1783f0e698201e80e5dbc50393bf42a88981d9f4ab0c7f01424bff80529b",
+      "source_sha256": "e4b93e0cbd931c328667a957b4b5ebe77b50206fc637857e316f6b8a02c1008d",
       "markdown_sha256": "9fd523fae366cd804ad3e73563e538d25825f25a3d94f838945cfa484c3e1796",
       "bytes": 838
     },
@@ -428,9 +428,9 @@
       "path": "/directory/junk-removal/index.md",
       "title": "Junk removal in Greater Cincinnati | JobHackAI Local",
       "description": "Compare local junk removal by accepted items, loading, service area and quote method. Check municipal pickup before paying for a haul.",
-      "source_sha256": "065dcf016567c052062062b3279a49d1e4fde499c053891b8216173d63e94076",
-      "markdown_sha256": "3019c0171d237133e249af334d7691dc99e0f2c2ebfcc8dbb8d91213a6193d7b",
-      "bytes": 18968
+      "source_sha256": "a1a67348da4b2a6a734970e1501cbd9fa77292ba8d3c8a8b854fabaf63b634c4",
+      "markdown_sha256": "56ba7a2a30e1d1299b4db9814e8f1a05af471b5d27d3c217fdf9b38997003ea2",
+      "bytes": 19005
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/1-800-got-junk",
@@ -438,9 +438,9 @@
       "path": "/directory/junk-removal/1-800-got-junk.md",
       "title": "1-800-GOT-JUNK? Cincinnati / Northern Kentucky | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for 1-800-GOT-JUNK? Cincinnati / Northern Kentucky. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "59df755f502ab8b12b8f0cd5deed398cf67867af9db2da33b92ef591634de5ff",
-      "markdown_sha256": "752ae3ac66ea2a62c15bb2d2222b0da4998d4b55c48a7ecb0d9602db3744ed06",
-      "bytes": 2163
+      "source_sha256": "d0f42d148b86fb56f8d34e54c73e3dea81349482401b1a7f03aacd15bc85ef77",
+      "markdown_sha256": "eb142c5eda3d56e700ee76b6e10e76c2a023cc4a761e93c74a66af18a68a74b4",
+      "bytes": 2200
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/ak-site-services",
@@ -448,9 +448,9 @@
       "path": "/directory/junk-removal/ak-site-services.md",
       "title": "AK Site Services | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for AK Site Services. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "6809d89f2b0fa5a0d1177e79c5e9038054c06e6d64269308677dba22b83e6e47",
-      "markdown_sha256": "b8594b72f55dd65a9cf9877dca11bb40361ea5bc825c1ab77fa16b94dadc7b5b",
-      "bytes": 1990
+      "source_sha256": "9d1ada5b6abee3f512d99f024b021ac33adaa09d82976b6dfc3c15a2e27c5886",
+      "markdown_sha256": "355c29c1dad6ccdb84cae145fe2adf945c09489a380e5fd918f19fb16f432b42",
+      "bytes": 2027
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/all-in-1-junk-removal",
@@ -458,9 +458,9 @@
       "path": "/directory/junk-removal/all-in-1-junk-removal.md",
       "title": "All-In-1 Junk Removal and Demo | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for All-In-1 Junk Removal and Demo. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "fa2111c30062c462e11785a60a868c58fd878270fc9a58f1feeeb1a439d5686b",
-      "markdown_sha256": "8fd020784f0784efbe88f6f2702b9fbbcd35ed0ff191e9bf989e29f32093ed10",
-      "bytes": 2004
+      "source_sha256": "177a6c4c7cd1ecee7563c266793ceb52869b1d35cee491913e470bcb5807b6a4",
+      "markdown_sha256": "fde17f711713c53a8260ac1e85fdcc1f03f417d18630a02a2a681dca8f047245",
+      "bytes": 2041
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/beckett-services",
@@ -468,9 +468,9 @@
       "path": "/directory/junk-removal/beckett-services.md",
       "title": "Beckett Services | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for Beckett Services. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "7aaad7487ffbc05ebc3fb8c28a4732e3c3d2231ce619bc1a60d92c012c46f33d",
-      "markdown_sha256": "a157002b7cf2974fc4f0c00e3cac33914f0b95d0ad6b0b820197688affa56d2a",
-      "bytes": 1883
+      "source_sha256": "1043ec23c6d714385b1e66cc36dee986a543ef12ebbd8400493c89672e518c4c",
+      "markdown_sha256": "e3a864d7c68ad8b529696bf47bf45fb445ff9e7bf2d74a9a22c9883d2b8917d9",
+      "bytes": 1920
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/blue-koi-hauling",
@@ -478,9 +478,9 @@
       "path": "/directory/junk-removal/blue-koi-hauling.md",
       "title": "Blue Koi Hauling and Junk Removal | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for Blue Koi Hauling and Junk Removal. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "8953bb7a8629878e5993e636f4912c7441072dfc7c501c9332a88458f1fe9549",
-      "markdown_sha256": "a37256b10a04701e049c5fc52de53a1072ad0ef5a438cef07385f66c24828c3b",
-      "bytes": 1955
+      "source_sha256": "9141c5c4a1741873117db4a61141b17cddeec0a8b91b54639ba0ac64f38026a8",
+      "markdown_sha256": "ff28b082d483e2851c92363b1f1a400abf34dbaaca2a05786a50f3ea76b01044",
+      "bytes": 1992
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/bright-hauling-junk-removal",
@@ -488,9 +488,9 @@
       "path": "/directory/junk-removal/bright-hauling-junk-removal.md",
       "title": "Bright Hauling and Junk Removal | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for Bright Hauling and Junk Removal. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "1d056ea5757b4aa4a36af8399e716845b0f0dead40165694277247dcb1c738df",
-      "markdown_sha256": "32c4efd1a4eb138fc6a03a58e978c5a2772220ee43c5b5bd0103d3e7efad4bee",
-      "bytes": 1953
+      "source_sha256": "308bf236cc733daccd599ef42dc0cadc6705e88eb4cc35a764a4868e280ecca7",
+      "markdown_sha256": "bd5eeca04f89e4a312a1ed6211b733f3bff24cc69bc71d2ed13fcd9e5e94970a",
+      "bytes": 1990
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/cincy-junk-busters",
@@ -498,9 +498,9 @@
       "path": "/directory/junk-removal/cincy-junk-busters.md",
       "title": "Cincy Junk Busters | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for Cincy Junk Busters. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "891a6d3369c4550af0d3928f84b7b7d6ffae0d531940925b034017427eaf0d77",
-      "markdown_sha256": "de7c29d2bb02509f959ccbc0dd71736c5a9cfdcc6ce04e0b7c706a6037dc81f7",
-      "bytes": 2018
+      "source_sha256": "1a63276398cb3f282bad08c71efc4e0c69f9c05c145955fc2308f32ce84ad733",
+      "markdown_sha256": "bd4451f6e37aded046663196a6cef714eafa1ffc68f34864af96cf7b6952c9ca",
+      "bytes": 2055
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/clutter-box-junk-removal",
@@ -508,9 +508,9 @@
       "path": "/directory/junk-removal/clutter-box-junk-removal.md",
       "title": "Clutter Box Junk Removal | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for Clutter Box Junk Removal. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "c7859d00e87aad79b6adb77242c7fb5ae699c1af712838a7096379c5a0658c5b",
-      "markdown_sha256": "6e1988a334ae167f9128ac6844e06793783cb56e99bee1d2eebcf200dbc890d4",
-      "bytes": 1965
+      "source_sha256": "9be2f932eeb3bba87e1f729658f7cb07c49143d90bcc3817fc4684303cbdca9c",
+      "markdown_sha256": "f8700cabfdddf24bfe5acfbfc2ff473ec6f07586f9d547894a87a40165b676c3",
+      "bytes": 2002
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/college-hunks-florence",
@@ -518,9 +518,9 @@
       "path": "/directory/junk-removal/college-hunks-florence.md",
       "title": "College HUNKS Hauling Junk & Moving — Florence | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for College HUNKS Hauling Junk & Moving — Florence. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "0ccd2319fb01576c85c9a49034bb53f3ce86ab88651a56cd48d7ac6abe794cb0",
-      "markdown_sha256": "b5cd0ab10b595d56e8d8d0f578879e08c0dc33b4b1b2a52699a5052ae1703fc5",
-      "bytes": 2014
+      "source_sha256": "818bebc9c39f06648ff4126d55f05155c856cbd52bc8d87b0beb7b97cb0bea21",
+      "markdown_sha256": "7885a76b8956e8db0a8652088008c35a146afbddf1e1cd2deffce43cb9170211",
+      "bytes": 2051
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/evict-my-junk",
@@ -528,9 +528,9 @@
       "path": "/directory/junk-removal/evict-my-junk.md",
       "title": "Evict My Junk | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for Evict My Junk. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "d5e118aec0bd4650e0531240cee2f53c8893abd953eb7296b7b28390c0cdd220",
-      "markdown_sha256": "6ec3603d2dd7f362e60c7b8098cfdfad0e400b6b1bd4e1279a31388c15c5f5d6",
-      "bytes": 1969
+      "source_sha256": "b1bd189b3b2390e19d5496117b33f1e34dc8b606c3075523bea4c2e18996da10",
+      "markdown_sha256": "3751a3c31613caad41b916df8b2bd29b400ec6e7af2f276efbc7d08b0f6af726",
+      "bytes": 2006
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/goodfellas-junk-removal",
@@ -538,9 +538,9 @@
       "path": "/directory/junk-removal/goodfellas-junk-removal.md",
       "title": "GoodFellas Junk Removal | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for GoodFellas Junk Removal. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "58a1e325689b4828fb10032bd9c1d70e984453113a826460399f0db84cca702a",
-      "markdown_sha256": "a815bbea1c9cda451b1dcb9513200911f68fd970cbbd0a3dfdeb6afc629c3626",
-      "bytes": 2030
+      "source_sha256": "709ea12d89471f910efce251efa096f4622c466307bbb18065156bb24deba190",
+      "markdown_sha256": "9f5bc233baad41584ef2d8d4dcf5d09839b9a43c8604ea02966a1a4245a81911",
+      "bytes": 2067
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/haulaway-pro",
@@ -548,9 +548,9 @@
       "path": "/directory/junk-removal/haulaway-pro.md",
       "title": "HaulAway Pro | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for HaulAway Pro. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "04fd10d15119821981a1da82e00e0618e0992f9922e8be5f9f6ad4a3515f0119",
-      "markdown_sha256": "52808081b4f1ea165dcc0af54f0fb2fe1744e9fa8a2d96816a5b786852f627b2",
-      "bytes": 1846
+      "source_sha256": "fe557764ed34dbdd44ded4477b1421025add89f4d6b5fee5cc178719d6109038",
+      "markdown_sha256": "a8941a2ada444bf5e8a6e1679c61fd25e4c0d9ab3df98637e4cb0d05900d741a",
+      "bytes": 1883
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/junk-junkies-llc",
@@ -558,9 +558,9 @@
       "path": "/directory/junk-removal/junk-junkies-llc.md",
       "title": "Junk Junkies LLC | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for Junk Junkies LLC. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "054861105d6ae5f4681852f21197e99cf0555f0c438b15231ec0c97d4f477201",
-      "markdown_sha256": "5e59abe7adb702b3ba7aac33cca49b9a514cd761455977d4d3d821eadb6526e3",
-      "bytes": 1870
+      "source_sha256": "2fcca8133276299bf68fbd3d7906cf0c4f196de29e8660bfed5ac8b6313a457d",
+      "markdown_sha256": "262dbfc264eb171f9510720050e1652926643336ac0ba5d3f2675530f81d30e5",
+      "bytes": 1907
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/junk-king-cincinnati",
@@ -568,9 +568,9 @@
       "path": "/directory/junk-removal/junk-king-cincinnati.md",
       "title": "Junk King Cincinnati | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for Junk King Cincinnati. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "09b4605f03eac1bdb41ff18d70782707fa65181f79472dcd4ea90dc546d1c278",
-      "markdown_sha256": "11ad96e18ddacf4db4ce733561ce0419502baf03359cec494378eab6bff89e3f",
-      "bytes": 1928
+      "source_sha256": "3c955629c6ebe78d1ef131cf1245dacada014e19537a335a32f605ebfe0120c9",
+      "markdown_sha256": "6a401373709c9a123a74ac7de16e04815746d0a111da6fda59d4a88d2fff5675",
+      "bytes": 1965
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/junk-king-northern-kentucky",
@@ -578,9 +578,9 @@
       "path": "/directory/junk-removal/junk-king-northern-kentucky.md",
       "title": "Junk King Northern Kentucky | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for Junk King Northern Kentucky. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "b4836398cd73b98b67526c4da0abef2f36615d9fe0e5568741836d911174950e",
-      "markdown_sha256": "4dbafa651a8530a3d283e0f43d0e98762467e5cc128c1700f2db1dd8a72c6108",
-      "bytes": 2067
+      "source_sha256": "428ade912a1144122113545e8581239ec60fd614cf7c6ca573b6f8787eb2d2a1",
+      "markdown_sha256": "06d3b04b8dda127924f4478e3bb814fee5d847e428d1d1a20d93d229431f0e2f",
+      "bytes": 2104
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/junk-removal-guys",
@@ -588,9 +588,9 @@
       "path": "/directory/junk-removal/junk-removal-guys.md",
       "title": "Junk Removal Guys | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for Junk Removal Guys. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "a20c607c3650a42170ca8f280efdc55d7d4429b762a018e252642e454099be72",
-      "markdown_sha256": "ef50154f8c48dd3d247dcb136542f09c10c3e1d3bfedb750a654957ec4bd3b8f",
-      "bytes": 1931
+      "source_sha256": "9810aecb4aac6bae149a401c56bbb1b9505161124f7774276bbadc556cae2596",
+      "markdown_sha256": "146a114287fec5baf7d1ddc423ae3c36c82ed8e1dd5dae47eac85e8acd4f4ea8",
+      "bytes": 1968
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/larrys-junk-removal",
@@ -598,9 +598,9 @@
       "path": "/directory/junk-removal/larrys-junk-removal.md",
       "title": "Larry’s Junk Removal | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for Larry’s Junk Removal. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "8ad0a92cce463b9340102dfc9756b5e46ce63bd935347d1dc8ab912a384c1417",
-      "markdown_sha256": "43c9ef2cd245ba21136c7daab1afda69359e34f8d8f5b5464c9255eed335b434",
-      "bytes": 2098
+      "source_sha256": "c8ce150b3b7c0cabf1dd4e1c3e427597c6c2fb04ac85953b3c52aebf3ce063cd",
+      "markdown_sha256": "eaea74e8658856cd80c7c27436234437646fd798e310bd3ba3348c174997fdff",
+      "bytes": 2135
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/latham-junk-removal",
@@ -608,9 +608,9 @@
       "path": "/directory/junk-removal/latham-junk-removal.md",
       "title": "Latham Junk Removal | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for Latham Junk Removal. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "7621f984abaa4b1ffd3855a6ba2d83326423e1d35a56d57dbb72135b05b0316b",
-      "markdown_sha256": "7402e79bf04827cba87a6c891d6cfcdecd5aecdf9f3badc083052cfd20271044",
-      "bytes": 1990
+      "source_sha256": "bb145aab6ac7f456e4d1d944924f3fa7487d68aa45cc0685c2c6ec2c6b3edf95",
+      "markdown_sha256": "aa21ea4e33d7473f846a0b88500a2a611549698adef15bf2fac9521cf3a5a50d",
+      "bytes": 2027
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/nky-junk-dads",
@@ -618,9 +618,9 @@
       "path": "/directory/junk-removal/nky-junk-dads.md",
       "title": "NKY Junk Dads | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for NKY Junk Dads. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "704847127a28ce024dcc47fb56110d1b6c8b44e29fb44e022fe59fa6fc98f6ba",
-      "markdown_sha256": "666d50644c2ecba62302b2a3b312c83d71afad68b424d08bad1d7c8c4850c62b",
-      "bytes": 1908
+      "source_sha256": "8bf4a5cafc319418b15d6ba446bb7dc66322e4119c41dcb15e76eac6862587ae",
+      "markdown_sha256": "8256e6fa9084906e1647273f6740868c492b3c7809b5b67769bc46a38ae88641",
+      "bytes": 1945
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/royal-flush-enterprises",
@@ -628,9 +628,9 @@
       "path": "/directory/junk-removal/royal-flush-enterprises.md",
       "title": "Royal Flush Enterprises | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for Royal Flush Enterprises. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "a8e67fde1d78cb6558a147a1eee18668b6c11d2660887ce254104c0f4e27e423",
-      "markdown_sha256": "102af43ce47aa78d4c10c05107c61f8ce8371ddd268e9b35cdeded68bdd4d9cd",
-      "bytes": 2011
+      "source_sha256": "b34c75a2bf846aafd4b2b05bcf47e6939179d2f0580a889090dcb8e351af1621",
+      "markdown_sha256": "9cb1006a04d3e7852258e13b4ac951378ce0873cd7b8280d9a54103657bf325c",
+      "bytes": 2048
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/rumpke-haul-it-away",
@@ -638,9 +638,9 @@
       "path": "/directory/junk-removal/rumpke-haul-it-away.md",
       "title": "Rumpke Haul-it-Away | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for Rumpke Haul-it-Away. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "b3aff224b00f3be3a3fb817e2c3f67f79e8bba6632501c6396165f5c421c1c2a",
-      "markdown_sha256": "91a84a368c5d69ca69c2b0d764905e7a3ae8b01aa08c5e4546ef89aa71bf6aa6",
-      "bytes": 2053
+      "source_sha256": "dda787c56b47277db9c98449eee377297abacb137e7e2213d0c3d16516a71619",
+      "markdown_sha256": "813edc066a7e92914f8d8ec061ed05f3f66688455ebfbed5d9835f3cda268f51",
+      "bytes": 2090
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/sen-hauling-junk-removal",
@@ -648,9 +648,9 @@
       "path": "/directory/junk-removal/sen-hauling-junk-removal.md",
       "title": "SEN Hauling & Junk Removal | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for SEN Hauling & Junk Removal. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "104d4382606cfba54ceb90bb9756cd33d7acadd69fd0d0cefabe219cc46710a5",
-      "markdown_sha256": "cb10c4aa28d9874409ee359678e8268736e5dd4039b4f295b71bab834838f132",
-      "bytes": 1971
+      "source_sha256": "37271ea80173685585e634a25d5048bd7a4cc7c96a321b8369dd2dedc9589488",
+      "markdown_sha256": "ba567e7e4c9f1a096568847cf2648b3f700aafda0926e5bdffb6d13a8f93defc",
+      "bytes": 2008
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/swat-junk-removal",
@@ -658,9 +658,9 @@
       "path": "/directory/junk-removal/swat-junk-removal.md",
       "title": "S.W.A.T. Junk Removal | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for S.W.A.T. Junk Removal. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "70007ff1b08839a2fc2f3d23b194fb3c7c6a5b71f43fb99b68dbab4a66f16f06",
-      "markdown_sha256": "318bff14408c7889c03dcc868c7b97de16260ab309e94cea37376139a4daea03",
-      "bytes": 1915
+      "source_sha256": "cfa77b5c4226d00809ddc99805419179bfa1eee0e7bb21309cd7b347daf43c10",
+      "markdown_sha256": "7abdede4d5585dd70cbdbb6b6132d2d59a3b2dfafc274104b2f506883e754cda",
+      "bytes": 1952
     },
     {
       "url": "https://jobhackai.io/directory/mobile-detailing/513-auto-clean",
@@ -668,7 +668,7 @@
       "path": "/directory/mobile-detailing/513-auto-clean.md",
       "title": "513 Auto Clean — mobile detailing | JobHackAI Local",
       "description": "Package details and booking requirements for 513 Auto Clean in the Greater Cincinnati tri-state area.",
-      "source_sha256": "f128c3119f8e9f57ac51123c4ba7b721e2b8fcce13da6dc96eedf4fe67c70670",
+      "source_sha256": "1a89544575f10f6723255d79237cd08133e9597adc0f8df8505fea4f43c9ce1d",
       "markdown_sha256": "3a8931937b8a1af029bf21041da75d788b0e6c9f607ee8ede146315b02ce836d",
       "bytes": 3523
     },
@@ -678,7 +678,7 @@
       "path": "/directory/mobile-detailing/a-good-mobile-detailing.md",
       "title": "A GOOD Mobile Detailing — mobile detailing | JobHackAI Local",
       "description": "Package details and booking requirements for A GOOD Mobile Detailing in the Greater Cincinnati tri-state area.",
-      "source_sha256": "295f8d0984f633dd47c0a0ac5ea744b6ea48b4b96fbee2ca79d8c0bae78f2f9b",
+      "source_sha256": "3784294c26705013913a064667adfa9a8825932f9a56596ff25d315566678648",
       "markdown_sha256": "238390bb500094ea54be87ea41522ebf9fbcbcabb471f457c019e7203093f18f",
       "bytes": 1631
     },
@@ -688,7 +688,7 @@
       "path": "/directory/mobile-detailing/apex-detailing.md",
       "title": "Apex Detailing — mobile detailing | JobHackAI Local",
       "description": "Package details and booking requirements for Apex Detailing in the Greater Cincinnati tri-state area.",
-      "source_sha256": "805f2d1c2d478a2b531d4007470925ca4d0112722d6004c928cb1134608f2aa9",
+      "source_sha256": "fd6c41c7dc45a815e14ce7e1bde5b66979ecb4653240ef984988378af746e923",
       "markdown_sha256": "338aaeb058b765bbd997220973992dbf3d479c9b57efbc70869fe0008c115c18",
       "bytes": 1540
     },
@@ -698,7 +698,7 @@
       "path": "/directory/mobile-detailing/avalon-mobile-detailing.md",
       "title": "Avalon Mobile Detailing — mobile detailing | JobHackAI Local",
       "description": "Package details and booking requirements for Avalon Mobile Detailing in the Greater Cincinnati tri-state area.",
-      "source_sha256": "2f7bec0f43bb8822f2690eae5feba7d44ca4e423f382938c4f54426dbe538cc4",
+      "source_sha256": "85a51d1b219c1f4aa070fb859b58c262488ed4508ec436c91b9c0179e1da33b2",
       "markdown_sha256": "6ca1923486e6878bf95f9b58096c8abe5e6976324c7030f8c1da631141cc1b7b",
       "bytes": 1615
     },
@@ -708,7 +708,7 @@
       "path": "/directory/mobile-detailing/car-detailing-direct.md",
       "title": "Car Detailing Direct — mobile detailing | JobHackAI Local",
       "description": "Package details and booking requirements for Car Detailing Direct in the Greater Cincinnati tri-state area.",
-      "source_sha256": "7d79e9c7296ac03fb7cc2aedf0a37632f768f827ea3d2037f6e4dffd923eed02",
+      "source_sha256": "f0aca75d490caa40defee0382526e7783f38dc7422e27f746839166dadb1c36a",
       "markdown_sha256": "a72fae4a2d42e54f10c6710cac6923ade9a0da56e795f4cb22cb641f29c0d1c0",
       "bytes": 1610
     },
@@ -718,7 +718,7 @@
       "path": "/directory/mobile-detailing/cincy-auto-care.md",
       "title": "Cincy Auto Care — mobile detailing | JobHackAI Local",
       "description": "Package details and booking requirements for Cincy Auto Care in the Greater Cincinnati tri-state area.",
-      "source_sha256": "2109fc5eccb7b72fa28a2f5ee74df3442dfb6ddf86f2c75fd16d2d97ac88faee",
+      "source_sha256": "144b4ce10576910830fff8c56025f9636b606d98f787b72650aa9224b86e6a3e",
       "markdown_sha256": "aa0c2e2b6d07b766d163f81e1a9e8a8d1647619582091fe4326c5f83575c93e1",
       "bytes": 1502
     },
@@ -728,7 +728,7 @@
       "path": "/directory/mobile-detailing/cincy-car-spa.md",
       "title": "Cincy Car Spa — mobile detailing | JobHackAI Local",
       "description": "Package details and booking requirements for Cincy Car Spa in the Greater Cincinnati tri-state area.",
-      "source_sha256": "845a11b66c958f2fd507109f6c5ef39d38cf5d8ca4885dc4c4e4b65f0690e8f3",
+      "source_sha256": "855224233492d9651a55cbfcdb6e543238829097795abce0fa51726dd23e707d",
       "markdown_sha256": "771c57fbaa12de72afdbfe4edf85685aac88e99c2056dd42c0b5a0161a90207c",
       "bytes": 1533
     },
@@ -738,7 +738,7 @@
       "path": "/directory/mobile-detailing/dds-detailing-auto-care.md",
       "title": "DDS Detailing & Auto Care — mobile detailing | JobHackAI Local",
       "description": "Package details and booking requirements for DDS Detailing & Auto Care in the Greater Cincinnati tri-state area.",
-      "source_sha256": "4bcb70fe3539909924ec8710b2a4995ab865f2a8a3a8f0e27282aa9910117164",
+      "source_sha256": "7d63d43c546e48b726162b0bd467391a18682dd9ea49f95c6e12c9cac201c8bd",
       "markdown_sha256": "62e69822680cff9e125d4465cbf1684fcbc6be630ec9a69691b9ab91050f6998",
       "bytes": 1657
     },
@@ -748,7 +748,7 @@
       "path": "/directory/mobile-detailing/deets-mobile-detailing.md",
       "title": "deets mobile detailing — mobile detailing | JobHackAI Local",
       "description": "Package details and booking requirements for deets mobile detailing in the Greater Cincinnati tri-state area.",
-      "source_sha256": "c87764f63dae1feea44ed833203445a559e781c98546aabd867723ef3df7a503",
+      "source_sha256": "ce6137fc0d3293b67a98d2e4d720cda9ee5536d3e8c93ea4d4ffa71030fe78e6",
       "markdown_sha256": "937ca700ef3acf854b00fb1197bd1eafc71e685fffcb167fe4d222b4268760f1",
       "bytes": 1625
     },
@@ -758,7 +758,7 @@
       "path": "/directory/mobile-detailing/detail-dr.md",
       "title": "Detail Dr. — mobile detailing | JobHackAI Local",
       "description": "Package details and booking requirements for Detail Dr. in the Greater Cincinnati tri-state area.",
-      "source_sha256": "66e0082855c63ab14611b391167ec6795f93413f4a9fd482f17637af38358d3a",
+      "source_sha256": "27582a8e3799abd8274e1ebd1f5395fd7197bae9a4236d71715d7d5ea269fb13",
       "markdown_sha256": "d4dc7fff9ad715c2bcce2bbf3a0c3552ac088d1b4078d01ca8e40bf59ad4a75c",
       "bytes": 1511
     },
@@ -768,7 +768,7 @@
       "path": "/directory/mobile-detailing/detlings-detailing.md",
       "title": "Detling's Detailing — mobile detailing | JobHackAI Local",
       "description": "Package details and booking requirements for Detling's Detailing in the Greater Cincinnati tri-state area.",
-      "source_sha256": "0f0987bf6614a5b85da24478702aca5b4243a019ed574c63039fe864c6eb9bba",
+      "source_sha256": "4d957fff7ca880bf31ddb3eb28a4da20b44eabf0032748466706e9a23b0d7bed",
       "markdown_sha256": "1091d62c9a0d619fffba31eb3bc1b767bcc7695595f9ee059b81e12941b07737",
       "bytes": 1547
     },
@@ -778,7 +778,7 @@
       "path": "/directory/mobile-detailing/diamond-cut-details.md",
       "title": "Diamond Cut Details — mobile detailing | JobHackAI Local",
       "description": "Package details and booking requirements for Diamond Cut Details in the Greater Cincinnati tri-state area.",
-      "source_sha256": "794f232ae8a1511d8f0478bc82398927000733445817500a6eb0d9bcdef60079",
+      "source_sha256": "ecf55e8aeffdd731f36902e4651377565edba22c0ae829f28fdec5116f3485f6",
       "markdown_sha256": "7e709013cffa9ff1386f66dc21ea557cd2b58b4c2e08b3904bf56e16f8813632",
       "bytes": 1586
     },
@@ -788,7 +788,7 @@
       "path": "/directory/mobile-detailing/every-detail-car-detailing.md",
       "title": "Every Detail Car Detailing — mobile detailing | JobHackAI Local",
       "description": "Package details and booking requirements for Every Detail Car Detailing in the Greater Cincinnati tri-state area.",
-      "source_sha256": "9129b6bf6a2cf97519c8e1740f576d7cb9d82be91a95007a72481d0347a74858",
+      "source_sha256": "44f2833e964a9ea1f5ca6a2f27ac9fb7986f32f77957777155deabef6a51daaf",
       "markdown_sha256": "f49d8d59bf5296af275c898d50866c40fb566666f938da3b7c6aa520bf939bbf",
       "bytes": 1625
     },
@@ -798,7 +798,7 @@
       "path": "/directory/mobile-detailing/her-majestys-detail.md",
       "title": "Her Majesty's Detail — mobile detailing | JobHackAI Local",
       "description": "Package details and booking requirements for Her Majesty's Detail in the Greater Cincinnati tri-state area.",
-      "source_sha256": "bb3ceb33646f161997f2685bf986f8da4d8bf3a1186ec98d0c1589d8ed4ceade",
+      "source_sha256": "ceaf5bec4ed476e59f670a46ff3d220a4cbdcdf3c24b24c447d04077680ad2d8",
       "markdown_sha256": "752e2ad20edf468e7753a1365c62a5bfc7bc57aae2837ba9691ed691dedfe9f5",
       "bytes": 1688
     },
@@ -808,7 +808,7 @@
       "path": "/directory/mobile-detailing/jackson-bros-detail.md",
       "title": "Jackson Bros — mobile detailing | JobHackAI Local",
       "description": "Package details and booking requirements for Jackson Bros in the Greater Cincinnati tri-state area.",
-      "source_sha256": "ea2977f5f400e1825fc96f292b58a9788050013f92968a0210d60047634e1fbb",
+      "source_sha256": "ab62bb377a47da773d221620ef1fab2bfd670d252be816373d1c4d369a409e15",
       "markdown_sha256": "2ab03428a45c7508e2629bcbb6c69e3eb7cd552a78c8857674bc7e15e3d78c49",
       "bytes": 1592
     },
@@ -818,7 +818,7 @@
       "path": "/directory/mobile-detailing/northern-kentucky-auto-detail.md",
       "title": "Northern KY Auto Detail — mobile detailing | JobHackAI Local",
       "description": "Package details and booking requirements for Northern KY Auto Detail in the Greater Cincinnati tri-state area.",
-      "source_sha256": "f66911b96b03cac2b2f67af8833f31c1ae75ed3656dffebb36a994d4f9722a73",
+      "source_sha256": "f1de62a4657ee23faaa9d97b745c2266166d9a772d0c5c83545760208bc6b429",
       "markdown_sha256": "1cbcf9149df1c5d1533ac235bf3be3870db94fddb7921e437be42e21731ee0d7",
       "bytes": 1683
     },
@@ -828,7 +828,7 @@
       "path": "/directory/mobile-detailing/ocg-auto-detailing.md",
       "title": "OCG Auto Detailing — mobile detailing | JobHackAI Local",
       "description": "Package details and booking requirements for OCG Auto Detailing in the Greater Cincinnati tri-state area.",
-      "source_sha256": "124bba629b9b93d77c9792564b9625d91626d935828b5cf7aaf88e3a98ad5b96",
+      "source_sha256": "a719c0f8cd82aabddc2148677dfa407c129f09589c0005de633d9674ab44f0e6",
       "markdown_sha256": "147b0962433e0e65fbce0c5a3d3b31f845e40c0582a2e742389cd389c9f5458f",
       "bytes": 1589
     },
@@ -838,7 +838,7 @@
       "path": "/directory/mobile-detailing/og-mobile-detailing.md",
       "title": "OG Mobile Detailing — mobile detailing | JobHackAI Local",
       "description": "Package details and booking requirements for OG Mobile Detailing in the Greater Cincinnati tri-state area.",
-      "source_sha256": "b1e21e899ab171fa9dc2515965bf92c58e3af31a42694cc1231308898ca538fa",
+      "source_sha256": "fc953161ce3027627030e878317ba8efba1dab83777fecb41e7743e5e2807aa7",
       "markdown_sha256": "157c73d02c9a6bf774dcdd8222b951fa6e12b8f7e9046028e86c04e8d9d90631",
       "bytes": 1575
     },
@@ -848,7 +848,7 @@
       "path": "/directory/mobile-detailing/onyx-pristine-co.md",
       "title": "Onyx Pristine Co. — mobile detailing | JobHackAI Local",
       "description": "Package details and booking requirements for Onyx Pristine Co. in the Greater Cincinnati tri-state area.",
-      "source_sha256": "204f09f7dfc251d19a2dcc04fb43ed8155d0800005d5f6b46438e987a8074bfc",
+      "source_sha256": "98595d0245b757c639de5b973adf15823dddec78eb36f4eae3897848f93189fd",
       "markdown_sha256": "54ba43e855782bf74d9eef92f77ffc806f4e7afe79b85070146313f69b262e69",
       "bytes": 1580
     },
@@ -858,7 +858,7 @@
       "path": "/directory/mobile-detailing/pearls-auto-recon.md",
       "title": "Pearl's Auto Recon — mobile detailing | JobHackAI Local",
       "description": "Package details and booking requirements for Pearl's Auto Recon in the Greater Cincinnati tri-state area.",
-      "source_sha256": "da2735f5775512ff5546e245a6895de9a657691549391a3edc73294141c18248",
+      "source_sha256": "d08d7fe918a50ed151e6579735683926b3a8c50a1b4434f956bdde11c7aabe93",
       "markdown_sha256": "b067f04ffc90a20527eb6c1d1930f09c09bf592c1c85e555c09927ddcaba3441",
       "bytes": 1636
     },
@@ -868,7 +868,7 @@
       "path": "/directory/mobile-detailing/perfect-touch-mobile-detailing.md",
       "title": "Perfect Touch Mobile Detailing — mobile detailing | JobHackAI Local",
       "description": "Package details and booking requirements for Perfect Touch Mobile Detailing in the Greater Cincinnati tri-state area.",
-      "source_sha256": "2ec243cfc34a3aefd137a78b4815d1999e5c6a671ef9a631f2d17dacfa2c653a",
+      "source_sha256": "362691f405b53f3294ea013400b93f07e52a05e438688868d1cd8677df7b5920",
       "markdown_sha256": "797baa1ae036793b24c27787aad08f0b7fdb03330d1834a36ff3cc2da7ead6ba",
       "bytes": 1666
     },
@@ -878,7 +878,7 @@
       "path": "/directory/mobile-detailing/precision-gloss.md",
       "title": "Precision Gloss — mobile detailing | JobHackAI Local",
       "description": "Package details and booking requirements for Precision Gloss in the Greater Cincinnati tri-state area.",
-      "source_sha256": "95ddda932804a0ae85bee5ac040e4ff4423a2184ea9275f9b9ad502ff6be14e1",
+      "source_sha256": "ca45e43cde7a12cd78cbd37ffc4d71727fb59c39d669affaeb2b8e0d03ee06d6",
       "markdown_sha256": "3b050ccd57a831cb517e82036f263511541631b6004f1cd5ad472cd893de1a01",
       "bytes": 1501
     },
@@ -888,7 +888,7 @@
       "path": "/directory/mobile-detailing/raad-detailing.md",
       "title": "RAAD Detailing — mobile detailing | JobHackAI Local",
       "description": "Package details and booking requirements for RAAD Detailing in the Greater Cincinnati tri-state area.",
-      "source_sha256": "093e31ebb1ebcd821aa449adfcdb6e8f08dc2ce7c070337a9c659723d2e20254",
+      "source_sha256": "bc8c98f748915472368494cab564b3c686058fa1aa7e7873a0025d3e07a51c5c",
       "markdown_sha256": "68f2fd794fcedb30fc4da19f9059956c5c1e4acd251d14666e3560a33c4dd22d",
       "bytes": 1576
     },
@@ -898,7 +898,7 @@
       "path": "/directory/mobile-detailing/sammys-suds.md",
       "title": "Sammy's Suds — mobile detailing | JobHackAI Local",
       "description": "Package details and booking requirements for Sammy's Suds in the Greater Cincinnati tri-state area.",
-      "source_sha256": "b2c67cbedd416787ec2f85178129175de573e67398c604df16c987079d5a552a",
+      "source_sha256": "007c2b0e8a2dbf812f57c77aeca922efcb858313a99a137b556b767bb7fc2525",
       "markdown_sha256": "46933b32188bc06394f182a799022db9a3fe7c799c3120f5a4a3d36db62427f6",
       "bytes": 1502
     },
@@ -908,7 +908,7 @@
       "path": "/directory/mobile-detailing/stang-detailing.md",
       "title": "Stang Detailing — mobile detailing | JobHackAI Local",
       "description": "Package details and booking requirements for Stang Detailing in the Greater Cincinnati tri-state area.",
-      "source_sha256": "fad2bd10955abd860591a084c088c9e974eb5391b09eb18304e7f4abc2c59af4",
+      "source_sha256": "85fb47cb79e5a557f3247363794758c58b168bed9dada5faa76f728e9e85fdbc",
       "markdown_sha256": "4864600e89ef3233821e264d6fb54a70c9bee05a10ca84646e121c5f79647af4",
       "bytes": 1563
     },
@@ -918,7 +918,7 @@
       "path": "/directory/mobile-detailing/true-colors-detailing.md",
       "title": "True Colors Detailing — mobile detailing | JobHackAI Local",
       "description": "Package details and booking requirements for True Colors Detailing in the Greater Cincinnati tri-state area.",
-      "source_sha256": "3628027a23e0828afaaaedb91e9594f0a3a51ef351917b6b4abc96587b5ab898",
+      "source_sha256": "f0b67eccdc6989ff1359fa681d6bddcbe112e425f16c5e089a22945c485ec8af",
       "markdown_sha256": "af2278737252938186eb0c95ebfd7455770b7e27c8079f75aaae93899e6ce2b4",
       "bytes": 1652
     },
