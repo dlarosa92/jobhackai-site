@@ -1,6 +1,6 @@
 ---
 title: "513 Auto Clean — mobile detailing | JobHackAI Local"
-description: "Package details and booking requirements for 513 Auto Clean in Northern Kentucky and Cincinnati."
+description: "Package details and booking requirements for 513 Auto Clean in the Greater Cincinnati tri-state area."
 url: "https://jobhackai.io/directory/mobile-detailing/513-auto-clean"
 language: "en"
 generated_by: "jobhackai-agent-markdown"

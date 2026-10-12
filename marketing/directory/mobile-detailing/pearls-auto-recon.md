@@ -1,6 +1,6 @@
 ---
 title: "Pearl's Auto Recon — mobile detailing | JobHackAI Local"
-description: "Package details and booking requirements for Pearl's Auto Recon in Northern Kentucky and Cincinnati."
+description: "Package details and booking requirements for Pearl's Auto Recon in the Greater Cincinnati tri-state area."
 url: "https://jobhackai.io/directory/mobile-detailing/pearls-auto-recon"
 language: "en"
 generated_by: "jobhackai-agent-markdown"

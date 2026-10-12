@@ -7,29 +7,45 @@
     if (typeof window.JHA?.gtagSafe !== 'function') return;
     window.JHA.gtagSafe('event', name, Object.assign({
       business_line: 'local_directory', directory_category: (document.body.dataset.directoryCategory || 'mobile-detailing').replaceAll('-','_'),
-      directory_market: 'nky_cincinnati'
+      directory_market: 'greater_cincinnati_tri_state'
     }, values));
   }
   var filters = document.getElementById('filters');
   if (filters) {
     var cards = Array.from(document.querySelectorAll('.listing'));
+    var pagination = document.getElementById('directory-pagination');
+    var previous = pagination?.querySelector('[data-page="previous"]');
+    var next = pagination?.querySelector('[data-page="next"]');
+    var pageStatus = pagination?.querySelector('[data-page-status]');
+    var pageSize = 24;
+    var page = 0;
     function filter() {
       var values = new FormData(filters);
-      var count = 0;
-      cards.forEach(function (card) {
-        var matches = Array.from(values.keys()).every(function (key) {
+      var matching = cards.filter(function (card) {
+        return Array.from(values.keys()).every(function (key) {
           return !values.get(key) || (card.dataset[key] || '').split('|').includes(values.get(key));
         });
-        card.hidden = !matches;
-        if (matches) count++;
       });
+      var pages = Math.max(1, Math.ceil(matching.length / pageSize));
+      page = Math.min(page, pages - 1);
+      var visible = new Set(matching.slice(page * pageSize, (page + 1) * pageSize));
+      cards.forEach(function (card) { card.hidden = !visible.has(card); });
       var noun = document.body.dataset.providerNoun || 'detailer';
-      document.getElementById('result-count').textContent = count + ' ' + noun + (count === 1 ? '' : 's') + ' · alphabetical order';
-      document.getElementById('no-results').hidden = count !== 0;
+      document.getElementById('result-count').textContent = matching.length + ' ' + noun + (matching.length === 1 ? '' : 's') + ' · alphabetical order';
+      document.getElementById('no-results').hidden = matching.length !== 0;
+      if (pagination) {
+        pagination.hidden = pages <= 1;
+        previous.disabled = page === 0;
+        next.disabled = page >= pages - 1;
+        pageStatus.textContent = 'Page ' + (page + 1) + ' of ' + pages;
+      }
     }
+    previous?.addEventListener('click', function () { page--; filter(); });
+    next?.addEventListener('click', function () { page++; filter(); });
     filters.addEventListener('submit', function (event) { event.preventDefault(); });
-    filters.addEventListener('change', function () { filter(); track('directory_filter_change',Object.fromEntries(new FormData(filters))); });
-    filters.addEventListener('reset', function () { setTimeout(filter, 0); });
+    filters.addEventListener('change', function () { page = 0; filter(); track('directory_filter_change',Object.fromEntries(new FormData(filters))); });
+    filters.addEventListener('reset', function () { page = 0; setTimeout(filter, 0); });
+    filter();
   }
   var viewed = false;
   var categoryViewed = false;

@@ -1,6 +1,6 @@
 ---
 title: "deets mobile detailing — mobile detailing | JobHackAI Local"
-description: "Package details and booking requirements for deets mobile detailing in Northern Kentucky and Cincinnati."
+description: "Package details and booking requirements for deets mobile detailing in the Greater Cincinnati tri-state area."
 url: "https://jobhackai.io/directory/mobile-detailing/deets-mobile-detailing"
 language: "en"
 generated_by: "jobhackai-agent-markdown"

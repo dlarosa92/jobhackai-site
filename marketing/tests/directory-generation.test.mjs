@@ -10,10 +10,10 @@ const root=join(dirname(fileURLToPath(import.meta.url)),'..');
 const read=p=>readFileSync(join(root,p),'utf8');
 const categories=Object.keys(categoryDefinitions);
 
-test('each category has six sourced businesses and every comparison field is explicit or unknown',()=>{
+test('each category has sourced businesses and every comparison field is explicit or unknown',()=>{
  for(const category of categories){
   const data=JSON.parse(read(`data/directory/${category}.json`));validateCategory(data,categoryDefinitions[category]);
-  assert.equal(data.listings.length,6);
+  assert.ok(data.listings.length>=6);
   for(const l of data.listings){
    const html=read(`directory/${category}/${l.id}.html`);
    assert.ok(html.includes(`https://jobhackai.io/directory/${category}/${l.id}`));
@@ -23,6 +23,17 @@ test('each category has six sourced businesses and every comparison field is exp
    for(const label of Object.values(categoryDefinitions[category].fields))assert.ok(html.includes(label));
   }
  }
+});
+test('category validation accepts a larger tri-state inventory',()=>{
+ const data=JSON.parse(read('data/directory/junk-removal.json'));
+ for(let i=0;i<25;i++){
+  const listing=structuredClone(data.listings[0]);
+  listing.id=`scale-provider-${i}`;
+  listing.name=`Scale Provider ${i}`;
+  listing.regions=['Southeast Indiana'];
+  data.listings.push(listing);
+ }
+ assert.doesNotThrow(()=>validateCategory(data,categoryDefinitions['junk-removal']));
 });
 test('generator rejects duplicate providers, unreviewed source URLs and omitted fields',()=>{
  const original=JSON.parse(read('data/directory/junk-removal.json'));

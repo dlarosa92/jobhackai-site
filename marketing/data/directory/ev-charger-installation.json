@@ -1,7 +1,7 @@
 {
   "category": "ev-charger-installation",
-  "market": "Northern Kentucky and Cincinnati",
-  "checkedAt": "2026-09-23",
+  "market": "Greater Cincinnati, Northern Kentucky and nearby Southeast Indiana",
+  "checkedAt": "2026-10-11",
   "verification": "Provider-published services and service areas checked against linked sources. No service-quality, active-license, insurance or partnership endorsement. Null fields mean not established in the checked sources.",
   "listings": [
     {
@@ -168,6 +168,438 @@
           "url": "https://velascoelectricllc.com/servicios/cargadores-tesla-ev",
           "label": "Provider service page",
           "checkedAt": "2026-09-23"
+        }
+      ]
+    },
+    {
+      "id": "pulsar-electrical-services",
+      "name": "Pulsar Electrical Services",
+      "website": "https://pulsarelectricalservices.com/",
+      "regions": [
+        "Cincinnati",
+        "Northern Kentucky"
+      ],
+      "services": [],
+      "details": {
+        "panel": null,
+        "charger": null,
+        "permits": null,
+        "area": "Greater Cincinnati and Northern Kentucky.",
+        "quote": null,
+        "scope": "Level 2 home charging station setup is listed.",
+        "license": null
+      },
+      "sources": [
+        {
+          "url": "https://pulsarelectricalservices.com/",
+          "label": "Provider service page",
+          "checkedAt": "2026-10-11"
+        }
+      ]
+    },
+    {
+      "id": "leitner-electric",
+      "name": "Leitner Electric Co.",
+      "website": "https://www.leitnerelectric.com/ev-charger-installation-services",
+      "regions": [
+        "Cincinnati",
+        "Northern Kentucky"
+      ],
+      "services": [
+        "panel-upgrade",
+        "indoor-outdoor",
+        "multi-vehicle"
+      ],
+      "details": {
+        "panel": "Provider lists electrical panel evaluations and service upgrades.",
+        "charger": null,
+        "permits": null,
+        "area": "Greater Cincinnati and Northern Kentucky.",
+        "quote": null,
+        "scope": "Residential Level 2 chargers, dedicated circuits, garage and outdoor installations, and smart chargers are listed.",
+        "license": null
+      },
+      "sources": [
+        {
+          "url": "https://www.leitnerelectric.com/ev-charger-installation-services",
+          "label": "Provider service page",
+          "checkedAt": "2026-10-11"
+        }
+      ]
+    },
+    {
+      "id": "afw-electric",
+      "name": "AFW Electric LLC",
+      "website": "https://afwelectric.com/",
+      "regions": [
+        "Cincinnati"
+      ],
+      "services": [
+        "panel-upgrade"
+      ],
+      "details": {
+        "panel": "Provider separately offers service and panel upgrades; whether needed for a charger depends on the home.",
+        "charger": null,
+        "permits": null,
+        "area": "Loveland, Milford, Mason and the Greater Cincinnati area.",
+        "quote": null,
+        "scope": "Home EV charger installation is listed on the provider site.",
+        "license": null
+      },
+      "sources": [
+        {
+          "url": "https://afwelectric.com/",
+          "label": "Provider service page",
+          "checkedAt": "2026-10-11"
+        }
+      ]
+    },
+    {
+      "id": "brodbeck-electric",
+      "name": "Brodbeck Electric LLC",
+      "website": "https://www.brodbeckelectric.com/",
+      "regions": [
+        "Cincinnati"
+      ],
+      "services": [
+        "panel-upgrade"
+      ],
+      "details": {
+        "panel": "Provider separately offers electrical service upgrades.",
+        "charger": null,
+        "permits": null,
+        "area": "Cincinnati, Dayton and surrounding Ohio areas.",
+        "quote": null,
+        "scope": "Provider advertises Level 2 home EV charger circuit and installation work.",
+        "license": null
+      },
+      "sources": [
+        {
+          "url": "https://www.brodbeckelectric.com/",
+          "label": "Provider service page",
+          "checkedAt": "2026-10-11"
+        }
+      ]
+    },
+    {
+      "id": "thomas-and-galbraith",
+      "name": "Thomas & Galbraith",
+      "website": "https://thomasgalbraith.com/ev-charging-station/",
+      "regions": [
+        "Cincinnati"
+      ],
+      "services": [],
+      "details": {
+        "panel": null,
+        "charger": null,
+        "permits": null,
+        "area": "Cincinnati area; confirm a particular address.",
+        "quote": null,
+        "scope": "Home EV charging station installation is described.",
+        "license": null
+      },
+      "sources": [
+        {
+          "url": "https://thomasgalbraith.com/ev-charging-station/",
+          "label": "Provider service page",
+          "checkedAt": "2026-10-11"
+        }
+      ]
+    },
+    {
+      "id": "risen-electric",
+      "name": "Risen Electric",
+      "website": "https://risenelectrical.com/ev-charger-installation-florence-ky/",
+      "regions": [
+        "Northern Kentucky"
+      ],
+      "services": [
+        "panel-upgrade"
+      ],
+      "details": {
+        "panel": "Provider lists panel-capacity evaluation and panel or 200-amp service upgrades when needed.",
+        "charger": null,
+        "permits": "Provider says permits and inspections may apply; confirm who obtains them and their cost.",
+        "area": "Florence, Union, Hebron, Burlington, Erlanger, Edgewood, Independence, Newport, Fort Thomas, Alexandria and surrounding Northern Kentucky communities.",
+        "quote": null,
+        "scope": "Residential Level 2 charger installation with a dedicated 240-volt circuit is described.",
+        "license": null
+      },
+      "sources": [
+        {
+          "url": "https://risenelectrical.com/ev-charger-installation-florence-ky/",
+          "label": "Provider service page",
+          "checkedAt": "2026-10-11"
+        }
+      ]
+    },
+    {
+      "id": "anyweather-heating-and-air",
+      "name": "AnyWeather Heating & Air",
+      "website": "https://anyweatherhvac.com/electrical-services/ev-charger-installation/",
+      "regions": [
+        "Cincinnati",
+        "Northern Kentucky"
+      ],
+      "services": [
+        "indoor-outdoor"
+      ],
+      "details": {
+        "panel": "Provider says an electrician checks panel capacity before quoting.",
+        "charger": null,
+        "permits": "Provider says it pulls the permit and handles inspection; confirm the written quote.",
+        "area": "Greater Cincinnati and Northern Kentucky.",
+        "quote": null,
+        "scope": "Home Level 2 charger installation in a garage or driveway is described; the provider says it can install customer-supplied chargers.",
+        "license": null
+      },
+      "sources": [
+        {
+          "url": "https://anyweatherhvac.com/electrical-services/ev-charger-installation/",
+          "label": "Provider service page",
+          "checkedAt": "2026-10-11"
+        }
+      ]
+    },
+    {
+      "id": "veneman-electric",
+      "name": "Veneman Electric",
+      "website": "https://venemanelectric.com/ev-charger-installation/",
+      "regions": [
+        "Cincinnati"
+      ],
+      "services": [],
+      "details": {
+        "panel": "Provider describes a dedicated 240-volt circuit and panel compatibility check.",
+        "charger": null,
+        "permits": "Provider says local permits and inspections are handled; confirm for the job address.",
+        "area": "Cincinnati area; confirm a particular address.",
+        "quote": null,
+        "scope": "Provider describes wall-mounted Level 2 home charging station installation.",
+        "license": null
+      },
+      "sources": [
+        {
+          "url": "https://venemanelectric.com/ev-charger-installation/",
+          "label": "Provider service page",
+          "checkedAt": "2026-10-11"
+        }
+      ]
+    },
+    {
+      "id": "qei-electrical",
+      "name": "QEI Electrical Service LLC",
+      "website": "https://qeielectrical.com/",
+      "regions": [
+        "Cincinnati"
+      ],
+      "services": [],
+      "details": {
+        "panel": "Provider says it evaluates the home electrical system before recommending installation.",
+        "charger": null,
+        "permits": null,
+        "area": "Cincinnati, Colerain Township, White Oak, North College Hill, Groesbeck, Finneytown, Mount Healthy and Forest Park.",
+        "quote": null,
+        "scope": "Residential EV charger installation is explicitly listed.",
+        "license": null
+      },
+      "sources": [
+        {
+          "url": "https://qeielectrical.com/",
+          "label": "Provider service page",
+          "checkedAt": "2026-10-11"
+        }
+      ]
+    },
+    {
+      "id": "cdi-electric",
+      "name": "CDI Electric Inc.",
+      "website": "https://www.cdielectric.com/services/residential-electrician-cincinnati-nky",
+      "regions": [
+        "Cincinnati",
+        "Northern Kentucky"
+      ],
+      "services": [
+        "panel-upgrade"
+      ],
+      "details": {
+        "panel": "Provider lists site evaluation, load calculations and panel upgrades if needed.",
+        "charger": null,
+        "permits": null,
+        "area": "Greater Cincinnati and Northern Kentucky.",
+        "quote": null,
+        "scope": "Residential EV charger installation, mounting and wiring are listed.",
+        "license": null
+      },
+      "sources": [
+        {
+          "url": "https://www.cdielectric.com/services/residential-electrician-cincinnati-nky",
+          "label": "Provider service page",
+          "checkedAt": "2026-10-11"
+        }
+      ]
+    },
+    {
+      "id": "lcs-electric",
+      "name": "LCS Electric & Home Improvement Services",
+      "website": "https://www.lcselectricandhome.com/residential-services",
+      "regions": [
+        "Cincinnati"
+      ],
+      "services": [],
+      "details": {
+        "panel": null,
+        "charger": null,
+        "permits": null,
+        "area": "Cincinnati and New Richmond, Ohio area.",
+        "quote": null,
+        "scope": "EV charger installation is listed among residential electrical services.",
+        "license": null
+      },
+      "sources": [
+        {
+          "url": "https://www.lcselectricandhome.com/residential-services",
+          "label": "Provider service page",
+          "checkedAt": "2026-10-11"
+        }
+      ]
+    },
+    {
+      "id": "baker-electric",
+      "name": "Baker Electric LLC",
+      "website": "https://www.bakerec.us/ev-chargers",
+      "regions": [
+        "Cincinnati"
+      ],
+      "services": [
+        "panel-upgrade",
+        "indoor-outdoor",
+        "multi-vehicle"
+      ],
+      "details": {
+        "panel": "Provider lists panel-capacity checks and panel or service upgrades when needed.",
+        "charger": null,
+        "permits": "Provider says it handles permitting; confirm jurisdiction and fees in the quote.",
+        "area": "Dayton and Cincinnati metropolitan areas; confirm a particular Cincinnati-area address.",
+        "quote": null,
+        "scope": "Level 2 home charger installation in garages, carports and driveways is described.",
+        "license": null
+      },
+      "sources": [
+        {
+          "url": "https://www.bakerec.us/ev-chargers",
+          "label": "Provider service page",
+          "checkedAt": "2026-10-11"
+        }
+      ]
+    },
+    {
+      "id": "jolly",
+      "name": "Jolly",
+      "website": "https://jollyplumbing.com/electrical/electric-vehicle-charging-station-installation/",
+      "regions": [
+        "Cincinnati",
+        "Northern Kentucky"
+      ],
+      "services": [
+        "panel-upgrade",
+        "indoor-outdoor"
+      ],
+      "details": {
+        "panel": "Provider says it evaluates panel capacity and recommends upgrades if needed.",
+        "charger": null,
+        "permits": null,
+        "area": "Cincinnati and Northern Kentucky.",
+        "quote": null,
+        "scope": "Home Level 2 charger installation in garages or outdoor locations, with a dedicated circuit, is described.",
+        "license": null
+      },
+      "sources": [
+        {
+          "url": "https://jollyplumbing.com/electrical/electric-vehicle-charging-station-installation/",
+          "label": "Provider service page",
+          "checkedAt": "2026-10-11"
+        }
+      ]
+    },
+    {
+      "id": "elite-electrical-solutions",
+      "name": "Elite Electrical Solutions LLC",
+      "website": "https://www.eliteelectrical.com/services",
+      "regions": [
+        "Cincinnati",
+        "Southeast Indiana"
+      ],
+      "services": [
+        "panel-upgrade"
+      ],
+      "details": {
+        "panel": "Provider lists circuit upgrades and load calculations.",
+        "charger": null,
+        "permits": null,
+        "area": "Lawrenceburg, Aurora, Bright and Milan, Indiana, plus Harrison and Cleves, Ohio; confirm a particular address.",
+        "quote": null,
+        "scope": "Provider describes wall-mounted and portable EV charger installation at homes and businesses.",
+        "license": null
+      },
+      "sources": [
+        {
+          "url": "https://www.eliteelectrical.com/services",
+          "label": "Provider service page",
+          "checkedAt": "2026-10-11"
+        }
+      ]
+    },
+    {
+      "id": "mm-custom-wiring",
+      "name": "MM Custom Wiring",
+      "website": "https://mmcustomwiring.com/",
+      "regions": [
+        "Cincinnati",
+        "Northern Kentucky"
+      ],
+      "services": [
+        "panel-upgrade"
+      ],
+      "details": {
+        "panel": "Provider lists panel upgrades sized for the home and vehicle.",
+        "charger": null,
+        "permits": null,
+        "area": "Cincinnati, Northern Kentucky and surrounding communities.",
+        "quote": null,
+        "scope": "Dedicated EV branch circuits, wallboxes and Level 2 home charging are listed.",
+        "license": null
+      },
+      "sources": [
+        {
+          "url": "https://mmcustomwiring.com/",
+          "label": "Provider service page",
+          "checkedAt": "2026-10-11"
+        }
+      ]
+    },
+    {
+      "id": "mr-electric-hamilton",
+      "name": "Mr. Electric — Hamilton",
+      "website": "https://mrelectric.com/locations/ohio/hamilton/",
+      "regions": [
+        "Cincinnati"
+      ],
+      "services": [],
+      "details": {
+        "panel": null,
+        "charger": null,
+        "permits": null,
+        "area": "Hamilton, Mason, Middletown, Lebanon and other named Ohio communities in the Greater Cincinnati area.",
+        "quote": null,
+        "scope": "Hamilton location advertises residential EV charger installation and replacement.",
+        "license": null
+      },
+      "sources": [
+        {
+          "url": "https://mrelectric.com/locations/ohio/hamilton/",
+          "label": "Provider service page",
+          "checkedAt": "2026-10-11"
         }
       ]
     }

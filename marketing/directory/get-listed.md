@@ -10,7 +10,7 @@ For local businesses
 
 # Help people find the right fit.
 
-Suggest a mobile detailing, junk removal, or home Level 2 EV charger installation business serving Northern Kentucky or Cincinnati. We review the details before adding any public listing.
+Suggest a mobile detailing, junk removal, or home Level 2 EV charger installation business serving Greater Cincinnati in Ohio, Northern Kentucky or nearby Southeast Indiana. We review the details before adding any public listing.
 
 ## Request a listing
 

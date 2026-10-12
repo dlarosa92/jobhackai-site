@@ -1,6 +1,6 @@
 ---
 title: "Detling's Detailing — mobile detailing | JobHackAI Local"
-description: "Package details and booking requirements for Detling's Detailing in Northern Kentucky and Cincinnati."
+description: "Package details and booking requirements for Detling's Detailing in the Greater Cincinnati tri-state area."
 url: "https://jobhackai.io/directory/mobile-detailing/detlings-detailing"
 language: "en"
 generated_by: "jobhackai-agent-markdown"

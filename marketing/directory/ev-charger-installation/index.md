@@ -1,12 +1,12 @@
 ---
-title: "Home Level 2 EV charger installation in Northern Kentucky & Cincinnati | JobHackAI Local"
+title: "Home Level 2 EV charger installation in Greater Cincinnati | JobHackAI Local"
 description: "Compare local home Level 2 EV charger installers by panel assessment, charger supply, permits, service area and written quote scope."
 url: "https://jobhackai.io/directory/ev-charger-installation/"
 language: "en"
 generated_by: "jobhackai-agent-markdown"
 ---
 
-Northern Kentucky + Cincinnati · Home Level 2 EV charger installation
+Greater Cincinnati tri-state · Home Level 2 EV charger installation
 
 # Plan home charging. Compare the whole installation.
 
@@ -16,11 +16,83 @@ Browse freely. Contact providers directly.
 
 [Read the installation checklist](https://jobhackai.io/directory/ev-charger-installation/#installation-checklist)
 
-Provider-published information checked 2026-09-23. Listings are alphabetical, unpaid and not endorsements. Service quality and current credentials have not been independently verified. Confirm your address, scope and final quote directly.
+Provider-published information checked 2026-10-11. Listings are alphabetical, unpaid and not endorsements. Service quality and current credentials have not been independently verified. Confirm your address, scope and final quote directly.
 
-6 installers · alphabetical order
+22 installers · alphabetical order
 
 Filters show only services and areas mentioned in the checked sources. Unknown does not mean unavailable.
+
+Home Level 2 EV charger installation
+
+## [AFW Electric LLC](https://jobhackai.io/directory/ev-charger-installation/afw-electric)
+
+Cincinnati
+
+**Panel assessment**
+
+Provider separately offers service and panel upgrades; whether needed for a charger depends on the home.
+
+**Who supplies the charger?**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Permits and inspections**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Service area**
+
+Loveland, Milford, Mason and the Greater Cincinnati area.
+
+**How to get a quote**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Published installation scope**
+
+Home EV charger installation is listed on the provider site.
+
+**License verification**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+[Compare provider details](https://jobhackai.io/directory/ev-charger-installation/afw-electric)
+
+Home Level 2 EV charger installation
+
+## [AnyWeather Heating & Air](https://jobhackai.io/directory/ev-charger-installation/anyweather-heating-and-air)
+
+Cincinnati · Northern Kentucky
+
+**Panel assessment**
+
+Provider says an electrician checks panel capacity before quoting.
+
+**Who supplies the charger?**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Permits and inspections**
+
+Provider says it pulls the permit and handles inspection; confirm the written quote.
+
+**Service area**
+
+Greater Cincinnati and Northern Kentucky.
+
+**How to get a quote**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Published installation scope**
+
+Home Level 2 charger installation in a garage or driveway is described; the provider says it can install customer-supplied chargers.
+
+**License verification**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+[Compare provider details](https://jobhackai.io/directory/ev-charger-installation/anyweather-heating-and-air)
 
 Home Level 2 EV charger installation
 
@@ -96,6 +168,150 @@ Unknown in the checked sources. Ask the provider to confirm in writing.
 
 Home Level 2 EV charger installation
 
+## [Baker Electric LLC](https://jobhackai.io/directory/ev-charger-installation/baker-electric)
+
+Cincinnati
+
+**Panel assessment**
+
+Provider lists panel-capacity checks and panel or service upgrades when needed.
+
+**Who supplies the charger?**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Permits and inspections**
+
+Provider says it handles permitting; confirm jurisdiction and fees in the quote.
+
+**Service area**
+
+Dayton and Cincinnati metropolitan areas; confirm a particular Cincinnati-area address.
+
+**How to get a quote**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Published installation scope**
+
+Level 2 home charger installation in garages, carports and driveways is described.
+
+**License verification**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+[Compare provider details](https://jobhackai.io/directory/ev-charger-installation/baker-electric)
+
+Home Level 2 EV charger installation
+
+## [Brodbeck Electric LLC](https://jobhackai.io/directory/ev-charger-installation/brodbeck-electric)
+
+Cincinnati
+
+**Panel assessment**
+
+Provider separately offers electrical service upgrades.
+
+**Who supplies the charger?**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Permits and inspections**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Service area**
+
+Cincinnati, Dayton and surrounding Ohio areas.
+
+**How to get a quote**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Published installation scope**
+
+Provider advertises Level 2 home EV charger circuit and installation work.
+
+**License verification**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+[Compare provider details](https://jobhackai.io/directory/ev-charger-installation/brodbeck-electric)
+
+Home Level 2 EV charger installation
+
+## [CDI Electric Inc.](https://jobhackai.io/directory/ev-charger-installation/cdi-electric)
+
+Cincinnati · Northern Kentucky
+
+**Panel assessment**
+
+Provider lists site evaluation, load calculations and panel upgrades if needed.
+
+**Who supplies the charger?**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Permits and inspections**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Service area**
+
+Greater Cincinnati and Northern Kentucky.
+
+**How to get a quote**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Published installation scope**
+
+Residential EV charger installation, mounting and wiring are listed.
+
+**License verification**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+[Compare provider details](https://jobhackai.io/directory/ev-charger-installation/cdi-electric)
+
+Home Level 2 EV charger installation
+
+## [Elite Electrical Solutions LLC](https://jobhackai.io/directory/ev-charger-installation/elite-electrical-solutions)
+
+Cincinnati · Southeast Indiana
+
+**Panel assessment**
+
+Provider lists circuit upgrades and load calculations.
+
+**Who supplies the charger?**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Permits and inspections**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Service area**
+
+Lawrenceburg, Aurora, Bright and Milan, Indiana, plus Harrison and Cleves, Ohio; confirm a particular address.
+
+**How to get a quote**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Published installation scope**
+
+Provider describes wall-mounted and portable EV charger installation at homes and businesses.
+
+**License verification**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+[Compare provider details](https://jobhackai.io/directory/ev-charger-installation/elite-electrical-solutions)
+
+Home Level 2 EV charger installation
+
 ## [Gronotte Electric](https://jobhackai.io/directory/ev-charger-installation/gronotte-electric)
 
 Cincinnati · Northern Kentucky
@@ -168,6 +384,186 @@ Unknown in the checked sources. Ask the provider to confirm in writing.
 
 Home Level 2 EV charger installation
 
+## [Jolly](https://jobhackai.io/directory/ev-charger-installation/jolly)
+
+Cincinnati · Northern Kentucky
+
+**Panel assessment**
+
+Provider says it evaluates panel capacity and recommends upgrades if needed.
+
+**Who supplies the charger?**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Permits and inspections**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Service area**
+
+Cincinnati and Northern Kentucky.
+
+**How to get a quote**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Published installation scope**
+
+Home Level 2 charger installation in garages or outdoor locations, with a dedicated circuit, is described.
+
+**License verification**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+[Compare provider details](https://jobhackai.io/directory/ev-charger-installation/jolly)
+
+Home Level 2 EV charger installation
+
+## [LCS Electric & Home Improvement Services](https://jobhackai.io/directory/ev-charger-installation/lcs-electric)
+
+Cincinnati
+
+**Panel assessment**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Who supplies the charger?**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Permits and inspections**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Service area**
+
+Cincinnati and New Richmond, Ohio area.
+
+**How to get a quote**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Published installation scope**
+
+EV charger installation is listed among residential electrical services.
+
+**License verification**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+[Compare provider details](https://jobhackai.io/directory/ev-charger-installation/lcs-electric)
+
+Home Level 2 EV charger installation
+
+## [Leitner Electric Co.](https://jobhackai.io/directory/ev-charger-installation/leitner-electric)
+
+Cincinnati · Northern Kentucky
+
+**Panel assessment**
+
+Provider lists electrical panel evaluations and service upgrades.
+
+**Who supplies the charger?**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Permits and inspections**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Service area**
+
+Greater Cincinnati and Northern Kentucky.
+
+**How to get a quote**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Published installation scope**
+
+Residential Level 2 chargers, dedicated circuits, garage and outdoor installations, and smart chargers are listed.
+
+**License verification**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+[Compare provider details](https://jobhackai.io/directory/ev-charger-installation/leitner-electric)
+
+Home Level 2 EV charger installation
+
+## [MM Custom Wiring](https://jobhackai.io/directory/ev-charger-installation/mm-custom-wiring)
+
+Cincinnati · Northern Kentucky
+
+**Panel assessment**
+
+Provider lists panel upgrades sized for the home and vehicle.
+
+**Who supplies the charger?**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Permits and inspections**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Service area**
+
+Cincinnati, Northern Kentucky and surrounding communities.
+
+**How to get a quote**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Published installation scope**
+
+Dedicated EV branch circuits, wallboxes and Level 2 home charging are listed.
+
+**License verification**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+[Compare provider details](https://jobhackai.io/directory/ev-charger-installation/mm-custom-wiring)
+
+Home Level 2 EV charger installation
+
+## [Mr. Electric — Hamilton](https://jobhackai.io/directory/ev-charger-installation/mr-electric-hamilton)
+
+Cincinnati
+
+**Panel assessment**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Who supplies the charger?**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Permits and inspections**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Service area**
+
+Hamilton, Mason, Middletown, Lebanon and other named Ohio communities in the Greater Cincinnati area.
+
+**How to get a quote**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Published installation scope**
+
+Hamilton location advertises residential EV charger installation and replacement.
+
+**License verification**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+[Compare provider details](https://jobhackai.io/directory/ev-charger-installation/mr-electric-hamilton)
+
+Home Level 2 EV charger installation
+
 ## [Nabi Electric](https://jobhackai.io/directory/ev-charger-installation/nabi-electric)
 
 Cincinnati · Northern Kentucky
@@ -204,6 +600,150 @@ Website lists Ohio 24614 and Kentucky ME63606. Current status, contractor author
 
 Home Level 2 EV charger installation
 
+## [Pulsar Electrical Services](https://jobhackai.io/directory/ev-charger-installation/pulsar-electrical-services)
+
+Cincinnati · Northern Kentucky
+
+**Panel assessment**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Who supplies the charger?**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Permits and inspections**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Service area**
+
+Greater Cincinnati and Northern Kentucky.
+
+**How to get a quote**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Published installation scope**
+
+Level 2 home charging station setup is listed.
+
+**License verification**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+[Compare provider details](https://jobhackai.io/directory/ev-charger-installation/pulsar-electrical-services)
+
+Home Level 2 EV charger installation
+
+## [QEI Electrical Service LLC](https://jobhackai.io/directory/ev-charger-installation/qei-electrical)
+
+Cincinnati
+
+**Panel assessment**
+
+Provider says it evaluates the home electrical system before recommending installation.
+
+**Who supplies the charger?**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Permits and inspections**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Service area**
+
+Cincinnati, Colerain Township, White Oak, North College Hill, Groesbeck, Finneytown, Mount Healthy and Forest Park.
+
+**How to get a quote**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Published installation scope**
+
+Residential EV charger installation is explicitly listed.
+
+**License verification**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+[Compare provider details](https://jobhackai.io/directory/ev-charger-installation/qei-electrical)
+
+Home Level 2 EV charger installation
+
+## [Risen Electric](https://jobhackai.io/directory/ev-charger-installation/risen-electric)
+
+Northern Kentucky
+
+**Panel assessment**
+
+Provider lists panel-capacity evaluation and panel or 200-amp service upgrades when needed.
+
+**Who supplies the charger?**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Permits and inspections**
+
+Provider says permits and inspections may apply; confirm who obtains them and their cost.
+
+**Service area**
+
+Florence, Union, Hebron, Burlington, Erlanger, Edgewood, Independence, Newport, Fort Thomas, Alexandria and surrounding Northern Kentucky communities.
+
+**How to get a quote**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Published installation scope**
+
+Residential Level 2 charger installation with a dedicated 240-volt circuit is described.
+
+**License verification**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+[Compare provider details](https://jobhackai.io/directory/ev-charger-installation/risen-electric)
+
+Home Level 2 EV charger installation
+
+## [Thomas & Galbraith](https://jobhackai.io/directory/ev-charger-installation/thomas-and-galbraith)
+
+Cincinnati
+
+**Panel assessment**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Who supplies the charger?**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Permits and inspections**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Service area**
+
+Cincinnati area; confirm a particular address.
+
+**How to get a quote**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Published installation scope**
+
+Home EV charging station installation is described.
+
+**License verification**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+[Compare provider details](https://jobhackai.io/directory/ev-charger-installation/thomas-and-galbraith)
+
+Home Level 2 EV charger installation
+
 ## [Velasco Electric](https://jobhackai.io/directory/ev-charger-installation/velasco-electric)
 
 Cincinnati · Northern Kentucky
@@ -237,6 +777,42 @@ Dedicated circuit, connection, load calculation and permit/inspection work are l
 Unknown in the checked sources. Ask the provider to confirm in writing.
 
 [Compare provider details](https://jobhackai.io/directory/ev-charger-installation/velasco-electric)
+
+Home Level 2 EV charger installation
+
+## [Veneman Electric](https://jobhackai.io/directory/ev-charger-installation/veneman-electric)
+
+Cincinnati
+
+**Panel assessment**
+
+Provider describes a dedicated 240-volt circuit and panel compatibility check.
+
+**Who supplies the charger?**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Permits and inspections**
+
+Provider says local permits and inspections are handled; confirm for the job address.
+
+**Service area**
+
+Cincinnati area; confirm a particular address.
+
+**How to get a quote**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+**Published installation scope**
+
+Provider describes wall-mounted Level 2 home charging station installation.
+
+**License verification**
+
+Unknown in the checked sources. Ask the provider to confirm in writing.
+
+[Compare provider details](https://jobhackai.io/directory/ev-charger-installation/veneman-electric)
 
 ## Verify the contractor and the installation plan
 
