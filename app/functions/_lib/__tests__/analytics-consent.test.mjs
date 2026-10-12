@@ -280,7 +280,7 @@ test('directory runtime retains consented Local campaign fields and never replay
   h.ctx.dispatchEvent=event=>windowEvents[event.type]?.();
   vm.runInContext(readFileSync(new URL('../../../../marketing/directory/directory.js',import.meta.url),'utf8'),h.ctx);
   h.ctx.document.getElementById=getElement;
-  const click=()=>pageEvents.click({target:{closest:()=>({dataset:{directoryContact:'pearls'}})}});
+  const click=()=>pageEvents.click({target:{closest:()=>({dataset:{directoryContact:'pearls'},getAttribute:()=> 'https://provider.example/'})}});
   assert.equal(h.events('directory_listing_view').length,1);
   click();assert.equal(h.events('directory_contact_click').length,1);
   const params=h.events('directory_contact_click')[0][2];
