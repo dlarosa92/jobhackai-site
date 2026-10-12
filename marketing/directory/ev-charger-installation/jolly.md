@@ -12,7 +12,7 @@ Home Level 2 EV charger installation
 
 Cincinnati + Northern Kentucky
 
-[Visit provider & request a quote](https://jollyplumbing.com/electrical/electric-vehicle-charging-station-installation/?utm_source=jobhackai_local&utm_medium=referral&utm_campaign=directory_ev_charger_installation_nky_2026_09&utm_content=jolly_profile_website)
+[Visit provider & request a quote](https://jollyplumbing.com/electrical/electric-vehicle-charging-station-installation/)
 
 Provider-published information. Each provider page records its sources and check dates. Listings are alphabetical, unpaid and not endorsements. Service quality and current credentials have not been independently verified. Confirm your address, scope and final quote directly.
 
@@ -48,7 +48,7 @@ Unknown in the checked sources. Ask the provider to confirm in writing.
 
 ## Sources and check dates
 
--   [Provider service page](https://jollyplumbing.com/electrical/electric-vehicle-charging-station-installation/?utm_source=jobhackai_local&utm_medium=referral&utm_campaign=directory_ev_charger_installation_nky_2026_09&utm_content=jolly_profile_source), checked 2026-10-11
+-   [Provider service page](https://jollyplumbing.com/electrical/electric-vehicle-charging-station-installation/), checked 2026-10-11
 
 [Suggest a correction for review](https://jobhackai.io/directory/get-listed?category=ev-charger-installation)
 

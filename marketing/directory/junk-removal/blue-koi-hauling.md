@@ -12,7 +12,7 @@ Junk removal
 
 Cincinnati
 
-[Visit provider & request a quote](https://bluekoihauling.com/services/?utm_source=jobhackai_local&utm_medium=referral&utm_campaign=directory_junk_removal_nky_2026_09&utm_content=blue-koi-hauling_profile_website)
+[Visit provider & request a quote](https://bluekoihauling.com/services/)
 
 Provider-published information. Each provider page records its sources and check dates. Listings are alphabetical, unpaid and not endorsements. Service quality and current credentials have not been independently verified. Confirm your address, scope and final quote directly.
 
@@ -40,7 +40,7 @@ Unknown in the checked sources. Ask the provider to confirm in writing.
 
 ## Sources and check dates
 
--   [Provider service page](https://bluekoihauling.com/services/?utm_source=jobhackai_local&utm_medium=referral&utm_campaign=directory_junk_removal_nky_2026_09&utm_content=blue-koi-hauling_profile_source), checked 2026-10-11
+-   [Provider service page](https://bluekoihauling.com/services/), checked 2026-10-11
 
 [Suggest a correction for review](https://jobhackai.io/directory/get-listed?category=junk-removal)
 

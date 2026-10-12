@@ -12,7 +12,7 @@ Northern Kentucky + Cincinnati
 
 Mobile detailing, booked directly with the provider.
 
-[Visit provider & request a quote](https://www.pearlsautorecon.com/mobile-detailing?utm_source=jobhackai_local&utm_medium=referral&utm_campaign=directory_mobile_detailing_nky_2026_09&utm_content=pearls-auto-recon_profile_website)
+[Visit provider & request a quote](https://www.pearlsautorecon.com/mobile-detailing)
 
 Details from the provider’s website, checked 2026-09-22. Confirm availability and service at your address. No paid placement or partnership is implied.
 
@@ -48,6 +48,6 @@ interior, exterior, full detail
 
 **Information source**
 
-[Provider website](https://www.pearlsautorecon.com/mobile-detailing?utm_source=jobhackai_local&utm_medium=referral&utm_campaign=directory_mobile_detailing_nky_2026_09&utm_content=pearls-auto-recon_profile_source) · checked 2026-09-22
+[Provider website](https://www.pearlsautorecon.com/mobile-detailing) · checked 2026-09-22
 
 [Suggest a correction by email](mailto:support@jobhackai.io?subject=Directory%20correction%3A%20Pearl's%20Auto%20Recon&body=Business%3A%20Pearl's%20Auto%20Recon%0AListing%3A%20https%3A%2F%2Fjobhackai.io%2Fdirectory%2Fmobile-detailing%2Fpearls-auto-recon%0ACorrection%20and%20source%20URL%3A%0A)
