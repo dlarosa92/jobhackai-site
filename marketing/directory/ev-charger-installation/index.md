@@ -514,7 +514,7 @@ Cincinnati, Northern Kentucky and surrounding communities.
 
 **How to get a quote**
 
-Unknown in the checked sources. Ask the provider to confirm in writing.
+Request a project quote on the MM Custom Wiring website.
 
 **Published installation scope**
 
