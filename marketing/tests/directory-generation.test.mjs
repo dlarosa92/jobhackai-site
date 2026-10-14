@@ -99,3 +99,20 @@ test('mobile-detailing links, filters and published claims remain available',()=
   assert.ok(page.includes('data-directory-category="mobile-detailing"'));
  }
 });
+
+test('express combined pricing is visible without representing it as a full detail',()=>{
+ const data=JSON.parse(read('data/directory/mobile-detailing.json'));
+ const listing=data.listings.find(l=>l.id==='her-majestys-detail');
+ assert.equal(listing.fullPrice,null);
+ assert.equal(listing.combinedPrice.from,159.99);
+ // Only the express package is priced in this listing; keep it out of full-detail comparisons.
+ assert.equal(listing.services.includes('full-detail'),false);
+ const profile=read(`directory/mobile-detailing/${listing.id}.html`);
+ assert.ok(profile.includes('<h2>Combined express package</h2>'));
+ assert.equal(profile.includes('<h2>Full detail package</h2>'),false);
+ const card=read('directory/index.html').split('<article class="listing"').find(s=>s.includes(`/directory/mobile-detailing/${listing.id}`)).split('</article>')[0];
+ assert.ok(card.includes('From $159.99'));
+ assert.ok(card.includes('The Baron'));
+ assert.ok(card.includes('data-utilities="self-contained"'));
+ assert.ok(read('directory/mobile-detailing/513-auto-clean.html').includes('<h2>Full detail package</h2>'));
+});

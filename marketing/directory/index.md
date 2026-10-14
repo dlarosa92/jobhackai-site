@@ -212,9 +212,11 @@ Mobile service
 
 Cincinnati · Northern Kentucky · Southeast Indiana
 
-**Request a quote**
+**From $159.99**
 
-No comparable package price recorded.
+The Baron — express interior/exterior clean
+
+Published starting prices: coupe/2-door car $159.99; small SUV or midsize truck $179.99; minivan, three-row SUV or full-size truck $199.99. Vacuum and interior wipe-down plus exterior wash and ceramic sealant; this is not the deeper-clean package. Confirm vehicle size, condition, package scope and final quote before booking.
 
 Provider brings its own power and water, confirmed by Cliff on October 14, 2026. Confirm a suitable parking and work area before booking.
 
