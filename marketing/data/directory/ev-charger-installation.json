@@ -553,7 +553,7 @@
     {
       "id": "mm-custom-wiring",
       "name": "MM Custom Wiring",
-      "website": "https://mmcustomwiring.com/",
+      "website": "https://mmcustomwiring.com/#contact",
       "regions": [
         "Cincinnati",
         "Northern Kentucky"
@@ -566,7 +566,7 @@
         "charger": null,
         "permits": null,
         "area": "Cincinnati, Northern Kentucky and surrounding communities.",
-        "quote": null,
+        "quote": "Request a project quote on the MM Custom Wiring website.",
         "scope": "Dedicated EV branch circuits, wallboxes and Level 2 home charging are listed.",
         "license": null
       },
@@ -574,7 +574,7 @@
         {
           "url": "https://mmcustomwiring.com/",
           "label": "Provider service page",
-          "checkedAt": "2026-10-11"
+          "checkedAt": "2026-10-13"
         }
       ]
     },
