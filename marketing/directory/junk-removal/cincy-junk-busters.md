@@ -50,4 +50,6 @@ Hazardous, regulated or unusually heavy materials may be excluded. Confirm first
 2.  Ask whether the quote includes carrying from inside, labor, transport, disposal charges and cleanup. Ask what could change the price.
 3.  Confirm hazardous-material and appliance restrictions before pickup. Published acceptance of a general item type does not cover every condition.
 
+[Moving out? Use the printable quote comparison worksheet.](https://jobhackai.io/directory/move-out-kit)
+
 [Check municipal pickup eligibility](https://jobhackai.io/directory/junk-removal/#municipal-pickup)

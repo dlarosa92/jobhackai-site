@@ -117,7 +117,7 @@ function sitemapPages(root) {
     const parsed = new URL(url);
     const path = parsed.pathname;
     if (parsed.origin !== SITE || parsed.search || parsed.hash || !/^\/[a-z0-9/-]*$/.test(path) ||
-        !(/^\/$|^\/features$|^\/blog(?:\/|$)|^\/interview-questions(?:\/|$)|^\/directory(?:\/|$)/.test(path))) {
+        !(/^\/$|^\/features$|^\/interview-prep-kit$|^\/blog(?:\/|$)|^\/interview-questions(?:\/|$)|^\/directory(?:\/|$)/.test(path))) {
       throw new Error(`Sitemap entry is not an allowed public marketing URL: ${url}`);
     }
     if (seen.has(url)) throw new Error(`Duplicate sitemap entry: ${url}`);
@@ -141,7 +141,7 @@ function agentIndex(pages) {
   const summary = $('main .hero-subtitle').first().text().trim() || home.description;
   const facts = $('main .hero-card p').last().text().trim();
   let text = `# JobHackAI\n\n> ${inline(summary)}\n\n${facts ? `${inline(facts)}\n\n` : ''}`;
-  text += '## Product\n\n' + pageList(pages.filter(page => ['/', '/features'].includes(new URL(page.url).pathname)));
+  text += '## Product\n\n' + pageList(pages.filter(page => ['/', '/features', '/interview-prep-kit'].includes(new URL(page.url).pathname)));
   text += '## Account and pricing\n\n- [Pricing](https://app.jobhackai.io/pricing): current plans and billing terms.\n- [Sign up](https://app.jobhackai.io/login?mode=signup): create an account to use the tools.\n\n';
   const groups = [
     ['Interview questions by role', page => /^\/interview-questions(?:\/|$)/.test(new URL(page.url).pathname)],

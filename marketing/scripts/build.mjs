@@ -11,7 +11,7 @@ export function buildMarketingSite({ root = fileURLToPath(new URL('..', import.m
   mkdirSync(out);
   // Publish assets only. Dependencies, tests, generators and source data stay out.
   const assets = ['assets', 'css', 'js', 'components', 'blog', 'directory', 'interview-questions',
-    'index.html', 'features.html', 'blog.html', 'index.md', 'features.md', 'blog.md',
+    'index.html', 'features.html', 'blog.html', 'interview-prep-kit.html', 'interview-prep-kit.md', 'index.md', 'features.md', 'blog.md',
     'robots.txt', 'sitemap.xml', 'llms.txt', 'llms-full.txt', 'agent-index.json', '_headers', '_redirects'];
   for (const asset of assets) {
     if (existsSync(join(root, asset))) cpSync(join(root, asset), join(out, asset), { recursive: true });

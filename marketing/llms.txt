@@ -8,6 +8,7 @@ Your free interview includes a feedback preview: one strength and one area to im
 
 - [JobHackAI | Practice Your Next Interview Out Loud](https://jobhackai.io/index.md): Practice a live voice mock interview for your target role. Your first interview is free with a feedback preview. Continue with $17/week, $34/month, or five interviews for $39. [HTML](https://jobhackai.io/)
 - [Voice Mock Interview & Preparation Tools | JobHackAI Features](https://jobhackai.io/features.md): Choose your role, answer aloud, handle follow-up questions, and review feedback. See the free interview preview and paid full report in JobHackAI. [HTML](https://jobhackai.io/features)
+- [Interview prep kit: say what you actually did | JobHackAI](https://jobhackai.io/interview-prep-kit.md): Three prompts to explain your own contribution, a printable worksheet and a free first voice interview with a feedback preview. [HTML](https://jobhackai.io/interview-prep-kit)
 
 ## Account and pricing
 
