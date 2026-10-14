@@ -108,9 +108,9 @@
       "path": "/blog/how-to-answer-tell-me-about-yourself.md",
       "title": "How to Answer “Tell Me About Yourself” in an Interview | JobHackAI Blog",
       "description": "Build an introduction around your current work, one relevant example and why this role fits. Includes two illustrative answers and a short practice exercise.",
-      "source_sha256": "7dcbe1f5714876314f4230c2331d2459f145295069ecadafe80bcac171e5b886",
-      "markdown_sha256": "735968d827a65ec41283b1f4da9a9731c243f053cd42e9c217121068375d8762",
-      "bytes": 5783
+      "source_sha256": "c819c7e5e9df6b2f79da2f44d31a6d22c1ecb7b60a6a6d2dc41fc4bb595b1877",
+      "markdown_sha256": "2faa282f73a98a06f414936012002757e59c83a371d8a63f0d0a3161f022c922",
+      "bytes": 5936
     },
     {
       "url": "https://jobhackai.io/blog/how-to-prepare-a-salary-range-and-a-private-minimum",
@@ -428,9 +428,9 @@
       "path": "/directory/junk-removal/index.md",
       "title": "Junk removal in Greater Cincinnati | JobHackAI Local",
       "description": "Compare local junk removal by accepted items, loading, service area and quote method. Check municipal pickup before paying for a haul.",
-      "source_sha256": "a1a67348da4b2a6a734970e1501cbd9fa77292ba8d3c8a8b854fabaf63b634c4",
-      "markdown_sha256": "56ba7a2a30e1d1299b4db9814e8f1a05af471b5d27d3c217fdf9b38997003ea2",
-      "bytes": 19005
+      "source_sha256": "e669e0c4b78a71d99bd68e57052e4ae1478955c52db5dc8f34e6b136aeb48dbd",
+      "markdown_sha256": "386b83eb6e36e65d8bab22f1b1ad44d1851675a7defb4ab153b7a511641f8332",
+      "bytes": 19111
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/1-800-got-junk",
@@ -438,9 +438,9 @@
       "path": "/directory/junk-removal/1-800-got-junk.md",
       "title": "1-800-GOT-JUNK? Cincinnati / Northern Kentucky | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for 1-800-GOT-JUNK? Cincinnati / Northern Kentucky. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "d0f42d148b86fb56f8d34e54c73e3dea81349482401b1a7f03aacd15bc85ef77",
-      "markdown_sha256": "eb142c5eda3d56e700ee76b6e10e76c2a023cc4a761e93c74a66af18a68a74b4",
-      "bytes": 2200
+      "source_sha256": "dd93ecc8237c840d00667bc03397eb152f077e51496eca258fc54bb18325cc0b",
+      "markdown_sha256": "056b6c57cabf3ccf1e094691d568bda8aaaa68f1e5969db36d13f211608a1d6d",
+      "bytes": 2306
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/ak-site-services",
@@ -448,9 +448,9 @@
       "path": "/directory/junk-removal/ak-site-services.md",
       "title": "AK Site Services | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for AK Site Services. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "9d1ada5b6abee3f512d99f024b021ac33adaa09d82976b6dfc3c15a2e27c5886",
-      "markdown_sha256": "355c29c1dad6ccdb84cae145fe2adf945c09489a380e5fd918f19fb16f432b42",
-      "bytes": 2027
+      "source_sha256": "8482aafc98a1e59e5143ac26f64f14e0c6dbc9a1ea7b7ff14894c8d1d6eaafe5",
+      "markdown_sha256": "717e6d48eefc462a6192dd2eb62367ab302112e1e685385155a5aa5567095a05",
+      "bytes": 2133
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/all-in-1-junk-removal",
@@ -458,9 +458,9 @@
       "path": "/directory/junk-removal/all-in-1-junk-removal.md",
       "title": "All-In-1 Junk Removal and Demo | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for All-In-1 Junk Removal and Demo. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "177a6c4c7cd1ecee7563c266793ceb52869b1d35cee491913e470bcb5807b6a4",
-      "markdown_sha256": "fde17f711713c53a8260ac1e85fdcc1f03f417d18630a02a2a681dca8f047245",
-      "bytes": 2041
+      "source_sha256": "d27b8b7db96400927e3e60f684c411f60e68e7e9a24fe88648b0867ed69367df",
+      "markdown_sha256": "436aec6d63f9726e8949a5acf3e0bdc2c829eddd14034bb2e1d861c2989faa01",
+      "bytes": 2147
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/beckett-services",
@@ -468,9 +468,9 @@
       "path": "/directory/junk-removal/beckett-services.md",
       "title": "Beckett Services | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for Beckett Services. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "1043ec23c6d714385b1e66cc36dee986a543ef12ebbd8400493c89672e518c4c",
-      "markdown_sha256": "e3a864d7c68ad8b529696bf47bf45fb445ff9e7bf2d74a9a22c9883d2b8917d9",
-      "bytes": 1920
+      "source_sha256": "e21b95632170db9784a9a1da8500568684e2f60b21565ad6ddd138bff1388a3b",
+      "markdown_sha256": "6cee019201f95620ad8aad8ff814fd5f8f32ba80ab31c0d4777a581adbafde43",
+      "bytes": 2026
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/blue-koi-hauling",
@@ -478,9 +478,9 @@
       "path": "/directory/junk-removal/blue-koi-hauling.md",
       "title": "Blue Koi Hauling and Junk Removal | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for Blue Koi Hauling and Junk Removal. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "9141c5c4a1741873117db4a61141b17cddeec0a8b91b54639ba0ac64f38026a8",
-      "markdown_sha256": "ff28b082d483e2851c92363b1f1a400abf34dbaaca2a05786a50f3ea76b01044",
-      "bytes": 1992
+      "source_sha256": "0edca06ba71dce58264e313e3ed1828a8f330bb437493283ce99119551a26173",
+      "markdown_sha256": "6470bc9b6c0da36c03b649d4833f2c1712ce1353753c2ac2cb932138dbcde77d",
+      "bytes": 2098
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/bright-hauling-junk-removal",
@@ -488,9 +488,9 @@
       "path": "/directory/junk-removal/bright-hauling-junk-removal.md",
       "title": "Bright Hauling and Junk Removal | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for Bright Hauling and Junk Removal. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "308bf236cc733daccd599ef42dc0cadc6705e88eb4cc35a764a4868e280ecca7",
-      "markdown_sha256": "bd5eeca04f89e4a312a1ed6211b733f3bff24cc69bc71d2ed13fcd9e5e94970a",
-      "bytes": 1990
+      "source_sha256": "87608b64bcb6f586313a9614286d135287a8b6f69a73af96ea125817f6763413",
+      "markdown_sha256": "bf101b17868ee6f9c10568c829cec6b642b46a066a35b4c3175dbe2895b20a1d",
+      "bytes": 2096
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/cincy-junk-busters",
@@ -498,9 +498,9 @@
       "path": "/directory/junk-removal/cincy-junk-busters.md",
       "title": "Cincy Junk Busters | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for Cincy Junk Busters. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "1a63276398cb3f282bad08c71efc4e0c69f9c05c145955fc2308f32ce84ad733",
-      "markdown_sha256": "bd4451f6e37aded046663196a6cef714eafa1ffc68f34864af96cf7b6952c9ca",
-      "bytes": 2055
+      "source_sha256": "b7b220be1e76e806dad36936c0a4e5b777952b62479c8fe0bb8b9177c7cb7800",
+      "markdown_sha256": "6ea1aec83ad3650634ac662ed96b8d2f9e3e5e93096b1dd97ecff47f0cd2cec5",
+      "bytes": 2161
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/clutter-box-junk-removal",
@@ -508,9 +508,9 @@
       "path": "/directory/junk-removal/clutter-box-junk-removal.md",
       "title": "Clutter Box Junk Removal | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for Clutter Box Junk Removal. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "9be2f932eeb3bba87e1f729658f7cb07c49143d90bcc3817fc4684303cbdca9c",
-      "markdown_sha256": "f8700cabfdddf24bfe5acfbfc2ff473ec6f07586f9d547894a87a40165b676c3",
-      "bytes": 2002
+      "source_sha256": "fdfab7edae7bbd318fb085257e3a17c3605e4999c6f64862019e867073b3ccb0",
+      "markdown_sha256": "117101c9422998668f9758d6e1f15c2418c883c2e8dae4917146073eea033e02",
+      "bytes": 2108
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/college-hunks-florence",
@@ -518,9 +518,9 @@
       "path": "/directory/junk-removal/college-hunks-florence.md",
       "title": "College HUNKS Hauling Junk & Moving — Florence | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for College HUNKS Hauling Junk & Moving — Florence. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "818bebc9c39f06648ff4126d55f05155c856cbd52bc8d87b0beb7b97cb0bea21",
-      "markdown_sha256": "7885a76b8956e8db0a8652088008c35a146afbddf1e1cd2deffce43cb9170211",
-      "bytes": 2051
+      "source_sha256": "8c1cf5a95e043f3ad5f05894ab56f4022a942f3d99234d6ce9e7b01a2a38116d",
+      "markdown_sha256": "f1d22f69e037befb9d00b2a50812d08a55701a8aa4a25cc00a241ca0caf82997",
+      "bytes": 2157
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/evict-my-junk",
@@ -528,9 +528,9 @@
       "path": "/directory/junk-removal/evict-my-junk.md",
       "title": "Evict My Junk | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for Evict My Junk. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "b1bd189b3b2390e19d5496117b33f1e34dc8b606c3075523bea4c2e18996da10",
-      "markdown_sha256": "3751a3c31613caad41b916df8b2bd29b400ec6e7af2f276efbc7d08b0f6af726",
-      "bytes": 2006
+      "source_sha256": "95ee8a22bbd5686591081ce673b58f476ff14f836c111d5b6008467a043c63be",
+      "markdown_sha256": "754a8d6d159d2049ce0eb04c2fbb46a34de5fe3bd7d43f0dbf4ce53b5d1a4dde",
+      "bytes": 2112
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/goodfellas-junk-removal",
@@ -538,9 +538,9 @@
       "path": "/directory/junk-removal/goodfellas-junk-removal.md",
       "title": "GoodFellas Junk Removal | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for GoodFellas Junk Removal. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "709ea12d89471f910efce251efa096f4622c466307bbb18065156bb24deba190",
-      "markdown_sha256": "9f5bc233baad41584ef2d8d4dcf5d09839b9a43c8604ea02966a1a4245a81911",
-      "bytes": 2067
+      "source_sha256": "538079527f9240125c8e6eb41d037da384bce2ce4316458f913a728743c5432e",
+      "markdown_sha256": "f8a285af554a51473f46e24680039cb95800ca4fc80f5d1af4664be33a5269fe",
+      "bytes": 2173
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/haulaway-pro",
@@ -548,9 +548,9 @@
       "path": "/directory/junk-removal/haulaway-pro.md",
       "title": "HaulAway Pro | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for HaulAway Pro. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "fe557764ed34dbdd44ded4477b1421025add89f4d6b5fee5cc178719d6109038",
-      "markdown_sha256": "a8941a2ada444bf5e8a6e1679c61fd25e4c0d9ab3df98637e4cb0d05900d741a",
-      "bytes": 1883
+      "source_sha256": "511725d755f835b194de55550d1dc8a2cfef5490a3e46094a8609a1fdcf52498",
+      "markdown_sha256": "10d57c0fd7b6f1c9f6f4fe00306925c68a58521a4e65bdc06ca4d376ad50e1d4",
+      "bytes": 1989
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/junk-junkies-llc",
@@ -558,9 +558,9 @@
       "path": "/directory/junk-removal/junk-junkies-llc.md",
       "title": "Junk Junkies LLC | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for Junk Junkies LLC. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "2fcca8133276299bf68fbd3d7906cf0c4f196de29e8660bfed5ac8b6313a457d",
-      "markdown_sha256": "262dbfc264eb171f9510720050e1652926643336ac0ba5d3f2675530f81d30e5",
-      "bytes": 1907
+      "source_sha256": "284eca3c8bb0f8986234e3c522187ef0cac3afb8670a040087a386b5d466a2db",
+      "markdown_sha256": "9a1771c89456077cd4df0e4b1af387f7a33858564f62feb54badde50ebf790da",
+      "bytes": 2013
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/junk-king-cincinnati",
@@ -568,9 +568,9 @@
       "path": "/directory/junk-removal/junk-king-cincinnati.md",
       "title": "Junk King Cincinnati | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for Junk King Cincinnati. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "3c955629c6ebe78d1ef131cf1245dacada014e19537a335a32f605ebfe0120c9",
-      "markdown_sha256": "6a401373709c9a123a74ac7de16e04815746d0a111da6fda59d4a88d2fff5675",
-      "bytes": 1965
+      "source_sha256": "47ed42d0fe176fdda22b73d9deb498417022985a2ae05fb594be7d09434b4262",
+      "markdown_sha256": "371d4dffd9be2518c9f31e65a1c590e4880ac16dfa4b0ee55e1fb7ff63fe6513",
+      "bytes": 2071
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/junk-king-northern-kentucky",
@@ -578,9 +578,9 @@
       "path": "/directory/junk-removal/junk-king-northern-kentucky.md",
       "title": "Junk King Northern Kentucky | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for Junk King Northern Kentucky. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "428ade912a1144122113545e8581239ec60fd614cf7c6ca573b6f8787eb2d2a1",
-      "markdown_sha256": "06d3b04b8dda127924f4478e3bb814fee5d847e428d1d1a20d93d229431f0e2f",
-      "bytes": 2104
+      "source_sha256": "b8bfdd8ba639d11acad73f34023447730c655edfe6846fd2bbb0093dab545dda",
+      "markdown_sha256": "d2cd874af298fa55abe015086c8f9b709c0203384ec2c0f00ae221f3ad55a6a6",
+      "bytes": 2210
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/junk-removal-guys",
@@ -588,9 +588,9 @@
       "path": "/directory/junk-removal/junk-removal-guys.md",
       "title": "Junk Removal Guys | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for Junk Removal Guys. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "9810aecb4aac6bae149a401c56bbb1b9505161124f7774276bbadc556cae2596",
-      "markdown_sha256": "146a114287fec5baf7d1ddc423ae3c36c82ed8e1dd5dae47eac85e8acd4f4ea8",
-      "bytes": 1968
+      "source_sha256": "5b0f589610397f81e4caffc636b4fa21835cd36bebed78e11157de565f22fe8e",
+      "markdown_sha256": "bd094978165a8e543c2a8c13d694ee5b7f823b8e1b59ac4ab5dc180f4cf655be",
+      "bytes": 2074
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/larrys-junk-removal",
@@ -598,9 +598,9 @@
       "path": "/directory/junk-removal/larrys-junk-removal.md",
       "title": "Larry’s Junk Removal | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for Larry’s Junk Removal. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "c8ce150b3b7c0cabf1dd4e1c3e427597c6c2fb04ac85953b3c52aebf3ce063cd",
-      "markdown_sha256": "eaea74e8658856cd80c7c27436234437646fd798e310bd3ba3348c174997fdff",
-      "bytes": 2135
+      "source_sha256": "940e0f7067838483dc8fb4268487714204df0a2346a71554517e56c817408dc8",
+      "markdown_sha256": "6e4e28d11dd291bcc87e7017c34e058f657cc379aa9eaffe0268454f7a5eb045",
+      "bytes": 2241
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/latham-junk-removal",
@@ -608,9 +608,9 @@
       "path": "/directory/junk-removal/latham-junk-removal.md",
       "title": "Latham Junk Removal | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for Latham Junk Removal. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "bb145aab6ac7f456e4d1d944924f3fa7487d68aa45cc0685c2c6ec2c6b3edf95",
-      "markdown_sha256": "aa21ea4e33d7473f846a0b88500a2a611549698adef15bf2fac9521cf3a5a50d",
-      "bytes": 2027
+      "source_sha256": "41f775c77b26b29fc46081d6c94b4547ea7eada4615e88f629a995ee7f307285",
+      "markdown_sha256": "8d41dfebdacea9cedcf8db49fe83d28c9e6e4f9f31044bf099218e70ef5d1f8f",
+      "bytes": 2133
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/nky-junk-dads",
@@ -618,9 +618,9 @@
       "path": "/directory/junk-removal/nky-junk-dads.md",
       "title": "NKY Junk Dads | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for NKY Junk Dads. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "8bf4a5cafc319418b15d6ba446bb7dc66322e4119c41dcb15e76eac6862587ae",
-      "markdown_sha256": "8256e6fa9084906e1647273f6740868c492b3c7809b5b67769bc46a38ae88641",
-      "bytes": 1945
+      "source_sha256": "af49b0a5a2199cb422c81eab6c80c96e5b8708897e304883cda1b4d1064e065f",
+      "markdown_sha256": "920e7cdd1c4c60e192a4f5d41de9e7f81f6bfad8a3c7ae9f579d6ae7227c1fb8",
+      "bytes": 2051
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/royal-flush-enterprises",
@@ -628,9 +628,9 @@
       "path": "/directory/junk-removal/royal-flush-enterprises.md",
       "title": "Royal Flush Enterprises | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for Royal Flush Enterprises. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "b34c75a2bf846aafd4b2b05bcf47e6939179d2f0580a889090dcb8e351af1621",
-      "markdown_sha256": "9cb1006a04d3e7852258e13b4ac951378ce0873cd7b8280d9a54103657bf325c",
-      "bytes": 2048
+      "source_sha256": "9cbd494457f73945965dd6bdc0b84ef79a0e1a31cbfb2d0f7390f589ff3145c5",
+      "markdown_sha256": "1b3c58aab30502e1b5f7fd3d21d2781369940a5d273412224b2e64bfee5d74c0",
+      "bytes": 2154
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/rumpke-haul-it-away",
@@ -638,9 +638,9 @@
       "path": "/directory/junk-removal/rumpke-haul-it-away.md",
       "title": "Rumpke Haul-it-Away | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for Rumpke Haul-it-Away. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "dda787c56b47277db9c98449eee377297abacb137e7e2213d0c3d16516a71619",
-      "markdown_sha256": "813edc066a7e92914f8d8ec061ed05f3f66688455ebfbed5d9835f3cda268f51",
-      "bytes": 2090
+      "source_sha256": "f13d6df60918fa69a3f78b97cb3b8490a796f8cefc6662a42ae0a3b4caebcddd",
+      "markdown_sha256": "781a3016fcdd0bbb47b803fe1c87141fd9b53faa7bcd3f38a97f16295d60523c",
+      "bytes": 2196
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/sen-hauling-junk-removal",
@@ -648,9 +648,9 @@
       "path": "/directory/junk-removal/sen-hauling-junk-removal.md",
       "title": "SEN Hauling & Junk Removal | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for SEN Hauling & Junk Removal. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "37271ea80173685585e634a25d5048bd7a4cc7c96a321b8369dd2dedc9589488",
-      "markdown_sha256": "ba567e7e4c9f1a096568847cf2648b3f700aafda0926e5bdffb6d13a8f93defc",
-      "bytes": 2008
+      "source_sha256": "eff34191170bcf77710a2eb67e4a4de7ab4fd285d6076e5a3e2789d5e165ceb6",
+      "markdown_sha256": "9cdc567990b6ef320e199a4b5d0e55014a1285e467ce678288412a695be281a9",
+      "bytes": 2114
     },
     {
       "url": "https://jobhackai.io/directory/junk-removal/swat-junk-removal",
@@ -658,9 +658,9 @@
       "path": "/directory/junk-removal/swat-junk-removal.md",
       "title": "S.W.A.T. Junk Removal | Junk removal | JobHackAI Local",
       "description": "Published service and quote details for S.W.A.T. Junk Removal. Confirm availability, scope and current credentials directly.",
-      "source_sha256": "cfa77b5c4226d00809ddc99805419179bfa1eee0e7bb21309cd7b347daf43c10",
-      "markdown_sha256": "7abdede4d5585dd70cbdbb6b6132d2d59a3b2dfafc274104b2f506883e754cda",
-      "bytes": 1952
+      "source_sha256": "95c800fd1b6b7b35a415f2e148e1c67fc012988725704bf35fb60fcf3b808fab",
+      "markdown_sha256": "5aeb42cbfb1cc24c330eef865a04ee3f04146c83f52e10ca20c655765c2893c3",
+      "bytes": 2058
     },
     {
       "url": "https://jobhackai.io/directory/mobile-detailing/513-auto-clean",
@@ -923,6 +923,16 @@
       "bytes": 1652
     },
     {
+      "url": "https://jobhackai.io/directory/move-out-kit",
+      "markdown": "https://jobhackai.io/directory/move-out-kit.md",
+      "path": "/directory/move-out-kit.md",
+      "title": "Move-out junk removal checklist and quote worksheet | JobHackAI Local",
+      "description": "Compare junk removal quotes in Greater Cincinnati and Northern Kentucky. Check carrying, accepted items, access and the full job price.",
+      "source_sha256": "7de3641ef88a4fbcde7dbbb8c0043873a6ffd913163831ba8c56a341805d8083",
+      "markdown_sha256": "242af7e9951dcc7142c4f95cc76bacc95ba5048fd0ed7f1dbfd5418561e05993",
+      "bytes": 4669
+    },
+    {
       "url": "https://jobhackai.io/features",
       "markdown": "https://jobhackai.io/features.md",
       "path": "/features.md",
@@ -931,6 +941,16 @@
       "source_sha256": "96524b0956f99eb7ea64001bee61e039f2ae14f2ce73ff2d926988efd5ef329f",
       "markdown_sha256": "bba45384aa390cf6eff59a441a65b60fc77feaf84106993ed2ac3c4d18e836c5",
       "bytes": 4384
+    },
+    {
+      "url": "https://jobhackai.io/interview-prep-kit",
+      "markdown": "https://jobhackai.io/interview-prep-kit.md",
+      "path": "/interview-prep-kit.md",
+      "title": "Interview prep kit: say what you actually did | JobHackAI",
+      "description": "Three prompts to explain your own contribution, a printable worksheet and a free first voice interview with a feedback preview.",
+      "source_sha256": "47e3fd7fe048630c47910d11a77ae69921b87e3e0329f3a09fef6614f3ee24d5",
+      "markdown_sha256": "a6088073fa28933de90261b923c347e6d3afdecdc4157b4ab48fc49e5201facb",
+      "bytes": 3803
     },
     {
       "url": "https://jobhackai.io/interview-questions/",

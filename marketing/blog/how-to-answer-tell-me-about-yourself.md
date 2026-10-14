@@ -50,6 +50,8 @@ The example describes a plausible step in responsibility without pretending the 
 
 ## Try one short practice round
 
+[Use the free interview prep worksheet](https://jobhackai.io/interview-prep-kit) to put your team result and personal contribution into your own words.
+
 1.  **Write three prompts.** Use a few words for your current work, one example, and your reason for applying.
 2.  **Answer out loud.** For this exercise, try a 45 to 75 second answer, then adjust it to the interviewer and the question.
 3.  **Check the substance.** Could someone identify what you do, one relevant contribution, and why this job fits? Add the missing detail.
