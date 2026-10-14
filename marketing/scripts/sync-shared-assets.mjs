@@ -23,4 +23,9 @@ const cookieDestination = new URL('../css/cookie-consent.css', import.meta.url);
 if (check) {
   if (readFileSync(cookieDestination, 'utf8') !== cookieCss) throw new Error('Cookie styles are stale: run node marketing/scripts/sync-shared-assets.mjs');
 } else writeFileSync(cookieDestination, cookieCss);
+// Legacy app pages need just the consent controls, not the site's global styles.
+const appCookieDestination = new URL('../../css/cookie-consent.css', import.meta.url);
+if (check) {
+  if (readFileSync(appCookieDestination, 'utf8') !== cookieCss) throw new Error('App cookie styles are stale: run node marketing/scripts/sync-shared-assets.mjs');
+} else writeFileSync(appCookieDestination, cookieCss);
 console.log(check ? 'Marketing shared assets match source.' : 'Marketing shared assets refreshed.');
