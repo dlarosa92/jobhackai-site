@@ -9,7 +9,7 @@ const script = read('../js/partner-kits.js');
 function runtime({ consent = false, clipboardFails = false, kit = 'interview' } = {}) {
   const events = [], listeners = {}, status = { textContent: '' };
   const block = { textContent: 'A useful email. https://jobhackai.io/interview-prep-kit?utm_source=email' };
-  const notes = { style: {}, scrollHeight: 200, value: 'PRIVATE NOTE NOT FOR ANALYTICS', addEventListener: (name, fn) => { listeners.note = fn; } };
+  const notes = { tagName: 'TEXTAREA', style: {}, scrollHeight: 200, value: 'PRIVATE NOTE NOT FOR ANALYTICS', addEventListener: (name, fn) => { if (name === 'input') listeners.note = fn; } };
   let copied = null, printed = 0;
   const context = { document: { body: { dataset: { kit } }, querySelectorAll: () => [notes], querySelector: selector => {
     if (selector === '[data-copy-status]') return status;
@@ -52,10 +52,15 @@ for (const [file,kit] of [['../interview-prep-kit.html','interview'],['../direct
     const $ = load(read(file)); assert.equal($('main h1').length, 1);
     assert.equal($('script[src*="cookie-consent.js"]').length,1);
     assert.ok($('link[href*="cookie-consent.css"]').length);
-    assert.ok($('textarea[data-kit-notes]').length >= 3);
-    $('textarea').each((_, el) => { assert.ok($(`label[for="${$(el).attr('id')}"]`).length); assert.equal($(el).attr('data-clarity-mask'),'true'); });
+    assert.ok($('[data-kit-notes]').length >= 7);
+    $('[data-kit-notes]').each((_, el) => { assert.ok($(`label[for="${$(el).attr('id')}"]`).length); assert.equal($(el).attr('data-clarity-mask'),'true'); });
     $('a[href]').each((_, el) => { const url = new URL($(el).attr('href'),'https://jobhackai.io'); assert.equal(url.searchParams.has('utm_source'),false,'Only the copyable external handoff block carries campaign tags'); });
     assert.match($('[data-partner-block]').text(), /utm_medium=partner_referral/);
     assert.ok($('[data-copy-status][aria-live="polite"]').length);
+    assert.equal($('[data-copy-block]').text(), 'Copy ready-to-paste text');
+    assert.equal($('.paste-steps li').length, 3);
+    assert.match($('a[href^="mailto:"]').attr('href'), /^mailto:support@jobhackai\.io\?subject=/);
+    assert.ok($('[data-worksheet-preview][data-clarity-mask]').length);
+    assert.equal($('script[src*="partner-kit-model.js"]').length,1);
   });
 }

@@ -6709,21 +6709,74 @@ Ask your building, municipality and regular hauler about bulky-item pickup, elig
 4.  **What is included, and what could change the price?** Ask about labor, transport, disposal and anything heavy or still connected to utilities.
 5.  **What is the final quote for my job, and what is excluded?** Ask for the scope and price in writing before work begins.
 
-Compare the same job
+Guided quote comparison
 
-## Put two quotes side by side.
+## Compare the same job.
 
-Give both providers the same item list and access details.
+Give both providers the same item list and access details. Choose “Not confirmed yet” until you have an answer.
 
-### Provider A
+### The job both providers are quoting
 
-Provider nameServes my address and meets my deadlineMy items accepted and exclusionsCarrying, stairs, parking and accessIncluded labor, transport and disposalWritten quote, possible extras and quote source
+Mark what each provider actually confirmed, rather than what you assume.
 
-### Provider B
+What needs to go?
 
-Provider nameServes my address and meets my deadlineMy items accepted and exclusionsCarrying, stairs, parking and accessIncluded labor, transport and disposalWritten quote, possible extras and quote source
+Where are the items?
 
-These notes stay in this tab and are not submitted to JobHackAI. Print or save them before leaving or reloading this page.
+Your deadline
+
+The date your space needs to be clear.
+
+Provider A
+
+Provider name
+
+Quoted amount ($)
+
+Serves my address and meets my deadline
+
+Accepts my specific items
+
+Includes the carrying and loading I need
+
+Includes disposal fees
+
+Written quote and scope received
+
+Possible extras or exclusions
+
+Provider B
+
+Provider name
+
+Quoted amount ($)
+
+Serves my address and meets my deadline
+
+Accepts my specific items
+
+Includes the carrying and loading I need
+
+Includes disposal fees
+
+Written quote and scope received
+
+Possible extras or exclusions
+
+Your comparison
+
+### See the gaps before you book.
+
+Confirm each part of the quote with the provider.
+
+Your two provider quotes
+
+| Check | Provider A | Provider B |
+| --- | --- | --- |
+
+Quote amounts can cover different work. This comparison does not rank or recommend providers.
+
+Your entries stay in this tab. They are not uploaded or saved after you leave or reload. Copy or print your summary to keep it.
 
 ## Compare published provider details.
 
@@ -6737,11 +6790,17 @@ For property managers
 
 ## A useful addition to your move-out email.
 
-Keep your building’s instructions and dates. Add this optional comparison resource below them. No resident list to upload.
+Use this in the email you already send with move-out instructions.
+
+1.  **Copy the text below.** The button copies the whole message, including the kit link.
+2.  **Paste it into your email.** Put it beneath your building’s move-out dates and requirements.
+3.  **Check it, then send.** Keep your existing details and signature. You can reuse it in your saved template.
+
+TEXT TO PASTE INTO YOUR EMAIL
 
 Need to clear bulky items before move-out? Check your building, municipality and regular hauler options first. The JobHackAI Local move-out kit has an optional checklist for comparing local junk removal: items accepted, who carries and loads, what the quote includes, what could change the price, and the final quote for your job. https://jobhackai.io/directory/move-out-kit?utm\_source=email&utm\_medium=partner\_referral&utm\_campaign=local\_moveout\_partners\_2026\_10&utm\_content=public\_property\_handoff\_01 JobHackAI Local compares published provider information. Listings are not endorsements, and you book with providers directly.
 
-This shared link measures the general handoff. For a separate property link, [ask for your property’s link](mailto:sebastian.larosa@jobhackai.io?subject=Move-out%20kit%20property%20link). We do not need resident names, addresses or lease details.
+The included link is ready to use. To track referrals from your property separately, [ask for your property’s link](mailto:support@jobhackai.io?subject=Move-out%20kit%20property%20link). We do not need resident names, addresses or lease details.
 
 JobHackAI Local · https://jobhackai.io/directory/move-out-kit
 
