@@ -24,5 +24,10 @@
 /billing-management   /account-setting.html   301
 /billing-management.html   /account-setting.html   301
 
+# Retired duplicate HTML under the JavaScript asset directory.
+# Use the tracked canonical page; Pages retains the incoming campaign query.
+/js/dashboard-trial.html /dashboard-trial 301
+/js/dashboard-trial /dashboard-trial 301
+
 # Fallback for all other routes
 /*    /index.html   200
