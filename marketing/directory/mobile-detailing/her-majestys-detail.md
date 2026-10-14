@@ -16,13 +16,7 @@ Mobile detailing, booked directly with the provider.
 
 Details from the provider’s website and provider-supplied corrections, checked 2026-10-14. Confirm availability and service at your address. No paid placement or partnership is implied.
 
-## Interior package
-
-**Request a quote**
-
-No comparable package price recorded.
-
-## Full detail package
+## Combined express package
 
 **From $159.99**
 

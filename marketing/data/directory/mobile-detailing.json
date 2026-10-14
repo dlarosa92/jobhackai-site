@@ -436,7 +436,8 @@
       "waterPower": "self-contained",
       "waterPowerNote": "Provider brings its own power and water, confirmed by Cliff on October 14, 2026. Confirm a suitable parking and work area before booking.",
       "interiorPrice": null,
-      "fullPrice": {
+      "fullPrice": null,
+      "combinedPrice": {
         "from": 159.99,
         "currency": "USD",
         "package": "The Baron — express interior/exterior clean",
