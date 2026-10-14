@@ -105,6 +105,8 @@ test('express combined pricing is visible without representing it as a full deta
  const listing=data.listings.find(l=>l.id==='her-majestys-detail');
  assert.equal(listing.fullPrice,null);
  assert.equal(listing.combinedPrice.from,159.99);
+ // Only the express package is priced in this listing; keep it out of full-detail comparisons.
+ assert.equal(listing.services.includes('full-detail'),false);
  const profile=read(`directory/mobile-detailing/${listing.id}.html`);
  assert.ok(profile.includes('<h2>Combined express package</h2>'));
  assert.equal(profile.includes('<h2>Full detail package</h2>'),false);

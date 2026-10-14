@@ -178,7 +178,7 @@
       "path": "/directory/index.md",
       "title": "Mobile detailing in Greater Cincinnati | JobHackAI Local",
       "description": "Compare local mobile detailers by package scope, starting prices, and water and power requirements.",
-      "source_sha256": "871b24d422798231578e8ede51ed50ea0ce6215eda5a44afff6875a29d3f9749",
+      "source_sha256": "8e7dcc68a8b598aae269b0524af58fe5871a6823e78adb48bc569685fa79b496",
       "markdown_sha256": "5e7e80e193b40054ef9545ea604624d3b770e7614ce49c64ecd036c4b190f7cf",
       "bytes": 11982
     },
@@ -798,9 +798,9 @@
       "path": "/directory/mobile-detailing/her-majestys-detail.md",
       "title": "Her Majesty's Detail — mobile detailing | JobHackAI Local",
       "description": "Package details and booking requirements for Her Majesty's Detail in the Greater Cincinnati tri-state area.",
-      "source_sha256": "0c8c1b68d5007a00d183a71b279d82a93c6f28ce8725a0df499ea79895cb0a50",
-      "markdown_sha256": "bc96a9fd46f132124b2c3e255a564f020c1d02c0d8f818e060aecc00536cd4b4",
-      "bytes": 2521
+      "source_sha256": "6699cbcfa2a9fbc62b8f15a3e9dc30c468d4cb34cf519afe096a1cef583e83a0",
+      "markdown_sha256": "84229dee81e5c176fbe7bfdf5c7b7519f25923e1b5afcf63c93aefba26af4f8e",
+      "bytes": 2508
     },
     {
       "url": "https://jobhackai.io/directory/mobile-detailing/jackson-bros-detail",

@@ -44,7 +44,7 @@ The booking page says mobile operations are suspended during winter, with compli
 
 **Services mentioned**
 
-interior, exterior, full detail, boats, rvs, fleets
+interior, exterior, boats, rvs, fleets
 
 **Information source**
 
