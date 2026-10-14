@@ -39,3 +39,11 @@ test('isolated consent styles match shared source without restyling legacy pages
   const main = read('css/main.css');
   assert.equal(read('css/cookie-consent.css'), main.slice(main.indexOf('/* Cookie Consent Banner */')));
 });
+
+test('legacy HTML asset alias routes to the tracked dashboard-trial page', () => {
+  const redirects = read('app/public/_redirects');
+  assert.match(redirects, /^\/js\/dashboard-trial\.html +\/dashboard-trial +301$/m);
+  assert.match(redirects, /^\/js\/dashboard-trial +\/dashboard-trial +301$/m);
+  assert.ok(redirects.indexOf('/js/dashboard-trial ') < redirects.indexOf('/* '));
+  assert.match(read('dashboard-trial.html'), /cookie-consent\.js/);
+});
