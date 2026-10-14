@@ -216,7 +216,7 @@ Cincinnati · Northern Kentucky · Southeast Indiana
 
 No comparable package price recorded.
 
-Confirm water, power and parking requirements directly with the provider.
+Provider brings its own power and water, confirmed by Cliff on October 14, 2026. Confirm a suitable parking and work area before booking.
 
 [See packages & booking details](https://jobhackai.io/directory/mobile-detailing/her-majestys-detail)
 
