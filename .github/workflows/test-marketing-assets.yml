@@ -50,5 +50,5 @@ jobs:
       - run: node --test app/functions/_lib/__tests__/blog-cta.test.mjs app/functions/_lib/__tests__/analytics-consent.test.mjs
       - run: node --test app/functions/_lib/__tests__/page-tracking-coverage.test.mjs
       - run: node --test marketing/tests/directory-consent.test.mjs marketing/tests/instagram-entry.test.mjs
-      - run: node --test marketing/tests/partner-kits.test.mjs
+      - run: node --test marketing/tests/partner-kits.test.mjs marketing/tests/partner-kit-model.test.mjs
       - run: node --test marketing/tests/subscription-reset.test.mjs
