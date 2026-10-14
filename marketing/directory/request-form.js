@@ -70,7 +70,7 @@
       const success = document.getElementById('request-success'); success.hidden = false; success.focus();
       // Storage, not a sale or an inbox receipt. Never include form fields/IDs.
       if (!result.duplicate && window.JHA?.cookieConsent?.hasAnalyticsConsent?.() === true) {
-        window.JHA?.gtagSafe?.('event','directory_request_saved',{business_line:'local_directory',directory_category:data.category.replaceAll('-','_'),directory_market:'nky_cincinnati',interest_type:'listing'});
+        window.JHA?.gtagSafe?.('event','directory_request_saved',{business_line:'local_directory',directory_category:data.category.replaceAll('-','_'),directory_market:'greater_cincinnati_tri_state',directory_tracking_version:'2',interest_type:'listing'});
       }
     } catch (_) { showError('We could not confirm that your request was saved. Your details are still here. Please try again; the same request will not be added twice.'); }
     finally { clearTimeout(timer); pending = false; button.disabled = false; button.textContent = 'Save listing request'; }

@@ -44,6 +44,8 @@ test('saved events identify each category independently without collecting the s
  for(const category of ['mobile-detailing','junk-removal','ev-charger-installation']){
   const f=setup();f.fields.category=category;f.consent(true);f.outcome('saved');await f.send();
   assert.equal(f.events[0][2].directory_category,category.replaceAll('-','_'));
+  assert.equal(f.events[0][2].directory_market,'greater_cincinnati_tri_state');
+  assert.equal(f.events[0][2].directory_tracking_version,'2');
   assert.equal(JSON.parse(f.calls[0].body).category,category);
  }
 });
