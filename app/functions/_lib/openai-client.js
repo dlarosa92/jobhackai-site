@@ -1,3 +1,4 @@
+import { textCompletionParameters, estimateTextCost } from './openai-text-models.js';
 // OpenAI API client utility
 // Handles rate limiting, structured outputs, prompt caching, and cost tracking
 import { normalizeRoleToFamily } from './role-normalizer.js';
@@ -52,7 +53,7 @@ function detectTruncation(result, feature) {
 /**
  * Call OpenAI API with structured outputs and optional fallback model.
  * @param {Object} options - API options
- * @param {string} options.model - Primary model (gpt-4.1-mini, gpt-4.1, etc.)
+ * @param {string} options.model - Primary model (gpt-6-luna, gpt-6-sol, etc.)
  * @param {string} [options.fallbackModel] - Optional fallback model on non-rate-limit failures
  * @param {Array} options.messages - Chat messages
  * @param {Object} options.responseFormat - Structured output schema (optional)
@@ -67,7 +68,7 @@ function detectTruncation(result, feature) {
  * @returns {Promise<Object>} API response
  */
 export async function callOpenAI({
-  model = 'gpt-4.1-mini',
+  model = 'gpt-6-luna',
   fallbackModel = null,
   messages = [],
   responseFormat = null,
@@ -92,8 +93,7 @@ export async function callOpenAI({
     const body = {
       model: activeModel,
       messages,
-      max_tokens: maxTokens,
-      temperature
+      ...textCompletionParameters(activeModel, maxTokens, temperature)
     };
 
     // Add structured outputs if provided
@@ -343,7 +343,7 @@ export async function callOpenAI({
  * @returns {Promise<Object>} OpenAI response with atsRubric and atsIssues only
  */
 export async function generateATSFeedback(resumeText, ruleBasedScores, jobTitle, env, options = {}) {
-  const baseModel = env.OPENAI_MODEL_FEEDBACK || 'gpt-4.1-mini';
+  const baseModel = env.OPENAI_MODEL_FEEDBACK || 'gpt-6-luna';
   const skipRoleTips = options.skipRoleTips === true;
   const shortMode = options.shortMode === true;
 
@@ -627,7 +627,7 @@ ${roleContext}
  * @returns {Promise<Object>} OpenAI response with roleSpecificFeedback only
  */
 export async function generateRoleTips(resumeText, ruleBasedScores, jobTitle, env, options = {}) {
-  const baseModel = env.OPENAI_MODEL_FEEDBACK || 'gpt-4.1-mini';
+  const baseModel = env.OPENAI_MODEL_FEEDBACK || 'gpt-6-luna';
   const timeoutMs = options.timeoutMs || 20000; // PHASE 2: 20-25s timeout for Tier 2
 
   if (!jobTitle || jobTitle.trim().length === 0) {
@@ -786,7 +786,7 @@ RESUME-AWARE CONSTRAINT (CRITICAL):
 
 /**
  * Generate resume rewrite using AI.
- * Uses gpt-4.1 for higher quality and structured output so UI can rely on shape.
+ * Uses gpt-6-sol for higher quality and structured output so UI can rely on shape.
  * This is a premium feature, so we accept a higher per-call cost but still cap it.
  * 
  * @param {string} resumeText - Original resume text
@@ -797,8 +797,8 @@ RESUME-AWARE CONSTRAINT (CRITICAL):
  * @param {Object} env - Environment variables
  */
 export async function generateResumeRewrite(resumeText, section, jobTitle, atsIssues, roleSpecificFeedback, env) {
-  const baseModel = env.OPENAI_MODEL_REWRITE || 'gpt-4.1';
-  const fallbackModel = 'gpt-4.1-mini'; // cheaper fallback if primary has issues
+  const baseModel = env.OPENAI_MODEL_REWRITE || 'gpt-6-sol';
+  const fallbackModel = 'gpt-6-luna'; // cheaper fallback if primary has issues
 
   const maxOutputTokens = Number(env.OPENAI_MAX_TOKENS_REWRITE) > 0
     ? Number(env.OPENAI_MAX_TOKENS_REWRITE)
@@ -955,20 +955,7 @@ async function hashString(str) {
  * Estimate cost in USD for OpenAI API call
  */
 function estimateCost(model, promptTokens, completionTokens, cachedTokens = 0) {
-  // Pricing (approximate, may vary)
-  const pricing = {
-    'gpt-4.1-mini': { input: 0.4 / 1_000_000, output: 1.6 / 1_000_000 },
-    'gpt-4.1': { input: 2.0 / 1_000_000, output: 8.0 / 1_000_000 },
-    'gpt-4o-mini': { input: 0.15 / 1_000_000, output: 0.6 / 1_000_000 },
-    'gpt-4o': { input: 2.5 / 1_000_000, output: 10 / 1_000_000 },
-    'gpt-4': { input: 30 / 1_000_000, output: 60 / 1_000_000 }
-  };
-
-  const modelPricing = pricing[model] || pricing['gpt-4.1-mini'];
-  const inputCost = Math.max(0, promptTokens - cachedTokens) * modelPricing.input;
-  const outputCost = completionTokens * modelPricing.output;
-  const cost = inputCost + outputCost;
-  return Number.isFinite(cost) ? cost : 0;
+  return estimateTextCost(model, promptTokens, completionTokens, cachedTokens);
 }
 
 function sleep(ms) {

@@ -2,12 +2,14 @@ name: ATS Scoring & Grammar Tests
 
 on:
   push:
-    branches: [main, dev0]
+    branches: [main, dev0, develop]
     paths:
       - 'app/functions/_lib/**'
       - 'app/tests/voice-transcripts/**'
       - '.github/workflows/test-ats-scoring.yml'
-      - 'app/functions/api/voice/**'
+      - 'app/functions/api/**'
+      - 'functions/api/**'
+      - 'test-openai-direct.js'
       - 'app/functions/dictionaries/**'
       # These are browser modules, but their suites live in _lib/__tests__ —
       # without these paths they could break untested.
@@ -19,12 +21,14 @@ on:
       - 'js/role-selector.js'
       - 'js/package.json'
   pull_request:
-    branches: [main, dev0]
+    branches: [main, dev0, develop]
     paths:
       - 'app/functions/_lib/**'
       - 'app/tests/voice-transcripts/**'
       - '.github/workflows/test-ats-scoring.yml'
-      - 'app/functions/api/voice/**'
+      - 'app/functions/api/**'
+      - 'functions/api/**'
+      - 'test-openai-direct.js'
       - 'app/functions/dictionaries/**'
       # These are browser modules, but their suites live in _lib/__tests__ —
       # without these paths they could break untested.
@@ -62,6 +66,9 @@ jobs:
             exit 1
           fi
           echo "✅ Dictionary file found"
+
+      - name: Run OpenAI migration regressions
+        run: npm run test:openai:migration
 
       - name: Run grammar engine tests
         working-directory: app/functions/_lib/__tests__
