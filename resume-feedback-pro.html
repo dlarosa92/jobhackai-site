@@ -4127,80 +4127,7 @@
           let uploadResult;
           if (existingResumeId && existingFileName === file.name && existingFileSize === currentFileSize) {
             // File name and size match - likely same file, reuse existing resumeId
-            // CRITICAL: Still need to check and consume credit for free accounts even when reusing
-            // This prevents free users from bypassing the limit by re-uploading the same file
-            const userPlan = getCurrentUserPlan();
-            if (userPlan === 'free') {
-              const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
-              let hasCredit = false;
-              
-              if (currentUser && currentUser.uid) {
-                const creditKey = `creditsByUid:${currentUser.uid}`;
-                const creditsData = localStorage.getItem(creditKey);
-                if (creditsData) {
-                  try {
-                    const credits = JSON.parse(creditsData);
-                    hasCredit = credits.ats_free_lifetime > 0;
-                  } catch (e) {
-                    console.warn('[RESUME-FEEDBACK] Failed to parse credits data (cached path):', e);
-                    hasCredit = true; // Default to allowing for new users or corrupted data
-                  }
-                } else {
-                  // No credits data means user hasn't used it yet - grant access
-                  hasCredit = true;
-                }
-              } else {
-                console.warn('[RESUME-FEEDBACK] No authenticated user found for free account check (cached path)');
-                hasCredit = false;
-              }
-              
-              // Also check freeAccountManager as fallback
-              if (!hasCredit && window.freeAccountManager) {
-                try {
-                  const usageCheck = window.freeAccountManager.canUseATSScoring();
-                  hasCredit = usageCheck.allowed;
-                } catch (e) {
-                  console.warn('[RESUME-FEEDBACK] Error checking free account manager (cached path):', e);
-                  hasCredit = false;
-                }
-              }
-              
-              if (!hasCredit) {
-                // Free account limit reached - show upgrade message
-                uploadInput.disabled = false;
-                updateGenerateButtonState();
-                hideLoadingState();
-                handleApiError(new Error('You have used your 1 free lifetime ATS score. Upgrade to continue scoring unlimited resumes.'));
-                // Redirect to pricing page after showing error
-                setTimeout(() => {
-                  window.location.href = 'pricing.html?plan=essential';
-                }, 2000);
-                return;
-              }
-              
-              // CRITICAL: Consume credit even when reusing cached resumeId
-              // This prevents free users from bypassing the limit by re-uploading the same file
-              if (currentUser && currentUser.uid) {
-                const creditKey = `creditsByUid:${currentUser.uid}`;
-                const creditsData = localStorage.getItem(creditKey);
-                let credits = { ats_free_lifetime: 1 }; // Default for new users
-                
-                if (creditsData) {
-                  try {
-                    credits = JSON.parse(creditsData);
-                  } catch (e) {
-                    console.warn('[RESUME-FEEDBACK] Failed to parse credits data before consumption (cached path):', e);
-                    credits = { ats_free_lifetime: 1 }; // Default to available on parse error
-                  }
-                }
-                
-                // Consume credit immediately (even for cached file reuse)
-                credits.ats_free_lifetime = 0;
-                localStorage.setItem(creditKey, JSON.stringify(credits));
-                console.log('[RESUME-FEEDBACK] ✅ Free ATS credit consumed in localStorage (cached file reuse)');
-              }
-            }
-            
+            // The API validates usage and cached results; browser storage is not an entitlement source.
             console.log('[RESUME-FEEDBACK] Reusing existing resumeId (name and size match):', existingResumeId);
             const existingResumeText = sessionStorage.getItem('currentResumeText');
             uploadResult = {
@@ -4216,83 +4143,7 @@
             localStorage.setItem('lastUploadedResumeName', file.name);
             localStorage.setItem('lastUploadedResumeSize', currentFileSize);
           } else {
-            // New file or file changed - check free account limits before upload
-            const userPlan = getCurrentUserPlan();
-            if (userPlan === 'free') {
-              // Check if free account has remaining credit
-              const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
-              let hasCredit = false;
-              
-              if (currentUser && currentUser.uid) {
-                const creditKey = `creditsByUid:${currentUser.uid}`;
-                const creditsData = localStorage.getItem(creditKey);
-                if (creditsData) {
-                  try {
-                    const credits = JSON.parse(creditsData);
-                    hasCredit = credits.ats_free_lifetime > 0;
-                  } catch (e) {
-                    console.warn('[RESUME-FEEDBACK] Failed to parse credits data:', e);
-                    // Default to allowing for new users or corrupted data
-                    hasCredit = true;
-                  }
-                } else {
-                  // No credits data means user hasn't used it yet - grant access
-                  hasCredit = true;
-                }
-              } else {
-                // No authenticated user - should not reach here due to access control, but handle gracefully
-                console.warn('[RESUME-FEEDBACK] No authenticated user found for free account check');
-                hasCredit = false;
-              }
-              
-              // Also check freeAccountManager as fallback
-              if (!hasCredit && window.freeAccountManager) {
-                try {
-                  const usageCheck = window.freeAccountManager.canUseATSScoring();
-                  hasCredit = usageCheck.allowed;
-                } catch (e) {
-                  console.warn('[RESUME-FEEDBACK] Error checking free account manager:', e);
-                  // If check fails, deny access to be safe
-                  hasCredit = false;
-                }
-              }
-              
-              if (!hasCredit) {
-                // Free account limit reached - show upgrade message
-                uploadInput.disabled = false;
-                updateGenerateButtonState();
-                hideLoadingState();
-                handleApiError(new Error('You have used your 1 free lifetime ATS score. Upgrade to continue scoring unlimited resumes.'));
-                // Redirect to pricing page after showing error
-                setTimeout(() => {
-                  window.location.href = 'pricing.html?plan=essential';
-                }, 2000);
-                return;
-              }
-              
-              // CRITICAL: Consume credit immediately after check passes to prevent multiple uploads
-              // This prevents race conditions where multiple uploads could pass the check
-              if (currentUser && currentUser.uid) {
-                const creditKey = `creditsByUid:${currentUser.uid}`;
-                const creditsData = localStorage.getItem(creditKey);
-                let credits = { ats_free_lifetime: 1 }; // Default for new users
-                
-                if (creditsData) {
-                  try {
-                    credits = JSON.parse(creditsData);
-                  } catch (e) {
-                    console.warn('[RESUME-FEEDBACK] Failed to parse credits data before consumption:', e);
-                    credits = { ats_free_lifetime: 1 }; // Default to available on parse error
-                  }
-                }
-                
-                // Consume credit immediately (before upload)
-                credits.ats_free_lifetime = 0;
-                localStorage.setItem(creditKey, JSON.stringify(credits));
-                console.log('[RESUME-FEEDBACK] ✅ Free ATS credit consumed in localStorage (before upload)');
-              }
-            }
-            
+            // The API validates usage and cached results; browser storage is not an entitlement source.
             // New file or file changed (name or size different), upload it
             // Store file name and size after determining we need to upload
             localStorage.setItem('lastUploadedResumeName', file.name);
@@ -4302,31 +4153,7 @@
           
           // CRITICAL: If upload failed, don't proceed to ATS scoring
           if (!uploadResult || !uploadResult.success || !uploadResult.resumeId) {
-            // Restore credit if upload failed (for free accounts)
-            const userPlan = getCurrentUserPlan();
-            if (userPlan === 'free') {
-              const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
-              if (currentUser && currentUser.uid) {
-                const creditKey = `creditsByUid:${currentUser.uid}`;
-                const creditsData = localStorage.getItem(creditKey);
-                let credits = { ats_free_lifetime: 1 }; // Default for new users
-                
-                if (creditsData) {
-                  try {
-                    credits = JSON.parse(creditsData);
-                  } catch (e) {
-                    console.warn('[RESUME-FEEDBACK] Failed to parse credits data during restoration:', e);
-                    credits = { ats_free_lifetime: 1 }; // Default on parse error
-                  }
-                }
-                
-                // Restore only the ats_free_lifetime credit, preserving other credit types
-                credits.ats_free_lifetime = 1;
-                localStorage.setItem(creditKey, JSON.stringify(credits));
-                console.log('[RESUME-FEEDBACK] ✅ Free ATS credit restored due to upload failure');
-              }
-            }
-            
+            // The API validates usage and cached results; browser storage is not an entitlement source.
             // Error already shown by uploadResume, but we need to clean up UI state
             // Clean up any loading overlays
             if (window._currentFeedbackLoading) {
@@ -5510,35 +5337,7 @@
           // Only clear if role tips aren't in-flight (role tips will clear token in its .finally() handler)
           maybeClearFeedbackToken('promise-all-settled-complete');
         } catch (error) {
-          // Restore credit ONLY if ATS scoring failed (not for post-scoring errors)
-          // If scoring succeeded but UI/feedback generation failed, user already got value
-          const userPlan = getCurrentUserPlan();
-          if (userPlan === 'free' && !atsScoringSucceeded) {
-            const currentUser = window.FirebaseAuthManager?.getCurrentUser?.();
-            if (currentUser && currentUser.uid) {
-              const creditKey = `creditsByUid:${currentUser.uid}`;
-              const creditsData = localStorage.getItem(creditKey);
-              let credits = { ats_free_lifetime: 1 }; // Default for new users
-              
-              if (creditsData) {
-                try {
-                  credits = JSON.parse(creditsData);
-                } catch (e) {
-                  console.warn('[RESUME-FEEDBACK] Failed to parse credits data during restoration:', e);
-                  credits = { ats_free_lifetime: 1 }; // Default on parse error
-                }
-              }
-              
-              // Restore only the ats_free_lifetime credit, preserving other credit types
-              credits.ats_free_lifetime = 1;
-              localStorage.setItem(creditKey, JSON.stringify(credits));
-              console.log('[RESUME-FEEDBACK] ✅ Free ATS credit restored due to scoring/upload failure');
-            }
-          } else if (userPlan === 'free' && atsScoringSucceeded) {
-            // Log that credit is NOT restored because scoring succeeded
-            console.log('[RESUME-FEEDBACK] ⚠️ Error occurred but ATS scoring succeeded - credit NOT restored');
-          }
-          
+            // The API validates usage and cached results; browser storage is not an entitlement source.
           // Clear state on error
           // Clean up feedback loading overlay
           if (window._currentFeedbackLoading) {
@@ -7539,6 +7338,13 @@
             // Clear container first
             usageContainer.innerHTML = '';
             
+            if (plan === 'free' && usageData.usage.atsScans) {
+              const ats = usageData.usage.atsScans;
+              const note = document.createElement('p');
+              note.textContent = `New-resume ATS scans: ${ats.remaining} of ${ats.limit} remaining (lifetime). Feedback has a separate allowance below. You can still review saved results in History.`;
+              usageContainer.appendChild(note);
+            }
+
             // Create a child div for the resume feedback indicator
             const indicatorDiv = document.createElement('div');
             usageContainer.appendChild(indicatorDiv);

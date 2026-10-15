@@ -146,10 +146,11 @@
             </div>
 
             <div class="cl-preview-wrap">
-              <textarea id="cl-preview" class="cl-preview-textarea" rows="14" placeholder="Your generated cover letter will appear here…"></textarea>
+              <textarea aria-label="Cover letter draft" aria-describedby="cl-word-count" id="cl-preview" class="cl-preview-textarea" rows="14" placeholder="Your generated cover letter will appear here…"></textarea>
               <div class="cl-preview-skeleton" id="cl-preview-skeleton" aria-hidden="true" hidden></div>
             </div>
 
+            <p id="cl-word-count" aria-live="polite">0 words · Target: 250–350</p>
             <div class="cl-preview-actions">
               <button id="cl-copy" class="btn-outline" type="button">Copy Cover Letter</button>
               <button id="cl-download" class="btn-outline" type="button">Download PDF</button>

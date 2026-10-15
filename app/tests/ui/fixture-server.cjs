@@ -50,7 +50,7 @@ function startFixtureServer({port=3003, apiHandler}={}) {
         if (url.pathname === '/api/plan/me') return json({plan,subscriptionStatus:'active',voice:{enabled:true},isAuthenticated:true});
         if (url.pathname === '/api/usage') {
           const unlimited={used:0,limit:null,remaining:null,unlimited:true,cooldown:0};
-          return json({success:true,plan,usage:{atsScoring:{used:0,limit:plan==='free'?1:null,remaining:1},resumeFeedback:{used:history?1:0,limit:['free','pack','essential','trial'].includes(plan)?3:null,remaining:history?2:3},resumeRewrite:unlimited,interviewQuestions:unlimited,mockInterview:{used:0,limit:20,remaining:20}}});
+          return json({success:true,plan,usage:{atsScans:{used:0,limit:plan==='free'?1:null,remaining:1},resumeFeedback:{used:history?1:0,limit:['free','pack','essential','trial'].includes(plan)?3:null,remaining:history?2:3},resumeRewrite:unlimited,interviewQuestions:unlimited,mockInterview:{used:0,limit:20,remaining:20}}});
         }
         if (url.pathname === '/api/roles') return json({roles:[{name:'QA Engineer',category:'software_engineering'},{name:'Software Engineer',category:'software_engineering'}]});
         if (url.pathname === '/api/resume-feedback/history') return json({success:true,items:history?[saved]:[],total:history?1:0});

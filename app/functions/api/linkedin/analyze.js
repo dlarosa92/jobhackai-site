@@ -1,4 +1,5 @@
-import { getBearer, verifyFirebaseIdToken } from '../../_lib/firebase-auth';
+import { preserveRecommendationText } from '../../_lib/linkedin-grounding.js';
+import { getBearer, verifyFirebaseIdToken } from '../../_lib/firebase-auth.js';
 import { callOpenAI } from '../../_lib/openai-client.js';
 import { getUserPlan } from '../../_lib/db.js';
 
@@ -149,6 +150,7 @@ function buildAnalyzeMessages({ role, headline, summary, experience, skills, rec
 
   const system = `You are JobHackAI's LinkedIn Profile Optimizer.
 Return STRICT JSON only (no markdown, no commentary).
+Recommendations must preserve the original third-party wording and attribution exactly. Never invent quotes or speakers.
 
 Rules:
 - Optimize for recruiter search and clarity for the target role.
@@ -235,6 +237,26 @@ async function cleanupOldRuns(db, uid) {
     )
     .bind(uid, cutoff)
     .run();
+}
+
+export async function generateLinkedInAnalysis(inputJsonObj, uid, env) {
+  const includeRecommendations = !!inputJsonObj.recommendations;
+  return callOpenAI(
+        {
+          model: env.OPENAI_MODEL_LINKEDIN_ANALYZE || 'gpt-6-luna',
+          fallbackModel: 'gpt-6-luna',
+          messages: buildAnalyzeMessages(inputJsonObj),
+          responseFormat: analyzeResponseSchema(includeRecommendations),
+          maxTokens: Number(env.OPENAI_MAX_TOKENS_LINKEDIN_ANALYZE) > 0 ? Number(env.OPENAI_MAX_TOKENS_LINKEDIN_ANALYZE) : 1300,
+          temperature: Number.isFinite(Number(env.OPENAI_TEMPERATURE_LINKEDIN_ANALYZE))
+            ? Number(env.OPENAI_TEMPERATURE_LINKEDIN_ANALYZE)
+            : 0.2,
+          systemPrompt: 'linkedin_optimizer_analyze_v3', // Invalidate earlier cached recommendations
+          userId: uid,
+          feature: 'linkedin_optimizer_analyze'
+        },
+        env
+      );
 }
 
 export async function onRequest(context) {
@@ -400,22 +422,7 @@ export async function onRequest(context) {
     let aiResult;
     try {
       // AI call (single call for all sections)
-      aiResult = await callOpenAI(
-        {
-          model: env.OPENAI_MODEL_LINKEDIN_ANALYZE || 'gpt-6-luna',
-          fallbackModel: 'gpt-6-luna',
-          messages: buildAnalyzeMessages(inputJsonObj),
-          responseFormat: analyzeResponseSchema(includeRecommendations),
-          maxTokens: Number(env.OPENAI_MAX_TOKENS_LINKEDIN_ANALYZE) > 0 ? Number(env.OPENAI_MAX_TOKENS_LINKEDIN_ANALYZE) : 1300,
-          temperature: Number.isFinite(Number(env.OPENAI_TEMPERATURE_LINKEDIN_ANALYZE))
-            ? Number(env.OPENAI_TEMPERATURE_LINKEDIN_ANALYZE)
-            : 0.2,
-          systemPrompt: 'linkedin_optimizer_analyze_v2', // Bumped to v2 to invalidate old cached responses with incompatible schema
-          userId: uid,
-          feature: 'linkedin_optimizer_analyze'
-        },
-        env
-      );
+      aiResult = await generateLinkedInAnalysis(inputJsonObj, uid, env);
     } catch (e) {
       const msg = e?.message || 'openai_error';
       await db
@@ -490,6 +497,8 @@ export async function onRequest(context) {
       return jsonResponse(env, { error: 'generation_failed', reason: msg }, 500);
     }
     
+    preserveRecommendationText(output.sections?.recommendations, recommendations);
+
     // --- Normalize section scores and compute weighted overall (server authoritative) ---
     const WEIGHTS = {
       headline: 20,

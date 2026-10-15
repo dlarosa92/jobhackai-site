@@ -32,7 +32,7 @@ import { getUserPlan } from '../../_lib/db.js';
  * Generate mock interview questions using OpenAI
  * Industry-trend aware, role-specific questions
  */
-async function generateMockInterviewQuestions({ role, seniority, interviewStyle }, env) {
+export async function generateMockInterviewQuestions({ role, seniority, interviewStyle }, env) {
   const styleDescriptions = {
     mixed: 'a mix of behavioral, technical, and situational questions',
     behavioral: 'behavioral and situational questions using STAR method scenarios',
