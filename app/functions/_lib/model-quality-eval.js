@@ -1,3 +1,4 @@
+import { scoreResume } from './ats-scoring-engine.js';
 import { generateCoverLetterText } from './cover-letter-generator.js';
 import { generateLinkedInAnalysis } from '../api/linkedin/analyze.js';
 import { generateLinkedInSection } from '../api/linkedin/regenerate.js';
@@ -17,6 +18,7 @@ export async function evaluateTextFixture(fixture, env, uid) {
     count: 10, interviewStyle: 'mixed', headline: p.role, summary: p.resumeText, experience: p.resumeText,
     skills: p.resumeText, jd: p.jobDescription };
   let result, output, section;
+  const ruleScores = ['resume-feedback', 'role-tips'].includes(feature) ? await scoreResume(p.resumeText, p.role, {}, env) : null;
   const issues = [];
   switch (feature) {
     case 'cover-letter': result = await generateCoverLetterText(input, env, uid); output = result.content; break;
@@ -31,8 +33,8 @@ export async function evaluateTextFixture(fixture, env, uid) {
       if (section === 'recommendations') preserveRecommendationText(output.data, p.recommendations);
       if (output.section !== section || !output.data?.optimizedText) issues.push('missing or wrong requested section');
       break;
-    case 'resume-feedback': result = await generateATSFeedback(p.resumeText, {}, p.role, env, { skipRoleTips: true }); output = JSON.parse(result.content); break;
-    case 'role-tips': result = await generateRoleTips(p.resumeText, {}, p.role, env); output = result.roleSpecificFeedback; if (!output) issues.push('missing role tips'); break;
+    case 'resume-feedback': result = await generateATSFeedback(p.resumeText, ruleScores, p.role, env, { skipRoleTips: true }); output = JSON.parse(result.content); break;
+    case 'role-tips': result = await generateRoleTips(p.resumeText, ruleScores, p.role, env); output = result.roleSpecificFeedback; if (!output) issues.push('missing role tips'); break;
     case 'resume-rewrite': result = await generateResumeRewrite(p.resumeText, null, p.role, null, null, env); output = JSON.parse(result.content); break;
     case 'interview-questions': output = await generateQuestions(input, env); break;
     case 'mock-questions': output = await generateMockInterviewQuestions(input, env); break;
@@ -49,11 +51,15 @@ export async function evaluateTextFixture(fixture, env, uid) {
     case 'role-template': output = await generateRoleTemplate(env, p.role); if (!output.must_have?.length) issues.push('missing core skills'); break;
     default: throw new Error('unknown_feature');
   }
+  if (feature === 'resume-feedback') {
+    const expected = [ruleScores.keywordScore, ruleScores.formattingScore, ruleScores.structureScore, ruleScores.toneScore, ruleScores.grammarScore];
+    if (output.atsRubric?.length !== 5 || output.atsRubric.some((item, i) => item.score !== expected[i].score || item.max !== expected[i].max)) issues.push('feedback changed deterministic ATS scores');
+  }
   if (feature.endsWith('questions')) {
     if (output.questions?.length !== 10) issues.push('expected ten questions');
     if (new Set(output.questions?.map(q => q.q || q.question || q.text)).size !== 10) issues.push('duplicate or empty questions');
   }
   if (result?.finishReason === 'length') issues.push('truncated response');
-  return { feature, profile: p, section, issues, output, model: result?.model || null,
+  return { feature, profile: p, section, issues, output, ruleScores, model: result?.model || null,
     usage: result?.usage || null, wordCount: result?.wordCount || null, fromCache: result?.fromCache || false };
 }

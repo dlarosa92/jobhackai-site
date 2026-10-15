@@ -9,6 +9,8 @@
   <h1>Synthetic text model check</h1>
   <p>Operator-only QA check using five fixed fictional profiles per feature and the actual production generation functions. It makes no voice calls, uses no interview credits and does not change interview history. Outputs need semantic review.</p>
   <p id="status" role="status">Checking access...</p>
+  <label for="feature">Feature</label>
+  <select id="feature"><option value="">All features (55 cases)</option></select>
   <button id="run" disabled>Run 55 text cases</button>
   <p><a href="/voice-interview">Back to voice interviews</a></p>
   <a id="download" download="jobhackai-model-quality-results.json" hidden>Download results</a>
@@ -16,6 +18,7 @@
   <script type="module">
     import authManager from '/js/firebase-auth.js?v=20260207-2';
     const status = document.getElementById('status'), run = document.getElementById('run'), output = document.getElementById('results');
+    const featureSelect = document.getElementById('feature');
     const download = document.getElementById('download');
     let fixtures = [], running = false, authVersion = 0;
     async function api(id, readyUser) {
@@ -33,8 +36,10 @@
       running = true; run.disabled = true;
       const report = { createdAt: new Date().toISOString(), results: [] };
       try {
-        for (const fixture of fixtures) {
-          status.textContent = 'Scoring ' + fixture.id + ' (' + (report.results.length + 1) + ' of ' + fixtures.length + ')...';
+        const selectedFixtures = fixtures.filter(f => !featureSelect.value || f.feature === featureSelect.value);
+        featureSelect.disabled = true;
+        for (const fixture of selectedFixtures) {
+          status.textContent = 'Scoring ' + fixture.id + ' (' + (report.results.length + 1) + ' of ' + selectedFixtures.length + ')...';
           try { report.results.push(await api(fixture.id)); } catch { report.results.push({ id: fixture.id, issues: ['request failed'] }); }
           output.textContent = JSON.stringify(report, null, 2);
           download.href = URL.createObjectURL(new Blob([output.textContent], {type: 'application/json'})); download.hidden = false;
@@ -58,6 +63,8 @@
         const data = await api(null, user);
         if (version !== authVersion) return;
         fixtures = data.cases;
+        featureSelect.replaceChildren(new Option('All features (55 cases)', ''));
+        for (const feature of new Set(fixtures.map(f => f.feature))) featureSelect.add(new Option(feature + ' (5 cases)', feature));
         status.textContent = 'Ready. All input is fixed synthetic test data.'; run.disabled = false;
       } catch {
         if (version === authVersion) status.textContent = 'This check is unavailable or your account does not have operator access.';
