@@ -625,7 +625,9 @@ async function generateCoverLetter() {
     console.error('[COVER-LETTER] Generate failed:', e);
     const code = e?.data?.error || e?.message || 'server_error';
     if (e?.status === 403 && code === 'not_authorized') {
-      alert('This feature is available on Pro and Premium plans only.');
+      alert('Please sign in to generate a cover letter.');
+    } else if (e?.data?.reason === 'cover_letter_length_validation_failed') {
+      alert('We could not produce a complete 250–350 word draft. Please try again or add more relevant detail to your resume text.');
     } else {
       alert('Could not generate a cover letter. Please try again.');
     }
