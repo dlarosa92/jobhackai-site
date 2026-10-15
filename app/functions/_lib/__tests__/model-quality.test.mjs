@@ -76,3 +76,30 @@ test('provider failures are sanitized and missing provider key does not invoke g
   assert.equal(response.status, 502); assert.ok(!(await response.text()).includes('secret'));
   assert.equal((await handler({ request: request('POST'), env: { ...env, OPENAI_API_KEY: '' } })).status, 503);
 });
+
+test('resume evaluator supplies real ATS scores and flags any model score drift', async t => {
+  const { evaluateTextFixture } = await import('../model-quality-eval.js');
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  let alterScore = false;
+  globalThis.fetch = async (_url, init) => {
+    const body = JSON.parse(init.body);
+    const prompt = body.messages?.map(m => m.content).join('\n') || '';
+    const match = prompt.match(/RULE-BASED SCORES: (\{[^\n]+\})/);
+    let content = { errors: false };
+    if (match) {
+      const scores = Object.values(JSON.parse(match[1]));
+      assert.equal(scores.length, 5);
+      assert.equal(scores.reduce((sum, s) => sum + s.max, 0), 100);
+      content = { atsRubric: scores.map((s, i) => ({ ...s, score: s.score + (alterScore && i === 0 ? 1 : 0) })) };
+    }
+    return Response.json({ model: body.model, choices: [{ message: { content: JSON.stringify(content) }, finish_reason: 'stop' }], usage: {} });
+  };
+  const fixture = cases.find(c => c.feature === 'resume-feedback');
+  const valid = await evaluateTextFixture(fixture, { OPENAI_API_KEY: 'fixture' }, 'operator');
+  assert.ok(valid.ruleScores.overallScore >= 0);
+  assert.deepEqual(valid.issues, []);
+  alterScore = true;
+  const invalid = await evaluateTextFixture(fixture, { OPENAI_API_KEY: 'fixture' }, 'operator');
+  assert.ok(invalid.issues.includes('feedback changed deterministic ATS scores'));
+});
