@@ -7,7 +7,7 @@
  */
 
 import { getBearer, verifyFirebaseIdToken } from '../../_lib/firebase-auth.js';
-import { callOpenAI } from '../../_lib/openai-client.js';
+import { generateCoverLetterText } from '../../_lib/cover-letter-generator.js';
 import { isSignedInPlan } from '../../_lib/plan-access.js';
 
 const DB_BINDING_NAMES = ['JOBHACKAI_DB', 'INTERVIEW_QUESTIONS_DB', 'IQ_D1', 'DB'];
@@ -114,24 +114,6 @@ function buildTitle(role, company) {
   return clampText(base || 'Cover Letter', 120);
 }
 
-function buildCoverLetterPrompt({ role, company, seniority, tone, jobDescription, resumeText }) {
-  const companyLine = company ? `Company: ${company}\n` : '';
-  const resumeBlock = resumeText ? `\nResume (paste):\n${resumeText}\n` : '';
-  return (
-    `Write an ATS-friendly cover letter (250–350 words) for the following application.\n` +
-    `Constraints:\n` +
-    `- Do NOT invent metrics, numbers, companies, titles, or achievements.\n` +
-    `- Only use information explicitly provided.\n` +
-    `- Use a confident, professional tone unless a different tone is specified.\n` +
-    `- Format as plain text with paragraphs (no markdown headers).\n\n` +
-    `Target Role: ${role}\n` +
-    companyLine +
-    `Seniority: ${seniority}\n` +
-    `Tone: ${tone}\n\n` +
-    `Job Description:\n${jobDescription}\n` +
-    resumeBlock
-  );
-}
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -259,40 +241,8 @@ export async function onRequest(context) {
       });
     }
 
-    const prompt = buildCoverLetterPrompt({
-      role,
-      company,
-      seniority,
-      tone,
-      jobDescription,
-      resumeText
-    });
-
-    const result = await callOpenAI(
-      {
-        model: 'gpt-6-luna',
-        fallbackModel: 'gpt-6-luna',
-        messages: [
-          {
-            role: 'system',
-            content:
-              'You are an expert career coach and recruiter. You write concise, ATS-friendly cover letters that are specific and honest.'
-          },
-          { role: 'user', content: prompt }
-        ],
-        maxTokens: 800,
-        temperature: 0.4,
-        systemPrompt: 'cover_letter_generator_v1',
-        userId: uid,
-        feature: 'cover_letter'
-      },
-      env
-    );
-
-    const coverLetterText = String(result?.content || '').trim();
-    if (!coverLetterText) {
-      return json(origin, { error: 'generation_failed', reason: 'empty_response' }, 500);
-    }
+    const result = await generateCoverLetterText({ role, company, seniority, tone, jobDescription, resumeText }, env, uid);
+    const coverLetterText = result.content;
 
     const id = crypto.randomUUID();
     const now = Date.now();

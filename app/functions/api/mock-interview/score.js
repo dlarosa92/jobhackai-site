@@ -82,7 +82,7 @@ function truncateToWords(text, maxWords = 250) {
  * Score mock interview using OpenAI
  * Single call for all 10 Q&A pairs
  */
-async function scoreMockInterview({ role, seniority, interviewStyle, questionSetName, qaPairs, isPremium }, env) {
+export async function scoreMockInterview({ role, seniority, interviewStyle, questionSetName, qaPairs, isPremium }, env) {
   const systemPrompt = `You are an expert hiring manager and interview coach.
 Score and coach a candidate's mock interview for the given role, seniority, and interview style.
 Use the rubric weights: Relevance 30, Structure & Delivery 25, Confidence & Clarity 20, Depth & Insight 15, Grammar & Pace 10.
