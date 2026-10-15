@@ -107,3 +107,27 @@ test('production coaching page never subscribes to auth or requests evaluation a
   assert.equal(h.calls.length, 0);
   assert.equal(h.element('run').disabled, true);
 });
+
+test('repeat quality evaluations bypass application cache without changing normal environment bindings', async () => {
+  const cache = { get: () => { throw Error('must not read cached reports'); } };
+  const configured = { ...env, JOBHACKAI_KV: cache, OPENAI_MODEL_VOICE_SCORE: 'gpt-6-sol' };
+  let calls = 0;
+  const handler = createQaCoachingHandler({ verify: async () => ({ uid: 'operator' }), score: async (fixture, scoringEnv) => {
+    assert.equal(scoringEnv.JOBHACKAI_KV, undefined);
+    assert.equal(scoringEnv.OPENAI_MODEL_VOICE_SCORE, 'gpt-6-sol');
+    assert.equal(scoringEnv.OPENAI_API_KEY, env.OPENAI_API_KEY);
+    calls++;
+    return { model: 'gpt-6-sol', fromCache: false, scorecard: {
+      methodologyVersion: 2, assessmentScope: 'Synthetic sample', competencies: [{}, {}, {}], moments: []
+    } };
+  } });
+  for (let run = 0; run < 2; run++) {
+    const response = await handler({ request: request('POST'), env: configured });
+    const report = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(report.fromCache, false);
+    assert.ok(Number.isFinite(report.elapsedMs) && report.elapsedMs >= 0);
+  }
+  assert.equal(calls, 2);
+  assert.equal(configured.JOBHACKAI_KV, cache);
+});
