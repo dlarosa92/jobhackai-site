@@ -270,8 +270,8 @@ export async function onRequest(context) {
 
     const result = await callOpenAI(
       {
-        model: 'gpt-4.1-mini',
-        fallbackModel: 'gpt-4.1-mini',
+        model: 'gpt-6-luna',
+        fallbackModel: 'gpt-6-luna',
         messages: [
           {
             role: 'system',
