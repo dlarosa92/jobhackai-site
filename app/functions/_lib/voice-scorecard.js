@@ -205,8 +205,8 @@ export async function scoreVoiceTranscript({ role, seniority, transcript, jd = n
   userParts.push(`Transcript:\n${text.slice(0, 24000)}`);
 
   const result = await callOpenAI({
-    model: env.OPENAI_MODEL_VOICE_SCORE || 'gpt-4.1-mini',
-    fallbackModel: 'gpt-4.1',
+    model: env.OPENAI_MODEL_VOICE_SCORE || 'gpt-6-luna',
+    fallbackModel: 'gpt-6-sol',
     systemPrompt,
     messages: [
       { role: 'system', content: systemPrompt },
@@ -221,6 +221,7 @@ export async function scoreVoiceTranscript({ role, seniority, transcript, jd = n
 
   // callOpenAI returns the model text on result.content (see openai-client.js),
   // matching how interview-questions/generate.js and mock-interview/score.js read it.
+  if (result?.finishReason === 'length') throw new Error('Truncated scorecard response');
   if (!result || !result.content) throw new Error('Empty scorecard response');
   const scorecard = typeof result.content === 'string'
     ? JSON.parse(result.content)

@@ -1,3 +1,4 @@
+import { textCompletionParameters } from './openai-text-models.js';
 // Grammar AI verification utility
 // Minimal OpenAI check for grammar/spelling errors
 // Only called when rule-based grammar score is perfect (10/10)
@@ -34,9 +35,11 @@ export async function verifyGrammarWithAI(resumeText, env) {
     ? sourceText.substring(0, maxChars) + '...'
     : sourceText;
 
-  // Build cache key - hash truncatedText directly to ensure KV key size safety
+  const model = env.OPENAI_MODEL_GRAMMAR || 'gpt-6-luna';
+
+  // Model changes must not reuse the previous model's verdict.
   const truncatedTextHash = await hashString(truncatedText);
-  const cacheKey = `grammarCheck:grammar-ai:${truncatedTextHash}`;
+  const cacheKey = `grammarCheck:grammar-ai:${model}:${truncatedTextHash}`;
 
   // Check KV cache first
   if (env.JOBHACKAI_KV) {
@@ -53,7 +56,6 @@ export async function verifyGrammarWithAI(resumeText, env) {
     }
   }
 
-  const model = env.OPENAI_MODEL_GRAMMAR || 'gpt-4.1-mini';
   const apiUrl = 'https://api.openai.com/v1/chat/completions';
 
   const systemPrompt = 'You are a grammar evaluator. Answer with JSON only.';
@@ -72,8 +74,7 @@ export async function verifyGrammarWithAI(resumeText, env) {
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
         ],
-        max_tokens: 20,
-        temperature: 0.0,
+        ...textCompletionParameters(model, 20, 0.0),
         response_format: {
           type: 'json_schema',
           json_schema: {

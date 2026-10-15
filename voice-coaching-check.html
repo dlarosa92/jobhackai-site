@@ -38,7 +38,7 @@
         }
         status.textContent = report.results.length + ' cases complete. Review each report against its stated criteria.';
       } catch {
-        status.textContent = 'The check stopped. Completed results remain below. Reload to retry; completed model outputs may be cached.';
+        status.textContent = 'The check stopped. Completed results remain below. Reload to retry; each run requests fresh model output.';
       }
     });
     async function loadAccess(user) {

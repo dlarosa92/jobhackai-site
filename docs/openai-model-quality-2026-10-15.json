@@ -1,0 +1,241 @@
+{
+  "source": "Displayed protected development evaluator responses; compact measurement transcription, not full report export",
+  "deployment": "df3fb523-4f6d-4ced-a0ad-f23c421549ed",
+  "commit": "d2f98aa3c61114f4666a95e5af9b8b32fb9dd84e",
+  "runs": [
+    {
+      "createdAt": "2026-10-15T01:35:03.605Z",
+      "results": [
+        {
+          "id": "senior-pm-unsupported-security",
+          "overall": 55,
+          "elapsedMs": 8879,
+          "model": "gpt-6-sol",
+          "fromCache": false,
+          "issues": [],
+          "usage": {
+            "promptTokens": 2218,
+            "completionTokens": 707,
+            "cachedTokens": 0,
+            "totalTokens": 2925
+          }
+        },
+        {
+          "id": "senior-pm-posting",
+          "overall": 86,
+          "elapsedMs": 8435,
+          "model": "gpt-6-sol",
+          "fromCache": false,
+          "issues": [],
+          "usage": {
+            "promptTokens": 2289,
+            "completionTokens": 756,
+            "cachedTokens": 0,
+            "totalTokens": 3045
+          }
+        },
+        {
+          "id": "junior-transferable",
+          "overall": 85,
+          "elapsedMs": 8242,
+          "model": "gpt-6-sol",
+          "fromCache": false,
+          "issues": [],
+          "usage": {
+            "promptTokens": 2223,
+            "completionTokens": 692,
+            "cachedTokens": 2090,
+            "totalTokens": 2915
+          }
+        },
+        {
+          "id": "retail-manager",
+          "overall": 85,
+          "elapsedMs": 9093,
+          "model": "gpt-6-sol",
+          "fromCache": false,
+          "issues": [],
+          "usage": {
+            "promptTokens": 2230,
+            "completionTokens": 755,
+            "cachedTokens": 2090,
+            "totalTokens": 2985
+          }
+        },
+        {
+          "id": "engineering-reasoning",
+          "overall": 86,
+          "elapsedMs": 8253,
+          "model": "gpt-6-sol",
+          "fromCache": false,
+          "issues": [],
+          "usage": {
+            "promptTokens": 2234,
+            "completionTokens": 682,
+            "cachedTokens": 2090,
+            "totalTokens": 2916
+          }
+        },
+        {
+          "id": "posting-instructions",
+          "overall": 60,
+          "elapsedMs": 9180,
+          "model": "gpt-6-sol",
+          "fromCache": false,
+          "issues": [],
+          "usage": {
+            "promptTokens": 2280,
+            "completionTokens": 724,
+            "cachedTokens": 2119,
+            "totalTokens": 3004
+          }
+        },
+        {
+          "id": "metrics-requested",
+          "overall": 70,
+          "elapsedMs": 8360,
+          "model": "gpt-6-sol",
+          "fromCache": false,
+          "issues": [],
+          "usage": {
+            "promptTokens": 2225,
+            "completionTokens": 679,
+            "cachedTokens": 2090,
+            "totalTokens": 2904
+          }
+        },
+        {
+          "id": "possible-transcription-error",
+          "overall": 82,
+          "elapsedMs": 9025,
+          "model": "gpt-6-sol",
+          "fromCache": false,
+          "issues": [],
+          "usage": {
+            "promptTokens": 2220,
+            "completionTokens": 659,
+            "cachedTokens": 2090,
+            "totalTokens": 2879
+          }
+        }
+      ]
+    },
+    {
+      "createdAt": "2026-10-15T01:36:37.653Z",
+      "results": [
+        {
+          "id": "senior-pm-unsupported-security",
+          "overall": 55,
+          "elapsedMs": 8881,
+          "model": "gpt-6-sol",
+          "fromCache": false,
+          "issues": [],
+          "usage": {
+            "promptTokens": 2218,
+            "completionTokens": 724,
+            "cachedTokens": 2215,
+            "totalTokens": 2942
+          }
+        },
+        {
+          "id": "senior-pm-posting",
+          "overall": 85,
+          "elapsedMs": 9035,
+          "model": "gpt-6-sol",
+          "fromCache": false,
+          "issues": [],
+          "usage": {
+            "promptTokens": 2289,
+            "completionTokens": 769,
+            "cachedTokens": 2286,
+            "totalTokens": 3058
+          }
+        },
+        {
+          "id": "junior-transferable",
+          "overall": 85,
+          "elapsedMs": 7198,
+          "model": "gpt-6-sol",
+          "fromCache": false,
+          "issues": [],
+          "usage": {
+            "promptTokens": 2223,
+            "completionTokens": 631,
+            "cachedTokens": 2220,
+            "totalTokens": 2854
+          }
+        },
+        {
+          "id": "retail-manager",
+          "overall": 83,
+          "elapsedMs": 8229,
+          "model": "gpt-6-sol",
+          "fromCache": false,
+          "issues": [],
+          "usage": {
+            "promptTokens": 2230,
+            "completionTokens": 710,
+            "cachedTokens": 2227,
+            "totalTokens": 2940
+          }
+        },
+        {
+          "id": "engineering-reasoning",
+          "overall": 85,
+          "elapsedMs": 7968,
+          "model": "gpt-6-sol",
+          "fromCache": false,
+          "issues": [],
+          "usage": {
+            "promptTokens": 2234,
+            "completionTokens": 669,
+            "cachedTokens": 2231,
+            "totalTokens": 2903
+          }
+        },
+        {
+          "id": "posting-instructions",
+          "overall": 60,
+          "elapsedMs": 8226,
+          "model": "gpt-6-sol",
+          "fromCache": false,
+          "issues": [],
+          "usage": {
+            "promptTokens": 2280,
+            "completionTokens": 712,
+            "cachedTokens": 2277,
+            "totalTokens": 2992
+          }
+        },
+        {
+          "id": "metrics-requested",
+          "overall": 70,
+          "elapsedMs": 8119,
+          "model": "gpt-6-sol",
+          "fromCache": false,
+          "issues": [],
+          "usage": {
+            "promptTokens": 2225,
+            "completionTokens": 626,
+            "cachedTokens": 2222,
+            "totalTokens": 2851
+          }
+        },
+        {
+          "id": "possible-transcription-error",
+          "overall": 81,
+          "elapsedMs": 9293,
+          "model": "gpt-6-sol",
+          "fromCache": false,
+          "issues": [],
+          "usage": {
+            "promptTokens": 2220,
+            "completionTokens": 726,
+            "cachedTokens": 2217,
+            "totalTokens": 2946
+          }
+        }
+      ]
+    }
+  ]
+}
