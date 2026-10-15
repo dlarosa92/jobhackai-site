@@ -206,7 +206,7 @@ Output JSON exactly in this structure:
   };
 
   const aiResponse = await callOpenAI({
-    model: env.OPENAI_MODEL_MI || 'gpt-4.1',
+    model: env.OPENAI_MODEL_MI || 'gpt-6-sol',
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt }

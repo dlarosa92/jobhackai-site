@@ -72,6 +72,7 @@ function gitPreflight(allowDirty) {
   const critical = dirty.filter(f =>
     f.includes('functions/_lib/voice-scorecard.js') ||
     f.includes('functions/_lib/openai-client.js') ||
+    f.includes('functions/_lib/openai-text-models.js') ||
     f.includes('tests/voice-transcripts/')
   );
   if (critical.length > 0 && !allowDirty) {

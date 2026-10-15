@@ -101,7 +101,7 @@ Output JSON:
   };
 
   const aiResponse = await callOpenAI({
-    model: env.OPENAI_MODEL_MI || 'gpt-4.1-mini',
+    model: env.OPENAI_MODEL_MI || 'gpt-6-luna',
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt }
