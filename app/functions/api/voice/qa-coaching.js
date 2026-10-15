@@ -26,12 +26,15 @@ export function createQaCoachingHandler({ verify = verifyFirebaseIdToken, score 
     try {
       // Only server-owned synthetic fixtures enter the exact production scorer.
       // No request body, candidate transcript, role or model override is accepted.
-      const { scorecard, usage, model, fromCache } = await score(fixture, env);
+      // Repeated evaluations must make fresh requests, not replay cached reports.
+      const startedAt = Date.now();
+      const { scorecard, usage, model, fromCache } = await score(fixture, { ...env, JOBHACKAI_KV: undefined });
+      const elapsedMs = Date.now() - startedAt;
       const issues = [];
       if (scorecard.tooShort || scorecard.methodologyVersion !== 2) issues.push('missing scoped report');
       if (!scorecard.assessmentScope || scorecard.competencies?.length < 3) issues.push('missing scope or competency coverage');
       if (groundedMoments(scorecard.moments, fixture.transcript).length !== scorecard.moments.length) issues.push('ungrounded moment');
-      return json({ id: fixture.id, reviewRequired: fixture.review, issues, scorecard, usage, model, fromCache });
+      return json({ id: fixture.id, reviewRequired: fixture.review, issues, scorecard, usage, model, fromCache, elapsedMs });
     } catch {
       // Do not return or log provider bodies, authentication data or thrown text.
       return json({ error: 'synthetic_scoring_failed' }, 502);
