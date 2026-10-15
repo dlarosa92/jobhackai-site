@@ -1,5 +1,7 @@
 # OpenAI text model retirement migration
 
+Follow-up implementation and live quality evidence: [October 15 evaluation](openai-model-quality-2026-10-15.md). The deployment and validation sections below preserve the initial audit state.
+
 Audit date: October 14, 2026. Repository base: `cdae6766cc525d29569736870c11edeab673a12b` on `main`.
 
 The official [deprecation notice](https://developers.openai.com/api/docs/deprecations) confirms January 14, 2027 retirement of GPT 4o, GPT 4o mini, GPT 4.1 and GPT 4.1 mini, including the listed snapshots. It recommends `gpt-6-luna`. [PR 778](https://github.com/dlarosa92/jobhackai-site/pull/778), merged April 5, migrated the prior defaults; it does not satisfy this new deadline. No overlapping open migration PR was found at audit time.
@@ -41,7 +43,7 @@ Fallback behavior remains bounded by the existing retry count: 429 retries the s
 
 Token and temperature overrides are retained: `OPENAI_MAX_TOKENS_ATS_TIER1`, `OPENAI_MAX_TOKENS_ATS`, `OPENAI_MAX_TOKENS_REWRITE`, `OPENAI_MAX_TOKENS_LINKEDIN_ANALYZE`, `OPENAI_MAX_TOKENS_LINKEDIN_REGENERATE`, `OPENAI_TEMPERATURE_SCORING`, `OPENAI_TEMPERATURE_REWRITE`, and the two corresponding LinkedIn temperature variables. Their deployed values were not inspected. Other fixed output caps remain voice 2,400, mock scoring 3,000, mock questions 1,500, interview questions 2,000, cover letter 800 and grammar 20.
 
-## Verified deployment configuration, no writes performed
+## Initial deployment audit, before the authorized rollout
 
 Cloudflare project settings and the canonical production deployment were read through the connector using a filter that returns only model settings. API credentials were not retrieved. Production deployment `f8ccfcbc-67b8-4009-a154-1ce41299f6e8`, created October 14 at 17:11:54 UTC, identifies the audited repository base above.
 
@@ -72,7 +74,7 @@ For an illustrative 2,000 input and 1,000 output tokens without cache, the old m
 
 The shared estimator now recognizes candidate models, charges cached input rather than treating it as free, supports dated snapshots, and returns null for unknown models or missing usage. Evaluation reports use the same rates. Estimates exclude cache write premiums, long context, service tier and regional adjustments and are not invoices. Actual total usage and fallback frequency must be measured.
 
-## Validation and release gates
+## Initial validation and release gates
 
 Completed locally on Node 24.19.0:
 
