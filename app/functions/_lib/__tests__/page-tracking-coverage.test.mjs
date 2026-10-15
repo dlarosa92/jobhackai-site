@@ -5,7 +5,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 const root = new URL('../../../../', import.meta.url);
 const read = path => readFileSync(new URL(path, root), 'utf8');
 // These diagnostic pages are deliberately denied by production middleware.
-const blocked = ['voice-coaching-check.html', 'voice-connection-check.html'];
+const blocked = ['voice-coaching-check.html', 'voice-connection-check.html', 'text-model-check.html'];
 const restored = ['404', 'about', 'dashboard-trial', 'demo-improved-flow', 'features',
   'free-account-onboarding', 'help', 'interview-questions-mockup', 'privacy',
   'resume-feedback-all-plans-mockup', 'resume-feedback-redesign-mockup-pro-with-feedback',

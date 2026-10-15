@@ -1,3 +1,4 @@
+import { preserveRecommendationText } from '../../../app/functions/_lib/linkedin-grounding.js';
 import { getBearer, verifyFirebaseIdToken } from '../../_lib/firebase-auth';
 import { callOpenAI } from '../../../app/functions/_lib/openai-client.js';
 
@@ -122,7 +123,7 @@ function sectionSchema() {
 
 function regenerateResponseSchema() {
   return {
-    name: 'linkedin_optimizer_regenerate_v1',
+    name: 'linkedin_optimizer_regenerate_v2',
     schema: {
       type: 'object',
       properties: {
@@ -147,6 +148,7 @@ Task:
 Rules:
 - feedbackBullets: 2-3 items max.
 - Keep optimizedText paste-ready for LinkedIn.
+- Preserve recommendations verbatim. Never invent quotations or attribution. Only original input is factual evidence.
 
 Length caps (LinkedIn limits):
 - headline optimizedText <= 220 chars
@@ -353,7 +355,7 @@ export async function onRequest(context) {
           temperature: Number.isFinite(Number(env.OPENAI_TEMPERATURE_LINKEDIN_REGENERATE))
             ? Number(env.OPENAI_TEMPERATURE_LINKEDIN_REGENERATE)
             : 0.35,
-          systemPrompt: 'linkedin_optimizer_regenerate_v1',
+          systemPrompt: 'linkedin_optimizer_regenerate_v2',
           userId: uid,
           feature: 'linkedin_optimizer_regenerate'
         },
@@ -393,6 +395,8 @@ export async function onRequest(context) {
         .run();
       return jsonResponse(env, { error: 'generation_failed', reason: msg }, 500);
     }
+
+    if (section === 'recommendations') preserveRecommendationText(out.data, input.recommendations);
 
     // Patch output_json in-place
     const next = { ...currentOutput };

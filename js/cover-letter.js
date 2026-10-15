@@ -353,6 +353,7 @@ function restoreFromItem(item) {
   if (els.jobDescription) els.jobDescription.value = item.jobDescription || '';
   if (els.resumeText) els.resumeText.value = item.resumeText || '';
   if (els.preview) els.preview.value = item.coverLetterText || '';
+  updateWordCount();
   setSaveIndicator(null, '');
 }
 
@@ -364,6 +365,7 @@ function clearForm() {
   if (els.jobDescription) els.jobDescription.value = '';
   if (els.resumeText) els.resumeText.value = '';
   if (els.preview) els.preview.value = '';
+  updateWordCount();
   setSaveIndicator(null, '');
   setSelected(null);
 }
@@ -623,7 +625,9 @@ async function generateCoverLetter() {
     console.error('[COVER-LETTER] Generate failed:', e);
     const code = e?.data?.error || e?.message || 'server_error';
     if (e?.status === 403 && code === 'not_authorized') {
-      alert('This feature is available on Pro and Premium plans only.');
+      alert('Please sign in to generate a cover letter.');
+    } else if (e?.data?.reason === 'cover_letter_length_validation_failed') {
+      alert('We could not produce a complete 250–350 word draft. Please try again or add more relevant detail to your resume text.');
     } else {
       alert('Could not generate a cover letter. Please try again.');
     }
@@ -692,6 +696,7 @@ async function handleDeleteConfirm() {
       if (selectedId === id) {
         selectedId = null;
         if (els.preview) els.preview.value = '';
+        updateWordCount();
         setSaveIndicator(null, '');
       }
     });
@@ -831,6 +836,12 @@ function initRoleSelector() {
   setTimeout(tryInit, 0);
 }
 
+function updateWordCount() {
+  const count = String(els.preview?.value || '').trim().split(/\s+/u).filter(Boolean).length;
+  const label = document.getElementById('cl-word-count');
+  if (label) label.textContent = `${count} words · Target: 250–350`;
+}
+
 function bindEvents() {
   els.form?.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -848,6 +859,7 @@ function bindEvents() {
   });
 
   els.preview?.addEventListener('input', () => {
+    updateWordCount();
     if (!selectedId) return;
     autosave(selectedId, els.preview?.value || '');
   });
