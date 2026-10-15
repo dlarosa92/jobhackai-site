@@ -1,3 +1,4 @@
+import { preserveRecommendationText } from '../../../app/functions/_lib/linkedin-grounding.js';
 import { getBearer, verifyFirebaseIdToken } from '../../_lib/firebase-auth';
 import { callOpenAI } from '../../../app/functions/_lib/openai-client.js';
 
@@ -148,6 +149,7 @@ function buildAnalyzeMessages({ role, headline, summary, experience, skills, rec
 
   const system = `You are JobHackAI's LinkedIn Profile Optimizer.
 Return STRICT JSON only (no markdown, no commentary).
+Recommendations must preserve the original third-party wording and attribution exactly. Never invent quotes or speakers.
 
 Rules:
 - Optimize for recruiter search and clarity for the target role.
@@ -449,6 +451,8 @@ export async function onRequest(context) {
         .run();
       return jsonResponse(env, { error: 'generation_failed', reason: msg }, 500);
     }
+
+    preserveRecommendationText(output.sections?.recommendations, recommendations);
 
     // --- Normalize section scores and compute weighted overall (server authoritative) ---
     const WEIGHTS = {
