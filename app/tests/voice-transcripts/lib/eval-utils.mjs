@@ -1,3 +1,4 @@
+import { estimateTextCost, TEXT_MODEL_PRICING } from '../../../functions/_lib/openai-text-models.js';
 // Deterministic helpers for the transcript evaluation harness:
 // fixture loading, case selection, expectation checking, aggregation,
 // stability statistics, and cost estimation.
@@ -163,29 +164,14 @@ export function round2(n) {
   return Math.round(n * 100) / 100;
 }
 
-// Mirrors the pricing table in app/functions/_lib/openai-client.js.
-export const MODEL_PRICING_PER_TOKEN = {
-  'gpt-4.1-mini': { input: 0.4 / 1_000_000, output: 1.6 / 1_000_000 },
-  'gpt-4.1': { input: 2.0 / 1_000_000, output: 8.0 / 1_000_000 },
-  'gpt-4o-mini': { input: 0.15 / 1_000_000, output: 0.6 / 1_000_000 },
-  'gpt-4o': { input: 2.5 / 1_000_000, output: 10 / 1_000_000 }
-};
+// Keep historical export consumers working while using the shared verified rates.
+export const MODEL_PRICING_PER_TOKEN = Object.fromEntries(Object.entries(TEXT_MODEL_PRICING)
+  .map(([model, rates]) => [model, { input: rates.input / 1e6, output: rates.output / 1e6 }]));
 
-/**
- * Estimated USD cost of a call; null when the model is unknown or usage
- * is unavailable.
- */
 export function estimateCostUsd(model, usage) {
-  if (!usage || typeof model !== 'string') return null;
-  // Longest matching prefix wins (gpt-4.1-mini before gpt-4.1).
-  const match = Object.keys(MODEL_PRICING_PER_TOKEN)
-    .filter(k => model === k || model.startsWith(`${k}-`))
-    .sort((a, b) => b.length - a.length)[0];
-  const pricing = MODEL_PRICING_PER_TOKEN[match];
-  if (!pricing) return null;
-  const cost = (usage.promptTokens || 0) * pricing.input
-    + (usage.completionTokens || 0) * pricing.output;
-  return Math.round(cost * 10000) / 10000;
+  if (!usage) return null;
+  const cost = estimateTextCost(model, usage.promptTokens, usage.completionTokens, usage.cachedTokens);
+  return cost === null ? null : Math.round(cost * 10000) / 10000;
 }
 
 /**

@@ -346,8 +346,8 @@ export async function onRequest(context) {
     try {
       aiResult = await callOpenAI(
         {
-          model: env.OPENAI_MODEL_LINKEDIN_REGENERATE || 'gpt-4.1-mini',
-          fallbackModel: 'gpt-4.1-mini',
+          model: env.OPENAI_MODEL_LINKEDIN_REGENERATE || 'gpt-6-luna',
+          fallbackModel: 'gpt-6-luna',
           messages: buildRegenerateMessages(input, currentOutput, section),
           responseFormat: regenerateResponseSchema(),
           maxTokens: Number(env.OPENAI_MAX_TOKENS_LINKEDIN_REGENERATE) > 0 ? Number(env.OPENAI_MAX_TOKENS_LINKEDIN_REGENERATE) : 900,
