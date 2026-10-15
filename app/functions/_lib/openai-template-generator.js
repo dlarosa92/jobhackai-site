@@ -1,3 +1,4 @@
+import { textCompletionParameters } from './openai-text-models.js';
 /**
  * OpenAI Role Template Generator
  * Generates role skill templates using OpenAI API
@@ -45,12 +46,12 @@ Guidelines:
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'gpt-4.1-mini', // Cost-effective model
+        model: 'gpt-6-luna', // Cost-effective model
         messages: [
           { role: 'system', content: 'You are an expert in job role requirements and skill templates. Return only valid JSON.' },
           { role: 'user', content: prompt }
         ],
-        temperature: 0.3,
+        ...textCompletionParameters('gpt-6-luna', 1200, 0.3),
         response_format: { type: 'json_object' }
       })
     });

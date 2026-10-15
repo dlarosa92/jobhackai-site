@@ -53,15 +53,17 @@ npm run test:voice:transcripts:unit       # deterministic unit tests, no API cal
 ```
 
 Optional: `OPENAI_MODEL_VOICE_SCORE` overrides the scoring model, exactly
-like the production environment variable (default `gpt-4.1-mini`, with
-`gpt-4.1` as production's fallback model).
+like the production environment variable (code default `gpt-6-luna`, with
+`gpt-6-sol` as the fallback). Deployed overrides must be checked separately.
 
 Calls run at concurrency 3 with retries (exponential backoff) for
 transient API failures. Reports (JSON + Markdown) are written to
 `app/tests/voice-transcripts/reports/` (git-ignored).
 
-Rough cost guide with the default gpt-4.1-mini: roughly $0.001–0.002 per
-case — a smoke run is ~20 calls, a full run ~100, stability 30.
+Current token estimates use the shared pricing module. A smoke run is about
+20 calls, a full run about 100, stability 30. These historical score bands do
+not validate methodology version 2. Use the eight current voice coaching
+cases and semantic review described in `../voice-coaching/README.md`.
 
 ## The fixture dataset
 

@@ -9,7 +9,7 @@ if (!process.env.OPENAI_API_KEY) {
   process.exit(2);
 }
 const report = {createdAt:new Date().toISOString(),sourceHashes:{}, results:[]};
-for(const file of ['voice-scorecard.js','voice-coaching.js']) report.sourceHashes[file]=createHash('sha256').update(readFileSync(new URL('../../functions/_lib/'+file,import.meta.url))).digest('hex');
+for(const file of ['voice-scorecard.js','voice-coaching.js','openai-client.js','openai-text-models.js']) report.sourceHashes[file]=createHash('sha256').update(readFileSync(new URL('../../functions/_lib/'+file,import.meta.url))).digest('hex');
 for (const fixture of cases) {
   const {scorecard,usage,model}=await scoreVoiceTranscript(fixture,process.env);
   const issues=[];
