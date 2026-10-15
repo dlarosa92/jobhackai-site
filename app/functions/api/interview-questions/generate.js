@@ -37,7 +37,7 @@ import { getUserPlan } from '../../_lib/db.js';
 /**
  * Generate cutting-edge interview questions using OpenAI
  */
-async function generateQuestions({ role, seniority, type, count, jd }, env) {
+export async function generateQuestions({ role, seniority, type, count, jd }, env) {
   const normalizedType = String(type || 'mixed').toLowerCase();
   const expandedTypes =
     normalizedType === 'mixed'

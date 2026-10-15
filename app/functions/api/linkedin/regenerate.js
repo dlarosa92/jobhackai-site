@@ -1,4 +1,5 @@
-import { getBearer, verifyFirebaseIdToken } from '../../_lib/firebase-auth';
+import { preserveRecommendationText } from '../../_lib/linkedin-grounding.js';
+import { getBearer, verifyFirebaseIdToken } from '../../_lib/firebase-auth.js';
 import { callOpenAI } from '../../_lib/openai-client.js';
 import { getUserPlan } from '../../_lib/db.js';
 
@@ -123,7 +124,7 @@ function sectionSchema() {
 
 function regenerateResponseSchema() {
   return {
-    name: 'linkedin_optimizer_regenerate_v1',
+    name: 'linkedin_optimizer_regenerate_v2',
     schema: {
       type: 'object',
       properties: {
@@ -148,6 +149,8 @@ Task:
 Rules:
 - feedbackBullets: 2-3 items max.
 - Keep optimizedText paste-ready for LinkedIn.
+- Recommendations are third-party endorsements: preserve the original wording and attribution exactly. Never turn paraphrased feedback into a quotation or invent a speaker.
+- Only ORIGINAL INPUT is evidence; previously generated text is not evidence for new claims.
 
 Length caps (LinkedIn limits):
 - headline optimizedText <= 220 chars
@@ -194,6 +197,25 @@ function validateRegenerateOutput(obj) {
   if (!Array.isArray(obj.data.feedbackBullets)) return false;
   if (typeof obj.data.optimizedText !== 'string') return false;
   return true;
+}
+
+export async function generateLinkedInSection(input, currentOutput, section, uid, env) {
+  return callOpenAI(
+        {
+          model: env.OPENAI_MODEL_LINKEDIN_REGENERATE || 'gpt-6-luna',
+          fallbackModel: 'gpt-6-luna',
+          messages: buildRegenerateMessages(input, currentOutput, section),
+          responseFormat: regenerateResponseSchema(),
+          maxTokens: Number(env.OPENAI_MAX_TOKENS_LINKEDIN_REGENERATE) > 0 ? Number(env.OPENAI_MAX_TOKENS_LINKEDIN_REGENERATE) : 900,
+          temperature: Number.isFinite(Number(env.OPENAI_TEMPERATURE_LINKEDIN_REGENERATE))
+            ? Number(env.OPENAI_TEMPERATURE_LINKEDIN_REGENERATE)
+            : 0.35,
+          systemPrompt: 'linkedin_optimizer_regenerate_v2',
+          userId: uid,
+          feature: 'linkedin_optimizer_regenerate'
+        },
+        env
+      );
 }
 
 export async function onRequest(context) {
@@ -344,22 +366,7 @@ export async function onRequest(context) {
 
     let aiResult;
     try {
-      aiResult = await callOpenAI(
-        {
-          model: env.OPENAI_MODEL_LINKEDIN_REGENERATE || 'gpt-6-luna',
-          fallbackModel: 'gpt-6-luna',
-          messages: buildRegenerateMessages(input, currentOutput, section),
-          responseFormat: regenerateResponseSchema(),
-          maxTokens: Number(env.OPENAI_MAX_TOKENS_LINKEDIN_REGENERATE) > 0 ? Number(env.OPENAI_MAX_TOKENS_LINKEDIN_REGENERATE) : 900,
-          temperature: Number.isFinite(Number(env.OPENAI_TEMPERATURE_LINKEDIN_REGENERATE))
-            ? Number(env.OPENAI_TEMPERATURE_LINKEDIN_REGENERATE)
-            : 0.35,
-          systemPrompt: 'linkedin_optimizer_regenerate_v1',
-          userId: uid,
-          feature: 'linkedin_optimizer_regenerate'
-        },
-        env
-      );
+      aiResult = await generateLinkedInSection(input, currentOutput, section, uid, env);
     } catch (e) {
       const msg = e?.message || 'openai_error';
       await db
@@ -394,6 +401,8 @@ export async function onRequest(context) {
         .run();
       return jsonResponse(env, { error: 'generation_failed', reason: msg }, 500);
     }
+
+    if (section === 'recommendations') preserveRecommendationText(out.data, input.recommendations);
 
     // Patch output_json in-place
     const next = { ...currentOutput };
