@@ -2,7 +2,7 @@ name: ATS Scoring & Grammar Tests
 
 on:
   push:
-    branches: [main, dev0]
+    branches: [main, dev0, develop]
     paths:
       - 'app/functions/_lib/**'
       - 'app/tests/voice-transcripts/**'
@@ -21,7 +21,7 @@ on:
       - 'js/role-selector.js'
       - 'js/package.json'
   pull_request:
-    branches: [main, dev0]
+    branches: [main, dev0, develop]
     paths:
       - 'app/functions/_lib/**'
       - 'app/tests/voice-transcripts/**'
