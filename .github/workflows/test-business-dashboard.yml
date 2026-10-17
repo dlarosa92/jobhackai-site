@@ -1,0 +1,30 @@
+name: Test business dashboard
+
+on:
+  pull_request:
+    branches: [dev0, develop, main]
+    paths:
+      - 'tools/business-dashboard/**'
+      - '.github/workflows/test-business-dashboard.yml'
+  push:
+    branches: [dev0, develop, main]
+    paths:
+      - 'tools/business-dashboard/**'
+      - '.github/workflows/test-business-dashboard.yml'
+
+jobs:
+  dashboard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: tools/business-dashboard/package-lock.json
+      - run: npm ci
+        working-directory: tools/business-dashboard
+      - run: npm run build
+        working-directory: tools/business-dashboard
+      - run: npm test
+        working-directory: tools/business-dashboard
