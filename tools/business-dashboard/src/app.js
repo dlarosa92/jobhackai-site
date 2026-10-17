@@ -29,9 +29,10 @@ function render(data) {
   $('error').hidden = true;
 }
 
-const stateLabels = { pending: 'Needs review', approved: 'Approved · awaiting action', sent: 'Sent', scheduled: 'Scheduled', published: 'Published', hold: 'On hold' };
+const stateLabels = { pending: 'Needs review', waiting: 'Waiting for their reply', approved: 'Approved · awaiting action', sent: 'Sent', scheduled: 'Scheduled', published: 'Published', hold: 'On hold' };
 const laneDefinitions = [
   { title: 'People waiting on us', matches: item => ['pending', 'hold'].includes(item.state) && item.impact !== 'campaign', first: true },
+  { title: 'Waiting for their reply', matches: item => item.state === 'waiting', first: true },
   { title: 'Campaign decisions', matches: item => ['pending', 'hold'].includes(item.state) && item.impact === 'campaign' },
   { title: 'Approved and scheduled', matches: item => ['approved', 'scheduled'].includes(item.state) },
   { title: 'Recent outcomes', matches: item => ['sent', 'published'].includes(item.state) },
@@ -58,12 +59,12 @@ function renderCampaigns(data) {
       if (item.impact === 'customer' || item.impact === 'prospect') {
         const priority = document.createElement('span');
         priority.className = `priority-badge ${item.impact}`;
-        priority.textContent = item.impact === 'customer' ? 'Customer directly affected · priority 1' : 'Inbound prospect · priority 2';
+        priority.textContent = item.state === 'waiting' ? (item.impact === 'customer' ? 'Customer conversation' : 'Prospect conversation') : item.impact === 'customer' ? 'Customer directly affected · priority 1' : 'Inbound prospect · priority 2';
         article.append(priority);
       }
       const kicker = document.createElement('div');
       kicker.className = `kicker${item.state === 'hold' ? ' caution' : ''}${['sent', 'scheduled', 'published'].includes(item.state) ? ' good' : ''}`;
-      const stateLabel = item.impact !== 'campaign' && ['pending', 'hold'].includes(item.state) ? 'Needs reply' : stateLabels[item.state] || item.state;
+      const stateLabel = item.source === 'gmail' && item.state === 'pending' ? 'Needs your review' : item.impact !== 'campaign' && ['pending', 'hold'].includes(item.state) ? 'Needs reply' : stateLabels[item.state] || item.state;
       kicker.textContent = `${item.channel} · ${stateLabel}`;
       const name = document.createElement('h3');
       name.textContent = item.title;
@@ -71,7 +72,7 @@ function renderCampaigns(data) {
       detail.textContent = item.detail;
       const evidence = document.createElement('p');
       evidence.className = 'evidence';
-      evidence.textContent = item.evidence;
+      evidence.textContent = item.source === 'gmail' ? `Latest ${item.state === 'waiting' ? 'sent' : 'received'} message ${time(item.updatedAt)} ET` : item.evidence;
       article.append(kicker, name, detail);
       if (item.nextAction) {
         const action = document.createElement('p');
@@ -112,8 +113,13 @@ function renderCampaigns(data) {
   const waiting = data.items.filter(item => ['pending', 'hold'].includes(item.state) && item.impact !== 'campaign');
   const approvals = data.items.filter(item => item.state === 'pending' && item.impact === 'campaign');
   $('focus-text').textContent = waiting.length ? `${waiting[0].title}. ${waiting[0].nextAction || 'Open the source and respond.'}` : approvals.length ? `${approvals.length} campaign ${approvals.length === 1 ? 'decision needs' : 'decisions need'} review.` : 'No recorded replies or approvals are waiting on this board.';
-  $('campaign-checked').textContent = `Action board records checked ${time(data.asOf)} ET · Refresh does not scan Gmail`;
-  $('campaign-status').textContent = `Read from the private dashboard database on ${time(data.asOf)} ET. Each card shows when its source was checked; new inbox replies are not imported automatically.`;
+  $('campaign-checked').textContent = `Action board records checked ${time(data.asOf)} ET`;
+  const sync = data.gmailSync || { status: 'not_connected' };
+  const syncText = sync.status === 'not_connected' ? 'Gmail sync is not connected yet. Saved email records may be out of date.' : `Gmail last synced ${time(sync.lastSuccessfulSyncAt)} ET · ${sync.trackedCount} tracked ${sync.trackedCount === 1 ? 'conversation' : 'conversations'}. ${sync.status === 'stale' ? 'Sync is overdue; email status may be out of date.' : 'Checks automatically about every five minutes.'}`;
+  $('gmail-sync').textContent = syncText;
+  $('gmail-sync').className = `sync-status${sync.status !== 'current' ? ' stale' : ''}`;
+  $('campaign-status').textContent = 'Campaigns use saved review records. Tracked email status comes from the last successful Gmail scan.';
+  if (sync.status !== 'current' && !waiting.length) $('focus-text').textContent += ' Gmail status is not current; check Gmail for new replies.';
   $('campaign-error').hidden = true;
 }
 
@@ -175,5 +181,5 @@ $('cost-form').addEventListener('submit', async event => {
   } finally { button.disabled = false; }
 });
 refresh();
-setInterval(() => { if (!document.hidden) refresh(); }, 10 * 60 * 1000);
+setInterval(() => { if (!document.hidden) refresh(); }, 60 * 1000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
