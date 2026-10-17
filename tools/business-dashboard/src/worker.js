@@ -82,7 +82,7 @@ async function overview(env, now = new Date()) {
 }
 
 async function campaignRecords(env, now = new Date()) {
-  const result = await env.DASHBOARD_DB.prepare('SELECT id, channel, title, detail, review_url AS reviewUrl, state, evidence, updated_at AS updatedAt, sort_order AS sortOrder FROM campaign_items ORDER BY sort_order, id').all();
+  const result = await env.DASHBOARD_DB.prepare("SELECT id, channel, title, detail, review_url AS reviewUrl, state, evidence, updated_at AS updatedAt, sort_order AS sortOrder, impact, next_action AS nextAction FROM campaign_items ORDER BY CASE impact WHEN 'customer' THEN 0 WHEN 'prospect' THEN 1 ELSE 2 END, sort_order, id").all();
   const items = result.results;
   return {
     asOf: now.toISOString(),
@@ -93,7 +93,7 @@ async function campaignRecords(env, now = new Date()) {
 
 async function approveCampaign(env, id) {
   if (!/^[a-z0-9-]{1,64}$/.test(id)) return false;
-  const result = await env.DASHBOARD_DB.prepare("UPDATE campaign_items SET state = 'approved', evidence = 'Owner approval recorded in dashboard. This does not send outreach or schedule a post.', updated_at = datetime('now') WHERE id = ? AND state = 'pending'").bind(id).run();
+  const result = await env.DASHBOARD_DB.prepare("UPDATE campaign_items SET state = 'approved', evidence = 'Owner approval recorded in dashboard. This does not send outreach or schedule a post.', updated_at = datetime('now') WHERE id = ? AND state = 'pending' AND impact = 'campaign'").bind(id).run();
   return result.meta?.changes === 1;
 }
 

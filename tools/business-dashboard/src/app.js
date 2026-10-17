@@ -31,18 +31,19 @@ function render(data) {
 
 const stateLabels = { pending: 'Needs review', approved: 'Approved · awaiting action', sent: 'Sent', scheduled: 'Scheduled', published: 'Published', hold: 'On hold' };
 const laneDefinitions = [
-  { title: 'Needs you', states: ['pending', 'hold'] },
-  { title: 'Approved and scheduled', states: ['approved', 'scheduled'] },
-  { title: 'Recent outcomes', states: ['sent', 'published'] },
+  { title: 'People waiting on us', matches: item => ['pending', 'hold'].includes(item.state) && item.impact !== 'campaign', first: true },
+  { title: 'Campaign decisions', matches: item => ['pending', 'hold'].includes(item.state) && item.impact === 'campaign' },
+  { title: 'Approved and scheduled', matches: item => ['approved', 'scheduled'].includes(item.state) },
+  { title: 'Recent outcomes', matches: item => ['sent', 'published'].includes(item.state) },
 ];
 
 function renderCampaigns(data) {
   const board = $('board');
   board.replaceChildren();
   for (const laneDefinition of laneDefinitions) {
-    const items = data.items.filter(item => laneDefinition.states.includes(item.state));
+    const items = data.items.filter(laneDefinition.matches);
     const lane = document.createElement('div');
-    lane.className = 'lane';
+    lane.className = `lane${laneDefinition.first ? ' people-lane' : ''}`;
     const heading = document.createElement('div');
     heading.className = 'lane-heading';
     const title = document.createElement('h2');
@@ -53,10 +54,17 @@ function renderCampaigns(data) {
     lane.append(heading);
     for (const item of items) {
       const article = document.createElement('article');
-      article.className = `item${item.state === 'pending' ? ' important' : ''}`;
+      article.className = `item${item.impact === 'customer' ? ' customer-impact' : item.impact === 'prospect' ? ' prospect-impact' : item.state === 'pending' ? ' important' : ''}`;
+      if (item.impact === 'customer' || item.impact === 'prospect') {
+        const priority = document.createElement('span');
+        priority.className = `priority-badge ${item.impact}`;
+        priority.textContent = item.impact === 'customer' ? 'Customer directly affected · priority 1' : 'Inbound prospect · priority 2';
+        article.append(priority);
+      }
       const kicker = document.createElement('div');
       kicker.className = `kicker${item.state === 'hold' ? ' caution' : ''}${['sent', 'scheduled', 'published'].includes(item.state) ? ' good' : ''}`;
-      kicker.textContent = `${item.channel} · ${stateLabels[item.state] || item.state}`;
+      const stateLabel = item.impact !== 'campaign' && ['pending', 'hold'].includes(item.state) ? 'Needs reply' : stateLabels[item.state] || item.state;
+      kicker.textContent = `${item.channel} · ${stateLabel}`;
       const name = document.createElement('h3');
       name.textContent = item.title;
       const detail = document.createElement('p');
@@ -64,19 +72,26 @@ function renderCampaigns(data) {
       const evidence = document.createElement('p');
       evidence.className = 'evidence';
       evidence.textContent = item.evidence;
-      article.append(kicker, name, detail, evidence);
+      article.append(kicker, name, detail);
+      if (item.nextAction) {
+        const action = document.createElement('p');
+        action.className = 'next-action';
+        action.textContent = `Next: ${item.nextAction}`;
+        article.append(action);
+      }
+      article.append(evidence);
       try {
         const reviewUrl = new URL(item.reviewUrl);
-        if (reviewUrl.protocol === 'https:' && reviewUrl.hostname === 'chatgpt.com') {
+        if (reviewUrl.protocol === 'https:' && ['chatgpt.com', 'mail.google.com'].includes(reviewUrl.hostname)) {
           const link = document.createElement('a');
           link.href = reviewUrl.href;
           link.target = '_blank';
           link.rel = 'noreferrer';
-          link.textContent = 'Open exact review record ↗';
+          link.textContent = reviewUrl.hostname === 'mail.google.com' ? 'Open email thread ↗' : 'Open exact review record ↗';
           article.append(link);
         }
       } catch { /* An invalid review URL is omitted. */ }
-      if (item.state === 'pending') {
+      if (item.state === 'pending' && item.impact === 'campaign') {
         const approval = document.createElement('button');
         approval.type = 'button';
         approval.className = 'approve';
@@ -94,10 +109,11 @@ function renderCampaigns(data) {
     }
     board.append(lane);
   }
-  const pending = data.items.filter(item => item.state === 'pending').length;
-  $('focus-text').textContent = pending ? `${pending} review ${pending === 1 ? 'item needs' : 'items need'} your decision. Open the exact review record before recording approval.` : 'No campaign approvals are waiting in this dashboard.';
-  $('campaign-checked').textContent = `Dashboard campaign records checked ${time(data.asOf)} ET`;
-  $('campaign-status').textContent = `Read from the private dashboard database on ${time(data.asOf)} ET. Native platform activity is verified separately on each card.`;
+  const waiting = data.items.filter(item => ['pending', 'hold'].includes(item.state) && item.impact !== 'campaign');
+  const approvals = data.items.filter(item => item.state === 'pending' && item.impact === 'campaign');
+  $('focus-text').textContent = waiting.length ? `${waiting[0].title}. ${waiting[0].nextAction || 'Open the source and respond.'}` : approvals.length ? `${approvals.length} campaign ${approvals.length === 1 ? 'decision needs' : 'decisions need'} review.` : 'No recorded replies or approvals are waiting on this board.';
+  $('campaign-checked').textContent = `Action board records checked ${time(data.asOf)} ET · Refresh does not scan Gmail`;
+  $('campaign-status').textContent = `Read from the private dashboard database on ${time(data.asOf)} ET. Each card shows when its source was checked; new inbox replies are not imported automatically.`;
   $('campaign-error').hidden = true;
 }
 
@@ -132,9 +148,9 @@ async function refresh() {
   }
   if (campaigns.status === 'fulfilled') renderCampaigns(campaigns.value);
   else {
-    $('campaign-error').textContent = 'Campaign records could not be refreshed. The last displayed campaign status may be stale.';
+    $('campaign-error').textContent = 'Action board records could not be refreshed. The last displayed status may be stale.';
     $('campaign-error').hidden = false;
-    $('campaign-checked').textContent = 'Campaign records: last refresh failed';
+    $('campaign-checked').textContent = 'Action board: last refresh failed';
     $('campaign-status').textContent = 'Last read failed; check again before making a decision.';
   }
   $('refresh').disabled = false;
