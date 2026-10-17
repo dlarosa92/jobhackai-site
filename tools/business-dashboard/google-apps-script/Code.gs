@@ -17,7 +17,7 @@ function syncTrackedMail() {
     var secret = properties.getProperty('SYNC_SECRET') || '';
     var expectedMailbox = properties.getProperty('MAILBOX_EMAIL') || '';
     var labelName = properties.getProperty('TRACK_LABEL_NAME') || '0: JobHackAI / Track';
-    if (!/^https:\/\/[a-z0-9.-]+\/sync$/.test(url) || secret.length < 32 || !expectedMailbox) throw new Error('Configure SYNC_URL, SYNC_SECRET and MAILBOX_EMAIL in Script Properties.');
+    if (!new RegExp('^https://[a-z0-9.-]+/sync$').test(url) || secret.length < 32 || !expectedMailbox) throw new Error('Configure SYNC_URL, SYNC_SECRET and MAILBOX_EMAIL in Script Properties.');
     var profile = Gmail.Users.getProfile('me');
     if (profile.emailAddress.toLowerCase() !== expectedMailbox.toLowerCase()) throw new Error('This script is authorized for a different Gmail account.');
     var labels = Gmail.Users.Labels.list('me').labels || [];
@@ -71,5 +71,5 @@ function syncTrackedMail() {
 }
 
 function cleanSyncText(value, limit) {
-  return String(value).replace(/[\u0000-\u001f]/g, ' ').slice(0, limit);
+  return String(value).split('').map(function (character) { return character.charCodeAt(0) < 32 ? ' ' : character; }).join('').slice(0, limit);
 }
