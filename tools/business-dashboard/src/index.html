@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#11241f">
+  <title>Everything in motion · JobHackAI</title>
+  <link rel="stylesheet" href="style.css?v=2026-10-17-priority">
+  <script src="app.js?v=2026-10-17-priority" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">JobHack<span>AI</span><small>Everything in motion</small></div>
+    <div class="toolbar"><span class="private">Private business view</span><button id="refresh" type="button">Refresh dashboard</button></div>
+  </header>
+  <main>
+    <div class="intro">
+      <div><h1>Everything in motion</h1><p>Your decisions, activity and results in one place.</p></div>
+      <p id="checked" class="checked" aria-live="polite">Checking dashboard records…</p>
+    </div>
+    <div id="error" class="error" role="alert" hidden></div>
+    <section class="focus" aria-label="Priority"><strong>First priority</strong><span id="focus-text">Checking who is waiting on us…</span></section>
+    <div id="campaign-error" class="error" role="alert" hidden></div>
+    <p id="campaign-checked" class="checked" aria-live="polite">Checking action board…</p>
+    <section id="board" class="board" aria-label="Work board"></section>
+    <section class="overview" aria-label="Business overview">
+      <div class="metric goal"><span class="eyebrow">Monthly income goal</span><div class="metric-value">$3,000</div><p>Money available to pay yourself after business costs.</p><div class="goal-line"><span id="available">Not calculated</span><span id="progress">Goal progress unavailable</span></div><div class="track"><div id="goal-fill"></div></div></div>
+      <div class="metric"><span class="eyebrow">Collected less refunds · this month</span><div class="metric-value" id="collected">—</div><p>Production D1 payment ledger, before business costs.</p></div>
+      <div class="metric"><span class="eyebrow">User records</span><div class="metric-value" id="users">—</div><p>Production D1 accounts. This is separate from paying customers.</p></div>
+    </section>
+    <section class="bottom">
+      <div class="panel"><div class="panel-title"><h2>Business costs this month</h2><span id="month-label">—</span></div><p>Enter the total you have recorded for this month, including payment fees, ads, software and other business costs. Mark complete only when every cost is included.</p><form id="cost-form"><label for="costs">Recorded costs (USD)</label><div class="cost-row"><span>$</span><input id="costs" name="costs" type="number" min="0" max="1000000" step="0.01" inputmode="decimal" placeholder="0.00" required><button type="submit">Save</button></div><label class="check"><input id="complete" type="checkbox"> I have included all business costs for this month</label></form><p id="cost-status" class="status" aria-live="polite">No costs recorded yet.</p></div>
+      <div class="panel"><h2>Source status</h2><dl><div><dt>Cloudflare payment and user records</dt><dd id="d1-status">Checking…</dd></div><div><dt>Action board records</dt><dd id="campaign-status">Checking…</dd></div><div><dt>Priority order</dt><dd>Current customer requests first, then inbound prospects and partner replies, then campaign approvals. A person waiting on a reply comes before planned promotion.</dd></div><div><dt>Native inbox and platform status</dt><dd>Each card shows when its source was checked. Refresh reads dashboard records; it does not scan Gmail, Marblism, Meta, X, or LinkedIn for new activity.</dd></div><div><dt>Website visits and signups</dt><dd>GA4 feed not connected to this dashboard yet. <a href="https://analytics.google.com/analytics/web/?authuser=1#/analysis/a366252518p523348532/edit/vuAzUp7vTsiY9cmdOg5t1g" target="_blank" rel="noreferrer">Open Analytics ↗</a></dd></div></dl></div>
+    </section>
+    <footer><p>Income is an estimate based on the production D1 payment ledger and costs you enter. It is not an accounting or tax statement. <span id="basis"></span></p></footer>
+  </main>
+</body>
+</html>
