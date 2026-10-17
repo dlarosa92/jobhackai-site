@@ -28,7 +28,7 @@ function database(cost = null, campaignItems = []) {
         },
         async run() {
           if (sql.includes('UPDATE campaign_items')) {
-            const item = campaignItems.find(item => item.id === this.args[0] && item.state === 'pending');
+            const item = campaignItems.find(item => item.id === this.args[0] && item.state === 'pending' && item.impact === 'campaign');
             if (!item) return { meta: { changes: 0 } };
             item.state = 'approved';
             item.evidence = 'Owner approval recorded in dashboard. This does not send outreach or schedule a post.';
@@ -91,8 +91,8 @@ test('the owner can load the page and read a source-labelled overview', async ()
 test('the phone reload gets the new campaign script rather than a cached old script', async () => {
   const ctx = { access: { aud: audience, getIdentity: async () => ({ email: 'sebastian.larosa@jobhackai.io' }) } };
   const page = await worker.fetch(new Request('https://dashboard.jobhackai.io/'), database(), ctx);
-  assert.match(await page.text(), /app\.js\?v=2026-10-17-campaigns/);
-  const script = await worker.fetch(new Request('https://dashboard.jobhackai.io/app.js?v=2026-10-17-campaigns'), database(), ctx);
+  assert.match(await page.text(), /app\.js\?v=2026-10-17-priority/);
+  const script = await worker.fetch(new Request('https://dashboard.jobhackai.io/app.js?v=2026-10-17-priority'), database(), ctx);
   assert.equal(script.headers.get('Cache-Control'), 'no-store');
   assert.match(await script.text(), /api\/campaigns/);
 });
@@ -130,7 +130,7 @@ test('cost updates reject a foreign origin', async () => {
 
 test('campaign refresh reflects a saved approval and does not imply sending', async () => {
   const ctx = { access: { aud: audience, getIdentity: async () => ({ email: 'sebastian.larosa@jobhackai.io' }) } };
-  const env = database(null, [{ id: 'new-outreach-proposals', channel: 'Stan · Outreach', title: 'New proposals', detail: 'Review first', reviewUrl: 'https://chatgpt.com/space/page_example', state: 'pending', evidence: 'Awaiting review', updatedAt: '2026-10-17 11:00:00', sortOrder: 1 }]);
+  const env = database(null, [{ id: 'new-outreach-proposals', channel: 'Stan · Outreach', title: 'New proposals', detail: 'Review first', reviewUrl: 'https://chatgpt.com/space/page_example', state: 'pending', impact: 'campaign', evidence: 'Awaiting review', updatedAt: '2026-10-17 11:00:00', sortOrder: 1 }]);
   const list = () => worker.fetch(new Request('https://dashboard.jobhackai.io/api/campaigns'), env, ctx);
   assert.equal((await (await list()).json()).items[0].state, 'pending');
   const approval = new Request('https://dashboard.jobhackai.io/api/campaigns/new-outreach-proposals/approve', {
@@ -152,4 +152,15 @@ test('campaign approval rejects foreign origins and non-owner requests', async (
   assert.equal((await worker.fetch(foreign, env, owner)).status, 403);
   const valid = new Request(path, { method: 'POST', headers: { Origin: 'https://dashboard.jobhackai.io', 'Content-Type': 'application/json' }, body: '{}' });
   assert.equal((await worker.fetch(valid, env, {})).status, 403);
+});
+
+test('an inbound prospect cannot be treated as a campaign approval', async () => {
+  const env = database(null, [{ id: 'inbound-prospect', channel: 'Inbound · Prospect', title: 'Reply to prospect', detail: 'Asked for a meeting', reviewUrl: 'https://mail.google.com/mail/u/0/#all/thread', state: 'pending', impact: 'prospect', nextAction: 'Reply with times next week.', evidence: 'Verified in Gmail', updatedAt: '2026-10-17 11:00:00', sortOrder: 0 }]);
+  const ctx = { access: { aud: audience, getIdentity: async () => ({ email: 'sebastian.larosa@jobhackai.io' }) } };
+  const list = await worker.fetch(new Request('https://dashboard.jobhackai.io/api/campaigns'), env, ctx);
+  const item = (await list.json()).items[0];
+  assert.equal(item.impact, 'prospect');
+  assert.equal(item.nextAction, 'Reply with times next week.');
+  const approval = new Request('https://dashboard.jobhackai.io/api/campaigns/inbound-prospect/approve', { method: 'POST', headers: { Origin: 'https://dashboard.jobhackai.io', 'Content-Type': 'application/json' }, body: '{}' });
+  assert.equal((await worker.fetch(approval, env, ctx)).status, 409);
 });

@@ -14,5 +14,7 @@ CREATE TABLE IF NOT EXISTS campaign_items (
   state TEXT NOT NULL CHECK (state IN ('pending', 'approved', 'sent', 'scheduled', 'published', 'hold')),
   evidence TEXT NOT NULL,
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-  sort_order INTEGER NOT NULL
+  sort_order INTEGER NOT NULL,
+  impact TEXT NOT NULL DEFAULT 'campaign' CHECK (impact IN ('customer', 'prospect', 'campaign')),
+  next_action TEXT NOT NULL DEFAULT ''
 );
