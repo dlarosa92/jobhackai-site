@@ -55,6 +55,22 @@ test('denied microphone permission performs no setup or credit request and allow
   assert.equal(f.opens().length,0);assert.equal(f.h.el('vi-start-btn').disabled,false);assert.equal(f.h.el('vi-setup-view').style.display,'');
 });
 
+for (const [reason,entReason,message] of [
+  ['voice_connection_paywall','paywall',/^You have no voice interviews left\. See plans/],
+  ['voice_connection_limit_reached','limit_reached',/this month's session limit/]]) {
+  test('a managed '+reason+' 403 shows the paywall message and keeps Start disabled',async t=>{
+    let plans=0;
+    const f=fixture(t,{routes:{
+      '/api/plan/me':()=>({voice:{...PLAN_PAYLOAD.voice,transport:'managed',...(++plans>1?{canStart:false,reason:entReason}:{})}}),
+      '/api/voice/connection':()=>({__status:403,error:'No interview sessions are available.',reason})}});
+    await f.start();
+    const alerts=f.h.logs.filter(l=>l[0]==='alert').map(l=>l[1]);
+    assert.equal(plans,2);assert.equal(alerts.length,1);assert.match(alerts[0],message);
+    assert.doesNotMatch(alerts[0],/Could not connect/);
+    assert.equal(f.h.el('vi-start-btn').disabled,true);assert.equal(f.h.el('vi-setup-view').style.display,'');
+  });
+}
+
 test('End while microphone permission is pending records closure and never attaches the late stream',async t=>{
   const permission=deferred(),stream=mic();
   const f=fixture(t,{getUserMedia:()=>permission.promise,routes:{

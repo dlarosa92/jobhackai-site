@@ -20,7 +20,7 @@ import { getBearer, verifyFirebaseIdToken } from '../../../_lib/firebase-auth.js
 import { getOrCreateUserByAuthId, getDb } from '../../../_lib/db.js';
 import { getVoiceEntitlement, voiceFeatureEnabled } from '../../../_lib/voice-entitlements.js';
 import { partialScorecard, groundedMoments, groundedCompetencies } from '../../../_lib/voice-scorecard.js';
-import { isSessionExpired, deleteVoiceSession } from '../../../_lib/voice-history.js';
+import { isSessionExpired, deleteVoiceSession, hasActiveVoicePlan } from '../../../_lib/voice-history.js';
 import { errorResponse, successResponse, generateRequestId } from '../../../_lib/error-handler.js';
 
 export async function onRequest(context) {
@@ -69,10 +69,13 @@ export async function onRequest(context) {
     let scorecard = null;
     try { scorecard = session.scorecard_json ? JSON.parse(session.scorecard_json) : null; } catch (_) {}
 
+    const ent = await getVoiceEntitlement(env, uid, {managed:env.VOICE_MANAGED_CALLS_ENABLED === 'true'});
+
     // Past the 90-day retention window the report is locked for everyone:
     // the retention-cleaner will remove the payload (or, for the free-taste
     // carve-out row, strip it while keeping the metadata). Serve a minimal
-    // expired payload either way; the client renders the locked view.
+    // expired payload either way; the client renders the locked view, and
+    // activePlan lets it skip the upgrade prompt for current subscribers.
     if (isSessionExpired(session.started_at)) {
       return successResponse({
         sessionId: session.id,
@@ -86,6 +89,7 @@ export async function onRequest(context) {
         scorecardReady: true,
         fullAccess: false,
         expired: true,
+        activePlan: hasActiveVoicePlan(ent),
         endReason: session.end_reason || null,
         scorecard: {
           topStrength: scorecard?.topStrength ?? null,
@@ -100,7 +104,6 @@ export async function onRequest(context) {
     // credits remaining), or the user has ever paid. Upgrading retroactively
     // unlocks the free-taste session, and that unlock persists after a pack
     // lapses or a subscription is cancelled (hasEverPaid).
-    const ent = await getVoiceEntitlement(env, uid, {managed:env.VOICE_MANAGED_CALLS_ENABLED === 'true'});
     const fullAccess = session.entitlement_mode !== 'free'
       || ent.unlimited
       || ent.sessionsRemaining > 0

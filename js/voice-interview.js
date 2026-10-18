@@ -42,6 +42,7 @@
     closeRequest: null,
     deadlineAtMs: null,
     starting: false,
+    canStart: false,           // last entitlement answer; a failed start never re-enables Start past it
     model: null,
     pc: null,
     dc: null,
@@ -127,17 +128,26 @@
   // ---------- entitlement banner ----------
 
   async function loadEntitlement() {
+    var banner = $('vi-entitlement');
+    var startBtn = $('vi-start-btn');
+    var retryBtn = $('vi-entitlement-retry');
+    state.canStart = false;
+    if (retryBtn && retryBtn.style.display !== 'none') {
+      retryBtn.style.display = 'none';
+      if (banner) { banner.textContent = 'Checking your access...'; banner.className = 'vi-banner vi-banner-ok'; }
+    }
     try {
       var res = await api('/api/plan/me', { method: 'GET' });
-      var voice = res.data && res.data.voice;
+      // A failed lookup is not a disabled feature. Offer a retry instead.
+      if (!res.ok || !res.data) throw new Error('plan_lookup_failed: ' + res.status);
+      var voice = res.data.voice;
       if (!voice || !voice.enabled) { show('vi-disabled-view'); return; }
       state.managedTransport = voice.transport === 'managed';
 
       initHistory(voice);
 
-      var banner = $('vi-entitlement');
-      var startBtn = $('vi-start-btn');
       if (!banner || !startBtn) return;
+      state.canStart = !!voice.canStart;
 
       if (voice.canStart) {
         startBtn.disabled = false;
@@ -162,9 +172,23 @@
         track('paywall_view', { surface: 'voice_setup' });
       }
     } catch (err) {
-      // Logged-out users get bounced by the page guard; other errors stay quiet
+      // Logged-out users get bounced by the page guard. Anything else must not
+      // leave setup stuck on "Checking your access...", so offer a retry.
       console.warn('[VOICE] entitlement load failed:', err && err.message);
+      state.canStart = false;
+      if (startBtn) startBtn.disabled = true;
+      if (banner) {
+        banner.textContent = 'We could not check your access. Check your connection and try again.';
+        banner.className = 'vi-banner vi-banner-error';
+      }
+      if (retryBtn) retryBtn.style.display = '';
     }
+  }
+
+  // After a failed start, Start is usable again only if the entitlement says so.
+  function resetStartButton() {
+    var startBtn = $('vi-start-btn');
+    if (startBtn) { startBtn.disabled = !state.canStart; startBtn.textContent = 'Start the interview'; }
   }
 
   // ---------- realtime event handling ----------
@@ -872,7 +896,7 @@
       if (state.ending || state.conductEnd) return;
       if (!lifecycle().is(PHASES.ACTIVE_INTERVIEW)) return;
       var caption = $('vi-caption');
-      if (caption) caption.textContent = 'One moment — the interviewer is thinking.';
+      if (caption) caption.textContent = 'One moment. The interviewer is thinking.';
       track('voice_turn_wait_cue', { waited_ms: Date.now() - wait.committedAtMs });
     }, WAITING_CUE_MS);
     state.turnWait = wait;
@@ -1396,7 +1420,7 @@
       probe.getTracks().forEach(function (t) { t.stop(); });
     } catch (micErr) {
       alert('JobHackAI needs microphone access for the voice interview. Allow the microphone and try again.');
-      if (startBtn) { startBtn.disabled = false; startBtn.textContent = 'Start the interview'; }
+      resetStartButton();
       return;
     }
 
@@ -1419,7 +1443,7 @@
         } else {
           alert((res.data && res.data.error) || 'Could not start the session. Please try again.');
         }
-        if (startBtn) { startBtn.disabled = false; startBtn.textContent = 'Start the interview'; }
+        resetStartButton();
         return;
       }
 
@@ -1459,7 +1483,7 @@
       teardownConnection();
       historyLiveClear(false);
       show('vi-setup-view');
-      if (startBtn) { startBtn.disabled = false; startBtn.textContent = 'Start the interview'; }
+      resetStartButton();
     }
   }
 
@@ -1512,7 +1536,11 @@
       if (error.status === 403) await loadEntitlement();
       show('vi-setup-view');
       var connectionMessage;
-      if (error.reason === 'voice_connection_conflict') {
+      if (error.status === 403) {
+        connectionMessage = error.reason === 'voice_connection_limit_reached'
+          ? 'You have reached this month\'s session limit. It resets at the start of next month.'
+          : 'You have no voice interviews left. See plans to keep practicing.';
+      } else if (error.reason === 'voice_connection_conflict') {
         connectionMessage = 'The previous connection is still open. Retry to replace it without using another interview.';
       } else if (['voice_connection_unconfirmed', 'voice_connection_pending', 'voice_call_close_unconfirmed'].indexOf(error.reason) !== -1) {
         connectionMessage = 'We could not confirm the interview connection. Please wait while we check it. Contact support if this continues.';
@@ -1526,7 +1554,7 @@
       alert(connectionMessage);
     } finally {
       state.starting = false;
-      if (startBtn) { startBtn.disabled = false; startBtn.textContent = 'Start the interview'; }
+      resetStartButton();
     }
   }
 
@@ -1834,13 +1862,24 @@
       '<span class="vi-dim-num">' + value + '</span></div>';
   }
 
-  // Most recent OTHER scored session, for the "vs your last session" delta.
-  function previousOverall(currentSessionId) {
-    for (var i = 0; i < historyState.items.length; i++) {
-      var item = historyState.items[i];
-      if (item.sessionId === currentSessionId) continue;
+  // Baseline for "vs your last session": the newest earlier session scored by
+  // the same rubric for the same role and level (the progress strip rule).
+  // History is newest first; a just-finished session may not be listed yet,
+  // and then every listed session is earlier.
+  function previousOverall(data, sc) {
+    var items = historyState.items;
+    var version = sc.methodologyVersion || 1;
+    var start = 0;
+    for (var j = 0; j < items.length; j++) {
+      if (items[j].sessionId === data.sessionId) { start = j + 1; break; }
+    }
+    for (var i = start; i < items.length; i++) {
+      var item = items[i];
       var v = Number(item.overall);
-      if (item.overall != null && isFinite(v)) return Math.round(v);
+      if (item.overall == null || !isFinite(v)) continue;
+      if ((item.methodologyVersion || 1) !== version) continue;
+      if (item.role !== data.role || item.seniority !== data.seniority) continue;
+      return Math.round(v);
     }
     return null;
   }
@@ -1910,7 +1949,7 @@
     html += '<h2 class="vi-sc-title">Your interview report</h2>';
     if (!data.expired) html += savedLine(data);
 
-    if (data.fullAccess && sc.tooShort) {
+    if (sc.tooShort && !data.expired) {
       html += '<p class="vi-sc-block">Not enough candidate speech to score this session.</p>';
     }
     if (data.fullAccess && !sc.tooShort) {
@@ -1918,11 +1957,11 @@
       html += '<div class="vi-sc-overall"><div class="vi-sc-score">' + escapeHtml(sc.overall) + '</div><div class="vi-sc-overall-label">' + (sc.methodologyVersion === 2 ? 'Practice sample' : 'Overall') + '</div></div>';
       // Session-over-session delta; downward trends are muted, not error-red —
       // practice is never punished (same rule as the history progress strip).
-      var prevOverall = previousOverall(data.sessionId);
-      if (sc.methodologyVersion !== 2 && prevOverall != null && sc.overall != null && isFinite(Number(sc.overall))) {
+      var prevOverall = previousOverall(data, sc);
+      if (prevOverall != null && sc.overall != null && isFinite(Number(sc.overall))) {
         var scDelta = Math.round(Number(sc.overall)) - prevOverall;
         html += '<p class="vi-sc-delta' + (scDelta < 0 ? ' vi-sc-delta--down' : '') + '">' +
-          (scDelta >= 0 ? '▲ +' : '▼ −') + Math.abs(scDelta) + ' vs your last session</p>';
+          (scDelta >= 0 ? '▲ +' : '▼ −') + Math.abs(scDelta) + ' vs your last session for this role</p>';
       }
       if (sc.dimensions) {
         html += '<div class="vi-sc-dims">';
@@ -1989,22 +2028,35 @@
         '<a class="vi-btn-secondary" href="mock-interview.html">Practice typed questions</a>' +
         '<a class="vi-sc-actions-link" href="dashboard.html">Back to Dashboard</a>' +
         '</div>';
+    } else if (sc.tooShort && !data.expired) {
+      // A free session too short to score has no full report to unlock.
+      track('paywall_view', { surface: 'voice_scorecard' });
+      html += '<div class="vi-sc-unlock vi-sc-unlock--inline"><h3>There is no full report for this session.</h3>' +
+        '<p>Run a full interview to get your scores, moment by moment feedback, and transcript.</p>' +
+        '<a class="vi-btn-primary" href="/pricing" data-cta="voice-scorecard-too-short">See plans</a></div>';
     } else {
       // Free taste: partial scorecard, blurred full report, one upgrade CTA.
       // Expired sessions (past the 90-day retention window) share the same
-      // locked view with retention-specific copy.
-      track('paywall_view', { surface: 'voice_scorecard' });
+      // locked view. Retention applies to every plan, so an active plan is
+      // pointed at a new interview rather than an upgrade.
+      var activePlan = !!(data.expired && data.activePlan);
+      if (!activePlan) track('paywall_view', { surface: 'voice_scorecard' });
       var unlockHeading = data.expired ? 'This report has expired.' : 'Your full report is ready.';
-      var unlockBody = data.expired
-        ? 'Upgrade to keep every report, transcript, and your progress across sessions.'
-        : 'Unlock every score, the moment by moment feedback, and your transcript. Then keep practicing until the answers are automatic.';
+      var unlockBody = !data.expired
+        ? 'Unlock every score, the moment by moment feedback, and your transcript. Then keep practicing until the answers are automatic.'
+        : activePlan
+          ? 'Reports are kept for 90 days. Your plan is still active. Run a new interview for a fresh report.'
+          : 'Reports are kept for 90 days. Pick a plan to keep practicing and track your progress.';
+      var unlockCta = activePlan
+        ? '<a class="vi-btn-primary" href="voice-interview.html" data-cta="voice-scorecard-expired-new">Start a new interview</a>'
+        : '<a class="vi-btn-primary" href="/pricing" data-cta="voice-scorecard-unlock">See plans</a>';
       html += '<div class="vi-sc-locked">';
       html += '<div class="vi-sc-blur" aria-hidden="true">';
       html += '<div class="vi-sc-overall"><div class="vi-sc-score">??</div><div class="vi-sc-overall-label">' + (sc.methodologyVersion === 2 ? 'Practice sample' : 'Overall') + '</div></div>';
       html += '<div class="vi-sc-dims">' + dimensionRow('Communication', 70) + dimensionRow('Structure', 55) + dimensionRow('Content depth', 62) + dimensionRow('Role fit', 75) + '</div>';
       html += '<p>The full report includes your scores, specific moments from your answers, a summary, and the complete transcript.</p>';
       html += '</div>';
-      html += '<div class="vi-sc-unlock"><h3>' + unlockHeading + '</h3><p>' + unlockBody + '</p><a class="vi-btn-primary" href="/pricing" data-cta="voice-scorecard-unlock">See plans</a></div>';
+      html += '<div class="vi-sc-unlock"><h3>' + unlockHeading + '</h3><p>' + unlockBody + '</p>' + unlockCta + '</div>';
       html += '</div>';
     }
 
@@ -2507,6 +2559,7 @@
     if (startBtn) startBtn.addEventListener('click', startInterview);
     if (endBtn) endBtn.addEventListener('click', function () { endInterview('user_ended'); });
     if ($('vi-save-retry')) $('vi-save-retry').addEventListener('click', saveCompletion);
+    if ($('vi-entitlement-retry')) $('vi-entitlement-retry').addEventListener('click', function () { loadEntitlement(); });
     if (muteBtn) muteBtn.addEventListener('click', toggleMute);
     if (reconnectBtn) reconnectBtn.addEventListener('click', reconnect);
 

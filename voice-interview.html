@@ -12,12 +12,12 @@
   <link rel="icon" type="image/png" sizes="128x128" href="assets/jobhackai_icon_Favicon_128.png">
   <link rel="apple-touch-icon" sizes="180x180" href="assets/jobhackai_apple_touch_icon_180.png">
   <script src="js/dynamic-favicon.js?v=20260418-3" defer></script>
-  <script src="js/cookie-consent.js?v=20260613-1" defer></script>
+  <script src="js/cookie-consent.js?v=20261001-checkout-2" defer></script>
 
   <!-- Design tokens & global styles -->
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/main.css">
-  <link rel="stylesheet" href="css/header.css">
+  <link rel="stylesheet" href="css/header.css?v=20260930-voice-nav-1">
   <link rel="stylesheet" href="css/footer.css">
 
   <style>
@@ -50,6 +50,8 @@
     .vi-banner-ok { background: #E8F5E9; color: var(--color-cta-green); }
     .vi-banner-paywall { background: #FFF7E6; color: #92400E; }
     .vi-banner-paywall a { color: #92400E; text-decoration: underline; font-weight: 700; }
+    .vi-banner-error { background: #FFF7E6; color: #92400E; }
+    .vi-entitlement-retry { margin: -0.4rem 0 1.1rem; }
     .vi-btn-primary { display: inline-block; background: var(--color-cta-green); color: #fff; font-weight: 700; border: 0; border-radius: var(--radius-button); padding: 0.85rem 1.8rem; font-size: 1.05rem; cursor: pointer; text-decoration: none; }
     .vi-btn-primary:hover:not(:disabled) { background: var(--color-cta-green-hover); }
     .vi-btn-primary:focus-visible { outline: 2px solid var(--color-accent-blue); outline-offset: 2px; }
@@ -117,6 +119,7 @@
     .vi-sc-unlock { position: absolute; top: 18%; left: 50%; transform: translateX(-50%); width: min(92%, 420px); background: #fff; border: 1px solid var(--color-divider); border-radius: var(--radius-xl); box-shadow: var(--shadow-xl); padding: 1.4rem 1.4rem 1.5rem; text-align: center; }
     .vi-sc-unlock h3 { margin: 0 0 0.5rem; color: var(--color-text-main); }
     .vi-sc-unlock p { color: var(--color-text-secondary); font-size: 0.95rem; margin: 0 0 1rem; }
+    .vi-sc-unlock--inline { position: static; transform: none; margin: 1.2rem auto 0; }
 
     /* Two-column layout with the history rail (mirrors mock-interview's
        .mi-layout grid, retokenized). The page stays single-column at the
@@ -238,11 +241,11 @@
     <!-- Mobile navigation will be dynamically populated by navigation.js -->
   </nav>
   <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
-  <script src="js/mobile-menu.js?v=20250115-1" defer></script>
+  <script src="js/mobile-menu.js?v=20260930-voice-nav-1" defer></script>
 
   <main class="vi-wrap">
     <h1>Voice Mock Interview</h1>
-    <p class="vi-sub">A realistic spoken interview for your target role. Up to 20 minutes, then a scored report.</p>
+    <p class="vi-sub">A realistic spoken interview for your target role. Up to 20 minutes, then feedback on your answers.</p>
 
     <div class="vi-layout">
       <!-- Left Column: Main Content Area -->
@@ -256,7 +259,8 @@
 
     <!-- Setup -->
     <div id="vi-setup-view" class="vi-card" style="display:none">
-      <div id="vi-entitlement" class="vi-banner vi-banner-ok">Checking your access...</div>
+      <div id="vi-entitlement" class="vi-banner vi-banner-ok" role="status">Checking your access...</div>
+      <button id="vi-entitlement-retry" type="button" class="vi-btn-secondary vi-entitlement-retry" style="display:none">Try again</button>
       <p id="vi-last-focus" class="vi-last-focus" hidden></p>
       <div class="vi-field">
         <label for="vi-role">Role you are interviewing for</label>
@@ -290,7 +294,7 @@
         </div>
         <div class="vi-checklist-item">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20,6 9,17 4,12"/></svg>
-          <span>We'll score you out of 100 and save this session to your history.</span>
+          <span>Your session is saved to history. Very short interviews may not have enough material for a score.</span>
         </div>
       </div>
       <p class="vi-hint">Find a quiet room and use headphones if you can. The interviewer hears everything your microphone hears.</p>
@@ -304,11 +308,11 @@
       <p><span id="vi-speaking" class="vi-speaking"></span>Interviewer</p>
       <p id="vi-caption" class="vi-caption">The interviewer will start in a moment. Speak naturally and take your time.</p>
       <div class="vi-sao-cue">
-        <div class="vi-sao-cue-label">ANSWER CUE — S + A = O</div>
+        <div class="vi-sao-cue-label">ANSWER CUE: S + A = O</div>
         <div class="vi-sao-strip">
-          <div class="vi-sao-item"><span class="vi-sao-label">Situation</span><br>Context — what mattered</div>
-          <div class="vi-sao-item"><span class="vi-sao-label">Action</span><br>Decisions — what you did</div>
-          <div class="vi-sao-item vi-sao-item--outcome"><span class="vi-sao-label">Outcome</span><br>Impact — what changed</div>
+          <div class="vi-sao-item"><span class="vi-sao-label">Situation</span><br>Context: what mattered</div>
+          <div class="vi-sao-item"><span class="vi-sao-label">Action</span><br>Decisions: what you did</div>
+          <div class="vi-sao-item vi-sao-item--outcome"><span class="vi-sao-label">Outcome</span><br>Impact: what changed</div>
         </div>
       </div>
       <div class="vi-live-actions">
@@ -465,15 +469,15 @@
   <script src="js/firebase-config.js" type="module"></script>
   <script src="js/firebase-auth.js?v=20260207-2" type="module"></script>
   <script src="js/auth-persistence.js"></script>
-  <script src="js/navigation.js?v=20260920-1" defer></script>
+  <script src="js/navigation.js?v=20261005-app-nav-1" defer></script>
   <script src="js/universal-logout.js?v=20260208-1" defer></script>
   <script src="js/analytics.js" type="module"></script>
   <script src="js/main.js" type="module"></script>
-  <script src="js/role-selector.js?v=20260726-1" type="module"></script>
+  <script src="js/role-selector.js?v=20261017-page-tag-1" type="module"></script>
   <script src="js/voice-transcript-order.js?v=20260809-1" type="module"></script>
   <script src="js/voice-conduct.js?v=20260725-3" type="module"></script>
   <script src="js/voice-lifecycle.js?v=20260930-controls" type="module"></script>
   <script src="js/voice-usage.js?v=20260920-1" type="module"></script>
-  <script src="js/voice-interview.js?v=20260930-controls" defer></script>
+  <script src="js/voice-interview.js?v=20261017-fixes-1" defer></script>
 </body>
 </html>

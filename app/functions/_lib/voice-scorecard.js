@@ -306,10 +306,11 @@ export async function generateAndStoreScorecard(env, sessionId) {
 /**
  * Reduce a full scorecard to the free-taste partial view:
  * top strength + one improvement area. Everything else is withheld.
+ * tooShort survives so the client never offers a full report that does not exist.
  */
 export function partialScorecard(scorecard) {
   if (!scorecard) return null;
-  return {
+  const partial = {
     partial: true,
     topStrength: scorecard.topStrength,
     topImprovement: scorecard.topImprovement,
@@ -318,4 +319,6 @@ export function partialScorecard(scorecard) {
     moments: null,
     summary: null
   };
+  if (scorecard.tooShort) partial.tooShort = true;
+  return partial;
 }

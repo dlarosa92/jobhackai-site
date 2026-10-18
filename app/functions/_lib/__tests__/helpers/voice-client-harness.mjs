@@ -44,7 +44,7 @@ const ELEMENT_IDS = [
   'vi-setup-view', 'vi-live-view', 'vi-done-view', 'vi-disabled-view',
   'vi-status', 'vi-caption', 'vi-timer', 'vi-speaking',
   'vi-done-status', 'vi-scorecard', 'vi-save-status', 'vi-save-retry',
-  'vi-entitlement', 'vi-role', 'vi-seniority', 'vi-jd',
+  'vi-entitlement', 'vi-entitlement-retry', 'vi-role', 'vi-seniority', 'vi-jd',
   'vi-start-btn', 'vi-end-btn', 'vi-mute-btn', 'vi-reconnect-btn',
   'vi-remote-audio'
 ];
@@ -108,12 +108,17 @@ function makeElement(id) {
  * `withoutModules` deletes named browser-module globals before the client
  * loads, so a test can prove the client's hand-synced fallbacks still hold when
  * a module script fails to execute.
+ *
+ * `elementIds` adds elements beyond ELEMENT_IDS; 'vi-history-panel' switches
+ * the history rail on, which the report's "vs your last session" line reads.
  */
 export function createVoiceClientHarness(options = {}) {
-  const { search = '', routes = {}, withoutModules = [] } = options;
+  const { search = '', routes = {}, withoutModules = [], elementIds = [] } = options;
 
   const elements = Object.create(null);
-  for (const id of ELEMENT_IDS) elements[id] = makeElement(id);
+  for (const id of ELEMENT_IDS.concat(elementIds)) elements[id] = makeElement(id);
+  // Ships hidden in voice-interview.html; only a failed access check shows it.
+  elements['vi-entitlement-retry'].style.display = 'none';
 
   const timers = new Set();
   const logs = [];

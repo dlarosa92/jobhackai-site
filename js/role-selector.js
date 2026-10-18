@@ -81,10 +81,21 @@ export function highlightRoleMatch(text, query) {
   return `${escapeHtmlText(before)}<strong>${escapeHtmlText(match)}</strong>${escapeHtmlText(after)}`;
 }
 
-/** "software_engineering" -> "software engineering" for the category line. */
-export function prettyCategory(category) {
-  if (typeof category !== 'string') return '';
-  return category.replace(/_/g, ' ').trim();
+// role_selected names the tool it fired on, matching the voice CTA's tool
+// names. A page missing from the map falls back to its own slug.
+const ROLE_EVENT_CATEGORIES = {
+  'resume-feedback-pro': 'resume_feedback',
+  'cover-letter-generator': 'cover_letter',
+  'interview-questions': 'interview_questions',
+  'mock-interview': 'mock_interview',
+  'voice-interview': 'voice_interview',
+  'linkedin-optimizer': 'linkedin_optimizer'
+};
+
+/** "/voice-interview.html" -> "voice_interview" for analytics. */
+export function roleEventCategory(pathname) {
+  const page = String(pathname || '').replace(/\/+$/, '').split('/').pop().replace(/\.html$/, '');
+  return ROLE_EVENT_CATEGORIES[page] || page.replace(/-/g, '_') || 'unknown';
 }
 
 /**
@@ -398,13 +409,8 @@ export class RoleSelector {
       nameDiv.innerHTML = highlightRoleMatch(role.name, query);
       optionDiv.appendChild(nameDiv);
 
-      const categoryLabel = prettyCategory(role.category);
-      if (categoryLabel) {
-        const categoryDiv = document.createElement('div');
-        categoryDiv.style.cssText = 'font-size: 0.85rem; color: #4B5563; margin-top: 0.2rem;';
-        categoryDiv.textContent = categoryLabel;
-        optionDiv.appendChild(categoryDiv);
-      }
+      // Role categories are internal grouping keys ("general"), so the
+      // suggestion shows only the role name.
 
       optionDiv.addEventListener('click', () => {
         this.selectRole(optionDiv.dataset.role);
@@ -453,13 +459,19 @@ export class RoleSelector {
   trackSelection(roleName) {
     const isCustom = this.isCustomRole(roleName);
 
-    if (window.gtag) {
-      window.gtag('event', 'role_selected', {
-        role_name: roleName,
-        role_type: isCustom ? 'custom' : 'standard',
-        event_category: 'resume_feedback'
-      });
-    }
+    try {
+      if (window.gtag) {
+        // Custom input can contain personal information. Only send a fixed
+        // label, or the canonical name from the known role list.
+        const standardRole = isCustom ? null : this.roles.find(
+          (role) => role.name.toLowerCase() === roleName.toLowerCase());
+        window.gtag('event', 'role_selected', {
+          role_name: standardRole ? standardRole.name : 'custom',
+          role_type: isCustom ? 'custom' : 'standard',
+          event_category: roleEventCategory(window.location?.pathname)
+        });
+      }
+    } catch (_) { /* Analytics must not interrupt role selection. */ }
 
     try {
       const telemetry = JSON.parse(localStorage.getItem('roleSelectorTelemetry') || '[]');
