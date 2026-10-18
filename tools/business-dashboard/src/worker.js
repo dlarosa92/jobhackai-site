@@ -99,7 +99,7 @@ async function campaignRecords(env, now = new Date()) {
 
 async function approveCampaign(env, id) {
   if (!/^[a-z0-9-]{1,64}$/.test(id)) return false;
-  const result = await env.DASHBOARD_DB.prepare("UPDATE campaign_items SET state = 'approved', evidence = 'Owner approval recorded in dashboard. This does not send outreach or schedule a post.', updated_at = datetime('now') WHERE id = ? AND state = 'pending' AND impact = 'campaign'").bind(id).run();
+  const result = await env.DASHBOARD_DB.prepare("UPDATE campaign_items SET state = 'approved', evidence = 'Owner approval recorded in dashboard. This does not send an email, schedule a post, or publish content.', updated_at = datetime('now') WHERE id = ? AND state = 'pending' AND impact = 'campaign'").bind(id).run();
   return result.meta?.changes === 1;
 }
 
