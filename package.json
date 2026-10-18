@@ -22,6 +22,8 @@
     "test:voice:usage": "node --test app/functions/_lib/__tests__/voice-usage.test.mjs",
     "test:voice:client": "node app/functions/_lib/__tests__/voice-client.test.mjs",
     "test:voice:report": "node --test app/functions/_lib/__tests__/voice-session-report.test.mjs",
+    "test:voice:grace": "node --test app/functions/_lib/__tests__/voice-early-end-grace.test.mjs",
+    "test:voice:retry": "node --test app/functions/_lib/__tests__/voice-retry.test.mjs",
     "test:role-selector": "node app/functions/_lib/__tests__/role-selector.test.mjs",
     "test:analytics": "node --test app/functions/_lib/__tests__/analytics-consent.test.mjs",
     "test:voice:coaching": "node --test app/functions/_lib/__tests__/voice-coaching.test.mjs",

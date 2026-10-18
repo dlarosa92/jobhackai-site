@@ -259,6 +259,53 @@ export async function refundVoiceSession(env, uid, mode) {
   }
 }
 
+// A candidate who ends a session this soon after it started gets its credit
+// back, once per account: 2 minutes of interview plus about 30 seconds to
+// connect and run the audio check. Measured from the session row on the
+// server, never from the browser's clock.
+export const EARLY_END_GRACE_SECONDS = 150;
+
+/**
+ * Give back the free or pack credit of a session the candidate ended early.
+ * Subscriptions have no per-session credit and never use the grace. One
+ * guarded UPDATE claims the account's single grace and restores the credit
+ * together, so it is atomic, and repeating it changes nothing.
+ * Returns true when this session holds the account's grace. Requires
+ * migration 033; without it every session keeps its credit.
+ */
+export async function restoreEarlyEndCredit(env, { userRowId, sessionId }) {
+  const db = getDb(env);
+  if (!db || !userRowId || !sessionId) return false;
+  try {
+    const session = await db.prepare(
+      'SELECT entitlement_mode FROM voice_sessions WHERE id = ? AND user_id = ?'
+    ).bind(sessionId, userRowId).first();
+    const mode = session?.entitlement_mode;
+    if (mode === 'free' || mode === 'pack') {
+      const restore = mode === 'free'
+        ? 'free_session_used = 0'
+        : 'voice_sessions_remaining = voice_sessions_remaining + 1';
+      await db.prepare(
+        `UPDATE users SET ${restore}, voice_grace_session_id = ?, voice_grace_used_at = datetime('now'),
+                updated_at = datetime('now')
+         WHERE id = ? AND voice_grace_session_id IS NULL ${mode === 'free' ? 'AND free_session_used = 1' : ''}
+           AND EXISTS (SELECT 1 FROM voice_sessions s WHERE s.id = ? AND s.user_id = users.id
+             AND s.status = 'completed' AND s.end_reason = 'user_ended' AND s.entitlement_mode = ?
+             AND s.started_at IS NOT NULL AND s.ended_at IS NOT NULL
+             AND (julianday(s.ended_at) - julianday(s.started_at)) * 86400 <= ?)`
+      ).bind(sessionId, userRowId, sessionId, mode, EARLY_END_GRACE_SECONDS).run();
+    }
+    const held = await db.prepare(
+      'SELECT 1 AS held FROM users WHERE id = ? AND voice_grace_session_id = ?'
+    ).bind(userRowId, sessionId).first();
+    return !!held;
+  } catch (err) {
+    console.warn('[VOICE-ENTITLEMENTS] Early-end grace unavailable:',
+      isMissingColumnError(err) ? 'schema not migrated' : (err?.message || err));
+    return false;
+  }
+}
+
 /**
  * Insert the voice_sessions row for a started session.
  *

@@ -78,7 +78,7 @@ Five voice interviews, valid for 90 days. No subscription.
 
 Subscription limits reset monthly, separate from your billing date. The next reset is at midnight UTC on the first of the month.
 
-Ending an interview early still uses a session. Reconnecting to the same session does not use another.
+End your free interview or a pack session within the first 2 minutes and it does not count. This applies once per account. Ending later still uses a session. Reconnecting to the same session does not use another.
 
 ## Free: The 12-Point ATS Resume Checklist
 

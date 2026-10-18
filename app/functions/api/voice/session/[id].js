@@ -19,7 +19,8 @@
 import { getBearer, verifyFirebaseIdToken } from '../../../_lib/firebase-auth.js';
 import { getOrCreateUserByAuthId, getDb } from '../../../_lib/db.js';
 import { getVoiceEntitlement, voiceFeatureEnabled } from '../../../_lib/voice-entitlements.js';
-import { partialScorecard, groundedMoments, groundedCompetencies } from '../../../_lib/voice-scorecard.js';
+import { partialScorecard, groundedMoments, groundedCompetencies, interviewerQuestionCount } from '../../../_lib/voice-scorecard.js';
+import { voiceRetryEnabled, retryEligibility, retryClaimed } from '../../../_lib/voice-retry.js';
 import { isSessionExpired, deleteVoiceSession, hasActiveVoicePlan } from '../../../_lib/voice-history.js';
 import { errorResponse, successResponse, generateRequestId } from '../../../_lib/error-handler.js';
 
@@ -109,9 +110,27 @@ export async function onRequest(context) {
       || ent.sessionsRemaining > 0
       || ent.hasEverPaid;
 
-    let transcript = null;
-    if (fullAccess && session.transcript_json) {
-      try { transcript = JSON.parse(session.transcript_json); } catch (_) {}
+    // The stored transcript grounds the free report's teaser quote and picks
+    // the retry question, but only full access ever receives it.
+    let storedTranscript = null;
+    if (session.transcript_json) {
+      try { storedTranscript = JSON.parse(session.transcript_json); } catch (_) {}
+    }
+    const transcript = fullAccess ? storedTranscript : null;
+
+    // "Retry this question, free" (VOICE_RETRY_ENABLED, off by default). Only
+    // an eligible offer is sent; a missing migration 034 simply hides it.
+    let retry = null;
+    if (!fullAccess && voiceRetryEnabled(env)) {
+      try {
+        const offer = retryEligibility({
+          enabled: true, session, scorecard, transcript: storedTranscript, expired: false,
+          alreadyClaimed: await retryClaimed(env, session.id)
+        });
+        if (offer.eligible) retry = { eligible: true, question: offer.question };
+      } catch (err) {
+        console.warn('[VOICE-SESSION-GET] Retry offer unavailable:', err?.message || err);
+      }
     }
 
     // Existing reports also need speaker grounding; keep the stored evidence
@@ -135,7 +154,9 @@ export async function onRequest(context) {
       scorecardReady: !!scorecard,
       endReason: session.end_reason || null,
       fullAccess,
-      scorecard: fullAccess ? scorecard : partialScorecard(scorecard),
+      questionCount: interviewerQuestionCount(storedTranscript),
+      scorecard: fullAccess ? scorecard : partialScorecard(scorecard, { transcript: storedTranscript }),
+      ...(retry ? { retry } : {}),
       transcript
     }, 200, origin, env, requestId);
   } catch (err) {
