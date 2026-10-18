@@ -780,6 +780,188 @@ test('an aborted SDP fetch cannot replace the completed report with a connection
   } finally { h.dispose(); }
 });
 
+// -------------------------------------------------- setup access and Start
+
+for (const [label, planRoute] of [
+  ['a server error', () => ({ __status: 500, error: 'server_error' })],
+  ['a network failure', () => { throw new Error('offline'); }]
+]) {
+  test(`${label} on the plan lookup offers a retry instead of a stuck access check`, async () => {
+    let failing = true;
+    const h = createVoiceClientHarness({ routes: {
+      '/api/plan/me': () => (failing ? planRoute() : PLAN_PAYLOAD),
+      '/api/voice/sessions': () => ({ sessions: [] })
+    } });
+    try {
+      await h.ready();
+      assert.equal(h.el('vi-setup-view').style.display, '', 'a failed lookup is not the feature-disabled view');
+      assert.equal(h.el('vi-disabled-view').style.display, 'none');
+      assert.match(h.el('vi-entitlement').textContent, /could not check your access/i);
+      assert.equal(h.el('vi-start-btn').disabled, true);
+      assert.equal(h.el('vi-entitlement-retry').style.display, '');
+
+      failing = false;
+      await h.click('vi-entitlement-retry');
+      assert.equal(h.el('vi-entitlement-retry').style.display, 'none');
+      assert.equal(h.el('vi-start-btn').disabled, false);
+      assert.match(h.el('vi-entitlement').textContent, /voice interviews left this calendar month|subscription/);
+    } finally { h.dispose(); }
+  });
+}
+
+test('a 403 on start keeps Start disabled once the reload says no sessions are left', async () => {
+  let planCalls = 0;
+  const h = createVoiceClientHarness({ routes: { ...LIVE_ROUTES,
+    '/api/plan/me': () => (++planCalls === 1 ? PLAN_PAYLOAD
+      : { voice: { enabled: true, canStart: false, unlimited: false, mode: null, reason: 'paywall', sessionsRemaining: 0 } }),
+    '/api/voice/session': () => ({ __status: 403, error: 'Your free voice interview is used. Upgrade to keep practicing.', reason: 'paywall' })
+  } });
+  try {
+    await h.ready();
+    h.el('vi-role').value = 'Product Manager';
+    await h.click('vi-start-btn');
+    assert.equal(planCalls, 2, 'the 403 reloads the entitlement');
+    assert.equal(h.el('vi-setup-view').style.display, '');
+    assert.equal(h.el('vi-start-btn').disabled, true, 'no sessions left, so Start stays disabled');
+    assert.equal(h.el('vi-start-btn').textContent, 'Start the interview');
+    assert.match(h.el('vi-entitlement').innerHTML, /See plans/);
+  } finally { h.dispose(); }
+});
+
+test('a start failure that is not a paywall still lets the user retry', async () => {
+  const h = createVoiceClientHarness({ routes: { ...LIVE_ROUTES,
+    '/api/voice/session': () => ({ __status: 502, error: 'Could not start the voice session. Please try again.' })
+  } });
+  try {
+    await h.ready();
+    h.el('vi-role').value = 'Product Manager';
+    await h.click('vi-start-btn');
+    assert.equal(h.el('vi-start-btn').disabled, false);
+    assert.equal(h.el('vi-start-btn').textContent, 'Start the interview');
+  } finally { h.dispose(); }
+});
+
+// ------------------------------------------------------- report variants
+
+const FREE_TOO_SHORT = {
+  partial: true, tooShort: true, overall: null, dimensions: null, moments: null, summary: null,
+  topStrength: 'The session was too short to evaluate.',
+  topImprovement: 'Run a full session so the interviewer can hear complete answers.'
+};
+
+test('a free session too short to score says so instead of offering a full report', async () => {
+  const h = await openPastSession(scoredSessionPayload({ fullAccess: false, transcript: null, scorecard: FREE_TOO_SHORT }));
+  try {
+    const html = h.el('vi-scorecard').innerHTML;
+    assert.ok(html.includes('Not enough candidate speech to score this session.'));
+    assert.ok(html.includes('There is no full report for this session.'));
+    assert.ok(!html.includes('Your full report is ready'), 'no upsell for a report that does not exist');
+    assert.ok(!html.includes('vi-sc-blur'), 'no blurred stand-in report');
+    assert.ok(html.includes('href="/pricing"'));
+  } finally { h.dispose(); }
+});
+
+test('a free scored session still shows the locked full report', async () => {
+  const h = await openPastSession(scoredSessionPayload({ fullAccess: false, transcript: null,
+    scorecard: { ...FREE_TOO_SHORT, tooShort: undefined, topStrength: 'Clear example.', topImprovement: 'Lead with the result.' } }));
+  try {
+    const html = h.el('vi-scorecard').innerHTML;
+    assert.ok(html.includes('Your full report is ready.'));
+    assert.ok(html.includes('vi-sc-blur'));
+    assert.ok(!html.includes('Not enough candidate speech'));
+  } finally { h.dispose(); }
+});
+
+const expiredPayload = (activePlan) => scoredSessionPayload({
+  fullAccess: false, expired: true, activePlan, transcript: null,
+  scorecard: { topStrength: 'Clear example.', topImprovement: 'Lead with the result.' }
+});
+
+test('an expired report points an active plan at a new interview, not an upgrade', async () => {
+  const h = await openPastSession(expiredPayload(true));
+  try {
+    const html = h.el('vi-scorecard').innerHTML;
+    assert.ok(html.includes('This report has expired.'));
+    assert.ok(html.includes('Your plan is still active.'));
+    assert.ok(html.includes('Start a new interview'));
+    assert.ok(!/upgrade/i.test(html));
+    assert.ok(!html.includes('href="/pricing"'));
+    assert.equal(h.analyticsEvents.filter((e) => e.name === 'paywall_view').length, 0);
+  } finally { h.dispose(); }
+});
+
+test('an expired report without an active plan points to plans and never promises to keep reports', async () => {
+  const h = await openPastSession(expiredPayload(false));
+  try {
+    const html = h.el('vi-scorecard').innerHTML;
+    assert.ok(html.includes('This report has expired.'));
+    assert.ok(html.includes('Reports are kept for 90 days.'));
+    assert.ok(html.includes('href="/pricing"'));
+    assert.ok(!/upgrade to keep every report/i.test(html));
+  } finally { h.dispose(); }
+});
+
+// ----------------------------------------------- session-over-session delta
+
+// Finish a live session with the history rail on, then read the report the
+// scoring poll renders. History is newest first and omits the live session.
+async function finishedReport(history, scorecard) {
+  const h = await liveInterviewWithOneAnswer({
+    elementIds: ['vi-history-panel'],
+    timerDelay: (ms) => (ms === 2500 || ms === 3500 ? 0 : ms),
+    routes: { ...LIVE_ROUTES,
+      '/api/voice/sessions': () => ({ sessions: history }),
+      '/api/voice/session/': (url) => (url.includes('/complete')
+        ? { sessionId: 'live-1', status: 'completed' }
+        : scoredSessionPayload({ sessionId: 'live-1', scorecard: { ...scoredSessionPayload().scorecard, ...scorecard } }))
+    }
+  });
+  await h.click('vi-end-btn');
+  // The poll timer is shortened to 0 ms, which still needs a real tick.
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  await h.settle(20);
+  return h;
+}
+
+const PM_SENIOR = { role: 'Product Manager', seniority: 'Senior', status: 'ready' };
+
+test('a v2 report shows the delta against the last v2 session for the same role and level', async () => {
+  const h = await finishedReport([
+    { sessionId: 'other-role', role: 'Data Engineer', seniority: 'Senior', status: 'ready', overall: 95, methodologyVersion: 2 },
+    { sessionId: 'other-level', role: 'Product Manager', seniority: 'Junior', status: 'ready', overall: 90, methodologyVersion: 2 },
+    { sessionId: 'same', ...PM_SENIOR, overall: 64, methodologyVersion: 2 },
+    { sessionId: 'old-rubric', ...PM_SENIOR, overall: 30, methodologyVersion: 1 }
+  ], { overall: 72, methodologyVersion: 2 });
+  try {
+    const html = h.el('vi-scorecard').innerHTML;
+    assert.ok(html.includes('>72<'), 'the report rendered: ' + html.slice(0, 200));
+    assert.ok(html.includes('▲ +8 vs your last session for this role'));
+    assert.ok(!html.includes('vi-sc-delta--down'));
+  } finally { h.dispose(); }
+});
+
+test('a lower v2 score keeps the muted downward styling', async () => {
+  const h = await finishedReport([{ sessionId: 'same', ...PM_SENIOR, overall: 80, methodologyVersion: 2 }],
+    { overall: 72, methodologyVersion: 2 });
+  try {
+    const html = h.el('vi-scorecard').innerHTML;
+    assert.ok(html.includes('vi-sc-delta vi-sc-delta--down'));
+    assert.ok(html.includes('▼ −8 vs your last session for this role'));
+  } finally { h.dispose(); }
+});
+
+test('no delta when no earlier session shares the rubric, role and level', async () => {
+  const h = await finishedReport([
+    { sessionId: 'old-rubric', ...PM_SENIOR, overall: 30, methodologyVersion: 1 },
+    { sessionId: 'other-role', role: 'Data Engineer', seniority: 'Senior', status: 'ready', overall: 95, methodologyVersion: 2 }
+  ], { overall: 72, methodologyVersion: 2 });
+  try {
+    const html = h.el('vi-scorecard').innerHTML;
+    assert.ok(html.includes('>72<'));
+    assert.ok(!html.includes('vi-sc-delta'), 'scores from another rubric, role or level are never compared');
+  } finally { h.dispose(); }
+});
+
 for (const t of pending) await t();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

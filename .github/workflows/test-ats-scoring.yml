@@ -107,6 +107,10 @@ jobs:
         working-directory: app/functions/_lib/__tests__
         run: node --test voice-managed-client.test.mjs
 
+      - name: Run voice report gating tests
+        working-directory: app/functions/_lib/__tests__
+        run: node --test voice-session-report.test.mjs
+
       - name: Run role-based coaching evidence and report tests
         working-directory: app/functions/_lib/__tests__
         run: node --test voice-coaching.test.mjs
