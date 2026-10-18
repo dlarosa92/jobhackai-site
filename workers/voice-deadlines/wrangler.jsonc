@@ -14,7 +14,7 @@
   "env": {
     "dev": {
       "name": "jobhackai-voice-deadlines-dev",
-      "vars": {"ENVIRONMENT": "dev", "VOICE_DEADLINES_ENABLED": "false"},
+      "vars": {"ENVIRONMENT": "dev", "VOICE_DEADLINES_ENABLED": "true"},
       "secrets": {"required": ["OPENAI_API_KEY"]},
       "d1_databases": [{"binding": "DB", "database_name": "jobhackai-dev-db", "database_id": "c5c0eee5-a223-4ea2-974e-f4aee5a28bab"}],
       "durable_objects": {"bindings": [{"name": "VOICE_DEADLINES", "class_name": "VoiceDeadline"}]}
