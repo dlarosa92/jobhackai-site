@@ -1,4 +1,5 @@
 import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { gmailRecords } from './gmail-sync.js';
 
 const OWNER = 'sebastian.larosa@jobhackai.io';
 const ACCESS_AUD = '884df74e9be8546b0051980538c8e00a75efd2b1d2da5a04a4e4fbe78f3a4a40';
@@ -82,12 +83,17 @@ async function overview(env, now = new Date()) {
 }
 
 async function campaignRecords(env, now = new Date()) {
-  const result = await env.DASHBOARD_DB.prepare("SELECT id, channel, title, detail, review_url AS reviewUrl, state, evidence, updated_at AS updatedAt, sort_order AS sortOrder, impact, next_action AS nextAction FROM campaign_items ORDER BY CASE impact WHEN 'customer' THEN 0 WHEN 'prospect' THEN 1 ELSE 2 END, sort_order, id").all();
-  const items = result.results;
+  const [result, gmail] = await Promise.all([
+    env.DASHBOARD_DB.prepare("SELECT id, channel, title, detail, review_url AS reviewUrl, state, evidence, updated_at AS updatedAt, sort_order AS sortOrder, impact, next_action AS nextAction FROM campaign_items WHERE gmail_thread_id IS NULL OR NOT EXISTS (SELECT 1 FROM gmail_threads WHERE thread_id=campaign_items.gmail_thread_id) ORDER BY CASE impact WHEN 'customer' THEN 0 WHEN 'prospect' THEN 1 ELSE 2 END, sort_order, id").all(),
+    gmailRecords(env.DASHBOARD_DB, now),
+  ]);
+  const rank = { customer: 0, prospect: 1, campaign: 2 };
+  const items = [...gmail.items, ...result.results].sort((a, b) => rank[a.impact] - rank[b.impact]);
   return {
     asOf: now.toISOString(),
     latestChange: items.reduce((latest, item) => item.updatedAt > latest ? item.updatedAt : latest, ''),
     items,
+    gmailSync: gmail.gmailSync,
   };
 }
 

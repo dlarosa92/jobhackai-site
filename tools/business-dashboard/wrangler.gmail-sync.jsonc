@@ -1,0 +1,11 @@
+{
+  "$schema": "https://unpkg.com/wrangler/config-schema.json",
+  "name": "jobhackai-dashboard-gmail-sync",
+  "main": "gmail-ingest.bundle.js",
+  "compatibility_date": "2026-10-17",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "d1_databases": [{ "binding": "DASHBOARD_DB", "database_name": "jobhackai-business-dashboard", "database_id": "efa0a420-6d83-450a-9133-572d174e2178" }],
+  "observability": { "enabled": true, "head_sampling_rate": 1 }
+}
