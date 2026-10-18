@@ -4,6 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="js/cookie-consent.js?v=20261001-checkout-2" defer></script>
   <style>html.auth-pending,html.plan-pending{visibility:hidden}</style>
   <script>window.__JHA_ALLOW_PREVIEW__ = true; /* free tool: logged-out preview with signup gate */</script>
   <script src="js/static-auth-guard.js?v=20260125-1"></script>
@@ -214,7 +215,7 @@
   <script src="js/run-authority.js?v=20260112-1"></script>
 
   <!-- Component overrides -->
-  <link rel="stylesheet" href="css/header.css">
+  <link rel="stylesheet" href="css/header.css?v=20260930-voice-nav-1">
   <link rel="stylesheet" href="css/footer.css">
   <link rel="stylesheet" href="css/history-tile.css">
   <style>
@@ -1244,7 +1245,7 @@
   <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
   
   <!-- Centralized mobile menu handler -->
-  <script src="js/mobile-menu.js?v=20250115-1"></script>
+  <script src="js/mobile-menu.js?v=20260930-voice-nav-1"></script>
   
   <!-- Load Firebase auth as ES module (same pattern as dashboard.html) -->
   <script src="js/plan-cache.js"></script>
@@ -1252,7 +1253,7 @@
   
   <!-- DEV-ONLY PLAN TOGGLE will be added by navigation.js -->
   <script src="js/auth-persistence.js"></script>
-  <script src="js/navigation.js?v=20260920-1"></script>
+  <script src="js/navigation.js?v=20261005-app-nav-1"></script>
   <script src="js/universal-logout.js?v=20260208-1"></script>
   <!-- Inactivity tracker - auto-logout after 30 minutes of inactivity -->
   <script src="js/inactivity-tracker.js?v=20250115-1"></script>
@@ -1262,11 +1263,11 @@
   <script src="js/loading-overlay.js?v=20250115-1" type="module"></script>
   <script src="js/toast.js?v=20250115-1"></script>
   <script src="js/file-validation.js?v=20250115-1"></script>
-  <script src="js/role-selector.js?v=20250115-1" type="module"></script>
+  <script src="js/role-selector.js?v=20261017-page-tag-1" type="module"></script>
   <script src="js/api-retry.js?v=20250115-1"></script>
   <script src="js/state-persistence.js?v=20250115-1"></script>
   <script src="js/free-account-manager.js?v=20250115-1"></script>
-  <script src="js/stripe-integration.js"></script>
+  <script src="js/stripe-integration.js?v=20260930-tracking-1"></script>
   <script>
     if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {
       window.JobHackAINavigation.initializeNavigation();
@@ -9250,6 +9251,6 @@
     </div>
   </footer>
   <script src="js/feedback-widget.js?v=20260303-1" defer></script>
-  <script src="js/voice-cta.js?v=20260613-1" defer></script>
+  <script src="js/voice-cta.js?v=20260930-tracking-1" defer></script>
 </body>
 </html>

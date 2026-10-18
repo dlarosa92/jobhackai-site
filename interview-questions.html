@@ -4,6 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="js/cookie-consent.js?v=20261001-checkout-2" defer></script>
   <style>html.auth-pending,html.plan-pending{visibility:hidden}</style>
   <script>window.__JHA_ALLOW_PREVIEW__ = true; /* free tool: logged-out preview with signup gate */</script>
   <script src="js/static-auth-guard.js?v=20260125-1"></script>
@@ -165,7 +166,7 @@
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/components.css">
-  <link rel="stylesheet" href="css/header.css">
+  <link rel="stylesheet" href="css/header.css?v=20260930-voice-nav-1">
   <link rel="stylesheet" href="css/footer.css">
   <script src="js/custom-select.js?v=20251212-1" defer></script>
   <script src="js/components/usage-indicator.js"></script>
@@ -4486,8 +4487,8 @@ function initIQPage(){
   </script>
   <!-- Load navigation system -->
   <script src="js/auth-persistence.js"></script>
-  <script src="js/navigation.js?v=20260920-1"></script>
-  <script src="js/stripe-integration.js"></script>
+  <script src="js/navigation.js?v=20261005-app-nav-1"></script>
+  <script src="js/stripe-integration.js?v=20260930-tracking-1"></script>
   <script src="js/universal-logout.js?v=20260208-1"></script>
   <!-- Load Firebase auth as ES module (required for API authentication) - MUST load before inactivity-tracker -->
   <script src="js/plan-cache.js"></script>
@@ -4495,7 +4496,7 @@ function initIQPage(){
   <!-- Inactivity tracker - auto-logout after 30 minutes of inactivity -->
   <script src="js/inactivity-tracker.js?v=20250115-1"></script>
   <!-- Load role selector -->
-  <script src="js/role-selector.js?v=20250115-1" type="module"></script>
+  <script src="js/role-selector.js?v=20261017-page-tag-1" type="module"></script>
   <script>
     // Initialize navigation system when DOM is ready
     document.addEventListener('DOMContentLoaded', function() {
@@ -4507,6 +4508,6 @@ function initIQPage(){
   <script src="js/main.js" type="module"></script>
   <script src="js/analytics.js" type="module"></script>
   <script src="js/feedback-widget.js?v=20260303-1" defer></script>
-  <script src="js/voice-cta.js?v=20260613-1" defer></script>
+  <script src="js/voice-cta.js?v=20260930-tracking-1" defer></script>
 </body>
 </html>

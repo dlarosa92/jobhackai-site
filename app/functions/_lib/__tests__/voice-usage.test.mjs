@@ -48,7 +48,7 @@ function setup(t){
  for(const f of ['020_add_voice_entitlements.sql','021_add_voice_end_reason.sql','029_voice_usage_evidence.sql']) db.exec(readFileSync(new URL('../../../db/migrations/'+f,import.meta.url),'utf8'));
  db.exec("INSERT INTO voice_sessions(id,user_id,status,entitlement_mode) VALUES('own',1,'active','free'),('other',2,'active','free')");
  const ctx={Request,Response,queueAccountWork,console:{log(){},error(){},warn(){}},normalizeVoiceUsage,responseTokenTotals,
- getBearer:r=>r.headers.get('Authorization'),verifyFirebaseIdToken:async()=>({uid:'owner'}),getDb:()=>db,getOrCreateUserByAuthId:async()=>({id:1}),voiceFeatureEnabled:()=>true,
+ getBearer:r=>r.headers.get('Authorization'),verifyFirebaseIdToken:async()=>({uid:'owner'}),getDb:()=>db,getOrCreateUserByAuthId:async()=>({id:1}),voiceFeatureEnabled:()=>true,restoreEarlyEndCredit:async()=>false,
  generateRequestId:()=> 'id', normalizeEndReason:()=> 'user_ended',shouldGenerateScorecard:()=>false,
  successResponse:(body,status)=>Response.json(body,{status}),errorResponse:(error,status)=>Response.json({error},{status})};
  vm.createContext(ctx);vm.runInContext(route.replace(/^import .*;\n/gm,'').replace('export async function onRequest','async function onRequest')+'\nglobalThis.handler=onRequest',ctx);
