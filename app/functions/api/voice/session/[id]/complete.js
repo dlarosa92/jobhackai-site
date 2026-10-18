@@ -10,7 +10,7 @@
 import { getBearer, verifyFirebaseIdToken } from '../../../../_lib/firebase-auth.js';
 import { queueAccountWork } from '../../../../_lib/account-operation-scope.js';
 import { getOrCreateUserByAuthId, getDb } from '../../../../_lib/db.js';
-import { voiceFeatureEnabled } from '../../../../_lib/voice-entitlements.js';
+import { voiceFeatureEnabled, restoreEarlyEndCredit } from '../../../../_lib/voice-entitlements.js';
 import { normalizeEndReason, shouldGenerateScorecard } from '../../../../_lib/voice-interviewer.js';
 import { generateAndStoreScorecard } from '../../../../_lib/voice-scorecard.js';
 import { errorResponse, successResponse, generateRequestId } from '../../../../_lib/error-handler.js';
@@ -79,13 +79,19 @@ async function completeRequest(context) {
     if (!session) return errorResponse('Session not found',404,origin,env,requestId);
     const completedResponse = data => successResponse({ ...data, ...(managed ? {saved:true,connectionClosed,closureNeedsReview} : {}) },
       managed && !connectionClosed ? 202 : 200,origin,env,requestId);
+    // A candidate who ended within the grace window gets a free or pack credit
+    // back, once per account. The server times it from the session row. The
+    // call is idempotent, so a repeated completion only reports the outcome.
+    const earlyEndCredit = reason => reason === 'user_ended'
+      ? restoreEarlyEndCredit(env, { userRowId: d1User.id, sessionId }) : false;
     if (session.status === 'completed') {
       // Idempotent: keep the original completion, still ensure a scorecard
       // exists — except for a safety-ended session, which is never scored.
       if (shouldGenerateScorecard(session.end_reason)) {
         queueAccountWork(context, () => generateAndStoreScorecard(env, sessionId));
       }
-      return completedResponse({ sessionId, status: 'completed', alreadyCompleted: true, endReason: session.end_reason || null });
+      return completedResponse({ sessionId, status: 'completed', alreadyCompleted: true, endReason: session.end_reason || null,
+        creditRestored: await earlyEndCredit(session.end_reason) });
     }
 
     // Transcript: [{ speaker: 'user'|'assistant', text: '...' }, ...]
@@ -143,7 +149,8 @@ async function completeRequest(context) {
       if (shouldGenerateScorecard(saved.end_reason)) {
         queueAccountWork(context, () => generateAndStoreScorecard(env, sessionId));
       }
-      return completedResponse({ sessionId, status: 'completed', alreadyCompleted: true, endReason: saved.end_reason || null });
+      return completedResponse({ sessionId, status: 'completed', alreadyCompleted: true, endReason: saved.end_reason || null,
+        creditRestored: await earlyEndCredit(saved.end_reason) });
     }
 
     // Observed client usage only; provider reconciliation remains required.
@@ -160,7 +167,9 @@ async function completeRequest(context) {
       console.log(`[VOICE-SAFETY] session=${sessionId} scorecard suppressed (ended_for_safety)`);
     }
 
-    return completedResponse({ sessionId, status: 'completed', costUsd, endReason });
+    const creditRestored = await earlyEndCredit(endReason);
+    if (creditRestored) console.log(`[VOICE-GRACE] session=${sessionId} uid=${uid} early end, credit restored`);
+    return completedResponse({ sessionId, status: 'completed', costUsd, endReason, creditRestored });
   } catch (err) {
     if (err?.message==='voice_connection_request_invalid') return errorResponse('Invalid interview reference',400,origin,env,requestId);
     if (err?.message==='voice_connection_not_found') return errorResponse('Session not found',404,origin,env,requestId);

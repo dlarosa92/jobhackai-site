@@ -142,7 +142,7 @@ jobs:
         run: node app/functions/_lib/__tests__/account-pack-display.test.mjs
 
       - name: Voice offer eligibility and checkout return routes
-        run: node --test app/functions/_lib/__tests__/voice-offer-display.test.mjs app/functions/_lib/__tests__/checkout-return.test.mjs app/functions/_lib/__tests__/pricing-route.test.mjs
+        run: node --test app/functions/_lib/__tests__/voice-offer-display.test.mjs app/functions/_lib/__tests__/checkout-return.test.mjs app/functions/_lib/__tests__/pricing-route.test.mjs app/functions/_lib/__tests__/pricing-preselect.test.mjs
 
       - name: Collected payments and refunds (real SQLite)
         run: node app/functions/_lib/__tests__/collected-revenue.test.mjs

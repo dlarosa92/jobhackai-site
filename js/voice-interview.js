@@ -34,6 +34,15 @@
   // ASR/VAD endpointing is untouched and stays server-side.
   var WAITING_CUE_MS = 4000;
 
+  // With this much time left the interviewer is told to wrap up, so the
+  // session closes through its normal closing line instead of the clock.
+  var WRAP_UP_SECONDS = 120;
+  var WRAP_UP_INSTRUCTION = 'About two minutes remain in this session. Let the candidate finish their current answer, ' +
+    'ask at most one short follow-up, then give your normal closing statement. Do not start a new topic.';
+
+  // How many recent turns the live view shows under the pinned question.
+  var RECENT_TURNS = 4;
+
   var state = {
     sessionId: null,
     startRequestId: null, // retained across failed starts to recover without spending twice
@@ -70,7 +79,14 @@
     endCause: null,            // 'conduct' | 'safety' | 'closing' — which reason the pending end carries
     lifecycle: null,           // interview lifecycle (voice-lifecycle.js); owns commit boundaries
     turnWait: null,            // { committedAtMs, cueTimer } — turn-start latency + waiting cue
-    lastAssistantResponseId: ''  // most recent assistant response seen; straggler guard for the settling window
+    lastAssistantResponseId: '',  // most recent assistant response seen; straggler guard for the settling window
+    interviewStartedAtMs: null,   // official interview start; the visible countdown waits for it
+    wrapUpNoted: false,           // the 2-minute notice went out (screen and interviewer)
+    audioEventsSeen: false,       // output_audio_buffer events drive the speaking indicator once seen
+    heardInterviewer: false,      // "Your turn" only makes sense after the interviewer has spoken
+    endConfirmOpen: false,
+    graceNotedSessionId: null,
+    analyticsReportSessionId: null
   };
 
   function $(id) { return document.getElementById(id); }
@@ -80,6 +96,12 @@
       var el = $(id);
       if (el) el.style.display = (id === viewId) ? '' : 'none';
     });
+    // The live interview takes the whole page: no intro, no history rail.
+    var wrap = document.querySelector('.vi-wrap');
+    if (wrap && wrap.classList) {
+      wrap.classList.toggle('vi-mode-live', viewId === 'vi-live-view');
+      wrap.classList.toggle('vi-mode-done', viewId === 'vi-done-view');
+    }
   }
 
   function setStatus(text, cls) {
@@ -468,21 +490,65 @@
   // slot its conversation item reserved (see voice-transcript-order.js).
   // Persistence is gated per item by the lifecycle: only turns that belong to
   // the official interview reach the stored transcript, history, or scoring.
-  // The live caption is ephemeral UI, so the audio-check exchange still
-  // captions while it is happening — it just never persists.
+  // The pinned question is ephemeral UI, so the audio-check greeting still
+  // shows while it is happening; it just never persists.
   function recordTurn(speaker, text, itemId) {
     text = String(text || '').trim();
     if (!text) return;
     var lc = lifecycle();
-    if (lc.is(PHASES.AUDIO_CHECK) || lc.is(PHASES.ACTIVE_INTERVIEW)) {
-      var caption = $('vi-caption');
-      if (caption) {
-        caption.textContent = (speaker === 'assistant' ? 'Interviewer: ' : 'You: ') + text;
-      }
+    var live = lc.is(PHASES.AUDIO_CHECK) || lc.is(PHASES.ACTIVE_INTERVIEW);
+    // Whisper transcripts of the candidate routinely land after the next
+    // question, so only the interviewer's own line can replace the pinned
+    // question. Candidate turns join the recent conversation in item order.
+    if (live && speaker === 'assistant') showQuestion(text);
+    if (lc.shouldCommit(itemId || null)) {
+      if (!state.order) state.order = newTranscriptOrder();
+      state.order.setText(itemId || null, speaker, text);
     }
-    if (!lc.shouldCommit(itemId || null)) return;
-    if (!state.order) state.order = newTranscriptOrder();
-    state.order.setText(itemId || null, speaker, text);
+    if (live) renderRecentTurns();
+  }
+
+  function showQuestion(text) {
+    var question = $('vi-question');
+    if (question) question.textContent = text;
+    var caption = $('vi-caption');
+    if (caption) caption.textContent = '';
+  }
+
+  // The last few committed turns in conversation order, not arrival order.
+  function renderRecentTurns() {
+    var box = $('vi-recent-turns');
+    if (!box) return;
+    var turns = getTranscript().slice(-RECENT_TURNS);
+    var wrap = $('vi-recent');
+    if (wrap) wrap.style.display = turns.length ? '' : 'none';
+    box.innerHTML = turns.map(function (t) {
+      var who = t.speaker === 'assistant' ? 'Interviewer' : 'You';
+      return '<p class="vi-recent-turn"><strong>' + who + ':</strong> ' + escapeHtml(t.text) + '</p>';
+    }).join('');
+    if (typeof box.scrollHeight === 'number') box.scrollTop = box.scrollHeight;
+  }
+
+  // Fresh live view for a new session.
+  function resetLiveView() {
+    var question = $('vi-question');
+    if (question) question.textContent = 'The interviewer will start in a moment.';
+    var caption = $('vi-caption');
+    if (caption) caption.textContent = 'Speak naturally and take your time.';
+    var note = $('vi-time-note');
+    if (note) note.style.display = 'none';
+    var recent = $('vi-recent');
+    if (recent) recent.style.display = 'none';
+    var turns = $('vi-recent-turns');
+    if (turns) turns.innerHTML = '';
+    var timerEl = $('vi-timer');
+    if (timerEl) timerEl.textContent = formatClock(state.maxMinutes * 60);
+    hideEndConfirm();
+    state.interviewStartedAtMs = null;
+    state.wrapUpNoted = false;
+    state.audioEventsSeen = false;
+    state.heardInterviewer = false;
+    setSpeaking(false);
   }
 
   // ---------- realtime sends ----------
@@ -869,9 +935,15 @@
     endInterview(state.conduct ? state.conduct.endReason() : 'ended_by_interviewer');
   }
 
+  // Color plus words, so the state never depends on color alone.
   function setSpeaking(on) {
     var ind = $('vi-speaking');
     if (ind) ind.classList.toggle('vi-speaking-on', !!on);
+    var label = $('vi-speaking-label');
+    if (label) {
+      label.textContent = on ? 'Interviewer speaking'
+        : (state.heardInterviewer && !state.ending ? 'Your turn' : 'Interviewer');
+    }
   }
 
   // ---------- turn-start latency + waiting cue ----------
@@ -996,6 +1068,8 @@
     if (action === 'begin_interview') {
       setStatus('Live. The interviewer can hear you.', 'vi-live');
       track('voice_interview_begin', {});
+      state.interviewStartedAtMs = Date.now();
+      tickTimer();
       beginTurnWait();
       return;
     }
@@ -1061,6 +1135,9 @@
       if (opening === 'demoted') {
         console.warn('[VOICE] candidate could not hear; audio check repeating — round excluded');
         setStatus('Connected. Quick audio check...', 'vi-connecting');
+        // Back in the audio check: the visible countdown holds again.
+        state.interviewStartedAtMs = null;
+        tickTimer();
         track('voice_audio_check_repeat', {});
         // Exclusion gates future writes only. A whisper that landed inside
         // the settling window is already written into the assembler, and the
@@ -1101,7 +1178,10 @@
     // only then does the closing turn count as complete.
     if (type === 'response.done') {
       handleToolCall(readToolCall(evt));
-      setSpeaking(false);
+      // response.done means generation finished, while the audio can keep
+      // playing for seconds. Only without audio buffer events is it the best
+      // available signal that the interviewer stopped.
+      if (!state.audioEventsSeen) setSpeaking(false);
       // The audio-check greeting finished generating; the next candidate
       // turn is the acknowledgement that begins the official interview.
       lifecycle().noteGreetingDone();
@@ -1118,7 +1198,7 @@
         sendRealtime({ type: 'response.cancel' });
         return;
       }
-      setSpeaking(true);
+      if (!state.audioEventsSeen) { state.heardInterviewer = true; setSpeaking(true); }
       return;
     }
     if (type === 'output_audio_buffer.started') {
@@ -1132,6 +1212,8 @@
       state.audioResponseId = evt.response_id || '';
       if (state.conductEnd) state.conductEnd.noteAudioStarted();
       noteTurnStarted();
+      state.audioEventsSeen = true;
+      state.heardInterviewer = true;
       setSpeaking(true);
       return;
     }
@@ -1216,7 +1298,10 @@
           // interviewer speaks first.
           lc.noteReconnect();
         } else {
-          return;               // reconnect mid-interview: the conversation resumes as before
+          // Reconnect mid-interview: the conversation resumes as before. A
+          // fresh realtime session has not seen the wrap-up notice yet.
+          if (state.wrapUpNoted) sendWrapUpInstruction();
+          return;
         }
         if (!lc.is(PHASES.ACTIVE_INTERVIEW)) {
           setStatus('Connected. Quick audio check...', 'vi-connecting');
@@ -1380,24 +1465,68 @@
 
   // ---------- timer ----------
 
+  // The session limit runs from the connection: the server's deadline when
+  // managed (the authority), the connection time otherwise. The visible
+  // countdown holds at the full length through the audio check and starts
+  // with the official interview, always showing the real time left, so it
+  // never promises more than the server allows.
   function startTimer(maxMinutes) {
     if (!state.startedAtMs || !state.managedTransport) state.startedAtMs = Date.now();
+    tickTimer();
+    state.timerInterval = setInterval(tickTimer, 1000);
+  }
+
+  function remainingSeconds() {
+    var limitMs = state.managedTransport && Number.isFinite(state.deadlineAtMs)
+      ? state.deadlineAtMs : (state.startedAtMs || Date.now()) + state.maxMinutes * 60000;
+    return Math.ceil((limitMs - Date.now()) / 1000);
+  }
+
+  function formatClock(seconds) {
+    var m = Math.floor(Math.abs(seconds) / 60);
+    var s = Math.abs(seconds) % 60;
+    return (seconds < 0 ? '-' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+  }
+
+  function tickTimer() {
+    if (!state.startedAtMs) return;
+    var remaining = remainingSeconds();
+    var counting = !!state.interviewStartedAtMs;
     var timerEl = $('vi-timer');
-    state.timerInterval = setInterval(function () {
-      var elapsed = Math.floor((Date.now() - state.startedAtMs) / 1000);
-      var remaining = state.managedTransport && Number.isFinite(state.deadlineAtMs)
-        ? Math.ceil((state.deadlineAtMs - Date.now()) / 1000) : maxMinutes * 60 - elapsed;
-      if (timerEl) {
-        var m = Math.floor(Math.abs(remaining) / 60);
-        var s = Math.abs(remaining) % 60;
-        timerEl.textContent = (remaining < 0 ? '-' : '') + m + ':' + (s < 10 ? '0' : '') + s;
-      }
-      if (remaining <= 0) {
-        // endInterview defers to a pending conduct or safety close on its own;
-        // checking here too just keeps this from logging that once a second.
-        if (!state.conductEnd) endInterview('time_up');
-      }
-    }, 1000);
+    if (timerEl) {
+      timerEl.textContent = formatClock(counting ? remaining : state.maxMinutes * 60);
+      if (timerEl.classList) timerEl.classList.toggle('vi-timer--held', !counting);
+    }
+    if (counting && remaining <= WRAP_UP_SECONDS) noteWrapUpTime();
+    if (remaining <= 0) {
+      // endInterview defers to a pending conduct or safety close on its own;
+      // checking here too just keeps this from logging that once a second.
+      if (!state.conductEnd) endInterview('time_up');
+    }
+  }
+
+  // Two minutes left: tell the candidate on screen and tell the interviewer to
+  // wrap up. The interviewer's closing line then ends the session through the
+  // normal closing path, before the clock cuts anyone off mid-sentence.
+  function noteWrapUpTime() {
+    if (state.wrapUpNoted || state.ending || state.conductEnd) return;
+    if (!lifecycle().is(PHASES.ACTIVE_INTERVIEW)) return;
+    state.wrapUpNoted = true;
+    var note = $('vi-time-note');
+    if (note) note.style.display = '';
+    sendWrapUpInstruction();
+    track('voice_wrap_up_notice', {});
+  }
+
+  function sendWrapUpInstruction() {
+    // A system item is not a turn. Excluding its id first keeps it out of the
+    // transcript, so it never holds the end-of-session flush open.
+    var id = 'jha_wrapup_' + Math.random().toString(36).slice(2, 10);
+    lifecycle().excludeItem(id);
+    sendRealtime({
+      type: 'conversation.item.create',
+      item: { id: id, type: 'message', role: 'system', content: [{ type: 'input_text', text: WRAP_UP_INSTRUCTION }] }
+    });
   }
 
   // ---------- lifecycle ----------
@@ -1467,6 +1596,7 @@
       state.lifecycle = newInterviewLifecycle();
       state.lastAssistantResponseId = '';
       clearTurnWait();
+      resetLiveView();
 
       show('vi-live-view');
       setStatus('Connecting...', 'vi-connecting');
@@ -1512,6 +1642,7 @@
       state.lifecycle = newInterviewLifecycle();
       state.lastAssistantResponseId = '';
       clearTurnWait();
+      resetLiveView();
       show('vi-live-view');
       setStatus('Connecting...', 'vi-connecting');
       historyLiveStart(role, seniority);
@@ -1671,6 +1802,34 @@
     if (btn && enabled !== null) btn.textContent = enabled ? 'Mute' : 'Unmute';
   }
 
+  // The End button asks first once the official interview is running, so an
+  // accidental tap cannot close a session. Before that there is nothing said
+  // yet, and every automatic end (time, closing line, spoken request) skips it.
+  function requestEnd() {
+    if (state.ending) return;
+    var panel = $('vi-end-confirm');
+    if (!panel || !lifecycle().is(PHASES.ACTIVE_INTERVIEW)) return endInterview('user_ended');
+    if (state.endConfirmOpen) return;
+    state.endConfirmOpen = true;
+    panel.style.display = '';
+    track('end_confirm_shown', {});
+    var keep = $('vi-end-keep');
+    if (keep && typeof keep.focus === 'function') keep.focus();
+  }
+
+  function hideEndConfirm() {
+    state.endConfirmOpen = false;
+    var panel = $('vi-end-confirm');
+    if (panel) panel.style.display = 'none';
+  }
+
+  function cancelEnd() {
+    hideEndConfirm();
+    track('end_confirm_cancel', {});
+    var endBtn = $('vi-end-btn');
+    if (endBtn && typeof endBtn.focus === 'function') endBtn.focus();
+  }
+
   async function endInterview(reason) {
     if (state.ending) return;
     // A conduct or safety close already in flight owns the ending and the reason
@@ -1685,6 +1844,7 @@
     }
     var wasConnecting = !!state.connectionAttempt;
     state.ending = true;
+    hideEndConfirm();
     cancelConnectionAttempt();
     // Mark unsaved before the asynchronous transcript flush so closing the
     // tab during that interval receives the same warning as a failed save.
@@ -1767,6 +1927,7 @@
         method: 'POST', body: JSON.stringify(pending)
       });
       if (!saved.ok) throw new Error((saved.data && saved.data.error) || 'save_failed');
+      noteCreditRestored(saved.data);
       if (saved.status === 202 || (saved.data && saved.data.connectionClosed === false)) {
         state.completionSaved = !!(saved.data && saved.data.saved);
         var closureNeedsReview = !!(saved.data && saved.data.closureNeedsReview);
@@ -1823,6 +1984,15 @@
       if (retryBtn) { retryBtn.style.display = ''; retryBtn.disabled = false; }
       historyLiveClear(false);
     } finally { state.savingCompletion = false; }
+  }
+
+  // The server gave this early-ended session's credit back (once per account).
+  function noteCreditRestored(data) {
+    if (!data || data.creditRestored !== true || state.graceNotedSessionId === state.sessionId) return;
+    state.graceNotedSessionId = state.sessionId;
+    var note = $('vi-grace-note');
+    if (note) note.style.display = '';
+    track('grace_credit_restored', {});
   }
 
   function pollScorecard(attempt) {
@@ -1931,7 +2101,188 @@
     wrap.style.display = '';
   }
 
+  // ---------- free report ----------
+
+  // Plain-language bands for the free practice score, highest first.
+  var SCORE_BANDS = [
+    { min: 75, label: 'Interview ready', tone: 'ready' },
+    { min: 50, label: 'Getting there', tone: 'progress' },
+    { min: 0, label: 'Needs specifics', tone: 'progress' }
+  ];
+
+  // The inline plan picker. Prices mirror pricing.html, which owns checkout.
+  var PLAN_OPTIONS = [
+    { id: 'weekly', name: 'Weekly', price: '$17', per: '/week', note: 'Cancel anytime' },
+    { id: 'monthly', name: 'Monthly', price: '$34', per: '/month', note: 'Cancel anytime' },
+    { id: 'pack', name: 'Interview Pack', price: '$39', per: 'for 5 sessions', note: 'One time payment. No subscription.' }
+  ];
+  var DEFAULT_PLAN = 'monthly';
+  var DIMENSION_NAMES = ['Communication', 'Structure', 'Content depth', 'Role fit'];
+
+  var CHECK_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20,6 9,17 4,12"/></svg>';
+  var LOCK_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>';
+
+  function scoreBand(score) {
+    for (var i = 0; i < SCORE_BANDS.length; i++) {
+      if (score >= SCORE_BANDS[i].min) return SCORE_BANDS[i];
+    }
+    return SCORE_BANDS[SCORE_BANDS.length - 1];
+  }
+
+  function planOption(id) {
+    for (var i = 0; i < PLAN_OPTIONS.length; i++) if (PLAN_OPTIONS[i].id === id) return PLAN_OPTIONS[i];
+    return null;
+  }
+
+  function pricingHref(planId) {
+    return '/pricing?plan=' + encodeURIComponent(planId) + '#plans';
+  }
+
+  // "Senior · 1 min · 3 questions", from what the session actually has.
+  function reportMeta(data) {
+    var parts = [];
+    if (data.seniority) parts.push(String(data.seniority));
+    var seconds = Number(data.durationSeconds);
+    if (data.durationSeconds != null && isFinite(seconds)) parts.push(Math.max(1, Math.round(seconds / 60)) + ' min');
+    var questions = Number(data.questionCount);
+    if (questions > 0) parts.push(questions + (questions === 1 ? ' question' : ' questions'));
+    return parts.join(' · ');
+  }
+
+  // Dimension names only. Free and expired reports never show numbers here.
+  function lockedDetailsHtml(teaserQuote) {
+    var html = '<div class="vi-locked-details"><h3>In the full report</h3><ul class="vi-locked-dims">';
+    DIMENSION_NAMES.forEach(function (name) { html += '<li>' + LOCK_SVG + '<span>' + name + '</span></li>'; });
+    html += '</ul>';
+    if (teaserQuote) {
+      // Close the sentence inside the quote unless the quote already ends one.
+      var quote = String(teaserQuote) + (/[.!?]$/.test(teaserQuote) ? '' : '.');
+      html += '<p class="vi-teaser">You said "' + escapeHtml(quote) + '" The full report shows what to say instead.</p>';
+    }
+    return html + '</div>';
+  }
+
+  function planPickerHtml() {
+    var selected = planOption(DEFAULT_PLAN);
+    var html = '<div class="vi-plan-picker"><h3 id="vi-plan-heading">Keep practicing until this answer is automatic</h3>' +
+      '<div class="vi-plan-options" role="radiogroup" aria-labelledby="vi-plan-heading">';
+    PLAN_OPTIONS.forEach(function (plan) {
+      var on = plan.id === selected.id;
+      html += '<label class="vi-plan-option' + (on ? ' is-selected' : '') + '">' +
+        '<input type="radio" name="vi-plan" value="' + plan.id + '"' + (on ? ' checked' : '') + '>' +
+        '<span class="vi-plan-name">' + plan.name + '</span>' +
+        '<span class="vi-plan-price">' + plan.price + '<small>' + plan.per + '</small></span></label>';
+    });
+    html += '</div><a id="vi-plan-continue" class="vi-btn-primary" href="' + pricingHref(selected.id) + '"' +
+      ' data-cta="voice-scorecard-plan-continue" data-plan="' + selected.id + '">Continue with ' + selected.name + '</a>' +
+      '<p id="vi-plan-note" class="vi-plan-note">' + selected.note + '</p></div>';
+    return html;
+  }
+
+  // Order: result, score, the one fix, what went well, what is locked, plans.
+  function renderFreeReport(data, sc, wrap) {
+    track('paywall_view', { surface: 'voice_scorecard' });
+    var html = '<div class="vi-result-head"><div class="vi-result-kicker">' + CHECK_SVG + '<span>Interview complete</span></div>' +
+      '<h2 class="vi-result-role">' + escapeHtml(data.role || 'Your interview') + '</h2>';
+    var meta = reportMeta(data);
+    if (meta) html += '<p class="vi-result-meta">' + escapeHtml(meta) + '</p>';
+    html += '</div>';
+
+    var score = sc.overall != null && isFinite(Number(sc.overall)) ? Math.round(Number(sc.overall)) : null;
+    if (sc.tooShort) {
+      html += '<p class="vi-sc-block">Not enough candidate speech to score this session.</p>';
+    } else if (score != null) {
+      var band = scoreBand(score);
+      html += '<div class="vi-result-score vi-result-score--' + band.tone + '"><div class="vi-sc-score">' + score + '</div>' +
+        '<div><div class="vi-result-band">' + band.label + '</div>' +
+        '<div class="vi-sc-overall-label">Practice score for this session</div></div></div>';
+    }
+
+    if (sc.topImprovement) {
+      html += '<div class="vi-fix-card"><h3>Your number one fix</h3><p>' + escapeHtml(sc.topImprovement) + '</p>';
+      if (!sc.tooShort) {
+        html += '<div class="vi-fix-actions">';
+        if (data.retry && data.retry.eligible) {
+          html += '<button type="button" id="vi-retry-btn" class="vi-btn-primary" data-cta="voice-retry-question">Retry this question, free</button>';
+        }
+        html += '<a class="vi-btn-secondary vi-btn-locked" href="' + pricingHref(DEFAULT_PLAN) + '" data-cta="voice-strong-answer-locked">' +
+          LOCK_SVG + '<span>Hear a strong answer</span></a></div>';
+      }
+      html += '</div>';
+    }
+
+    if (sc.tooShort) {
+      html += '<p class="vi-sc-block">There is no full report for this session. Run a full interview to get your scores, moment by moment feedback, and transcript.</p>';
+    } else {
+      if (sc.topStrength) html += '<div class="vi-good-card"><h3>What went well</h3><p>' + escapeHtml(sc.topStrength) + '</p></div>';
+      html += lockedDetailsHtml(sc.teaserQuote);
+    }
+
+    html += planPickerHtml();
+    wrap.innerHTML = html;
+    wrap.style.display = '';
+    bindFreeReport(wrap);
+  }
+
+  // Delegated once on the report container, which outlives each render.
+  function bindFreeReport(wrap) {
+    if (wrap.dataset && wrap.dataset.freeReportBound === 'true') return;
+    if (wrap.dataset) wrap.dataset.freeReportBound = 'true';
+    wrap.addEventListener('change', function (e) {
+      var input = e && e.target;
+      if (!input || input.name !== 'vi-plan') return;
+      selectPlan(input.value, wrap);
+    });
+    wrap.addEventListener('click', function (e) {
+      var target = e && e.target;
+      var retry = target && (target.id === 'vi-retry-btn' ? target
+        : (typeof target.closest === 'function' ? target.closest('#vi-retry-btn') : null));
+      if (retry) startQuestionRetry();
+    });
+  }
+
+  function selectPlan(planId, wrap) {
+    var plan = planOption(planId);
+    if (!plan) return;
+    var link = $('vi-plan-continue');
+    if (link) {
+      link.setAttribute('href', pricingHref(plan.id));
+      link.setAttribute('data-plan', plan.id);
+      link.textContent = 'Continue with ' + plan.name;
+    }
+    var note = $('vi-plan-note');
+    if (note) note.textContent = plan.note;
+    var options = wrap && typeof wrap.querySelectorAll === 'function' ? wrap.querySelectorAll('.vi-plan-option') : [];
+    for (var i = 0; i < options.length; i++) {
+      var input = options[i].querySelector('input');
+      options[i].classList.toggle('is-selected', !!(input && input.value === plan.id));
+    }
+    track('plan_option_selected', { plan: plan.id, surface: 'voice_scorecard' });
+  }
+
+  // The retry voice session (a 3-minute single-question call) is not built
+  // yet. The server only offers this button with VOICE_RETRY_ENABLED on, and
+  // that flag must stay off until the session exists.
+  function startQuestionRetry() {
+    track('retry_start', {});
+    alert('Retrying a question is not available yet.');
+  }
+
+  // One report_view per session, whichever report variant renders.
+  function trackReportView(data) {
+    if (!data || state.analyticsReportSessionId === data.sessionId) return;
+    state.analyticsReportSessionId = data.sessionId;
+    var sc = data.scorecard || {};
+    track('report_view', {
+      access: data.endReason === 'ended_for_safety' ? 'safety'
+        : data.fullAccess ? 'full' : data.expired ? 'expired' : 'free',
+      too_short: !!sc.tooShort,
+      has_score: sc.overall != null
+    });
+  }
+
   function renderScorecard(data) {
+    trackReportView(data);
     // A safety-ended session never renders as a scorecard, even if one was
     // stored before suppression existed — that legacy report is the one that
     // misframed the safety statement.
@@ -1944,6 +2295,10 @@
     if (doneStatus) doneStatus.style.display = 'none';
     if (!wrap) return;
     var sc = data.scorecard || {};
+    if (!data.fullAccess && !data.expired) {
+      renderFreeReport(data, sc, wrap);
+      return;
+    }
     var html = '';
 
     html += '<h2 class="vi-sc-title">Your interview report</h2>';
@@ -2028,36 +2383,19 @@
         '<a class="vi-btn-secondary" href="mock-interview.html">Practice typed questions</a>' +
         '<a class="vi-sc-actions-link" href="dashboard.html">Back to Dashboard</a>' +
         '</div>';
-    } else if (sc.tooShort && !data.expired) {
-      // A free session too short to score has no full report to unlock.
-      track('paywall_view', { surface: 'voice_scorecard' });
-      html += '<div class="vi-sc-unlock vi-sc-unlock--inline"><h3>There is no full report for this session.</h3>' +
-        '<p>Run a full interview to get your scores, moment by moment feedback, and transcript.</p>' +
-        '<a class="vi-btn-primary" href="/pricing" data-cta="voice-scorecard-too-short">See plans</a></div>';
     } else {
-      // Free taste: partial scorecard, blurred full report, one upgrade CTA.
-      // Expired sessions (past the 90-day retention window) share the same
-      // locked view. Retention applies to every plan, so an active plan is
-      // pointed at a new interview rather than an upgrade.
-      var activePlan = !!(data.expired && data.activePlan);
+      // Expired (past the 90-day retention window): locked for every plan, so
+      // an active plan is pointed at a new interview rather than an upgrade.
+      var activePlan = !!data.activePlan;
       if (!activePlan) track('paywall_view', { surface: 'voice_scorecard' });
-      var unlockHeading = data.expired ? 'This report has expired.' : 'Your full report is ready.';
-      var unlockBody = !data.expired
-        ? 'Unlock every score, the moment by moment feedback, and your transcript. Then keep practicing until the answers are automatic.'
-        : activePlan
+      html += lockedDetailsHtml(null);
+      html += '<div class="vi-sc-unlock vi-sc-unlock--inline"><h3>This report has expired.</h3><p>' +
+        (activePlan
           ? 'Reports are kept for 90 days. Your plan is still active. Run a new interview for a fresh report.'
-          : 'Reports are kept for 90 days. Pick a plan to keep practicing and track your progress.';
-      var unlockCta = activePlan
-        ? '<a class="vi-btn-primary" href="voice-interview.html" data-cta="voice-scorecard-expired-new">Start a new interview</a>'
-        : '<a class="vi-btn-primary" href="/pricing" data-cta="voice-scorecard-unlock">See plans</a>';
-      html += '<div class="vi-sc-locked">';
-      html += '<div class="vi-sc-blur" aria-hidden="true">';
-      html += '<div class="vi-sc-overall"><div class="vi-sc-score">??</div><div class="vi-sc-overall-label">' + (sc.methodologyVersion === 2 ? 'Practice sample' : 'Overall') + '</div></div>';
-      html += '<div class="vi-sc-dims">' + dimensionRow('Communication', 70) + dimensionRow('Structure', 55) + dimensionRow('Content depth', 62) + dimensionRow('Role fit', 75) + '</div>';
-      html += '<p>The full report includes your scores, specific moments from your answers, a summary, and the complete transcript.</p>';
-      html += '</div>';
-      html += '<div class="vi-sc-unlock"><h3>' + unlockHeading + '</h3><p>' + unlockBody + '</p>' + unlockCta + '</div>';
-      html += '</div>';
+          : 'Reports are kept for 90 days. Pick a plan to keep practicing and track your progress.') + '</p>' +
+        (activePlan
+          ? '<a class="vi-btn-primary" href="voice-interview.html" data-cta="voice-scorecard-expired-new">Start a new interview</a>'
+          : '<a class="vi-btn-primary" href="/pricing" data-cta="voice-scorecard-unlock">See plans</a>') + '</div>';
     }
 
     wrap.innerHTML = html;
@@ -2557,7 +2895,12 @@
     var reconnectBtn = $('vi-reconnect-btn');
     initRoleSelector();
     if (startBtn) startBtn.addEventListener('click', startInterview);
-    if (endBtn) endBtn.addEventListener('click', function () { endInterview('user_ended'); });
+    if (endBtn) endBtn.addEventListener('click', requestEnd);
+    if ($('vi-end-keep')) $('vi-end-keep').addEventListener('click', cancelEnd);
+    if ($('vi-end-confirm-btn')) $('vi-end-confirm-btn').addEventListener('click', function () {
+      hideEndConfirm();
+      return endInterview('user_ended');
+    });
     if ($('vi-save-retry')) $('vi-save-retry').addEventListener('click', saveCompletion);
     if ($('vi-entitlement-retry')) $('vi-entitlement-retry').addEventListener('click', function () { loadEntitlement(); });
     if (muteBtn) muteBtn.addEventListener('click', toggleMute);

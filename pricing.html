@@ -178,6 +178,7 @@
     .vp-card ul li::before { content: "✓"; position: absolute; left: 0; color: var(--color-cta-green); font-weight: 700; }
     .vp-card .vp-buy { margin-top: auto; background: var(--color-cta-green); color: #fff; font-weight: 700; border: 0; border-radius: var(--radius-button); padding: 0.8rem 1rem; cursor: pointer; font-size: 1rem; font-family: inherit; }
     .vp-card .vp-buy:hover { background: var(--color-cta-green-hover); }
+    .vp-card.vp-card--selected { outline: 3px solid var(--color-cta-green); outline-offset: 2px; }
     .vp-card .vp-buy:focus-visible { outline: 2px solid var(--color-accent-blue); outline-offset: 2px; }
     .vp-card.vp-popular { border: 2px solid var(--color-cta-green); box-shadow: var(--shadow-xl); }
     @media (min-width: 760px) { .vp-card.vp-popular { transform: scale(1.04); } }
@@ -313,6 +314,7 @@
         </div>
       </div>
       <p class="vp-free-note">Subscription access requires an active plan. The 60-session allowance resets on the first day of each month at 00:00 UTC, not each billing renewal. Sessions started this month count toward it, including sessions ended early. Reconnecting to the same session does not use another slot.</p>
+      <p class="vp-free-note">End your free interview or a pack session within the first 2 minutes and it does not count. This applies once per account.</p>
       <p class="vp-free-note">Just exploring? The resume, cover letter, and interview question tools are <a href="login.html?mode=signup">free with an account</a>, and your first voice interview is on us.</p>
     </section>
 
@@ -537,7 +539,22 @@
         }
       }
 
+      // The voice report's plan picker links here with ?plan=weekly|monthly|pack.
+      // Highlight that card and focus its button. Checkout still starts only
+      // when the person presses it, so all checkout analytics stay here.
+      function preselectPlan() {
+        var plan = null;
+        try { plan = new URLSearchParams(window.location.search).get('plan'); } catch (_) {}
+        if (!plan || !Object.prototype.hasOwnProperty.call(PLAN_META, plan)) return;
+        var button = document.querySelector('.vp-buy[data-plan="' + plan + '"]');
+        var card = button && button.closest('.vp-card');
+        if (!card) return;
+        card.classList.add('vp-card--selected');
+        try { button.focus({ preventScroll: true }); } catch (_) {}
+      }
+
       document.addEventListener('DOMContentLoaded', function () {
+        preselectPlan();
         document.querySelectorAll('.vp-buy').forEach(function (button) {
           button.addEventListener('click', function (e) {
             e.preventDefault();

@@ -76,7 +76,7 @@ Five voice interviews, valid for 90 days. No subscription.
 
 [View Interview Pack](https://app.jobhackai.io/pricing)
 
-Subscription limits reset on the first of each month at 00:00 UTC, not each billing date. Ending an interview early still uses a session; reconnecting to the same session does not use another.
+Subscription limits reset on the first of each month at 00:00 UTC, not each billing date. End your free interview or a pack session within the first 2 minutes and it does not count. This applies once per account. Ending later still uses a session. Reconnecting to the same session does not use another.
 
 ## Free: The 12-Point ATS Resume Checklist
 

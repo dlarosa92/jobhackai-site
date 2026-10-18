@@ -20,6 +20,8 @@ on:
       - 'js/voice-interview.js'
       - 'js/role-selector.js'
       - 'js/package.json'
+      - 'app/db/migrations/033_voice_early_end_grace.sql'
+      - 'app/db/migrations/034_voice_question_retries.sql'
   pull_request:
     branches: [main, dev0, develop]
     paths:
@@ -39,6 +41,8 @@ on:
       - 'js/voice-interview.js'
       - 'js/role-selector.js'
       - 'js/package.json'
+      - 'app/db/migrations/033_voice_early_end_grace.sql'
+      - 'app/db/migrations/034_voice_question_retries.sql'
 
 jobs:
   test:
@@ -110,6 +114,14 @@ jobs:
       - name: Run voice report gating tests
         working-directory: app/functions/_lib/__tests__
         run: node --test voice-session-report.test.mjs
+
+      - name: Run voice early-end grace tests (real SQLite)
+        working-directory: app/functions/_lib/__tests__
+        run: node --test voice-early-end-grace.test.mjs
+
+      - name: Run voice question retry allowance tests (real SQLite)
+        working-directory: app/functions/_lib/__tests__
+        run: node --test voice-retry.test.mjs
 
       - name: Run role-based coaching evidence and report tests
         working-directory: app/functions/_lib/__tests__
