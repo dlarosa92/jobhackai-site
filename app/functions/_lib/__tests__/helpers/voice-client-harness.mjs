@@ -201,7 +201,9 @@ export function createVoiceClientHarness(options = {}) {
   };
 
   const windowListeners = {};
+  const analyticsEvents = [];
   const win = {
+    JHA: { analytics: { track: (name, params) => analyticsEvents.push({ name, params }) } },
     crypto: webcrypto,
     location: { search, href: 'https://app.jobhackai.io/voice-interview.html' + search, pathname: '/voice-interview.html' },
     navigator: { mediaDevices: { getUserMedia: options.getUserMedia || (async () => micStream()) } },
@@ -257,6 +259,7 @@ export function createVoiceClientHarness(options = {}) {
   }
 
   return {
+    analyticsEvents,
     windowEvent: (type, event) => (windowListeners[type] || []).forEach(fn => fn(event)),
     el: (id) => elements[id],
     wrap: () => wrapEl,
