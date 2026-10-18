@@ -1,7 +1,10 @@
 const $ = id => document.getElementById(id);
 const money = cents => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(cents / 100);
-const time = iso => new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso));
+const time = iso => new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', dateStyle: 'medium', timeStyle: 'short' }).format(new Date(/^[\d-]+ [\d:]+$/.test(iso) ? `${iso.replace(' ', 'T')}Z` : iso));
 let currentMonth = null;
+let boardData = null;
+let selectedChannel = 'All';
+const expandedLanes = new Set();
 
 function render(data) {
   currentMonth = data.month;
@@ -29,58 +32,115 @@ function render(data) {
   $('error').hidden = true;
 }
 
-const stateLabels = { pending: 'Needs review', waiting: 'Waiting for their reply', approved: 'Approved · awaiting action', sent: 'Sent', scheduled: 'Scheduled', published: 'Published', hold: 'On hold' };
+// Legacy Outreach records were verified as email; never infer a channel from an agent's name.
+function channelName(item) {
+  if (item.source === 'gmail' || /\b(email|gmail|outreach)\b/i.test(item.channel)) return 'Email';
+  return ['LinkedIn', 'Pinterest', 'Facebook', 'Instagram', 'Nextdoor', 'Blog', 'X'].find(channel => new RegExp(`\\b${channel}\\b`, 'i').test(item.channel)) || 'Channel not recorded';
+}
+function stateLabel(item) {
+  if (item.state === 'approved') return channelName(item) === 'Email' ? 'Approved, not sent' : 'Approved, not scheduled';
+  return { pending: item.impact === 'campaign' ? 'Needs your approval' : 'Needs your review', waiting: 'Waiting for an email reply', sent: 'Email sent', scheduled: 'Post scheduled', published: 'Published', hold: 'Not ready for approval' }[item.state] || item.state;
+}
+function plainEmailText(value) {
+  const named = { amp: '&', apos: "'", quot: '"', lt: '<', gt: '>', nbsp: ' ' };
+  return value.replace(/&(#x[0-9a-f]+|#\d+|amp|apos|quot|lt|gt|nbsp);/gi, (entity, code) => {
+    if (code[0] !== '#') return named[code.toLowerCase()];
+    const n = code[1].toLowerCase() === 'x' ? parseInt(code.slice(2), 16) : Number(code.slice(1));
+    return n > 0 && n <= 0x10ffff && !(n >= 0xd800 && n <= 0xdfff) ? String.fromCodePoint(n) : entity;
+  });
+}
 const laneDefinitions = [
-  { title: 'People waiting on us', matches: item => ['pending', 'hold'].includes(item.state) && item.impact !== 'campaign', first: true },
-  { title: 'Waiting for their reply', matches: item => item.state === 'waiting', first: true },
-  { title: 'Campaign decisions', matches: item => ['pending', 'hold'].includes(item.state) && item.impact === 'campaign' },
-  { title: 'Approved and scheduled', matches: item => ['approved', 'scheduled'].includes(item.state) },
-  { title: 'Recent outcomes', matches: item => ['sent', 'published'].includes(item.state) },
+  { title: 'Emails to review or reply to', note: 'A customer or partner may need your response.', empty: 'No tracked emails need your response.', matches: item => ['pending', 'hold'].includes(item.state) && item.impact !== 'campaign' },
+  { title: 'Needs your approval', note: 'Finished drafts for you to review. Approval alone does not send or publish.', empty: 'Nothing is ready for your approval.', matches: item => item.state === 'pending' && item.impact === 'campaign' },
+  { title: 'Being prepared', note: 'Drafts with checks or fixes still needed. Each card says what happens next.', empty: 'No saved drafts are being prepared.', matches: item => item.state === 'hold' && item.impact === 'campaign' },
+  { title: 'Waiting for an email reply', note: 'Your email was sent. The other person has not replied in the tracked conversation.', empty: 'No tracked email conversations are waiting for a reply.', matches: item => item.state === 'waiting' },
+  { title: 'Approved, not sent or scheduled', note: 'You approved the draft. Sending or scheduling is still a separate step.', empty: 'No approved drafts are waiting to be sent or scheduled.', matches: item => item.state === 'approved' },
+  { title: 'Scheduled posts', note: 'These posts have a saved date and time on their platform.', empty: 'No posts have a saved schedule.', matches: item => item.state === 'scheduled' },
+  { title: 'Emails sent and posts published', note: 'Recorded activity. An email marked sent does not prove it reached the inbox.', empty: 'No completed activity is saved here.', matches: item => ['sent', 'published'].includes(item.state) },
 ];
 
 function renderCampaigns(data) {
+  boardData = data;
+  const filters = $('channel-filters');
+  filters.replaceChildren();
+  const channels = ['All', 'Email', 'LinkedIn', 'Pinterest', 'Facebook', 'Instagram', 'X', 'Nextdoor', 'Blog'];
+  if (data.items.some(item => channelName(item) === 'Channel not recorded')) channels.push('Channel not recorded');
+  for (const channel of channels) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    const count = data.items.filter(item => channel === 'All' || channelName(item) === channel).length;
+    button.textContent = `${channel} (${count})`;
+    button.setAttribute('aria-pressed', String(selectedChannel === channel));
+    button.addEventListener('click', () => { selectedChannel = channel; renderCampaigns(boardData); });
+    filters.append(button);
+  }
+  const visibleItems = data.items.filter(item => selectedChannel === 'All' || channelName(item) === selectedChannel);
+  $('filter-status').textContent = selectedChannel === 'All' ? 'Showing all saved emails, posts and articles.' : visibleItems.length ? `Showing ${selectedChannel} only.` : `No ${selectedChannel} items are saved on this board. This does not mean there is no activity on ${selectedChannel}.`;
   const board = $('board');
   board.replaceChildren();
   for (const laneDefinition of laneDefinitions) {
-    const items = data.items.filter(laneDefinition.matches);
-    const lane = document.createElement('div');
-    lane.className = `lane${laneDefinition.first ? ' people-lane' : ''}`;
+    const items = visibleItems.filter(laneDefinition.matches);
+    const lane = document.createElement('section');
+    lane.className = `lane${items.length ? '' : ' empty-lane'}`;
     const heading = document.createElement('div');
     heading.className = 'lane-heading';
     const title = document.createElement('h2');
     title.textContent = laneDefinition.title;
     const count = document.createElement('span');
-    count.textContent = `${items.length} ${items.length === 1 ? 'item' : 'items'}`;
+    count.textContent = `${items.length} ${items.length === 1 ? 'card' : 'cards'}`;
     heading.append(title, count);
     lane.append(heading);
-    for (const item of items) {
+    const explanation = document.createElement('p');
+    explanation.className = 'lane-explanation';
+    explanation.textContent = laneDefinition.note;
+    lane.append(explanation);
+    const cards = document.createElement('div');
+    cards.className = 'lane-cards';
+    lane.append(cards);
+    const shownItems = expandedLanes.has(laneDefinition.title) ? items : items.slice(0, 3);
+    for (const item of shownItems) {
       const article = document.createElement('article');
       article.className = `item${item.impact === 'customer' ? ' customer-impact' : item.impact === 'prospect' ? ' prospect-impact' : item.state === 'pending' ? ' important' : ''}`;
       if (item.impact === 'customer' || item.impact === 'prospect') {
         const priority = document.createElement('span');
         priority.className = `priority-badge ${item.impact}`;
-        priority.textContent = item.state === 'waiting' ? (item.impact === 'customer' ? 'Customer conversation' : 'Prospect conversation') : item.impact === 'customer' ? 'Customer directly affected · priority 1' : 'Inbound prospect · priority 2';
+        priority.textContent = item.impact === 'customer' ? 'Customer email' : 'Business email';
         article.append(priority);
       }
       const kicker = document.createElement('div');
       kicker.className = `kicker${item.state === 'hold' ? ' caution' : ''}${['sent', 'scheduled', 'published'].includes(item.state) ? ' good' : ''}`;
-      const stateLabel = item.source === 'gmail' && item.state === 'pending' ? 'Needs your review' : item.impact !== 'campaign' && ['pending', 'hold'].includes(item.state) ? 'Needs reply' : stateLabels[item.state] || item.state;
-      kicker.textContent = `${item.channel} · ${stateLabel}`;
+      kicker.textContent = `${channelName(item)} · ${stateLabel(item)}`;
       const name = document.createElement('h3');
       name.textContent = item.title;
       const detail = document.createElement('p');
-      detail.textContent = item.detail;
+      detail.textContent = item.source === 'gmail' ? plainEmailText(item.detail) : item.detail;
       const evidence = document.createElement('p');
       evidence.className = 'evidence';
       evidence.textContent = item.source === 'gmail' ? `Latest ${item.state === 'waiting' ? 'sent' : 'received'} message ${time(item.updatedAt)} ET` : item.evidence;
       article.append(kicker, name, detail);
-      if (item.nextAction) {
+      const manager = /^(Stan|Sonny|Penny)\s*·/.exec(item.channel)?.[1];
+      if (manager) {
+        const owner = document.createElement('p');
+        owner.className = 'manager';
+        owner.textContent = `Managed by ${manager}`;
+        article.append(owner);
+      }
+      const nextAction = item.nextAction || ({ hold: 'Finish the checks listed above before asking for your approval.', pending: 'Open the draft and review the exact content before approving.', approved: channelName(item) === 'Email' ? 'Send the approved email, then verify it in Gmail Sent.' : 'Choose a date and schedule the approved post on its platform.', scheduled: 'Wait for the scheduled time, then verify the published post.' })[item.state];
+      if (nextAction) {
         const action = document.createElement('p');
         action.className = 'next-action';
-        action.textContent = `Next: ${item.nextAction}`;
+        action.textContent = `Next: ${nextAction}`;
         article.append(action);
       }
-      article.append(evidence);
+      if (item.source === 'gmail') article.append(evidence);
+      else {
+        const sourceDetails = document.createElement('details');
+        sourceDetails.className = 'source-details';
+        const summary = document.createElement('summary');
+        summary.textContent = 'Why this status?';
+        sourceDetails.append(summary, evidence);
+        article.append(sourceDetails);
+      }
       try {
         const reviewUrl = new URL(item.reviewUrl);
         if (reviewUrl.protocol === 'https:' && ['chatgpt.com', 'mail.google.com'].includes(reviewUrl.hostname)) {
@@ -88,7 +148,7 @@ function renderCampaigns(data) {
           link.href = reviewUrl.href;
           link.target = '_blank';
           link.rel = 'noreferrer';
-          link.textContent = reviewUrl.hostname === 'mail.google.com' ? 'Open email thread ↗' : 'Open exact review record ↗';
+          link.textContent = reviewUrl.hostname === 'mail.google.com' ? 'Open email in Gmail ↗' : ['sent', 'published', 'scheduled'].includes(item.state) ? 'Open saved details ↗' : 'Open draft details ↗';
           article.append(link);
         }
       } catch { /* An invalid review URL is omitted. */ }
@@ -96,29 +156,44 @@ function renderCampaigns(data) {
         const approval = document.createElement('button');
         approval.type = 'button';
         approval.className = 'approve';
-        approval.textContent = 'Record approval';
+        approval.textContent = 'Approve this draft';
         approval.addEventListener('click', () => recordApproval(item, approval));
         article.append(approval);
       }
-      lane.append(article);
+      cards.append(article);
     }
     if (!items.length) {
       const empty = document.createElement('p');
       empty.className = 'lane-note';
-      empty.textContent = 'Nothing in this lane.';
+      empty.textContent = laneDefinition.empty;
       lane.append(empty);
+    }
+    if (items.length > 3) {
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'show-more';
+      toggle.textContent = expandedLanes.has(laneDefinition.title) ? 'Show fewer' : `Show ${items.length - 3} more`;
+      toggle.setAttribute('aria-expanded', String(expandedLanes.has(laneDefinition.title)));
+      toggle.addEventListener('click', () => {
+        if (expandedLanes.has(laneDefinition.title)) expandedLanes.delete(laneDefinition.title);
+        else expandedLanes.add(laneDefinition.title);
+        renderCampaigns(boardData);
+      });
+      lane.append(toggle);
     }
     board.append(lane);
   }
   const waiting = data.items.filter(item => ['pending', 'hold'].includes(item.state) && item.impact !== 'campaign');
   const approvals = data.items.filter(item => item.state === 'pending' && item.impact === 'campaign');
-  $('focus-text').textContent = waiting.length ? `${waiting[0].title}. ${waiting[0].nextAction || 'Open the source and respond.'}` : approvals.length ? `${approvals.length} campaign ${approvals.length === 1 ? 'decision needs' : 'decisions need'} review.` : 'No recorded replies or approvals are waiting on this board.';
-  $('campaign-checked').textContent = `Action board records checked ${time(data.asOf)} ET`;
+  const preparing = data.items.filter(item => item.state === 'hold' && item.impact === 'campaign');
+  $('focus-text').textContent = waiting.length ? `${waiting[0].title}. ${waiting[0].nextAction || 'Open the email and review it.'}` : approvals.length ? `${approvals.length} ${approvals.length === 1 ? 'draft needs' : 'drafts need'} your approval.` : `No emails need your response and no drafts are ready for approval.${preparing.length ? ` ${preparing.length} saved drafts are still being prepared below.` : ''}`;
+  const savedChanges = data.items.filter(item => item.source !== 'gmail').map(item => item.updatedAt).filter(Boolean).sort();
+  $('campaign-checked').textContent = `Board loaded ${time(data.asOf)} ET.${savedChanges.length ? ` Saved draft and post records last updated ${time(savedChanges.at(-1))} ET.` : ''}`;
   const sync = data.gmailSync || { status: 'not_connected' };
   const syncText = sync.status === 'not_connected' ? 'Gmail sync is not connected yet. Saved email records may be out of date.' : `Gmail last synced ${time(sync.lastSuccessfulSyncAt)} ET · ${sync.trackedCount} tracked ${sync.trackedCount === 1 ? 'conversation' : 'conversations'}. ${sync.status === 'stale' ? 'Sync is overdue; email status may be out of date.' : 'Checks automatically about every five minutes.'}`;
   $('gmail-sync').textContent = syncText;
   $('gmail-sync').className = `sync-status${sync.status !== 'current' ? ' stale' : ''}`;
-  $('campaign-status').textContent = 'Campaigns use saved review records. Tracked email status comes from the last successful Gmail scan.';
+  $('campaign-status').textContent = 'Drafts and posts use saved records. New drafts and chat updates do not appear automatically. Only tracked Gmail conversations sync automatically.';
   if (sync.status !== 'current' && !waiting.length) $('focus-text').textContent += ' Gmail status is not current; check Gmail for new replies.';
   $('campaign-error').hidden = true;
 }
@@ -135,7 +210,7 @@ async function recordApproval(item, button) {
     $('campaign-error').textContent = error.message;
     $('campaign-error').hidden = false;
     button.disabled = false;
-    button.textContent = 'Record approval';
+    button.textContent = 'Approve this draft';
   }
 }
 
