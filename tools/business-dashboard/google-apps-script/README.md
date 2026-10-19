@@ -1,29 +1,32 @@
-# Tracked Gmail sync installation
+# Gmail dashboard relay
 
-This standalone Google Apps Script is owned by the mailbox owner. It reads only threads selected by the exact Gmail label `0: JobHackAI / Track`. Google authorization grants mailbox-wide **read-only** Gmail API access; code restricts reads to the selected threads. It cannot send, modify, label, archive, or delete mail.
+The existing Google Apps Script belongs to the business mailbox owner. Keep the existing project, secret, label and five-minute trigger. `Code.gs` synchronizes metadata for conversations selected by `0: JobHackAI / Track`. `Outreach.gs` adds independent lead history checks and an optional guarded sender.
 
-## One-time installation
+## Read-only upgrade
 
-1. Create a standalone project at https://script.google.com/ under the intended Google account.
-2. Paste `Code.gs` into its code file. In Project Settings, enable **Show appsscript.json manifest file in editor**, then replace the manifest with this directory's `appsscript.json`. Gmail API v1 is enabled by that manifest; use the default Google Cloud project.
-3. In Project Settings → Script Properties, add `SYNC_URL` (the deployed ingestion Worker's HTTPS URL ending in `/sync`), `SYNC_SECRET` (a random secret of at least 32 characters identical to the Worker's secret), and `MAILBOX_EMAIL` (the mailbox owner's exact email). Optional `TRACK_LABEL_NAME` defaults to `0: JobHackAI / Track`. Keep secrets out of Git, screenshots, logs and chat.
-4. Run **installGmailSync** and authorize the stated permissions in Google. The first full scan must succeed before the recurring trigger is installed. Rerunning installation retains one trigger for the sync handler.
-5. Verify the execution reports a completed sync and the dashboard shows a fresh Gmail timestamp. Confirm a latest sent conversation is waiting for its recipient.
+1. Apply dashboard D1 migration `003-outreach-gate.sql`, then deploy the dashboard and ingestion Workers from the same reviewed source. Keep `OUTREACH_SENDER_ENABLED=false` on **both** Workers.
+2. In the existing Apps Script project, update `Code.gs`, add `Outreach.gs` and keep `appsscript.json`. The normal manifest still requests `gmail.readonly`, external requests and trigger management. No new trigger is needed.
+3. Keep existing Script Properties `SYNC_URL` (HTTPS, ending `/sync`), `SYNC_SECRET` (at least 32 characters), `MAILBOX_EMAIL` and optional `TRACK_LABEL_NAME`. Set `OUTREACH_CHECKS_ENABLED=true`. Keep `OUTREACH_SEND_ENABLED` absent or `false`. Do not print secrets or include them in screenshots.
+4. Run `syncTrackedMail` once. Verify a successful Google execution and a fresh dashboard timestamp. An ordinary five-minute trigger then checks both tracked conversations and submitted outreach packets.
 
-## Behavior
+Tracked-thread reads remain metadata only. Outreach checks use full Gmail messages for the candidate's entire history, including Spam and Trash, to detect earlier sends, drafts, replies and delivery reports outside the original thread. Bodies are parsed inside Google; only native IDs, dates and classifications go to the private dashboard. The dashboard separately stores the owner-submitted exact proposed email. Global delivery-report discovery covers the last 60 days; candidate-specific history is not date-limited. Pagination must complete and scans over 200 matches hold for individual review. A scan failure never means clean history.
 
-- Runs approximately every five minutes on Google, even when the owner's computer is off.
-- Lists all labelled threads, then reads message metadata from each complete thread; a reply does not need a separate label. Drafts never count as sent replies.
-- Last non-draft message has Gmail's `SENT` label → waiting for the recipient. Otherwise → needs review. Receiving an email does not prove a reply is necessary; the owner decides after reading it.
-- Uploads only thread/message IDs, sender, subject, short Gmail preview, status, timestamps and the selected label identifier. No bodies or attachments are retrieved or sent.
-- At most 200 selected conversations per scan. Pagination and all reads must finish before uploading. Missing labels, authorization problems, quotas, excess selected threads or rejected uploads fail the run and preserve dashboard data. Active Apps Script triggers provide failure notifications.
-- A successful scan after a label is removed retires that conversation from the board. Stored customer/prospect classification is preserved for later relabelling.
-- Remove the trigger to stop sync; revoke Google access to stop Gmail reads. Rotate the ingestion secret in both locations if needed.
+`syncTrackedMail` owns the existing script lock. Do not add a separate trigger for `syncOutreach`. Removing the existing trigger stops the relay. Revoking Google access stops Gmail reads. Active triggers provide Google failure notifications.
 
-The dashboard warns when no scan has succeeded or the last successful scan is over 15 minutes old. Refresh reloads the stored scan; it does not force a Google execution.
+## Optional sender activation
 
-## Ingestion deployment
+This is a separate access change. Do not silently replace the normal manifest or enable sending during the read-only upgrade.
 
-Build with `npm run build` in the parent directory. Deploy `gmail-ingest.bundle.js` as `jobhackai-dashboard-gmail-sync` using `wrangler.gmail-sync.jsonc`. Its sole interface is signed `POST /sync`; it has only dashboard D1. Set Worker variables `MAILBOX_EMAIL` and `TRACK_LABEL_ID` to the verified mailbox and label ID, and secret `SYNC_SECRET` to the shared random secret. The main dashboard retains Cloudflare Access. This separate endpoint requires HMAC-SHA256 over `timestamp + '.' + raw JSON body`, in `X-Sync-Timestamp` and `X-Sync-Signature` headers. Signatures expire after five minutes. It has no read or approval endpoint.
+After the mailbox owner approves adding Gmail **send** access, replace the manifest with `appsscript.sender.json`, authorize that scope in Google, set Script Property `OUTREACH_SEND_ENABLED=true`, and explicitly set `OUTREACH_SENDER_ENABLED=true` on both Workers. Verify the relay reports its enabled state before presenting an executable send button. The manifest grants no Gmail modify/delete scope.
 
-Apply migration `002-gmail-sync.sql` once to existing dashboard D1 before deploying the new dashboard Worker. Fresh databases use `schema.sql`. Link existing manual email cards' `gmail_thread_id` to verified private thread IDs with bound parameters; duplicates hide only after the first successful sync. Do not commit real thread IDs, contact data, keys or setup files to this public repository.
+The owner reviews complete To/subject/plain text/HTML and source evidence, then chooses **Approve exact email**. Approval does not send. **Send approved email** queues that same revision. The relay immediately repeats all-folder history; the server repeats DNS and atomically reserves one attempt. It sends MIME built from the immutable approved packet, not an editable Gmail draft. Extra recipients, attachments and arbitrary headers are unsupported. Changing recipient, copy or thread invalidates approval. Queued mail can be cancelled only before an attempt is reserved.
+
+A send is marked verified only after reading the native `SENT` message and matching its envelope, copy, subject and unique transport Message-ID. Timeout, mismatch or missing receipt leaves the attempt held. Later runs may reconcile that Message-ID by read-only lookup; they never resend an attempted message. Received mail stops cold follow-ups and becomes an individual conversation review. A native failure remains suppressed even if its Gmail report is subsequently deleted. Clearing a suppression requires separate reviewed operational repair; no automatic release exists.
+
+A fresh routing pass proves neither mailbox existence nor inbox delivery. The owner must still verify first-party contact evidence and current business relevance. The gate controls this dashboard path; it cannot prevent someone sending directly from Gmail or Marblism. Existing agent guidance must route new outreach through the gate and never treat an old generic approval as permission.
+
+## Ingestion and release
+
+`wrangler.gmail-sync.jsonc` defines the ingestion Worker with dashboard D1 only. Signed `POST /sync` receives tracked metadata. Signed `POST /outreach` serves the relay's poll/check/claim/receipt/delivery protocol. HMAC-SHA256 covers `timestamp + '.' + raw JSON`, using `X-Sync-Timestamp` and `X-Sync-Signature`; signatures expire after five minutes and bodies are bounded. There is no unsigned read, approval or send endpoint. Owner approval and queue endpoints remain behind dashboard Cloudflare Access and same-origin checks.
+
+The existing dashboard Access policy, disabled dashboard workers.dev, mailbox and label identifiers remain private runtime configuration. Preserve all existing Worker secrets when deploying. Apply migrations only to **dashboard D1**, never the production payment/user database. Preserve legacy approvals and historical native receipts; pending generic email cards become holds until reconciled and prepared as exact unsent packets.
