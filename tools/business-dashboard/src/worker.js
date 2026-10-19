@@ -1,5 +1,7 @@
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { gmailRecords } from './gmail-sync.js';
+import { outreachRecords, ownerOutreach, isLegacyEmail } from './outreach.js';
+import { digest } from './outreach-policy.js';
 
 const OWNER = 'sebastian.larosa@jobhackai.io';
 const ACCESS_AUD = '884df74e9be8546b0051980538c8e00a75efd2b1d2da5a04a4e4fbe78f3a4a40';
@@ -83,23 +85,39 @@ async function overview(env, now = new Date()) {
 }
 
 async function campaignRecords(env, now = new Date()) {
-  const [result, gmail] = await Promise.all([
+  const [result, gmail, outreach] = await Promise.all([
     env.DASHBOARD_DB.prepare("SELECT id, channel, title, detail, review_url AS reviewUrl, state, evidence, updated_at AS updatedAt, sort_order AS sortOrder, impact, next_action AS nextAction FROM campaign_items WHERE gmail_thread_id IS NULL OR NOT EXISTS (SELECT 1 FROM gmail_threads WHERE thread_id=campaign_items.gmail_thread_id) ORDER BY CASE impact WHEN 'customer' THEN 0 WHEN 'prospect' THEN 1 ELSE 2 END, sort_order, id").all(),
     gmailRecords(env.DASHBOARD_DB, now),
+    outreachRecords(env.DASHBOARD_DB, now.getTime()),
   ]);
   const rank = { customer: 0, prospect: 1, campaign: 2 };
-  const items = [...gmail.items, ...result.results].sort((a, b) => rank[a.impact] - rank[b.impact]);
+  const manual = await Promise.all(result.results.map(async item => {
+    const reviewRevision = await campaignRevision(item);
+    if(isLegacyEmail(item) && ['pending','approved'].includes(item.state)) return {...item, reviewRevision, state:'hold',
+      evidence:'This legacy email card has no bound recipient/message or current software checks. Its previous approval is retained as history, not send permission.',
+      nextAction:'Reconcile native sends, then prepare exact unsent messages through the outreach gate.', requiresOutreachManifest:true};
+    return {...item,reviewRevision};
+  }));
+  const items = [...gmail.items, ...manual, ...outreach.items].sort((a, b) => rank[a.impact] - rank[b.impact]);
   return {
     asOf: now.toISOString(),
     latestChange: items.reduce((latest, item) => item.updatedAt > latest ? item.updatedAt : latest, ''),
     items,
     gmailSync: gmail.gmailSync,
+    outreachSendingEnabled: env.OUTREACH_SENDER_ENABLED === 'true',
   };
 }
 
-async function approveCampaign(env, id) {
-  if (!/^[a-z0-9-]{1,64}$/.test(id)) return false;
-  const result = await env.DASHBOARD_DB.prepare("UPDATE campaign_items SET state = 'approved', evidence = 'Owner approval recorded in dashboard. This does not send an email, schedule a post, or publish content.', updated_at = datetime('now') WHERE id = ? AND state = 'pending' AND impact = 'campaign'").bind(id).run();
+function campaignRevision(item) {
+  return digest({id:item.id,channel:item.channel,title:item.title,detail:item.detail,reviewUrl:item.reviewUrl,nextAction:item.nextAction||''});
+}
+
+async function approveCampaign(env, id, revision) {
+  if (!/^[a-z0-9-]{1,64}$/.test(id) || !/^[a-f0-9]{64}$/.test(revision||'')) return false;
+  const current=await env.DASHBOARD_DB.prepare('SELECT id,channel,title,detail,review_url AS reviewUrl,state,impact,next_action AS nextAction,updated_at FROM campaign_items WHERE id=?').bind(id).first();
+  if(!current || current.state!=='pending' || current.impact!=='campaign' || isLegacyEmail(current) || await campaignRevision(current)!==revision)return false;
+  const result = await env.DASHBOARD_DB.prepare("UPDATE campaign_items SET state = 'approved', evidence = 'Owner approval recorded in dashboard. This does not send an email, schedule a post, or publish content.', updated_at = datetime('now') WHERE id = ? AND state = 'pending' AND impact = 'campaign' AND updated_at=? AND detail=? AND review_url=? AND title=? AND channel=? AND next_action=?")
+    .bind(id,current.updated_at,current.detail,current.reviewUrl,current.title,current.channel,current.nextAction).run();
   return result.meta?.changes === 1;
 }
 
@@ -120,7 +138,7 @@ export default {
           headers: {
             'Content-Type': 'text/html; charset=utf-8',
             'Cache-Control': 'no-store',
-            'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+            'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; frame-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
             'X-Content-Type-Options': 'nosniff',
             'Referrer-Policy': 'no-referrer',
           },
@@ -130,10 +148,12 @@ export default {
       if (request.method === 'GET' && url.pathname === '/app.js') return asset(APP, 'application/javascript; charset=utf-8');
       if (request.method === 'GET' && url.pathname === '/api/overview') return json(await overview(env));
       if (request.method === 'GET' && url.pathname === '/api/campaigns') return json(await campaignRecords(env));
+      if (url.pathname.startsWith('/api/outreach')) return ownerOutreach(request,env);
       const approval = /^\/api\/campaigns\/([a-z0-9-]{1,64})\/approve$/.exec(url.pathname);
       if (request.method === 'POST' && approval) {
         if (request.headers.get('origin') !== url.origin || request.headers.get('content-type')?.split(';')[0] !== 'application/json') return json({ error: 'Invalid request origin or type' }, 403);
-        if (!await approveCampaign(env, approval[1])) return json({ error: 'This item is no longer awaiting approval. Refresh to see its current status.' }, 409);
+        const input=await request.json();
+        if (!await approveCampaign(env, approval[1],input?.revision)) return json({ error: 'The review record changed, is not awaiting approval, or needs an exact outreach packet. Refresh before reviewing.' }, 409);
         return json(await campaignRecords(env));
       }
       if (request.method === 'POST' && url.pathname === '/api/costs') {
@@ -153,4 +173,4 @@ export default {
   },
 };
 
-export { monthKey, sameMonth, overview, campaignRecords, approveCampaign, validCostInput, accessTokenIsOwner };
+export { monthKey, sameMonth, overview, campaignRecords, approveCampaign, campaignRevision, validCostInput, accessTokenIsOwner };
