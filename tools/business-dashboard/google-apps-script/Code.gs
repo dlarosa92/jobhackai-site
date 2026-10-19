@@ -65,6 +65,7 @@ function syncTrackedMail() {
     });
     if (response.getResponseCode() !== 200) throw new Error('Dashboard sync rejected the snapshot (HTTP ' + response.getResponseCode() + '). Previous data has been preserved.');
     console.log('Gmail sync completed: ' + rows.length + ' tracked conversations.');
+    if (typeof syncOutreach === 'function') syncOutreach();
   } finally {
     lock.releaseLock();
   }

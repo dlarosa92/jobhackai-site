@@ -141,6 +141,32 @@ function renderCampaigns(data) {
         sourceDetails.append(summary, evidence);
         article.append(sourceDetails);
       }
+      if(item.source === 'outreach') {
+        const review=document.createElement('details');
+        const summary=document.createElement('summary'); summary.textContent='Review exact email'; review.append(summary);
+        const envelope=document.createElement('p'); envelope.textContent=`To: ${item.message.recipient}\nSubject: ${item.message.subject}`; envelope.className='email-envelope'; review.append(envelope);
+        const body=document.createElement('pre'); body.className='email-copy'; body.textContent=item.message.text; review.append(body);
+        if(item.message.html){
+          const preview=document.createElement('iframe'); preview.title='Exact formatted email preview'; preview.setAttribute('sandbox',''); preview.setAttribute('referrerpolicy','no-referrer');
+          preview.srcdoc='<meta http-equiv="Content-Security-Policy" content="default-src &#39;none&#39;; style-src &#39;unsafe-inline&#39;; base-uri &#39;none&#39;; form-action &#39;none&#39;">'+item.message.html;
+          review.append(preview);
+        }
+        const source=document.createElement('a'); source.href=item.sourceEvidence.sourceUrl; source.target='_blank'; source.rel='noreferrer'; source.textContent='Open first-party evidence ↗'; review.append(source);
+        const fact=document.createElement('p'); fact.textContent=`${item.sourceEvidence.fitFact} · checked ${time(item.sourceEvidence.checkedAt)} ET`; review.append(fact);
+        article.append(review);
+        if(item.sentThreadId){const thread=document.createElement('a');thread.href=`https://mail.google.com/mail/u/1/#all/${item.sentThreadId}`;thread.target='_blank';thread.rel='noreferrer';thread.textContent='Open verified Gmail conversation ↗';article.append(thread);}
+        if(item.impact==='campaign' && item.deliveryState==='review' && !item.issues.length){
+          const action=document.createElement('button');action.type='button';action.className='approve';
+          action.textContent=item.approved?'Send approved email':'Approve exact email';
+          action.disabled=item.approved&&(!data.outreachSendingEnabled||!item.senderAvailable);
+          action.addEventListener('click',()=>outreachAction(item,item.approved?'send':'approve',action));article.append(action);
+          if(action.disabled){const note=document.createElement('p');note.textContent='Guarded Gmail sender activation is required. No email has been sent.';article.append(note);}
+        }
+        if(item.deliveryState==='queued'){
+          const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Cancel queued email';
+          cancel.addEventListener('click',()=>outreachAction(item,'cancel',cancel));article.append(cancel);
+        }
+      }
       try {
         const reviewUrl = new URL(item.reviewUrl);
         if (reviewUrl.protocol === 'https:' && ['chatgpt.com', 'mail.google.com'].includes(reviewUrl.hostname)) {
@@ -152,7 +178,7 @@ function renderCampaigns(data) {
           article.append(link);
         }
       } catch { /* An invalid review URL is omitted. */ }
-      if (item.state === 'pending' && item.impact === 'campaign') {
+      if (item.source !== 'outreach' && !item.requiresOutreachManifest && item.state === 'pending' && item.impact === 'campaign') {
         const approval = document.createElement('button');
         approval.type = 'button';
         approval.className = 'approve';
@@ -193,7 +219,7 @@ function renderCampaigns(data) {
   const syncText = sync.status === 'not_connected' ? 'Gmail sync is not connected yet. Saved email records may be out of date.' : `Gmail last synced ${time(sync.lastSuccessfulSyncAt)} ET · ${sync.trackedCount} tracked ${sync.trackedCount === 1 ? 'conversation' : 'conversations'}. ${sync.status === 'stale' ? 'Sync is overdue; email status may be out of date.' : 'Checks automatically about every five minutes.'}`;
   $('gmail-sync').textContent = syncText;
   $('gmail-sync').className = `sync-status${sync.status !== 'current' ? ' stale' : ''}`;
-  $('campaign-status').textContent = 'Drafts and posts use saved records. New drafts and chat updates do not appear automatically. Only tracked Gmail conversations sync automatically.';
+  $('campaign-status').textContent = 'Saved drafts and posts require explicit preparation. Outreach approval binds the recipient and copy; release requires current source, routing and all-folder Gmail checks.';
   if (sync.status !== 'current' && !waiting.length) $('focus-text').textContent += ' Gmail status is not current; check Gmail for new replies.';
   $('campaign-error').hidden = true;
 }
@@ -203,7 +229,7 @@ async function recordApproval(item, button) {
   button.disabled = true;
   button.textContent = 'Saving…';
   try {
-    const response = await fetch(`/api/campaigns/${item.id}/approve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const response = await fetch(`/api/campaigns/${item.id}/approve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ revision:item.reviewRevision }) });
     if (!response.ok) throw new Error('Approval could not be saved. Refresh and try again.');
     renderCampaigns(await response.json());
   } catch (error) {
@@ -213,6 +239,27 @@ async function recordApproval(item, button) {
     button.textContent = 'Approve this draft';
   }
 }
+
+async function outreachAction(item,action,button) {
+  const verb=action==='approve'?'Approve':action==='cancel'?'Cancel the queued send of':'Send';
+  if(!confirm(`${verb} this exact email to ${item.message.recipient}?\nSubject: ${item.message.subject}\n${action==='send'?'The guarded sender checks Gmail and routing again before one send attempt.':action==='cancel'?'Cancellation succeeds only before a send attempt is reserved.':'Approval does not send it.'}`))return;
+  button.disabled=true;
+  try {
+    const response=await fetch(`/api/outreach/${action}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:item.outreachId,revision:item.revision})});
+    const result=await response.json();if(!response.ok)throw new Error(result.error||'The email remains held.');
+    await refresh();
+  }catch(error){$('campaign-error').textContent=error.message;$('campaign-error').hidden=false;button.disabled=false;}
+}
+
+$('outreach-form').addEventListener('submit',async event=>{
+  event.preventDefault();const form=event.currentTarget;const values=new FormData(form);const button=form.querySelector('button');button.disabled=true;
+  try{
+    const packet={id:values.get('id'),lane:values.get('lane'),phase:values.get('phase'),message:{recipient:values.get('recipient'),subject:values.get('subject'),text:values.get('text'),html:values.get('html'),threadId:values.get('threadId'),inReplyTo:values.get('inReplyTo'),references:values.get('references')},evidence:{sourceUrl:values.get('sourceUrl'),profileUrl:values.get('profileUrl'),publishedEmail:values.get('publishedEmail'),mailtoEmail:values.get('mailtoEmail'),fit:'current',fitFact:values.get('fitFact'),checkedBy:'sebastian.larosa@jobhackai.io',checkedAt:new Date().toISOString()}};
+    const response=await fetch('/api/outreach/prepare',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(packet)});
+    const result=await response.json();if(!response.ok)throw new Error(result.error||'Could not save the prepared email.');
+    $('outreach-status').textContent='Saved for source, routing and Gmail checks. This does not approve or send the email.';await refresh();
+  }catch(error){$('outreach-status').textContent=error.message;}finally{button.disabled=false;}
+});
 
 async function refresh() {
   $('refresh').disabled = true;

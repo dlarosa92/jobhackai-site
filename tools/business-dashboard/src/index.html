@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#11241f">
   <title>Everything in motion · JobHackAI</title>
-  <link rel="stylesheet" href="style.css?v=2026-10-17-clear-boards">
-  <script src="app.js?v=2026-10-17-clear-boards" defer></script>
+  <link rel="stylesheet" href="style.css?v=2026-10-19-outreach-gate">
+  <script src="app.js?v=2026-10-19-outreach-gate" defer></script>
 </head>
 <body>
   <header class="topbar">
@@ -27,6 +27,30 @@
     <nav id="channel-filters" class="channel-filters" aria-label="Filter by email or platform"></nav>
     <p id="filter-status" class="checked" role="status"></p>
     <section id="board" class="board" aria-label="Work board"></section>
+    <details class="panel prepare-email"><summary>Add a prepared email for review</summary>
+      <p>Save the complete researched message. It stays on hold until independent routing and Gmail checks are current.</p>
+      <form id="outreach-form" class="email-form">
+        <label>Message reference<input name="id" pattern="[a-z0-9-]{1,64}" required placeholder="Stable reference for this message"></label>
+        <label>Audience<select name="lane"><option value="coach">Coach</option><option value="kit-distributor">Kit distributor</option><option value="local-provider">Local provider</option><option value="community-publisher">Community publisher</option></select></label>
+        <label>Message type<select name="phase"><option value="intro">Introduction</option><option value="followup">One-time follow-up</option></select></label>
+        <label>Recipient<input type="email" name="recipient" required></label>
+        <label>Subject<input name="subject" maxlength="300" required></label>
+        <label>Complete email, including signature and footer<textarea name="text" rows="12" maxlength="30000" required></textarea></label>
+        <details><summary>Formatted copy and original-thread details</summary>
+          <label>Exact formatted email HTML, if used<textarea name="html" rows="5" maxlength="40000"></textarea></label>
+          <label>Original Gmail thread ID, for a follow-up<input name="threadId"></label>
+          <label>Original Message-ID, for a follow-up<input name="inReplyTo" placeholder="&lt;original-message-id@example.com&gt;"></label>
+          <label>Original References header, if present<input name="references"></label>
+        </details>
+        <label>First-party contact source URL<input type="url" name="sourceUrl" required></label>
+        <label>Email published on that source<input type="email" name="publishedEmail" required></label>
+        <label>Mailto address, when present<input type="email" name="mailtoEmail"></label>
+        <label>Current service or workflow that makes this relevant<textarea name="fitFact" rows="3" required maxlength="2000"></textarea></label>
+        <label>Published Local profile URL, for a provider<input type="url" name="profileUrl"></label>
+        <label class="check"><input type="checkbox" required>I checked this source now, confirmed the active business/role and exact email, and resolved any conflicting evidence.</label>
+        <button type="submit">Save for independent checks</button><p id="outreach-status" role="status"></p>
+      </form>
+    </details>
     <section class="overview" aria-label="Business overview">
       <div class="metric goal"><span class="eyebrow">Monthly income goal</span><div class="metric-value">$3,000</div><p>Money available to pay yourself after business costs.</p><div class="goal-line"><span id="available">Not calculated</span><span id="progress">Goal progress unavailable</span></div><div class="track"><div id="goal-fill"></div></div></div>
       <div class="metric"><span class="eyebrow">Collected less refunds · this month</span><div class="metric-value" id="collected">—</div><p>Production D1 payment ledger, before business costs.</p></div>
