@@ -12,7 +12,7 @@ Private Cloudflare Worker for `dashboard.jobhackai.io`, protected by owner-only 
 - Tracked Gmail conversations come from a standalone Google Apps Script. See [installation and operating instructions](google-apps-script/README.md). The last non-draft message determines whether a conversation needs review or is waiting for its recipient. Only minimal metadata is stored; Gmail access stays with Google.
 - Customer requests rank first, inbound prospects second, campaign decisions third. Selected conversations default to prospect; explicitly recorded customer classifications are preserved by sync.
 - Page load, return to the tab, the visible one-minute interval and Refresh reload board records. Google independently checks the label approximately every five minutes. The UI displays the actual last successful Gmail scan and warns after 15 minutes without success. Refresh cannot reset Gmail freshness.
-- Gmail sync does not send mail or alter approvals. Other native platforms and GA4 are not automatically connected.
+- Tracked Gmail sync does not alter approvals. The separate outreach gate requires exact copy approval, current first-party evidence, working MX targets and all-folder Gmail checks. Guarded sending stays disabled until the owner approves its separate Gmail send permission. Other native platforms and GA4 are not automatically connected.
 
 ## Build and validation
 
@@ -28,6 +28,16 @@ Build produces ignored `worker.bundle.js` (dashboard) and `gmail-ingest.bundle.j
 
 Promote reviewed commits through `dev0`, `develop`, and `main`, passing dashboard CI at each stage. These standalone Workers require explicit deployment after promotion; site Pages deployment does not deploy them. Annotate Cloudflare versions with the exact source commit. Cloudflare's deployment/version API is the current release record.
 
-Fresh databases use `schema.sql`. Existing databases need `001-priority.sql` if not already applied, then `002-gmail-sync.sql` once. Seeds preserve existing campaign decisions. Real contact records, manual-to-Gmail mappings, label IDs and secrets stay in private runtime configuration or D1, outside this public repository.
+Fresh databases use `schema.sql`. Existing databases need `001-priority.sql` if not already applied, then `002-gmail-sync.sql` once, followed by additive `003-outreach-gate.sql`. Seeds preserve existing campaign decisions. Real contact records, manual-to-Gmail mappings, label IDs and secrets stay in private runtime configuration or D1, outside this public repository.
 
-The dashboard reads the production ledger and uses dashboard D1 for costs, approvals and synced email metadata. Ingestion has only dashboard D1, accepts signed bounded snapshots, and exposes no data-reading interface. The original dashboard Access policy and disabled workers.dev/preview routes remain in place.
+The dashboard reads the production ledger and uses dashboard D1 for costs, approvals and synced email metadata. Ingestion has only dashboard D1, accepts signed bounded snapshots and the authenticated outreach relay protocol. It exposes no unsigned data-reading interface. The original dashboard Access policy and disabled workers.dev/preview routes remain in place.
+
+## Outreach quality gate
+
+Prepare one exact researched message through **Add a prepared email for review** or owner-authenticated `POST /api/outreach/prepare`. Include a stable ID, lane, phase, complete email and current first-party published-contact/business-fit evidence. Local providers require their actual directory profile. The owner sees complete plain text and optional sandboxed HTML. Current routing and Gmail checks must pass before exact revision approval. An approval has no sending effect; release is separate and rechecked.
+
+`node scripts/routing-preflight.mjs packet.json` checks each recipient domain and its MX targets' A/AAAA resolution. Exit 0 means routing present, 1 means at least one hold/reject, and 2 means invalid input. Input is a private JSON `messages` array, each with `recipient` (or nested `message.recipient`). Never commit contact packets or diagnostics. DNS results are not mailbox or inbox verification.
+
+Durable native bounce/reply suppression, business and recipient deduplication, conservative five-complete-business-day follow-up timing, exact original-thread matching and one atomic attempt prevent stale approvals or ambiguous send retries from releasing new outreach. Legacy generic email approvals stay in history but cannot authorize the guarded sender. Stan supplies evidence and Marblism-prepared copy; Codex independently checks and submits it; Sebastian approves exact copy and separately requests release. See the [relay upgrade and optional sender activation](google-apps-script/README.md).
+
+Tests cover these failure cases with real SQLite, mocked public DNS and an Apps Script VM; no test sends external mail. The standard Gmail manifest remains read-only.
