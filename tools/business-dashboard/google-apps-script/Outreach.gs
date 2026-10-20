@@ -107,7 +107,13 @@ function outreachAddress(value) {
 }
 function outreachBody(part) {
   var text='';
-  if(part.body&&part.body.data)text=Utilities.newBlob(Utilities.base64DecodeWebSafe(part.body.data)).getDataAsString('UTF-8');
+  if(part.body&&part.body.data){
+    // Gmail omits base64url padding; Apps Script's decoder can reject it.
+    var data=String(part.body.data).replace(/\s/g,'').replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+    if(!/^[A-Za-z0-9_-]*$/.test(data)||data.length%4===1)throw new Error('Invalid Gmail MIME encoding; hold for review.');
+    data+='='.repeat((4-data.length%4)%4);
+    text=Utilities.newBlob(Utilities.base64DecodeWebSafe(data)).getDataAsString('UTF-8');
+  }
   (part.parts||[]).forEach(function(child){text+='\n'+outreachBody(child);});
   if(text.length>200000)throw new Error('Delivery evidence exceeds the bounded read; review manually.');
   return text;
