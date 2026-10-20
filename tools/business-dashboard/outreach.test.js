@@ -150,7 +150,7 @@ test('migration preserves existing approvals and native receipts',()=>{
 
 function googleContext(){
  const props={},queries=[],uploads=[],sends=[];
- const context=vm.createContext({Date,console,PropertiesService:{getScriptProperties:()=>({getProperty:k=>props[k]})},Gmail:{Users:{Messages:{list:(_me,options)=>{queries.push(options);return {messages:[]};},get:()=>{throw Error('unconfigured native read');},send:m=>{sends.push(m);throw Error('network timeout');}},getProfile:()=>({emailAddress:mailbox})}},Utilities:{Charset:{UTF_8:'UTF-8'},base64Encode:v=>Buffer.from(v).toString('base64'),base64EncodeWebSafe:v=>Buffer.from(v).toString('base64url'),base64DecodeWebSafe:v=>Buffer.from(v,'base64url'),newBlob:v=>({getDataAsString:()=>Buffer.from(v).toString('utf8')}),computeHmacSha256Signature:(body,key)=>Array.from(createHmac('sha256',key).update(body).digest())},UrlFetchApp:{fetch:(url,options)=>{uploads.push({url,...options});return {getResponseCode:()=>200,getContentText:()=>JSON.stringify({messages:[],reconcile:[],sendingEnabled:false})};}}});
+ const context=vm.createContext({Date,console,PropertiesService:{getScriptProperties:()=>({getProperty:k=>props[k]})},Gmail:{Users:{Messages:{list:(_me,options)=>{queries.push(options);return {messages:[]};},get:()=>{throw Error('unconfigured native read');},send:m=>{sends.push(m);throw Error('network timeout');}},getProfile:()=>({emailAddress:mailbox})}},Utilities:{Charset:{UTF_8:'UTF-8'},base64Encode:v=>Buffer.from(v).toString('base64'),base64EncodeWebSafe:v=>Buffer.from(v).toString('base64url'),base64DecodeWebSafe:v=>{if(v.length%4!==0||!/^[A-Za-z0-9_-]*={0,2}$/.test(v))throw Error('Could not decode string');return Buffer.from(v,'base64url');},newBlob:v=>({getDataAsString:()=>Buffer.from(v).toString('utf8')}),computeHmacSha256Signature:(body,key)=>Array.from(createHmac('sha256',key).update(body).digest())},UrlFetchApp:{fetch:(url,options)=>{uploads.push({url,...options});return {getResponseCode:()=>200,getContentText:()=>JSON.stringify({messages:[],reconcile:[],sendingEnabled:false})};}}});
  vm.runInContext(readFileSync(new URL('./google-apps-script/Outreach.gs',import.meta.url),'utf8'),context);
  return {context,props,queries,uploads,sends};
 }
@@ -212,4 +212,19 @@ test('Google send timeout is one attempt, followed only by read-only reconciliat
  };
  assert.throws(()=>c.context.syncOutreach(),/Automatic retry is disabled/);
  c.context.syncOutreach();assert.equal(c.sends.length,1);assert.equal(claims,1);
+});
+
+
+test('Apps Script MIME decoding pads Gmail data and rejects malformed evidence',()=>{
+ const c=googleContext();
+ for(const value of ['a','ab','abc','✓ unicode','Status: 5.1.1'])assert.equal(c.context.outreachBody({body:{data:Buffer.from(value).toString('base64url')}}),value);
+ assert.throws(()=>c.context.outreachBody({body:{data:'x'}}),/Invalid Gmail MIME encoding/);
+});
+
+
+test('Advanced Gmail byte arrays are decoded directly, including signed Unicode bytes',()=>{
+ const c=googleContext(),value='Gmail ✓ signed bytes';
+ const bytes=Array.from(Buffer.from(value)).map(v=>v>127?v-256:v);
+ assert.equal(c.context.outreachBody({body:{data:bytes}}),value);
+ assert.throws(()=>c.context.outreachBody({body:{data:[999]}}),/Invalid Gmail MIME bytes/);
 });
