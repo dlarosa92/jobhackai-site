@@ -110,4 +110,16 @@ async function gmailRecords(db, now = new Date()) {
   } };
 }
 
-export { receiveGmailSync, gmailRecords };
+async function signedJson(request, env, now = new Date()) {
+  if (!env.SYNC_SECRET || env.SYNC_SECRET.length < 32 || !env.MAILBOX_EMAIL) throw new Error('Relay not configured');
+  const timestamp=request.headers.get('x-sync-timestamp')||'';
+  const signature=request.headers.get('x-sync-signature')||'';
+  if(request.method!=='POST'||request.headers.get('content-type')?.split(';')[0]!=='application/json'||!/^\d{10}$/.test(timestamp)||Math.abs(now.getTime()/1000-Number(timestamp))>300||!/^[a-f0-9]{64}$/.test(signature))throw new Error('Unauthorized');
+  const body=await boundedBody(request);
+  const key=await crypto.subtle.importKey('raw',encoder.encode(env.SYNC_SECRET),{name:'HMAC',hash:'SHA-256'},false,['verify']);
+  const bytes=Uint8Array.from(signature.match(/../g),byte=>parseInt(byte,16));
+  if(!await crypto.subtle.verify('HMAC',key,bytes,encoder.encode(`${timestamp}.${body}`)))throw new Error('Unauthorized');
+  return JSON.parse(body);
+}
+
+export { receiveGmailSync, gmailRecords, signedJson };
