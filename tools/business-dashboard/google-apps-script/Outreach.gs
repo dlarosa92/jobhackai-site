@@ -108,11 +108,19 @@ function outreachAddress(value) {
 function outreachBody(part) {
   var text='';
   if(part.body&&part.body.data){
-    // Gmail omits base64url padding; Apps Script's decoder can reject it.
-    var data=String(part.body.data).replace(/\s/g,'').replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-    if(!/^[A-Za-z0-9_-]*$/.test(data)||data.length%4===1)throw new Error('Invalid Gmail MIME encoding; hold for review.');
-    data+='='.repeat((4-data.length%4)%4);
-    text=Utilities.newBlob(Utilities.base64DecodeWebSafe(data)).getDataAsString('UTF-8');
+    var raw=part.body.data;
+    // Advanced Gmail exposes byte fields as signed byte arrays; the REST
+    // representation is a base64url string. Handle each representation once.
+    if(typeof raw==='object'&&typeof raw.length==='number'){
+      var bytes=Array.from(raw);
+      if(bytes.some(function(value){return !Number.isInteger(value)||value< -128||value>255;}))throw new Error('Invalid Gmail MIME bytes; hold for review.');
+      text=Utilities.newBlob(bytes).getDataAsString('UTF-8');
+    }else if(typeof raw==='string'){
+      var data=raw.replace(/\s/g,'').replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+      if(!/^[A-Za-z0-9_-]*$/.test(data)||data.length%4===1)throw new Error('Invalid Gmail MIME encoding; hold for review.');
+      data+='='.repeat((4-data.length%4)%4);
+      text=Utilities.newBlob(Utilities.base64DecodeWebSafe(data)).getDataAsString('UTF-8');
+    }else throw new Error('Unsupported Gmail MIME representation; hold for review.');
   }
   (part.parts||[]).forEach(function(child){text+='\n'+outreachBody(child);});
   if(text.length>200000)throw new Error('Delivery evidence exceeds the bounded read; review manually.');

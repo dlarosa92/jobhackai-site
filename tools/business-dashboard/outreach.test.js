@@ -220,3 +220,11 @@ test('Apps Script MIME decoding pads Gmail data and rejects malformed evidence',
  for(const value of ['a','ab','abc','✓ unicode','Status: 5.1.1'])assert.equal(c.context.outreachBody({body:{data:Buffer.from(value).toString('base64url')}}),value);
  assert.throws(()=>c.context.outreachBody({body:{data:'x'}}),/Invalid Gmail MIME encoding/);
 });
+
+
+test('Advanced Gmail byte arrays are decoded directly, including signed Unicode bytes',()=>{
+ const c=googleContext(),value='Gmail ✓ signed bytes';
+ const bytes=Array.from(Buffer.from(value)).map(v=>v>127?v-256:v);
+ assert.equal(c.context.outreachBody({body:{data:bytes}}),value);
+ assert.throws(()=>c.context.outreachBody({body:{data:[999]}}),/Invalid Gmail MIME bytes/);
+});
