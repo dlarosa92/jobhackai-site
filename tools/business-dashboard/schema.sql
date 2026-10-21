@@ -57,3 +57,11 @@ CREATE TABLE IF NOT EXISTS outreach_events (
 CREATE TABLE IF NOT EXISTS outreach_relay_state (
   id INTEGER PRIMARY KEY CHECK(id=1), checked_at TEXT NOT NULL, can_send INTEGER NOT NULL CHECK(can_send IN(0,1))
 );
+
+CREATE TABLE IF NOT EXISTS board_resolutions (
+  item_id TEXT NOT NULL,
+  revision TEXT NOT NULL,
+  handled_at TEXT NOT NULL,
+  reopened_at TEXT,
+  PRIMARY KEY (item_id, revision)
+);
