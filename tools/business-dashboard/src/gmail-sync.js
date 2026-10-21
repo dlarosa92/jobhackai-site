@@ -94,10 +94,11 @@ async function receiveGmailSync(request, env, now = new Date()) {
 async function gmailRecords(db, now = new Date()) {
   const [sync, rows] = await Promise.all([
     db.prepare('SELECT mailbox, completed_at, received_at, thread_count FROM gmail_sync_state WHERE id=1').first(),
-    db.prepare('SELECT thread_id, sender, subject, preview, state, last_message_at, impact FROM gmail_threads WHERE active=1 ORDER BY last_message_at DESC, thread_id').all(),
+    db.prepare('SELECT thread_id, last_message_id, sender, subject, preview, state, last_message_at, impact FROM gmail_threads WHERE active=1 ORDER BY last_message_at DESC, thread_id').all(),
   ]);
   const items = rows.results.map(row => ({
     id: `gmail-${row.thread_id}`, source: 'gmail', channel: 'Gmail · tracked conversation', impact: row.impact,
+    notificationRevision: row.last_message_id, sender: row.sender,
     title: row.subject || '(No subject)', detail: `${row.sender}: ${row.preview}`,
     state: row.state === 'waiting' ? 'waiting' : 'pending', updatedAt: row.last_message_at,
     evidence: `Latest ${row.state === 'waiting' ? 'sent' : 'received'} message: ${row.last_message_at}`,
