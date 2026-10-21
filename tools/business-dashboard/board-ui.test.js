@@ -73,3 +73,20 @@ test('unknown channels are explicit and untrusted review URLs do not become link
   assert.match(text(nodes.get('board')), /Channel not recorded/);
   assert.equal(walk(nodes.get('board')).filter(x => x.tag === 'a').length, 0);
 });
+
+test('directory intake has its own filter; handled notifications are separate, reversible and never first priority', () => {
+  const { render, nodes } = ui();
+  render({ ...data([
+    item('New directory request', 'Directory', 'pending', {source:'directory',impact:'prospect',notificationRevision:'a'.repeat(64),detail:'Contact: submitted@example.com <script>alert(1)</script>'}),
+    item('Handled bounce', 'Gmail', 'handled', {source:'gmail',impact:'prospect',notificationRevision:'abc123',handledAt:'2026-10-21T12:00:00Z'}),
+  ]), directorySource:{status:'current',checkedAt:'2026-10-21T14:00:00Z'} });
+  assert.match(text(lane(nodes,'Requests and emails to review')),/Directory · Needs your review.*submitted@example.com.*Mark handled/);
+  assert.doesNotMatch(text(lane(nodes,'Requests and emails to review')),/Handled bounce|Approve this draft/);
+  assert.match(text(lane(nodes,'Handled notifications')),/Handled bounce.*Reopen.*Marked handled/);
+  assert.match(nodes.get('focus-text').textContent,/New directory request/);
+  assert.doesNotMatch(nodes.get('focus-text').textContent,/Handled bounce/);
+  assert.match(nodes.get('directory-sync').textContent,/No Gmail label is needed/);
+  assert.equal(walk(nodes.get('board')).some(x=>x.tag==='script'),false);
+  nodes.get('channel-filters').children.find(x=>x.textContent==='Directory (1)').listeners.click();
+  assert.doesNotMatch(text(nodes.get('board')),/Handled bounce/);
+});
