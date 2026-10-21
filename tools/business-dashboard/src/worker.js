@@ -2,6 +2,7 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { gmailRecords } from './gmail-sync.js';
 import { outreachRecords, ownerOutreach, isLegacyEmail } from './outreach.js';
 import { digest } from './outreach-policy.js';
+import { directoryRecords, duplicateDirectoryRecord, applyResolutions, resolveNotification } from './notifications.js';
 
 const OWNER = 'sebastian.larosa@jobhackai.io';
 const ACCESS_AUD = '884df74e9be8546b0051980538c8e00a75efd2b1d2da5a04a4e4fbe78f3a4a40';
@@ -85,10 +86,11 @@ async function overview(env, now = new Date()) {
 }
 
 async function campaignRecords(env, now = new Date()) {
-  const [result, gmail, outreach] = await Promise.all([
+  const [result, gmail, outreach, directory] = await Promise.all([
     env.DASHBOARD_DB.prepare("SELECT id, channel, title, detail, review_url AS reviewUrl, state, evidence, updated_at AS updatedAt, sort_order AS sortOrder, impact, next_action AS nextAction FROM campaign_items WHERE gmail_thread_id IS NULL OR NOT EXISTS (SELECT 1 FROM gmail_threads WHERE thread_id=campaign_items.gmail_thread_id) ORDER BY CASE impact WHEN 'customer' THEN 0 WHEN 'prospect' THEN 1 ELSE 2 END, sort_order, id").all(),
     gmailRecords(env.DASHBOARD_DB, now),
     outreachRecords(env.DASHBOARD_DB, now.getTime()),
+    directoryRecords(env, now),
   ]);
   const rank = { customer: 0, prospect: 1, campaign: 2 };
   const manual = await Promise.all(result.results.map(async item => {
@@ -98,12 +100,17 @@ async function campaignRecords(env, now = new Date()) {
       nextAction:'Reconcile native sends, then prepare exact unsent messages through the outreach gate.', requiresOutreachManifest:true};
     return {...item,reviewRevision};
   }));
-  const items = [...gmail.items, ...manual, ...outreach.items].sort((a, b) => rank[a.impact] - rank[b.impact]);
+  const ids = new Set(directory.items.map(item => item.id));
+  const notifications = await applyResolutions(env.DASHBOARD_DB, [...directory.items, ...gmail.items]);
+  const items = [...notifications.filter(item => item.source !== 'gmail' || !duplicateDirectoryRecord(item, ids)),
+    ...manual.filter(item => !duplicateDirectoryRecord(item, ids)), ...outreach.items]
+    .sort((a, b) => rank[a.impact] - rank[b.impact]);
   return {
     asOf: now.toISOString(),
     latestChange: items.reduce((latest, item) => item.updatedAt > latest ? item.updatedAt : latest, ''),
     items,
     gmailSync: gmail.gmailSync,
+    directorySource: directory.directorySource,
     outreachSendingEnabled: env.OUTREACH_SENDER_ENABLED === 'true',
   };
 }
@@ -148,6 +155,24 @@ export default {
       if (request.method === 'GET' && url.pathname === '/app.js') return asset(APP, 'application/javascript; charset=utf-8');
       if (request.method === 'GET' && url.pathname === '/api/overview') return json(await overview(env));
       if (request.method === 'GET' && url.pathname === '/api/campaigns') return json(await campaignRecords(env));
+      const resolution = /^\/api\/notifications\/(handle|reopen)$/.exec(url.pathname);
+      if (request.method === 'POST' && resolution) {
+        if (request.headers.get('origin') !== url.origin || request.headers.get('content-type')?.split(';')[0] !== 'application/json') return json({ error: 'Invalid request origin or type' }, 403);
+        // Read at most 1 KiB even when the client omits or lies about Content-Length.
+        const reader = request.body?.getReader();
+        if (!reader) return json({ error: 'Missing notification revision' }, 400);
+        let size = 0, text = ''; const decoder = new TextDecoder();
+        while (true) {
+          const { value, done } = await reader.read(); if (done) break;
+          size += value.byteLength;
+          if (size > 1024) { await reader.cancel(); return json({ error: 'Request too large' }, 413); }
+          text += decoder.decode(value, { stream: true });
+        }
+        let input;
+        try { input = JSON.parse(text + decoder.decode()); } catch { return json({ error: 'Invalid JSON' }, 400); }
+        if (!await resolveNotification(env, input, resolution[1])) return json({ error: 'This notification changed or is unavailable. Refresh before marking it handled or reopening it.' }, 409);
+        return json(await campaignRecords(env));
+      }
       if (url.pathname.startsWith('/api/outreach')) return ownerOutreach(request,env);
       const approval = /^\/api\/campaigns\/([a-z0-9-]{1,64})\/approve$/.exec(url.pathname);
       if (request.method === 'POST' && approval) {
