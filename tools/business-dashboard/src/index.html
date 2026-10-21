@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#11241f">
   <title>Everything in motion · JobHackAI</title>
-  <link rel="stylesheet" href="style.css?v=2026-10-19-outreach-gate">
-  <script src="app.js?v=2026-10-19-outreach-gate" defer></script>
+  <link rel="stylesheet" href="style.css?v=2026-10-21-notification-intake">
+  <script src="app.js?v=2026-10-21-notification-intake" defer></script>
 </head>
 <body>
   <header class="topbar">
@@ -23,7 +23,8 @@
     <div id="campaign-error" class="error" role="alert" hidden></div>
     <p id="campaign-checked" class="checked" aria-live="polite">Checking action board…</p>
     <p id="gmail-sync" class="sync-status" role="status">Checking Gmail sync status…</p>
-    <p class="board-help">Emails are labelled Email. Posts name their platform. Drafts still being prepared appear below. Gmail syncs automatically; new drafts and post updates must be saved here separately.</p>
+    <p id="directory-sync" class="sync-status" role="status">Checking saved directory requests…</p>
+    <p class="board-help">Directory requests appear automatically from saved submissions, independently of Gmail. Mark handled to keep a reviewed notification out of your queue; new messages return to review. Posts name their platform. New drafts and post updates must be saved separately.</p>
     <nav id="channel-filters" class="channel-filters" aria-label="Filter by email or platform"></nav>
     <p id="filter-status" class="checked" role="status"></p>
     <section id="board" class="board" aria-label="Work board"></section>

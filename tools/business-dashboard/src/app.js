@@ -4,6 +4,7 @@ const time = iso => new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_Yo
 let currentMonth = null;
 let boardData = null;
 let selectedChannel = 'All';
+let notificationChange = 0;
 const expandedLanes = new Set();
 
 function render(data) {
@@ -34,12 +35,13 @@ function render(data) {
 
 // Legacy Outreach records were verified as email; never infer a channel from an agent's name.
 function channelName(item) {
+  if (item.source === 'directory') return 'Directory';
   if (item.source === 'gmail' || /\b(email|gmail|outreach)\b/i.test(item.channel)) return 'Email';
   return ['LinkedIn', 'Pinterest', 'Facebook', 'Instagram', 'Nextdoor', 'Blog', 'X'].find(channel => new RegExp(`\\b${channel}\\b`, 'i').test(item.channel)) || 'Channel not recorded';
 }
 function stateLabel(item) {
   if (item.state === 'approved') return channelName(item) === 'Email' ? 'Approved, not sent' : 'Approved, not scheduled';
-  return { pending: item.impact === 'campaign' ? 'Needs your approval' : 'Needs your review', waiting: 'Waiting for an email reply', sent: 'Email sent', scheduled: 'Post scheduled', published: 'Published', hold: 'Not ready for approval' }[item.state] || item.state;
+  return { pending: item.impact === 'campaign' ? 'Needs your approval' : 'Needs your review', handled: 'Handled', closed: 'Closed in directory source', waiting: 'Waiting for an email reply', sent: 'Email sent', scheduled: 'Post scheduled', published: 'Published', hold: 'Not ready for approval' }[item.state] || item.state;
 }
 function plainEmailText(value) {
   const named = { amp: '&', apos: "'", quot: '"', lt: '<', gt: '>', nbsp: ' ' };
@@ -50,20 +52,21 @@ function plainEmailText(value) {
   });
 }
 const laneDefinitions = [
-  { title: 'Emails to review or reply to', note: 'A customer or partner may need your response.', empty: 'No tracked emails need your response.', matches: item => ['pending', 'hold'].includes(item.state) && item.impact !== 'campaign' },
+  { title: 'Requests and emails to review', note: 'A customer or partner may need your response. Directory submissions appear here automatically.', empty: 'No requests or tracked emails need your response.', matches: item => ['pending', 'hold'].includes(item.state) && item.impact !== 'campaign' },
   { title: 'Needs your approval', note: 'Finished drafts for you to review. Approval alone does not send or publish.', empty: 'Nothing is ready for your approval.', matches: item => item.state === 'pending' && item.impact === 'campaign' },
   { title: 'Being prepared', note: 'Drafts with checks or fixes still needed. Each card says what happens next.', empty: 'No saved drafts are being prepared.', matches: item => item.state === 'hold' && item.impact === 'campaign' },
   { title: 'Waiting for an email reply', note: 'Your email was sent. The other person has not replied in the tracked conversation.', empty: 'No tracked email conversations are waiting for a reply.', matches: item => item.state === 'waiting' },
   { title: 'Approved, not sent or scheduled', note: 'You approved the draft. Sending or scheduling is still a separate step.', empty: 'No approved drafts are waiting to be sent or scheduled.', matches: item => item.state === 'approved' },
   { title: 'Scheduled posts', note: 'These posts have a saved date and time on their platform.', empty: 'No posts have a saved schedule.', matches: item => item.state === 'scheduled' },
   { title: 'Emails sent and posts published', note: 'Recorded activity. An email marked sent does not prove it reached the inbox.', empty: 'No completed activity is saved here.', matches: item => ['sent', 'published'].includes(item.state) },
+  { title: 'Handled notifications', note: 'Handled items stay out of your review queue. New replies or changed submissions return to review. No email is deleted and no listing is published.', empty: 'No handled notifications are saved.', matches: item => ['handled', 'closed'].includes(item.state) },
 ];
 
 function renderCampaigns(data) {
   boardData = data;
   const filters = $('channel-filters');
   filters.replaceChildren();
-  const channels = ['All', 'Email', 'LinkedIn', 'Pinterest', 'Facebook', 'Instagram', 'X', 'Nextdoor', 'Blog'];
+  const channels = ['All', 'Directory', 'Email', 'LinkedIn', 'Pinterest', 'Facebook', 'Instagram', 'X', 'Nextdoor', 'Blog'];
   if (data.items.some(item => channelName(item) === 'Channel not recorded')) channels.push('Channel not recorded');
   for (const channel of channels) {
     const button = document.createElement('button');
@@ -75,7 +78,7 @@ function renderCampaigns(data) {
     filters.append(button);
   }
   const visibleItems = data.items.filter(item => selectedChannel === 'All' || channelName(item) === selectedChannel);
-  $('filter-status').textContent = selectedChannel === 'All' ? 'Showing all saved emails, posts and articles.' : visibleItems.length ? `Showing ${selectedChannel} only.` : `No ${selectedChannel} items are saved on this board. This does not mean there is no activity on ${selectedChannel}.`;
+  $('filter-status').textContent = selectedChannel === 'All' ? 'Showing directory requests, saved emails, posts and articles.' : visibleItems.length ? `Showing ${selectedChannel} only.` : `No ${selectedChannel} items are saved on this board. This does not mean there is no activity on ${selectedChannel}.`;
   const board = $('board');
   board.replaceChildren();
   for (const laneDefinition of laneDefinitions) {
@@ -104,7 +107,7 @@ function renderCampaigns(data) {
       if (item.impact === 'customer' || item.impact === 'prospect') {
         const priority = document.createElement('span');
         priority.className = `priority-badge ${item.impact}`;
-        priority.textContent = item.impact === 'customer' ? 'Customer email' : 'Business email';
+        priority.textContent = item.source === 'directory' ? 'Directory request' : item.impact === 'customer' ? 'Customer email' : 'Business email';
         article.append(priority);
       }
       const kicker = document.createElement('div');
@@ -116,7 +119,7 @@ function renderCampaigns(data) {
       detail.textContent = item.source === 'gmail' ? plainEmailText(item.detail) : item.detail;
       const evidence = document.createElement('p');
       evidence.className = 'evidence';
-      evidence.textContent = item.source === 'gmail' ? `Latest ${item.state === 'waiting' ? 'sent' : 'received'} message ${time(item.updatedAt)} ET` : item.evidence;
+      evidence.textContent = item.source === 'gmail' ? `Latest ${(item.originalState || item.state) === 'waiting' ? 'sent' : 'received'} message ${time(item.updatedAt)} ET` : item.evidence;
       article.append(kicker, name, detail);
       const manager = /^(Stan|Sonny|Penny)\s*·/.exec(item.channel)?.[1];
       if (manager) {
@@ -186,6 +189,17 @@ function renderCampaigns(data) {
         approval.addEventListener('click', () => recordApproval(item, approval));
         article.append(approval);
       }
+      if (['gmail', 'directory'].includes(item.source) && item.notificationRevision && item.state !== 'closed') {
+        const action = document.createElement('button');
+        action.type = 'button';
+        action.textContent = item.state === 'handled' ? 'Reopen' : 'Mark handled';
+        action.addEventListener('click', () => notificationAction(item, item.state === 'handled' ? 'reopen' : 'handle', action));
+        article.append(action);
+        if (item.handledAt) {
+          const handled = document.createElement('p'); handled.className = 'checked';
+          handled.textContent = `Marked handled ${time(item.handledAt)} ET`; article.append(handled);
+        }
+      }
       cards.append(article);
     }
     if (!items.length) {
@@ -212,16 +226,34 @@ function renderCampaigns(data) {
   const waiting = data.items.filter(item => ['pending', 'hold'].includes(item.state) && item.impact !== 'campaign');
   const approvals = data.items.filter(item => item.state === 'pending' && item.impact === 'campaign');
   const preparing = data.items.filter(item => item.state === 'hold' && item.impact === 'campaign');
-  $('focus-text').textContent = waiting.length ? `${waiting[0].title}. ${waiting[0].nextAction || 'Open the email and review it.'}` : approvals.length ? `${approvals.length} ${approvals.length === 1 ? 'draft needs' : 'drafts need'} your approval.` : `No emails need your response and no drafts are ready for approval.${preparing.length ? ` ${preparing.length} saved drafts are still being prepared below.` : ''}`;
-  const savedChanges = data.items.filter(item => item.source !== 'gmail').map(item => item.updatedAt).filter(Boolean).sort();
+  $('focus-text').textContent = waiting.length ? `${waiting[0].title}. ${waiting[0].nextAction || 'Open the request and review it.'}` : approvals.length ? `${approvals.length} ${approvals.length === 1 ? 'draft needs' : 'drafts need'} your approval.` : `No requests or emails need your response and no drafts are ready for approval.${preparing.length ? ` ${preparing.length} saved drafts are still being prepared below.` : ''}`;
+  const savedChanges = data.items.filter(item => !['gmail', 'directory'].includes(item.source)).map(item => item.updatedAt).filter(Boolean).sort();
   $('campaign-checked').textContent = `Board loaded ${time(data.asOf)} ET.${savedChanges.length ? ` Saved draft and post records last updated ${time(savedChanges.at(-1))} ET.` : ''}`;
   const sync = data.gmailSync || { status: 'not_connected' };
   const syncText = sync.status === 'not_connected' ? 'Gmail sync is not connected yet. Saved email records may be out of date.' : `Gmail last synced ${time(sync.lastSuccessfulSyncAt)} ET · ${sync.trackedCount} tracked ${sync.trackedCount === 1 ? 'conversation' : 'conversations'}. ${sync.status === 'stale' ? 'Sync is overdue; email status may be out of date.' : 'Checks automatically about every five minutes.'}`;
   $('gmail-sync').textContent = syncText;
   $('gmail-sync').className = `sync-status${sync.status !== 'current' ? ' stale' : ''}`;
+  const directory = data.directorySource || { status: 'unavailable' };
+  $('directory-sync').textContent = directory.status === 'current' ? `Directory requests read directly from saved submissions ${time(directory.checkedAt)} ET. No Gmail label is needed.${directory.truncated ? ' Showing the newest 200 submissions only; older submissions remain in the source and must be reviewed separately.' : ''}` : 'Directory request source is unavailable. New requests cannot be verified; check the directory notification emails in Gmail.';
+  $('directory-sync').className = `sync-status${directory.status !== 'current' || directory.truncated ? ' stale' : ''}`;
   $('campaign-status').textContent = 'Saved drafts and posts require explicit preparation. Outreach approval binds the recipient and copy; release requires current source, routing and all-folder Gmail checks.';
   if (sync.status !== 'current' && !waiting.length) $('focus-text').textContent += ' Gmail status is not current; check Gmail for new replies.';
+  if (directory.status !== 'current') $('focus-text').textContent += ' Directory intake is unavailable; check notification emails.';
   $('campaign-error').hidden = true;
+}
+
+async function notificationAction(item, action, button) {
+  notificationChange++;
+  button.disabled = true;
+  try {
+    const response = await fetch(`/api/notifications/${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: item.id, revision: item.notificationRevision }) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Could not save this notification. Refresh and try again.');
+    notificationChange++;
+    renderCampaigns(result);
+  } catch (error) {
+    $('campaign-error').textContent = error.message; $('campaign-error').hidden = false; button.disabled = false;
+  }
 }
 
 async function recordApproval(item, button) {
@@ -262,6 +294,7 @@ $('outreach-form').addEventListener('submit',async event=>{
 });
 
 async function refresh() {
+  const notificationVersion = notificationChange;
   $('refresh').disabled = true;
   $('refresh').textContent = 'Checking…';
   const [numbers, campaigns] = await Promise.allSettled([
@@ -274,8 +307,8 @@ async function refresh() {
     $('error').hidden = false;
     $('checked').textContent = 'Cloudflare numbers: last refresh failed';
   }
-  if (campaigns.status === 'fulfilled') renderCampaigns(campaigns.value);
-  else {
+  if (notificationVersion === notificationChange && campaigns.status === 'fulfilled') renderCampaigns(campaigns.value);
+  else if (notificationVersion === notificationChange) {
     $('campaign-error').textContent = 'Action board records could not be refreshed. The last displayed status may be stale.';
     $('campaign-error').hidden = false;
     $('campaign-checked').textContent = 'Action board: last refresh failed';
