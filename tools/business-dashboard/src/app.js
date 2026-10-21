@@ -4,6 +4,7 @@ const time = iso => new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_Yo
 let currentMonth = null;
 let boardData = null;
 let selectedChannel = 'All';
+let notificationChange = 0;
 const expandedLanes = new Set();
 
 function render(data) {
@@ -242,11 +243,13 @@ function renderCampaigns(data) {
 }
 
 async function notificationAction(item, action, button) {
+  notificationChange++;
   button.disabled = true;
   try {
     const response = await fetch(`/api/notifications/${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: item.id, revision: item.notificationRevision }) });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'Could not save this notification. Refresh and try again.');
+    notificationChange++;
     renderCampaigns(result);
   } catch (error) {
     $('campaign-error').textContent = error.message; $('campaign-error').hidden = false; button.disabled = false;
@@ -291,6 +294,7 @@ $('outreach-form').addEventListener('submit',async event=>{
 });
 
 async function refresh() {
+  const notificationVersion = notificationChange;
   $('refresh').disabled = true;
   $('refresh').textContent = 'Checking…';
   const [numbers, campaigns] = await Promise.allSettled([
@@ -303,8 +307,8 @@ async function refresh() {
     $('error').hidden = false;
     $('checked').textContent = 'Cloudflare numbers: last refresh failed';
   }
-  if (campaigns.status === 'fulfilled') renderCampaigns(campaigns.value);
-  else {
+  if (notificationVersion === notificationChange && campaigns.status === 'fulfilled') renderCampaigns(campaigns.value);
+  else if (notificationVersion === notificationChange) {
     $('campaign-error').textContent = 'Action board records could not be refreshed. The last displayed status may be stale.';
     $('campaign-error').hidden = false;
     $('campaign-checked').textContent = 'Action board: last refresh failed';
