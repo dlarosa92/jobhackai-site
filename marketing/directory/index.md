@@ -16,7 +16,7 @@ Browse freely. Book directly with the provider.
 
 These are provider-published details. Each provider page records its source and check date. A listing is not a service-quality endorsement. Prices cover different jobs; confirm your address, vehicle condition and final quote before booking.
 
-26 detailers · alphabetical order
+27 detailers · alphabetical order
 
 Mobile service
 
@@ -395,6 +395,22 @@ No comparable package price recorded.
 Provider says its mobile service brings water, power and equipment.
 
 [See packages & booking details](https://jobhackai.io/directory/mobile-detailing/true-colors-detailing)
+
+Mobile service
+
+## [Z&G Mobile Detailing](https://jobhackai.io/directory/mobile-detailing/zg-mobile-detailing)
+
+Cincinnati
+
+**From $169.99**
+
+Interior Detail — coupe
+
+Coupe starting price. Includes vacuuming, steam cleaning, seat shampoo/conditioning and interior cleaning. Larger vehicles and extras cost more; confirm the final quote.
+
+Provider requires customer water and electricity within 100 feet of the vehicle. Its submission says some packages need electricity only; confirm requirements for your package.
+
+[See packages & booking details](https://jobhackai.io/directory/mobile-detailing/zg-mobile-detailing)
 
 ## Three things to confirm before you book
 
