@@ -178,9 +178,9 @@
       "path": "/directory/index.md",
       "title": "Mobile detailing in Greater Cincinnati | JobHackAI Local",
       "description": "Compare local mobile detailers by package scope, starting prices, and water and power requirements.",
-      "source_sha256": "8e7dcc68a8b598aae269b0524af58fe5871a6823e78adb48bc569685fa79b496",
-      "markdown_sha256": "5e7e80e193b40054ef9545ea604624d3b770e7614ce49c64ecd036c4b190f7cf",
-      "bytes": 11982
+      "source_sha256": "3e3a7035073e822b19d012e1af46614ebdaa416689967d46edd98a0d49f3ba45",
+      "markdown_sha256": "f0fe048d3a47dcf06884ea8aa14678911c8e57618e17131ed2536cef73b17240",
+      "bytes": 12603
     },
     {
       "url": "https://jobhackai.io/directory/ev-charger-installation/",
@@ -921,6 +921,16 @@
       "source_sha256": "f0b67eccdc6989ff1359fa681d6bddcbe112e425f16c5e089a22945c485ec8af",
       "markdown_sha256": "af2278737252938186eb0c95ebfd7455770b7e27c8079f75aaae93899e6ce2b4",
       "bytes": 1652
+    },
+    {
+      "url": "https://jobhackai.io/directory/mobile-detailing/zg-mobile-detailing",
+      "markdown": "https://jobhackai.io/directory/mobile-detailing/zg-mobile-detailing.md",
+      "path": "/directory/mobile-detailing/zg-mobile-detailing.md",
+      "title": "Z&G Mobile Detailing — mobile detailing | JobHackAI Local",
+      "description": "Package details and booking requirements for Z&G Mobile Detailing in the Greater Cincinnati tri-state area.",
+      "source_sha256": "a24578c8be8945719b95599ca76c97b05a76787ec7a38b77d3778c90369e75d0",
+      "markdown_sha256": "c6075837a00d19f93b22e334c3d15b67f9dee217877ebd9fcd1994b474e056cd",
+      "bytes": 2579
     },
     {
       "url": "https://jobhackai.io/directory/move-out-kit",

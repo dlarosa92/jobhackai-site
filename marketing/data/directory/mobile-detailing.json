@@ -7,6 +7,51 @@
   "notes": "Provider-published information, not an endorsement or independent service-quality verification. Starting prices cover different scopes and vehicle sizes. Confirm final quote, address coverage and availability directly. No paid placements or partner agreements exist.",
   "listings": [
     {
+      "id": "zg-mobile-detailing",
+      "name": "Z&G Mobile Detailing",
+      "website": "https://zgdetails.com/",
+      "source": "https://zgdetails.com/",
+      "checkedAt": "2026-10-22",
+      "regions": [
+        "Cincinnati"
+      ],
+      "services": [
+        "interior",
+        "exterior",
+        "full-detail",
+        "boats",
+        "rvs"
+      ],
+      "waterPower": "customer-required",
+      "waterPowerNote": "Provider requires customer water and electricity within 100 feet of the vehicle. Its submission says some packages need electricity only; confirm requirements for your package.",
+      "interiorPrice": {
+        "from": 169.99,
+        "currency": "USD",
+        "package": "Interior Detail — coupe",
+        "scope": "Coupe starting price. Includes vacuuming, steam cleaning, seat shampoo/conditioning and interior cleaning. Larger vehicles and extras cost more; confirm the final quote."
+      },
+      "fullPrice": {
+        "from": 279.99,
+        "currency": "USD",
+        "package": "Complete Detail — coupe",
+        "scope": "Coupe starting price for interior and exterior detailing. Confirm vehicle size, condition, extras and final quote."
+      },
+      "petHair": "add-on",
+      "petHairNote": "Pet-hair removal is an add-on; confirm the charge for your vehicle and condition.",
+      "serviceAreaNote": "Cincinnati and surrounding areas; confirm service at your address.",
+      "serviceDetails": [
+        "Interior, exterior and complete detailing",
+        "Paint correction, polishing and waxing",
+        "Stain and pet-hair removal",
+        "Boat and RV detailing reported in the submission; confirm scope and pricing directly"
+      ],
+      "sourceNote": "Website reviewed October 22, 2026, alongside the October 20 directory submission. Boat/RV coverage and package-specific utility exceptions are provider-submitted details.",
+      "bookingUrl": "https://zgdetails.setmore.com/",
+      "phone": "(513) 580-8806",
+      "phoneUrl": "tel:+15135808806",
+      "contactEmail": "zgdetails@gmail.com"
+    },
+    {
       "id": "pearls-auto-recon",
       "name": "Pearl's Auto Recon",
       "website": "https://www.pearlsautorecon.com/mobile-detailing",
