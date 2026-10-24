@@ -158,7 +158,12 @@ export async function relayOutreach(env, input, now = Date.now(), fetcher = fetc
     await db.prepare(`INSERT INTO outreach_relay_state(id,checked_at,can_send) VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET checked_at=excluded.checked_at,can_send=excluded.can_send`).bind(iso(now),input.canSend===true?1:0).run();
     const rows=(await db.prepare(`SELECT * FROM outreach_messages WHERE state IN ('review','queued','sent') ORDER BY COALESCE(history_at,''),id LIMIT 20`).all()).results;
     const unresolved=(await db.prepare(`SELECT id,revision,attempt_id,recipient,packet FROM outreach_messages WHERE state IN ('sending','uncertain') ORDER BY updated_at LIMIT 20`).all()).results;
-    return json({ messages:rows.map(r=>({id:r.id,revision:r.revision,packet:parse(r.packet),queued:r.state==='queued'})), reconcile:unresolved.map(r=>({...r,packet:parse(r.packet)})), sendingEnabled:env.OUTREACH_SENDER_ENABLED==='true' });
+    // Verified outbound threads enter the conversation feed even if their Gmail
+    // label was never applied. Include saved legacy receipts, never draft URLs.
+    const tracking=(await db.prepare(`SELECT sent_thread_id AS thread_id FROM outreach_messages WHERE state='sent' AND sent_thread_id IS NOT NULL
+      UNION SELECT gmail_thread_id AS thread_id FROM campaign_items WHERE state='sent' AND gmail_thread_id IS NOT NULL LIMIT 201`).all()).results;
+    if(tracking.length>200 || tracking.some(r=>!/^[a-f0-9]{1,64}$/.test(r.thread_id)))return json({error:'Outbound tracking exceeds the bounded scan or contains an invalid native thread ID.'},409);
+    return json({ messages:rows.map(r=>({id:r.id,revision:r.revision,packet:parse(r.packet),queued:r.state==='queued'})), reconcile:unresolved.map(r=>({...r,packet:parse(r.packet)})), trackedThreadIds:tracking.map(r=>r.thread_id), sendingEnabled:env.OUTREACH_SENDER_ENABLED==='true' });
   }
   if (!/^[a-z0-9-]{1,64}$/.test(input.id||'') || !/^[a-f0-9]{64}$/.test(input.revision||'')) return json({error:'Invalid message identity'},400);
   if (input.action==='check') return json(await recordHistory(env,input,now,fetcher));

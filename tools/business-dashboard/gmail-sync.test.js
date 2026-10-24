@@ -104,7 +104,7 @@ function scriptContext({ drafts = false, failRead = false, responseCode = 200 } 
     LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock() {} }) },
     Gmail: { Users: { getProfile: () => ({ emailAddress: mailbox }), Labels: { list: () => ({ labels: [{ id: labelId, name: '0: JobHackAI / Track' }] }) },
       Threads: { list: (_me, options) => { assert.deepEqual(Array.from(options.labelIds), [labelId]); return { threads: [{ id: 'abc123' }] }; },
-        get: (_me, _id, options) => { assert.equal(options.format, 'metadata'); if (failRead) throw new Error('Gmail unavailable'); return { id: 'abc123', messages: [
+        get: (_me, _id, options) => { assert.equal(options.format, 'metadata'); if (failRead) throw new Error('Gmail unavailable'); return { id: _id, messages: [
           { id: 'aa1', internalDate: '1792256400000', labelIds: ['INBOX'], payload: { headers: [{ name: 'Subject', value: 'Hello' }] }, snippet: 'Incoming' },
           { id: 'aa2', internalDate: '1792261504000', labelIds: ['SENT'], payload: { headers: [{ name: 'From', value: mailbox }, { name: 'Subject', value: 'Hello' }] }, snippet: 'Sent reply' },
           ...(drafts ? [{ id: 'aa3', internalDate: '1792262504000', labelIds: ['DRAFT'], payload: {}, snippet: 'Draft must not count' }] : [])
@@ -114,8 +114,23 @@ function scriptContext({ drafts = false, failRead = false, responseCode = 200 } 
     ScriptApp: { getProjectTriggers: () => triggers, newTrigger: () => ({ timeBased: () => ({ everyMinutes: n => ({ create: () => triggers.push(n) }) }) }), deleteTrigger() {} },
   });
   vm.runInContext(readFileSync(new URL('./google-apps-script/Code.gs', import.meta.url), 'utf8'), context);
-  return { context, uploads, triggers };
+  return { context, uploads, triggers, props };
 }
+
+test('tracked snapshots merge verified outbound IDs without labels and deduplicate existing threads',()=>{
+ const {context,uploads,props}=scriptContext();props.OUTREACH_CHECKS_ENABLED='true';
+ const work={trackedThreadIds:['abc123','def999']};context.outreachPollWork=()=>work;
+ let passed;context.syncOutreach=received=>{passed=received;};
+ context.syncTrackedMail();const payload=JSON.parse(uploads[0].payload);
+ assert.deepEqual(payload.threads.map(t=>t.threadId).sort(),['abc123','def999']);assert.equal(passed,work);
+ assert.ok(payload.threads.every(t=>t.state==='waiting'));
+});
+test('malformed or oversized outbound tracking feed preserves the previous successful snapshot',()=>{
+ for(const trackedThreadIds of [undefined,['not-a-native-id'],Array.from({length:201},(_,i)=>(1000+i).toString(16))]){
+  const {context,uploads,props}=scriptContext();props.OUTREACH_CHECKS_ENABLED='true';context.outreachPollWork=()=>({trackedThreadIds});
+  assert.throws(()=>context.syncTrackedMail(),/tracking feed|200 tracked/);assert.equal(uploads.length,0);
+ }
+});
 
 test('Apps Script uses the exact label, ignores drafts, signs its metadata and installs a five-minute trigger', async () => {
   const { context, uploads, triggers } = scriptContext({ drafts: true });
