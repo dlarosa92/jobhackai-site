@@ -10,6 +10,7 @@ POST operations under `/api/work-items/`:
 |---|---|---|
 | prepare | prepare | `id`, `source`, `sourceId`, `expectedVersion` (0 for new), `document` |
 | reconcile | reconcile | `id`, `expectedVersion`, `sourceRevision`, `checkedAt`, `nativeState`, optional complete `snapshot` |
+| capture-native | reconcile | Empty object; cache the successful directory feed for failure fallback |
 | source-health | reconcile | `source`, `expectedVersion`, `status`, `checkedAt`, `evidenceUrl`, `detail`, `maxAgeMinutes`, `requiresMac` |
 | contribute | contribute | `id`, `department`, contribution `expectedVersion`, `recommendation`, `evidence` HTTPS URL array, `nextAction` |
 | rank | coordinate | `id`, `expectedVersion`, integer `priority` (lower first) |
@@ -25,3 +26,5 @@ Canonical source references for existing records: campaign/campaign_items.id, gm
 Outreach retains `/api/outreach/prepare`, `/approve`, `/send`, `/cancel`; only prepare is available to machines with that capability. Owner-only `/api/outreach/feedback` accepts id, exact revision, action changes/decline and note. Feedback withdraws current approval and holds that revision; a different prepared revision requires a new decision. The signed relay, source/routing checks, suppression and one-attempt protocol remain authoritative.
 
 409 means reload and reconcile; never blind-retry an obsolete version. Approval and preparation never execute publication or sending. There is no machine cost, access-admin, approval or release API.
+
+Local executors can use `node scripts/dashboard-client.mjs get /api/work-items` or `post /api/work-items/prepare /private/path/packet.json`. It reads a mode-600 credential file at `~/.local/share/jobhackai/dashboard-access/credentials.json` (or the `JOBHACKAI_DASHBOARD_CREDENTIALS` secret-file path) containing `origin`, `clientId` and `clientSecret`. Install credentials separately through each executor's secret facility. It refuses owner routes and redirects. Monitor service-token expiry and rotate in the executor secret store; a long browser session does not renew machine credentials.

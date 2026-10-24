@@ -99,7 +99,10 @@ async function reconcile(db,input,now) {
   return get(db,id);
 }
 async function decision(db,input,now) {
-  const row=await get(db,key(input.id));
+  const id=key(input.id),requestId=key(input.requestId),note=text(input.note || '',4000,input.action==='changes');
+  const existing=await db.prepare('SELECT * FROM work_decisions WHERE id=?').bind(requestId).first();
+  if(existing){if(existing.item_id===id&&existing.revision===input.revision&&existing.action===input.action&&existing.note===note)return {saved:true};fail('Request ID already used.',409);}
+  const row=await get(db,id);
   if(!row || row.version!==expected(input.expectedVersion) || !row.snapshot_revision || row.snapshot_revision!==input.revision)fail('The reviewed revision changed.',409);
   if(['outreach','gmail','directory'].includes(row.source))fail('Use the original source review operation.');
   if(!['approve','changes','decline'].includes(input.action))fail('Invalid decision.');
@@ -111,9 +114,6 @@ async function decision(db,input,now) {
     const health=await db.prepare('SELECT * FROM source_health WHERE source=?').bind(row.source).first();
     if(!health || health.status!=='current'||Date.now()-Date.parse(health.last_success_at)>health.max_age_minutes*60000)fail('Source verification is unavailable or stale.',409);
   }
-  const requestId=key(input.requestId),note=text(input.note || '',4000,input.action==='changes');
-  const existing=await db.prepare('SELECT * FROM work_decisions WHERE id=?').bind(requestId).first();
-  if(existing){if(existing.item_id===row.id&&existing.revision===input.revision&&existing.action===input.action&&existing.note===note)return {saved:true};fail('Request ID already used.',409);}
   const mutation=crypto.randomUUID();
   const result=await db.batch([
     db.prepare('UPDATE work_items SET version=version+1,mutation_id=?,updated_at=? WHERE id=? AND version=? AND snapshot_revision=?').bind(mutation,now,row.id,row.version,input.revision),
@@ -152,8 +152,10 @@ export async function workRecords(db, base, now=new Date()) {
     const decision=decisions.results.filter(d=>d.item_id===row.id).at(-1)||null;
     const sourceHealth=freshness.find(s=>s.source===row.source);
     const fresh=!!sourceHealth&&sourceHealth.status==='current'&&row.checked_at&&now.getTime()-Date.parse(row.checked_at)<=86400000;
+    // Legacy campaign decisions are not native execution. Keep actual execution receipts authoritative.
+    const nativeState=linked && !(row.source==='campaign'&&['pending','hold','approved'].includes(linked.state))?linked.state:row.native_state;
     const item={...linked,...doc,impact:linked?.impact||doc.impact,id:row.id,workId:row.id,source:row.source,sourceId:row.source_id,version:row.version,
-      priority:row.priority,snapshot,snapshotRevision:row.snapshot_revision,decision,nativeState:linked?.state||row.native_state,
+      priority:row.priority,snapshot,snapshotRevision:row.snapshot_revision,decision,nativeState,
       checkedAt:row.checked_at,updatedAt:row.updated_at,sourceHealth,fresh,
       detail:linked?.detail||snapshot?.text||doc.reason,
       reviewUrl:linked?.reviewUrl||doc.sourceRefs[0]?.url,
@@ -161,7 +163,7 @@ export async function workRecords(db, base, now=new Date()) {
       sourceItemId:linked?.id,
       state:linked?.state||({draft:'hold',unknown:'hold',received:'pending',failed:'hold'}[row.native_state]||row.native_state),
     };
-    if(!linked && decision?.action==='approve' && row.native_state==='draft')item.state='approved';
+    if(decision?.action==='approve' && nativeState==='draft')item.state='approved';
     return item;
   });
   const items=[...work,...itemMap.values()].map(item=>({...item,

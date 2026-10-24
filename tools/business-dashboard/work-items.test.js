@@ -89,6 +89,26 @@ test('publication stays publication after an earlier approval',async()=>{
  await c.call('reconcile',{id:item.id,expectedVersion:item.version,sourceRevision:snap.sourceRevision,checkedAt:snap.checkedAt,nativeState:'published',snapshot:snap});
  item=(await c.board()).items[0];assert.equal(item.state,'published');assert.equal(item.boardLane,'completed');assert.equal(item.decision.action,'approve');
 });
+test('retrying a recorded decision is idempotent even after versions and freshness change',async()=>{
+ const c=fixture();const item=await ready(c);
+ const input={id:item.id,expectedVersion:item.version,revision:item.snapshotRevision,requestId:'lost-response',action:'approve',note:''};
+ assert.equal((await c.call('feedback',input)).status,200);
+ c.sql.exec("UPDATE source_health SET status='unavailable'");
+ assert.deepEqual(await c.call('feedback',input),{status:200,body:{saved:true}});
+ assert.equal(c.sql.prepare('SELECT count(*) n FROM work_decisions').get().n,1);
+ assert.equal((await c.call('feedback',{...input,action:'decline'})).status,409);
+});
+test('linked campaign drafts support exact approval while native execution remains authoritative',async()=>{
+ const c=fixture();c.sql.exec("INSERT INTO campaign_items(id,channel,title,detail,review_url,state,evidence,sort_order) VALUES('post','Facebook','Post','Copy','https://example.com/post','pending','Native draft',1)");
+ await c.call('prepare',{id:'work-post',source:'campaign',sourceId:'post',expectedVersion:0,document:doc()});
+ const snap=snapshot();await c.call('reconcile',{id:'work-post',expectedVersion:1,sourceRevision:snap.sourceRevision,checkedAt:snap.checkedAt,nativeState:'draft',snapshot:snap});
+ await c.call('source-health',{source:'campaign',expectedVersion:0,status:'current',checkedAt:snap.checkedAt,evidenceUrl:'https://example.com/post',detail:'Verified source draft',maxAgeMinutes:120});
+ const board=state=>workRecords(c.db,{items:[{id:'post',source:'campaign',state,channel:'Facebook'}]});
+ let item=(await board('pending')).items[0];assert.equal(item.canApprove,true);
+ assert.equal((await c.call('feedback',{id:item.id,expectedVersion:item.version,revision:item.snapshotRevision,requestId:'linked-approval',action:'approve',note:''})).status,200);
+ item=(await board('pending')).items[0];assert.equal(item.state,'approved');assert.equal(item.canApprove,false);assert.equal(item.boardLane,'in_progress');
+ for(const state of ['scheduled','published','sent']){item=(await board(state)).items[0];assert.equal(item.state,state);assert.equal(item.nativeState,state);assert.equal(item.canApprove,false);}
+});
 test('directory source failure retains the last verified cache and exposes a blocker',async()=>{
  const c=fixture();const {cacheNativeSources}=await import('./src/work-items.js');
  const base={items:[{id:'directory-example',source:'directory',title:'Verified source request',state:'pending',channel:'Directory',impact:'prospect'}],directorySource:{status:'current',checkedAt:new Date().toISOString()}};
