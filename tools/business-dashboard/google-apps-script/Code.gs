@@ -1,4 +1,4 @@
-/** Read-only Gmail status sync. Configure Script Properties before running installGmailSync. */
+/** Google-hosted Gmail status sync. Sender and label updates require separate activation. */
 function installGmailSync() {
   syncTrackedMail(); // Do not install a recurring job until configuration and the first upload work.
   var triggers = ScriptApp.getProjectTriggers().filter(function (trigger) { return trigger.getHandlerFunction() === 'syncTrackedMail'; });
@@ -23,6 +23,7 @@ function syncTrackedMail() {
     var labels = Gmail.Users.Labels.list('me').labels || [];
     var label = labels.find(function (entry) { return entry.name === labelName; });
     if (!label) throw new Error('Tracking label not found. Previous dashboard data has been preserved.');
+    var work = properties.getProperty('OUTREACH_CHECKS_ENABLED') === 'true' && typeof outreachPollWork === 'function' ? outreachPollWork() : null;
     var threads = [];
     var pageToken;
     do {
@@ -31,12 +32,21 @@ function syncTrackedMail() {
       if (threads.length > 200) throw new Error('More than 200 tracked conversations. Previous dashboard data has been preserved.');
       pageToken = page.nextPageToken;
     } while (pageToken);
+    var outbound = work ? work.trackedThreadIds : [];
+    if (!Array.isArray(outbound) || outbound.some(function(id){return !/^[a-f0-9]{1,64}$/.test(id);})) throw new Error('Invalid outbound tracking feed. Previous dashboard data has been preserved.');
+    var unique = {};
+    threads.concat(outbound.map(function(id){return {id:id};})).forEach(function(entry){unique[entry.id]=entry;});
+    threads = Object.keys(unique).map(function(id){return unique[id];});
+    if(threads.length>200) throw new Error('More than 200 tracked conversations. Previous dashboard data has been preserved.');
     var rows = threads.map(function (entry) {
       var thread = Gmail.Users.Threads.get('me', entry.id, { format: 'metadata', metadataHeaders: ['From', 'Subject'] });
       var messages = (thread.messages || []).filter(function (message) { return !(message.labelIds || []).includes('DRAFT'); });
       messages.sort(function (a, b) { return Number(b.internalDate) - Number(a.internalDate) || b.id.localeCompare(a.id); });
       if (!messages.length) return null;
       var latest = messages[0];
+      // Label edits are separately enabled and authorized. A label failure must
+      // not hide a real reply or discard the successful metadata snapshot.
+      if(typeof outreachLabelThread === 'function') outreachLabelThread(thread, labels);
       function header(name) {
         var found = ((latest.payload || {}).headers || []).find(function (value) { return value.name.toLowerCase() === name.toLowerCase(); });
         return found ? found.value : '';
@@ -65,7 +75,7 @@ function syncTrackedMail() {
     });
     if (response.getResponseCode() !== 200) throw new Error('Dashboard sync rejected the snapshot (HTTP ' + response.getResponseCode() + '). Previous data has been preserved.');
     console.log('Gmail sync completed: ' + rows.length + ' tracked conversations.');
-    if (typeof syncOutreach === 'function') syncOutreach();
+    if (typeof syncOutreach === 'function') syncOutreach(work);
   } finally {
     lock.releaseLock();
   }

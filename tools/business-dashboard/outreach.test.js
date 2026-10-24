@@ -166,7 +166,7 @@ test('migration preserves existing approvals and native receipts',()=>{
 
 function googleContext(){
  const props={},queries=[],uploads=[],sends=[];
- const context=vm.createContext({Date,console,PropertiesService:{getScriptProperties:()=>({getProperty:k=>props[k]})},Gmail:{Users:{Messages:{list:(_me,options)=>{queries.push(options);return {messages:[]};},get:()=>{throw Error('unconfigured native read');},send:m=>{sends.push(m);throw Error('network timeout');}},getProfile:()=>({emailAddress:mailbox})}},Utilities:{Charset:{UTF_8:'UTF-8'},base64Encode:v=>Buffer.from(v).toString('base64'),base64EncodeWebSafe:v=>Buffer.from(v).toString('base64url'),base64DecodeWebSafe:v=>{if(v.length%4!==0||!/^[A-Za-z0-9_-]*={0,2}$/.test(v))throw Error('Could not decode string');return Buffer.from(v,'base64url');},newBlob:v=>({getDataAsString:()=>Buffer.from(v).toString('utf8')}),computeHmacSha256Signature:(body,key)=>Array.from(createHmac('sha256',key).update(body).digest())},UrlFetchApp:{fetch:(url,options)=>{uploads.push({url,...options});return {getResponseCode:()=>200,getContentText:()=>JSON.stringify({messages:[],reconcile:[],sendingEnabled:false})};}}});
+ const context=vm.createContext({Date,console,PropertiesService:{getScriptProperties:()=>({getProperty:k=>props[k],setProperty:(k,v)=>{props[k]=v;},deleteProperty:k=>{delete props[k];}})},Gmail:{Users:{Messages:{list:(_me,options)=>{queries.push(options);return {messages:[]};},get:()=>{throw Error('unconfigured native read');},send:m=>{sends.push(m);throw Error('network timeout');}},getProfile:()=>({emailAddress:mailbox})}},Utilities:{Charset:{UTF_8:'UTF-8'},base64Encode:v=>Buffer.from(v).toString('base64'),base64EncodeWebSafe:v=>Buffer.from(v).toString('base64url'),base64DecodeWebSafe:v=>{if(v.length%4!==0||!/^[A-Za-z0-9_-]*={0,2}$/.test(v))throw Error('Could not decode string');return Buffer.from(v,'base64url');},newBlob:v=>({getDataAsString:()=>Buffer.from(v).toString('utf8')}),computeHmacSha256Signature:(body,key)=>Array.from(createHmac('sha256',key).update(body).digest())},UrlFetchApp:{fetch:(url,options)=>{uploads.push({url,...options});return {getResponseCode:()=>200,getContentText:()=>JSON.stringify({messages:[],reconcile:[],sendingEnabled:false})};}}});
  vm.runInContext(readFileSync(new URL('./google-apps-script/Outreach.gs',import.meta.url),'utf8'),context);
  return {context,props,queries,uploads,sends};
 }
@@ -243,4 +243,71 @@ test('Advanced Gmail byte arrays are decoded directly, including signed Unicode 
  const bytes=Array.from(Buffer.from(value)).map(v=>v>127?v-256:v);
  assert.equal(c.context.outreachBody({body:{data:bytes}}),value);
  assert.throws(()=>c.context.outreachBody({body:{data:[999]}}),/Invalid Gmail MIME bytes/);
+});
+
+test('signed poll includes every verified outbound thread and legacy sent receipt without label dependence',async()=>{
+ const c=database(),identity=await queued(c);
+ const claim=await(await relayOutreach(c.env,{action:'claim',mailbox,...identity},now,goodDns)).json();
+ await relayOutreach(c.env,{action:'receipt',mailbox,...identity,attemptId:claim.attemptId,outcome:'sent',messageId:'aa1',threadId:'bb1'},now);
+ c.sql.exec("INSERT INTO campaign_items(id,channel,title,detail,review_url,state,evidence,sort_order,gmail_thread_id) VALUES('legacy','Email','Sent','','https://mail.google.com','sent','Native receipt',0,'cc1'),('draft','Email','Draft','','https://mail.google.com','pending','',1,'dd1')");
+ const poll=await(await relayOutreach(c.env,{action:'poll',mailbox,canSend:false},now)).json();
+ assert.deepEqual(poll.trackedThreadIds.sort(),['bb1','cc1']);
+});
+
+test('Gmail-replaced Message-ID still requires the exact provider receipt and complete approved copy',()=>{
+ const c=googleContext(),p=normalizePacket(packet(),now).message,attempt='00000000-0000-4000-a000-000000000000',accepted={id:'a1',threadId:'b1'};
+ const native={...accepted,labelIds:['SENT'],payload:{mimeType:'text/plain',headers:[{name:'From',value:mailbox},{name:'To',value:p.recipient},{name:'Subject',value:p.subject},{name:'Message-ID',value:'<gmail-generated@mail.gmail.com>'}],body:{data:Buffer.from(p.text).toString('base64url')}}};
+ assert.equal(c.context.outreachVerifiedSent(native,p,attempt,mailbox),false);
+ assert.equal(c.context.outreachVerifiedSent(native,p,attempt,mailbox,accepted),true);
+ for(const alter of [m=>m.id='a2',m=>m.threadId='b2',m=>m.labelIds=[],m=>m.payload.headers.push({name:'Cc',value:'other@example.com'}),m=>m.payload.headers.find(h=>h.name==='Subject').value+='changed',m=>m.payload.body.data=Buffer.from('changed').toString('base64url')]){
+  const changed=structuredClone(native);alter(changed);assert.equal(c.context.outreachVerifiedSent(changed,p,attempt,mailbox,accepted),false);
+ }
+});
+
+for(const failAt of ['native read','receipt upload'])test('provider IDs survive a lost '+failAt+' and reconcile without resending',()=>{
+ const c=googleContext(),p=normalizePacket(packet(),now),identity={id:p.id,revision:'a'.repeat(64)},attemptId='00000000-0000-4000-a000-000000000000';
+ Object.assign(c.props,{OUTREACH_CHECKS_ENABLED:'true',OUTREACH_SEND_ENABLED:'true',MAILBOX_EMAIL:mailbox});
+ let reserved=false,fail=true,verified=0;
+ const native={id:'a1',threadId:'b1',labelIds:['SENT'],payload:{mimeType:'text/plain',headers:[{name:'From',value:mailbox},{name:'To',value:p.message.recipient},{name:'Subject',value:p.message.subject},{name:'Message-ID',value:'<gmail-generated@mail.gmail.com>'}],body:{data:Buffer.from(p.message.text).toString('base64url')}}};
+ c.context.Gmail.Users.Messages.send=m=>{c.sends.push(m);return {id:native.id,threadId:native.threadId};};
+ c.context.Gmail.Users.Messages.get=()=>{if(fail&&failAt==='native read')throw Error('read timeout');return native;};
+ c.context.outreachDeliveryScan=()=>{};c.context.outreachHistory=()=>clean();
+ c.context.outreachRequest=input=>{
+  if(input.action==='poll')return {messages:reserved?[]:[{...identity,packet:p,queued:true}],reconcile:reserved?[{...identity,attempt_id:attemptId,packet:p}]:[],sendingEnabled:true};
+  if(input.action==='check')return {issues:[]};
+  if(input.action==='claim'){reserved=true;return {attemptId,packet:p,expiresAt:new Date(Date.now()+30000).toISOString()};}
+  if(input.action==='receipt'){if(input.outcome==='sent'){if(fail&&failAt==='receipt upload')throw Error('upload timeout');verified++;}return {};}
+  throw Error('Unexpected action');
+ };
+ assert.throws(()=>c.context.syncOutreach());assert.equal(c.sends.length,1);
+ assert.deepEqual(JSON.parse(c.props['OUTREACH_RECEIPT_'+attemptId]),{id:'a1',threadId:'b1'});
+ fail=false;c.context.syncOutreach();assert.equal(verified,1);assert.equal(c.sends.length,1);assert.equal(c.props['OUTREACH_RECEIPT_'+attemptId],undefined);
+});
+
+test('workflow labels follow the latest non-draft message and preserve all unrelated labels',()=>{
+ const c=googleContext(),changes=[];
+ const labels=[{id:'track',name:'0: JobHackAI / Track'},{id:'respond',name:'1: To respond'},{id:'waiting',name:'6: Awaiting reply'}];
+ c.context.Gmail.Users.Threads={modify:(body,me,id)=>changes.push({body:JSON.parse(JSON.stringify(body)),me,id})};
+ const thread={id:'aa1',messages:[{id:'a1',internalDate:'1',labelIds:['INBOX','respond','UNREAD']},{id:'a2',internalDate:'2',labelIds:['SENT']},{id:'a3',internalDate:'9',labelIds:['DRAFT']}]};
+ c.context.outreachLabelThread(thread,labels);assert.equal(changes.length,0);
+ c.props.OUTREACH_LABELS_ENABLED='true';c.context.outreachLabelThread(thread,labels);
+ assert.deepEqual(changes[0],{body:{addLabelIds:['track','waiting'],removeLabelIds:['respond']},me:'me',id:'aa1'});
+ thread.messages.push({id:'a4',internalDate:'3',labelIds:['INBOX','UNREAD']});c.context.outreachLabelThread(thread,labels);
+ assert.deepEqual(changes[1].body,{addLabelIds:['track','respond'],removeLabelIds:['waiting']});
+ c.context.Gmail.Users.Threads.modify=()=>{throw Error('authorization missing');};
+ assert.doesNotThrow(()=>c.context.outreachLabelThread(thread,labels));
+ assert.ok(!readFileSync(new URL('./google-apps-script/appsscript.sender.json',import.meta.url),'utf8').includes('gmail.modify'));
+});
+
+
+test('verified outreach receipt yields one conversation card while delivery holds remain visible',async()=>{
+ const c=database(),identity=await queued(c);
+ const claim=await(await relayOutreach(c.env,{action:'claim',mailbox,...identity},now,goodDns)).json();
+ await relayOutreach(c.env,{action:'receipt',mailbox,...identity,attemptId:claim.attemptId,outcome:'sent',messageId:'aa1',threadId:'bb1'},now);
+ c.sql.exec("INSERT INTO gmail_threads(thread_id,last_message_id,sender,subject,preview,state,last_message_at,seen_sync_id) VALUES('bb1','aa1','Owner','Introduction','Sent','waiting','2026-10-19T19:00:00.000Z','test')");
+ const ctx={access:{aud:'884df74e9be8546b0051980538c8e00a75efd2b1d2da5a04a4e4fbe78f3a4a40',getIdentity:async()=>({email:mailbox})}};
+ const read=async()=> (await(await worker.fetch(new Request('https://dashboard.jobhackai.io/api/campaigns'),c.env,ctx)).json()).items;
+ let items=await read();assert.ok(items.some(i=>i.id==='gmail-bb1'));assert.ok(!items.some(i=>i.id==='outreach-'+identity.id));
+ await recordDeliveryEvent(c.db,{recipient:packet().message.recipient,messageId:'bad1',reason:'hard_bounce'},now);
+ items=await read();assert.equal(items.find(i=>i.id==='outreach-'+identity.id).state,'hold');
 });
