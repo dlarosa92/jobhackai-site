@@ -100,10 +100,12 @@ async function campaignRecords(env, now = new Date()) {
       nextAction:'Reconcile native sends, then prepare exact unsent messages through the outreach gate.', requiresOutreachManifest:true};
     return {...item,reviewRevision};
   }));
+  const trackedThreads = new Set(gmail.items.map(item => item.id.slice('gmail-'.length)));
+  const outbound = outreach.items.filter(item => item.deliveryState !== 'sent' || !trackedThreads.has(item.sentThreadId) || item.issues.some(issue => !issue.startsWith('received_reply_review')));
   const ids = new Set(directory.items.map(item => item.id));
   const notifications = await applyResolutions(env.DASHBOARD_DB, [...directory.items, ...gmail.items]);
   const items = [...notifications.filter(item => item.source !== 'gmail' || !duplicateDirectoryRecord(item, ids)),
-    ...manual.filter(item => !duplicateDirectoryRecord(item, ids)), ...outreach.items]
+    ...manual.filter(item => !duplicateDirectoryRecord(item, ids)), ...outbound]
     .sort((a, b) => rank[a.impact] - rank[b.impact]);
   return {
     asOf: now.toISOString(),
