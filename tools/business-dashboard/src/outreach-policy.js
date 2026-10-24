@@ -86,7 +86,9 @@ export function historyIssues(packet, history, now = Date.now()) {
 async function dnsQuestion(name, type, fetcher) {
   const url = new URL('https://cloudflare-dns.com/dns-query');
   url.searchParams.set('name', name); url.searchParams.set('type', type);
-  const response = await fetcher(url.href, { headers: { Accept: 'application/dns-json' }, signal: AbortSignal.timeout(6000), redirect: 'error' });
+  // Workers rejects redirect:'error' before making a request. Manual mode keeps
+  // DNS pinned to this resolver; response.ok below rejects every redirect.
+  const response = await fetcher(url.href, { headers: { Accept: 'application/dns-json' }, signal: AbortSignal.timeout(6000), redirect: 'manual' });
   if (!response.ok) throw new Error('DNS unavailable');
   const reader = response.body.getReader(); const chunks = []; let length = 0;
   while (true) { const { value, done } = await reader.read(); if (done) break; length += value.length; if (length > 32768) { await reader.cancel(); throw new Error('DNS response too large'); } chunks.push(value); }
