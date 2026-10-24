@@ -2,6 +2,8 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { gmailRecords } from './gmail-sync.js';
 import { outreachRecords, ownerOutreach, isLegacyEmail } from './outreach.js';
 import { digest } from './outreach-policy.js';
+import { requestIdentity, allowed } from './access.js';
+import { workApi, workRecords, cacheNativeSources } from './work-items.js';
 import { directoryRecords, duplicateDirectoryRecord, applyResolutions, resolveNotification } from './notifications.js';
 
 const OWNER = 'sebastian.larosa@jobhackai.io';
@@ -35,16 +37,6 @@ function asset(body, type) {
   });
 }
 
-async function ownerIdentity(request, ctx) {
-  if (ctx.access?.aud === ACCESS_AUD) {
-    const identity = await ctx.access.getIdentity();
-    return identity?.email?.toLowerCase() === OWNER;
-  }
-  const token = request.headers.get('cf-access-jwt-assertion');
-  if (!token) return false;
-  return accessTokenIsOwner(token);
-}
-
 async function accessTokenIsOwner(token, keys = ACCESS_KEYS) {
   try {
     const { payload } = await jwtVerify(token, keys, {
@@ -71,7 +63,7 @@ async function overview(env, now = new Date()) {
   return {
     asOf: now.toISOString(),
     month,
-    incomeGoalCents: 300000,
+    userGoal: 250,
     d1UserRecords: users?.count ?? null,
     d1UsersLatestUpdate: users?.latest_update ?? null,
     capturedCents,
@@ -121,15 +113,6 @@ function campaignRevision(item) {
   return digest({id:item.id,channel:item.channel,title:item.title,detail:item.detail,reviewUrl:item.reviewUrl,nextAction:item.nextAction||''});
 }
 
-async function approveCampaign(env, id, revision) {
-  if (!/^[a-z0-9-]{1,64}$/.test(id) || !/^[a-f0-9]{64}$/.test(revision||'')) return false;
-  const current=await env.DASHBOARD_DB.prepare('SELECT id,channel,title,detail,review_url AS reviewUrl,state,impact,next_action AS nextAction,updated_at FROM campaign_items WHERE id=?').bind(id).first();
-  if(!current || current.state!=='pending' || current.impact!=='campaign' || isLegacyEmail(current) || await campaignRevision(current)!==revision)return false;
-  const result = await env.DASHBOARD_DB.prepare("UPDATE campaign_items SET state = 'approved', evidence = 'Owner approval recorded in dashboard. This does not send an email, schedule a post, or publish content.', updated_at = datetime('now') WHERE id = ? AND state = 'pending' AND impact = 'campaign' AND updated_at=? AND detail=? AND review_url=? AND title=? AND channel=? AND next_action=?")
-    .bind(id,current.updated_at,current.detail,current.reviewUrl,current.title,current.channel,current.nextAction).run();
-  return result.meta?.changes === 1;
-}
-
 function validCostInput(input, expectedMonth) {
   if (!input || input.month !== expectedMonth) return null;
   if (!Number.isInteger(input.amountCents) || input.amountCents < 0 || input.amountCents > 100_000_000) return null;
@@ -140,14 +123,24 @@ function validCostInput(input, expectedMonth) {
 export default {
   async fetch(request, env, ctx) {
     try {
-      if (!await ownerIdentity(request, ctx)) return new Response('Forbidden', { status: 403, headers: { 'Cache-Control': 'no-store' } });
       const url = new URL(request.url);
+      const identity=await requestIdentity(request,env,ctx);
+      if (!allowed(identity,request.method,url.pathname)) return json({error:'Forbidden'},403);
+      if(request.method!=='GET' && (request.headers.get('content-type')?.split(';')[0]!=='application/json' || (identity.role==='owner' && request.headers.get('origin')!==url.origin)))return json({error:'Invalid request origin or type'},403);
+      if(request.method==='GET'&&url.pathname==='/api/session')return json({role:identity.role,capabilities:identity.capabilities||[]});
+      if(request.method==='GET'&&url.pathname==='/api/operating-guide')return json({version:'2026-10-24',text:GUIDE});
+      if(request.method==='POST'&&url.pathname==='/api/work-items/capture-native')return json(await cacheNativeSources(env.DASHBOARD_DB,await campaignRecords(env)));
+      if(url.pathname==='/api/work-items'||url.pathname.startsWith('/api/work-items/'))return workApi(request,env,identity,async()=>workRecords(env.DASHBOARD_DB,await campaignRecords(env)));
+      if(identity.role==='machine'&&url.pathname==='/api/outreach/prepare'){
+        const headers=new Headers(request.headers);headers.set('origin',url.origin);
+        return ownerOutreach(new Request(request,{headers}),env);
+      }
       if (request.method === 'GET' && url.pathname === '/') {
         return new Response(PAGE, {
           headers: {
             'Content-Type': 'text/html; charset=utf-8',
             'Cache-Control': 'no-store',
-            'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; frame-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+            'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data: https:; frame-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
             'X-Content-Type-Options': 'nosniff',
             'Referrer-Policy': 'no-referrer',
           },
@@ -179,9 +172,7 @@ export default {
       const approval = /^\/api\/campaigns\/([a-z0-9-]{1,64})\/approve$/.exec(url.pathname);
       if (request.method === 'POST' && approval) {
         if (request.headers.get('origin') !== url.origin || request.headers.get('content-type')?.split(';')[0] !== 'application/json') return json({ error: 'Invalid request origin or type' }, 403);
-        const input=await request.json();
-        if (!await approveCampaign(env, approval[1],input?.revision)) return json({ error: 'The review record changed, is not awaiting approval, or needs an exact outreach packet. Refresh before reviewing.' }, 409);
-        return json(await campaignRecords(env));
+        return json({error:'Open the complete draft in the review panel. Legacy summary approvals are retired; saved approval history is retained.'},409);
       }
       if (request.method === 'POST' && url.pathname === '/api/costs') {
         if (request.headers.get('origin') !== url.origin || request.headers.get('content-type')?.split(';')[0] !== 'application/json') return json({ error: 'Invalid request origin or type' }, 403);
@@ -200,4 +191,4 @@ export default {
   },
 };
 
-export { monthKey, sameMonth, overview, campaignRecords, approveCampaign, campaignRevision, validCostInput, accessTokenIsOwner };
+export { monthKey, sameMonth, overview, campaignRecords, campaignRevision, validCostInput, accessTokenIsOwner };
