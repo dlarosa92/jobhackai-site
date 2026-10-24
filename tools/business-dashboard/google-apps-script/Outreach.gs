@@ -2,19 +2,26 @@
  * Sending additionally needs the separately reviewed sender manifest and BOTH
  * the server flag and OUTREACH_SEND_ENABLED Script Property. Never enable by default.
  */
-function syncOutreach() {
+function outreachPollWork() {
+  return outreachRequest({action:'poll',canSend:PropertiesService.getScriptProperties().getProperty('OUTREACH_SEND_ENABLED') === 'true'});
+}
+function syncOutreach(work) {
   var props = PropertiesService.getScriptProperties();
   if (props.getProperty('OUTREACH_CHECKS_ENABLED') !== 'true') return;
   var canSend = props.getProperty('OUTREACH_SEND_ENABLED') === 'true';
-  var work = outreachRequest({ action: 'poll', canSend: canSend });
+  work = work || outreachPollWork();
   // Recover lost receipts by looking for the reserved transport Message-ID.
   // There is deliberately no re-send path for a reserved or uncertain attempt.
   (work.reconcile || []).forEach(function (attempt) {
-    var found = outreachList('in:sent rfc822msgid:outreach.' + attempt.attempt_id + '@jobhackai.io');
+    var key='OUTREACH_RECEIPT_'+attempt.attempt_id, saved=props.getProperty(key), accepted=saved?JSON.parse(saved):null;
+    if(accepted && (!/^[a-f0-9]{1,64}$/.test(accepted.id||'') || !/^[a-f0-9]{1,64}$/.test(accepted.threadId||''))) throw new Error('Invalid saved provider receipt; manual reconciliation required.');
+    var found = accepted ? [accepted] : outreachList('in:sent rfc822msgid:outreach.' + attempt.attempt_id + '@jobhackai.io');
     if (found.length !== 1) return;
     var message = Gmail.Users.Messages.get('me', found[0].id, { format: 'full' });
-    if (!outreachVerifiedSent(message, attempt.packet.message, attempt.attempt_id, props.getProperty('MAILBOX_EMAIL'))) return;
+    if (!outreachVerifiedSent(message, attempt.packet.message, attempt.attempt_id, props.getProperty('MAILBOX_EMAIL'),accepted)) return;
     outreachRequest({action:'receipt',id:attempt.id,revision:attempt.revision,attemptId:attempt.attempt_id,outcome:'sent',messageId:message.id,threadId:message.threadId});
+    props.deleteProperty(key);
+    outreachLabelSent(message.threadId);
   });
   outreachDeliveryScan();
   (work.messages || []).forEach(function (entry) {
@@ -41,8 +48,12 @@ function syncOutreach() {
       var payload = { raw: raw };
       if (outgoing.threadId) payload.threadId = outgoing.threadId;
       result = Gmail.Users.Messages.send(payload, 'me');
+      if(!/^[a-f0-9]{1,64}$/.test(result.id||'') || !/^[a-f0-9]{1,64}$/.test(result.threadId||'')) throw new Error('Missing provider send receipt.');
+      // Persist the provider-returned IDs before reading Gmail or uploading the
+      // receipt. Gmail may replace Message-ID; a lost upload must never resend.
+      props.setProperty('OUTREACH_RECEIPT_'+claim.attemptId,JSON.stringify({id:result.id,threadId:result.threadId}));
       var nativeSent = Gmail.Users.Messages.get('me', result.id, {format:'full'});
-      if (!outreachVerifiedSent(nativeSent, outgoing, claim.attemptId, props.getProperty('MAILBOX_EMAIL'))) throw new Error('Native Sent copy does not match the approved message.');
+      if (!outreachVerifiedSent(nativeSent, outgoing, claim.attemptId, props.getProperty('MAILBOX_EMAIL'),result)) throw new Error('Native Sent copy does not match the approved message.');
       result = nativeSent;
     } catch (error) {
       // The provider may have accepted a request before a timeout. Hold it; never
@@ -52,13 +63,18 @@ function syncOutreach() {
     }
     // If this upload fails, the record stays reserved. The next run reconciles it.
     outreachRequest({action:'receipt',id:entry.id,revision:entry.revision,attemptId:claim.attemptId,outcome:'sent',messageId:result.id,threadId:result.threadId});
+    props.deleteProperty('OUTREACH_RECEIPT_'+claim.attemptId);
+    outreachLabelSent(result.threadId);
   });
 }
 
-function outreachVerifiedSent(message, approved, attemptId, mailbox) {
+function outreachVerifiedSent(message, approved, attemptId, mailbox, accepted) {
+  // A native read must match either the unique requested Message-ID or the
+  // exact ID/thread pair returned by this reserved send, never copy alone.
+  var identity=accepted ? /^[a-f0-9]{1,64}$/.test(accepted.id||'') && /^[a-f0-9]{1,64}$/.test(accepted.threadId||'') && message.id===accepted.id && message.threadId===accepted.threadId : outreachHeader(message,'Message-ID')==='<outreach.'+attemptId+'@jobhackai.io>';
   if ((message.labelIds||[]).indexOf('SENT')<0 || outreachAddress(outreachHeader(message,'From'))!==mailbox.toLowerCase() ||
     outreachAddress(outreachHeader(message,'To'))!==approved.recipient || outreachHeader(message,'Cc') || outreachHeader(message,'Bcc') ||
-    outreachHeader(message,'Subject')!==approved.subject || outreachHeader(message,'Message-ID')!=='<outreach.'+attemptId+'@jobhackai.io>') return false;
+    outreachHeader(message,'Subject')!==approved.subject || !identity) return false;
   var plain=[],html=[],unsupported=false;
   function visit(part) {
     if(part.filename || (part.body&&part.body.attachmentId)) unsupported=true;
@@ -71,6 +87,30 @@ function outreachVerifiedSent(message, approved, attemptId, mailbox) {
   return !unsupported && plain.length===1 && plain[0].replace(/\r\n/g,'\n')===approved.text &&
     (approved.html ? html.length===1 && html[0].replace(/\r\n/g,'\n')===approved.html : html.length===0) &&
     (!approved.threadId || message.threadId===approved.threadId) && outreachHeader(message,'In-Reply-To')===(approved.inReplyTo||'');
+}
+
+function outreachLabelSent(threadId) {
+  if(PropertiesService.getScriptProperties().getProperty('OUTREACH_LABELS_ENABLED')!=='true')return;
+  try {
+    var thread=Gmail.Users.Threads.get('me',threadId,{format:'metadata',metadataHeaders:['From','Subject']});
+    outreachLabelThread(thread,Gmail.Users.Labels.list('me').labels||[]);
+  } catch(error) { console.warn('Outreach label update failed; verified send is retained and the next sync will retry labels only.'); }
+}
+function outreachLabelThread(thread, labels) {
+  var props=PropertiesService.getScriptProperties();
+  if(props.getProperty('OUTREACH_LABELS_ENABLED')!=='true')return;
+  try {
+    var messages=(thread.messages||[]).filter(function(m){return (m.labelIds||[]).indexOf('DRAFT')<0;});
+    messages.sort(function(a,b){return Number(b.internalDate)-Number(a.internalDate)||b.id.localeCompare(a.id);});
+    if(!messages.length)return;
+    var names=[props.getProperty('TRACK_LABEL_NAME')||'0: JobHackAI / Track','1: To respond','6: Awaiting reply'];
+    var ids=names.map(function(name){var label=labels.find(function(l){return l.name===name;});if(!label)throw new Error('Required workflow label missing.');return label.id;});
+    var waiting=(messages[0].labelIds||[]).indexOf('SENT')>=0, desired=[ids[0],waiting?ids[2]:ids[1]], other=waiting?ids[1]:ids[2];
+    if(messages.every(function(m){var current=m.labelIds||[];return desired.every(function(id){return current.indexOf(id)>=0;})&&current.indexOf(other)<0;}))return;
+    // Only these three user labels are changed. Inbox, unread, importance,
+    // handled labels and unrelated labels are preserved.
+    Gmail.Users.Threads.modify({addLabelIds:desired,removeLabelIds:[other]},'me',thread.id);
+  } catch(error) { console.warn('Outreach label update failed; conversation metadata is retained. Check Gmail label authorization/configuration.'); }
 }
 
 function outreachRequest(input) {
