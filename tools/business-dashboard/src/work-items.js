@@ -170,7 +170,14 @@ export async function workRecords(db, base, now=new Date()) {
     dependencies:item.dependencies||[],priority:item.priority??item.sortOrder??1000,
     reason:item.reason||item.nextAction||item.evidence||'Review the source evidence.',
   }));
-  const complete=new Set(items.filter(completedWork).map(i=>i.id));
+  const complete=new Set(items.filter(i=>['sent','published','closed','handled'].includes(i.state)).map(i=>i.id));
+  // Resolve internal completion from prerequisites outward, never from its preparation flag alone.
+  let advanced=true;
+  while(advanced){advanced=false;for(const item of items){
+    if(!complete.has(item.id)&&completedWork({...item,unfinishedDependencies:item.dependencies.filter(id=>!complete.has(id))})){
+      complete.add(item.id);advanced=true;
+    }
+  }}
   for(const item of items){
     item.unfinishedDependencies=item.dependencies.filter(id=>!complete.has(id));
     item.canApprove=!!item.workId && !['outreach','gmail','directory'].includes(item.source) && !!item.snapshot && item.fresh && item.preparation==='ready' && item.nativeState==='draft' && !item.unfinishedDependencies.length && item.decision?.action!=='approve' && !['changes','decline'].includes(item.decision?.action);
@@ -185,7 +192,8 @@ export async function workRecords(db, base, now=new Date()) {
 }
 function completedWork(item) {
   return ['sent','published','closed','handled'].includes(item.state) ||
-    (['operations','github','analytics'].includes(item.source) && item.preparation==='complete');
+    (['operations','github','analytics'].includes(item.source) && item.preparation==='complete' &&
+      !item.blocker && !item.staleSource && !item.unfinishedDependencies?.length);
 }
 export function boardLane(item) {
   if(item.staleSource)return 'blocked';
