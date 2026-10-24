@@ -48,6 +48,22 @@ for(const [name,mx,hosts,expected] of [
  assert.equal(result.status,expected);assert.equal(result.mailboxVerified,false);assert.equal(result.inboxVerified,false);
 });
 test('routing bounds untrusted DNS responses',async()=>{assert.equal((await routingCheck('example.com',{fetcher:async()=>new Response('x'.repeat(33000))})).status,'dns_unavailable');});
+test('routing uses a Workers-compatible request without following resolver redirects',async()=>{
+ const checked=[];
+ const workersFetch=async(url,init)=>{
+  // Workers only implements follow/manual; Node accepts error and hid this bug.
+  if(!['follow','manual'].includes(init.redirect))throw new TypeError('Unsupported redirect mode');
+  const request=new Request(url,init);checked.push(request);
+  if(request.redirect!=='manual')return new Response(null,{status:302,headers:{Location:'https://elsewhere.example/dns'}});
+  return goodDns(url);
+ };
+ assert.equal((await routingCheck('example.com',{fetcher:workersFetch})).status,'routing_present_mailbox_unknown');
+ assert.equal(checked.length,3);
+ assert.ok(checked.every(request=>request.redirect==='manual'&&new URL(request.url).origin==='https://cloudflare-dns.com'));
+ let requests=0;
+ assert.equal((await routingCheck('example.com',{fetcher:async()=>{requests++;return new Response(null,{status:302,headers:{Location:'https://elsewhere.example/dns'}});}})).status,'dns_unavailable');
+ assert.equal(requests,1);
+});
 
 test('current exact published evidence, resolved conflicts and safe headers are required',()=>{
  for(const mutate of [p=>p.message.recipient='one@example.com,two@example.com',p=>p.message.subject+='\r\nBcc: other@example.net',p=>p.message.cc='other@example.net',p=>p.evidence.mailtoEmail='other@example.com',p=>p.evidence.checkedAt='2026-01-01T00:00:00Z',p=>p.evidence.fit='unknown',p=>p.message.html='<img src="https://tracking.example.net/x">',p=>p.lane='unqualified']){const p=packet();mutate(p);assert.throws(()=>normalizePacket(p,now));}
