@@ -132,3 +132,34 @@ test('approval uses authoritative handled dependencies and rejects already-publi
  const published=(await publishedBoard()).items.find(i=>i.id==='published-work');
  assert.equal((await c.call('feedback',{id:published.id,expectedVersion:published.version,revision:published.snapshotRevision,requestId:'stale-publication-approval',action:'approve',note:''},owner,publishedBoard)).status,409);
 });
+test('metadata-only reconciliation preserves same-revision packet and approval but invalidates changed source content',async()=>{
+ const c=fixture();let item=await ready(c);
+ await c.call('feedback',{id:item.id,expectedVersion:item.version,revision:item.snapshotRevision,requestId:'metadata-approval',action:'approve',note:''});
+ item=(await c.board()).items[0];const revision=item.snapshotRevision;
+ assert.equal((await c.call('reconcile',{id:item.id,expectedVersion:item.version,sourceRevision:'native-v1',checkedAt:new Date().toISOString(),nativeState:'published'})).status,200);
+ item=(await c.board()).items[0];assert.equal(item.snapshotRevision,revision);assert.ok(item.snapshot);assert.equal(item.decision.action,'approve');assert.equal(item.boardLane,'completed');
+ assert.equal((await c.call('reconcile',{id:item.id,expectedVersion:item.version,sourceRevision:'native-v2',checkedAt:new Date().toISOString(),nativeState:'draft'})).status,200);
+ item=(await c.board()).items[0];assert.equal(item.snapshot,null);assert.equal(item.decision,null);assert.equal(item.canApprove,false);
+ assert.equal(c.sql.prepare('SELECT count(*) n FROM work_snapshots').get().n,1);assert.equal(c.sql.prepare('SELECT count(*) n FROM work_decisions').get().n,1);
+});
+test('completed internal preparation satisfies dependencies without fabricating publication',async()=>{
+ const c=fixture();
+ await c.call('prepare',{id:'internal',source:'operations',sourceId:'internal',expectedVersion:0,document:doc({preparation:'complete'})});
+ const child=await ready(c,'dependent',{dependencies:['internal']});
+ const board=await c.board(),internal=board.items.find(i=>i.id==='internal');
+ assert.equal(internal.boardLane,'completed');assert.equal(internal.nativeState,'unknown');assert.equal(child.canApprove,true);
+ assert.equal((await c.call('feedback',{id:child.id,expectedVersion:child.version,revision:child.snapshotRevision,requestId:'internal-complete-approval',action:'approve',note:''})).status,200);
+ await c.call('prepare',{id:'content',source:'marblism',sourceId:'content',expectedVersion:0,document:doc({preparation:'complete'})});
+ assert.notEqual((await c.board()).items.find(i=>i.id==='content').boardLane,'completed');
+});
+test('internal completion cannot bypass prerequisite chains or explicit blockers',async()=>{
+ const c=fixture();
+ await c.call('prepare',{id:'root',source:'operations',sourceId:'root',expectedVersion:0,document:doc({preparation:'in_progress'})});
+ await c.call('prepare',{id:'middle',source:'operations',sourceId:'middle',expectedVersion:0,document:doc({preparation:'complete',dependencies:['root']})});
+ let child=await ready(c,'grandchild',{dependencies:['middle']});
+ assert.equal(child.canApprove,false);assert.equal((await c.board()).items.find(i=>i.id==='middle').boardLane,'blocked');
+ await c.call('prepare',{id:'root',source:'operations',sourceId:'root',expectedVersion:1,document:doc({preparation:'complete',blocker:'Acceptance evidence missing'})});
+ assert.equal((await c.board()).items.find(i=>i.id==='grandchild').canApprove,false);
+ await c.call('prepare',{id:'root',source:'operations',sourceId:'root',expectedVersion:2,document:doc({preparation:'complete'})});
+ const board=await c.board();assert.equal(board.items.find(i=>i.id==='middle').boardLane,'completed');assert.equal(board.items.find(i=>i.id==='grandchild').canApprove,true);
+});
