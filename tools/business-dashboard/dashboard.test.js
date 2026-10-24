@@ -50,7 +50,7 @@ test('Eastern month boundaries and current-month net collection', async () => {
   assert.equal(monthKey(new Date('2026-11-01T03:30:00Z')), '2026-10');
   assert.equal(monthKey(new Date('2026-11-01T04:30:00Z')), '2026-11');
   const result = await overview(database(), new Date('2026-10-16T12:00:00Z'));
-  assert.equal(result.incomeGoalCents, 300000);
+  assert.equal(result.userGoal, 250);
   assert.equal(result.capturedCents, 1700);
   assert.equal(result.refundedCents, 1700);
   assert.equal(result.netCollectedCents, 0);
@@ -82,11 +82,11 @@ test('the owner can load the page and read a source-labelled overview', async ()
   const ctx = { access: { aud: '884df74e9be8546b0051980538c8e00a75efd2b1d2da5a04a4e4fbe78f3a4a40', getIdentity: async () => ({ email: 'sebastian.larosa@jobhackai.io' }) } };
   const page = await worker.fetch(new Request('https://dashboard.jobhackai.io/'), database(), ctx);
   assert.equal(page.status, 200);
-  assert.match(await page.text(), /Monthly income goal/);
+  assert.match(await page.text(), /Software growth goal/);
   const api = await worker.fetch(new Request('https://dashboard.jobhackai.io/api/overview'), database(), ctx);
   assert.equal(api.status, 200);
   const payload = await api.json();
-  assert.equal(payload.incomeGoalCents, 300000);
+  assert.equal(payload.userGoal, 250);
   assert.equal(payload.d1UserRecords, 38);
   assert.match(payload.basis, /not independently verified/);
 });
@@ -94,10 +94,10 @@ test('the owner can load the page and read a source-labelled overview', async ()
 test('the phone reload gets the new campaign script rather than a cached old script', async () => {
   const ctx = { access: { aud: audience, getIdentity: async () => ({ email: 'sebastian.larosa@jobhackai.io' }) } };
   const page = await worker.fetch(new Request('https://dashboard.jobhackai.io/'), database(), ctx);
-  assert.match(await page.text(), /app\.js\?v=2026-10-21-notification-intake/);
-  const script = await worker.fetch(new Request('https://dashboard.jobhackai.io/app.js?v=2026-10-21-notification-intake'), database(), ctx);
+  assert.match(await page.text(), /app\.js\?v=2026-10-24-decisions/);
+  const script = await worker.fetch(new Request('https://dashboard.jobhackai.io/app.js?v=2026-10-24-decisions'), database(), ctx);
   assert.equal(script.headers.get('Cache-Control'), 'no-store');
-  assert.match(await script.text(), /api\/campaigns/);
+  assert.match(await script.text(), /api\/work-items/);
 });
 
 test('an identity from a different Access application cannot authorize the request', async () => {
@@ -131,7 +131,7 @@ test('cost updates reject a foreign origin', async () => {
   assert.equal((await worker.fetch(request, {}, ctx)).status, 403);
 });
 
-test('campaign refresh reflects a saved approval and does not imply sending', async () => {
+test('summary-only legacy approvals are retired without altering historical records', async () => {
   const ctx = { access: { aud: audience, getIdentity: async () => ({ email: 'sebastian.larosa@jobhackai.io' }) } };
   const env = database(null, [{ id: 'new-outreach-proposals', channel: 'Sonny · Social', title: 'New proposals', detail: 'Review first', reviewUrl: 'https://chatgpt.com/space/page_example', state: 'pending', impact: 'campaign', evidence: 'Awaiting review', updatedAt: '2026-10-17 11:00:00', sortOrder: 1 }]);
   const list = () => worker.fetch(new Request('https://dashboard.jobhackai.io/api/campaigns'), env, ctx);
@@ -141,10 +141,10 @@ test('campaign refresh reflects a saved approval and does not imply sending', as
     method: 'POST', headers: { Origin: 'https://dashboard.jobhackai.io', 'Content-Type': 'application/json' }, body: JSON.stringify({revision:before.reviewRevision}),
   });
   const response = await worker.fetch(approval.clone(), env, ctx);
-  assert.equal(response.status, 200);
+  assert.equal(response.status, 409);
   const after = (await (await list()).json()).items[0];
-  assert.equal(after.state, 'approved');
-  assert.match(after.evidence, /does not send an email/);
+  assert.equal(after.state, 'pending');
+  assert.equal(after.evidence, 'Awaiting review');
   assert.equal((await worker.fetch(approval.clone(), env, ctx)).status, 409);
 });
 
