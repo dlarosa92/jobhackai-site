@@ -32,7 +32,9 @@ test.describe('Authentication', () => {
       page.on('pageerror', (err) => {
         console.log('[BROWSER pageerror]', err.message, '\n', err.stack);
       });
+      let loginInitialized = false;
       page.on('console', (msg) => {
+        if (msg.text() === '[AUTH INIT COMPLETE] All initialization successful') loginInitialized = true;
         const type = msg.type();
         if (type === 'error' || type === 'warning') {
           console.log(`[BROWSER ${type}]`, msg.text());
@@ -70,6 +72,9 @@ test.describe('Authentication', () => {
             null,
             { timeout: 8000 }
           );
+          // Firebase becomes available before login-page attaches its submit
+          // handler. Submitting earlier falls back to a native GET.
+          await expect.poll(() => loginInitialized, { timeout: 8000 }).toBe(true);
           return true;
         } catch (_) {
           return false;
@@ -77,6 +82,7 @@ test.describe('Authentication', () => {
       };
       if (!(await authModuleLoaded())) {
         console.warn('[LOGIN TEST] FirebaseAuthManager missing after first load; reloading to recover from aborted module fetch');
+        loginInitialized = false;
         await page.reload();
         await page.waitForSelector('#loginEmail');
         if (!(await authModuleLoaded())) {
