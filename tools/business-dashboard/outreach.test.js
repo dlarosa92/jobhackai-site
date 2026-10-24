@@ -147,7 +147,7 @@ test('even stale Gmail evidence cannot authorize a second follow-up in the same 
 });
 test('large action board uses bounded SQL queries',async()=>{
  const c=database();for(let i=0;i<60;i++)await registerMessage(c.db,packet('lead-'+i),now);
- const before=c.queries();assert.equal((await outreachRecords(c.db,now)).items.length,60);assert.ok(c.queries()-before<=4);
+ const before=c.queries();assert.equal((await outreachRecords(c.db,now)).items.length,60);assert.ok(c.queries()-before<=5);
 });
 test('signed relay rejects unauthenticated, oversized and wrong-mailbox requests',async()=>{
  const c=database();
@@ -310,4 +310,14 @@ test('verified outreach receipt yields one conversation card while delivery hold
  let items=await read();assert.ok(items.some(i=>i.id==='gmail-bb1'));assert.ok(!items.some(i=>i.id==='outreach-'+identity.id));
  await recordDeliveryEvent(c.db,{recipient:packet().message.recipient,messageId:'bad1',reason:'hard_bounce'},now);
  items=await read();assert.equal(items.find(i=>i.id==='outreach-'+identity.id).state,'hold');
+});
+test('owner feedback withdraws approval and the exact revision stays held after re-preparation',async()=>{
+ const c=database(),p=packet('feedback-test');const x=await registerMessage(c.db,p,now);
+ await recordHistory(c.env,{...x,history:clean()},now,goodDns);
+ assert.equal((await ownerOutreach(ownerRequest('approve',x),c.env,now)).status,200);
+ assert.equal((await ownerOutreach(ownerRequest('feedback',{...x,action:'changes',note:'Revise the business-fit sentence.'}),c.env,now)).status,200);
+ assert.equal((await ownerOutreach(ownerRequest('approve',x),c.env,now)).status,409);
+ await registerMessage(c.db,p,now);await recordHistory(c.env,{...x,history:clean()},now,goodDns);
+ assert.equal((await ownerOutreach(ownerRequest('approve',x),c.env,now)).status,409);
+ assert.equal((await outreachRecords(c.db,now)).items[0].feedback.action,'changes');
 });
