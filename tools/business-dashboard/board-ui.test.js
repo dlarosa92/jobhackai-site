@@ -27,82 +27,47 @@ const walk = node => [node, ...node.children.flatMap(walk)];
 const text = node => walk(node).map(x => x.textContent).join(' ');
 const lane = (nodes, title) => nodes.get('board').children.find(x => text(x.children[0]).includes(title));
 
-test('holds, approvals, waiting emails and scheduled posts are distinct, each with plain channel names', () => {
-  const { render, nodes } = ui();
-  render(data([
-    item('Replacement email', 'Stan · Outreach', 'hold'),
-    item('Ready email', 'Stan · Email', 'pending'),
-    item('Approved email', 'Stan · Email', 'approved'),
-    item('LinkedIn post', 'Sonny · LinkedIn', 'scheduled'),
-    item('Pinterest post', 'Sonny · Pinterest', 'hold'),
-    item('Reply', 'Gmail · tracked conversation', 'waiting', { source: 'gmail', impact: 'prospect', detail: 'I&#39;d like to connect &amp; talk. &lt;script&gt;' }),
-  ]));
-  assert.match(text(lane(nodes, 'Being prepared')), /Email · Not ready for approval.*Replacement email/);
-  assert.equal(walk(lane(nodes, 'Being prepared')).some(x => x.className === 'approve'), false);
-  assert.match(text(lane(nodes, 'Needs your approval')), /Ready email.*Approve this draft/);
-  assert.match(text(lane(nodes, 'Approved, not sent or scheduled')), /Email · Approved, not sent.*Approved email/);
-  assert.doesNotMatch(text(lane(nodes, 'Approved, not sent or scheduled')), /LinkedIn post/);
-  assert.match(text(lane(nodes, 'Scheduled posts')), /LinkedIn · Post scheduled.*LinkedIn post/);
-  assert.match(text(lane(nodes, 'Waiting for an email reply')), /Email · Waiting for an email reply/);
-  assert.doesNotMatch(text(nodes.get('board')), /outreach/i);
-  assert.match(text(nodes.get('board')), /I'd like to connect & talk. <script>/);
-  assert.equal(walk(nodes.get('board')).filter(x => x.tag === 'script').length, 0);
-  assert.match(nodes.get('campaign-checked').textContent, /Oct 17, 2026, 7:00 PM ET/);
-});
 
-test('platform filter and expanded drafts survive refresh, with honest empty Pinterest status', () => {
-  const { render, nodes } = ui();
-  const items = Array.from({ length: 5 }, (_, i) => item(`Email ${i}`, 'Stan · Email', 'hold'));
-  render(data([...items, item('Post', 'Sonny · LinkedIn', 'scheduled')]));
-  nodes.get('channel-filters').children.find(x => x.textContent.startsWith('Email (')).listeners.click();
-  assert.doesNotMatch(text(nodes.get('board')), /LinkedIn ·/);
-  const preparing = lane(nodes, 'Being prepared');
-  preparing.children.find(x => x.className === 'show-more').listeners.click();
-  render(data([...items, item('New post', 'Sonny · LinkedIn', 'scheduled')]));
-  assert.match(text(lane(nodes, 'Being prepared')), /Email 4/);
-  assert.doesNotMatch(text(nodes.get('board')), /New post/);
-  nodes.get('channel-filters').children.find(x => x.textContent.startsWith('Pinterest (')).listeners.click();
-  assert.match(nodes.get('filter-status').textContent, /No Pinterest items are saved/);
-  assert.match(nodes.get('filter-status').textContent, /does not mean there is no activity/);
-  assert.match(nodes.get('focus-text').textContent, /5 saved drafts are still being prepared/);
+test('the board separates decisions, preparation, backlog, blockers and completed activity',()=>{
+ const {render,nodes}=ui();render(data([
+ item('Ready social','Sonny · Facebook','pending',{boardLane:'ready',canApprove:true,department:'marketing'}),
+ item('Copy checks','Penny · Blog','hold',{boardLane:'in_progress'}),
+ item('Measure signups','Product','hold',{boardLane:'up_next',department:'product'}),
+ item('Suppressed contact','Email','hold',{boardLane:'blocked',department:'sales'}),
+ item('Published post','LinkedIn','published',{boardLane:'completed'}),
+ ]));
+ assert.match(text(lane(nodes,'Ready for your review')),/Ready social/);
+ assert.match(text(lane(nodes,'In progress')),/Copy checks/);
+ assert.match(text(lane(nodes,'Up next')),/Measure signups/);
+ assert.equal(lane(nodes,'Waiting or blocked').open,false);
+ assert.equal(lane(nodes,'Completed activity').open,false);
+ assert.match(text(nodes.get('next-decisions')),/Ready social/);
+ assert.doesNotMatch(text(nodes.get('next-decisions')),/Suppressed contact|Published post/);
 });
-
-test('unknown channels are explicit and untrusted review URLs do not become links', () => {
-  const { render, nodes } = ui();
-  render(data([item('Unknown draft', 'Stan', 'hold', { reviewUrl: 'javascript:alert(1)' })]));
-  assert.match(text(nodes.get('board')), /Channel not recorded/);
-  assert.equal(walk(nodes.get('board')).filter(x => x.tag === 'a').length, 0);
+test('department and platform filters persist through refresh',()=>{
+ const {render,nodes}=ui();const items=[item('Social','Facebook','hold',{department:'marketing'}),item('Feature','Product','hold',{department:'product'})];render(data(items));
+ nodes.get('department-filters').children.find(x=>x.textContent==='Product & Technology').listeners.click();render(data(items));
+ assert.match(text(nodes.get('board')),/Feature/);assert.doesNotMatch(text(nodes.get('board')),/Social/);
+ nodes.get('channel-filters').children.find(x=>x.textContent.startsWith('Pinterest (')).listeners.click();
+ assert.match(nodes.get('filter-status').textContent,/does not mean there is no native activity/);
 });
-
-test('directory intake has its own filter; handled notifications are separate, reversible and never first priority', () => {
-  const { render, nodes } = ui();
-  render({ ...data([
-    item('New directory request', 'Directory', 'pending', {source:'directory',impact:'prospect',notificationRevision:'a'.repeat(64),detail:'Contact: submitted@example.com <script>alert(1)</script>'}),
-    item('Handled bounce', 'Gmail', 'handled', {source:'gmail',impact:'prospect',notificationRevision:'abc123',handledAt:'2026-10-21T12:00:00Z'}),
-  ]), directorySource:{status:'current',checkedAt:'2026-10-21T14:00:00Z'} });
-  assert.match(text(lane(nodes,'Requests and emails to review')),/Directory · Needs your review.*submitted@example.com.*Mark handled/);
-  assert.doesNotMatch(text(lane(nodes,'Requests and emails to review')),/Handled bounce|Approve this draft/);
-  assert.match(text(lane(nodes,'Handled notifications')),/Handled bounce.*Reopen.*Marked handled/);
-  assert.match(nodes.get('focus-text').textContent,/New directory request/);
-  assert.doesNotMatch(nodes.get('focus-text').textContent,/Handled bounce/);
-  assert.match(nodes.get('directory-sync').textContent,/No Gmail label is needed/);
-  assert.equal(walk(nodes.get('board')).some(x=>x.tag==='script'),false);
-  nodes.get('channel-filters').children.find(x=>x.textContent==='Directory (1)').listeners.click();
-  assert.doesNotMatch(text(nodes.get('board')),/Handled bounce/);
+test('all draft cards open full copy inside one accessible dialog; unsafe URLs and HTML remain inert',()=>{
+ const {render,nodes}=ui();const full='Complete draft <script>untrusted()</script> with all of the copy.';
+ render(data([item('Exact post','Facebook','pending',{boardLane:'ready',workId:'one',canApprove:true,snapshot:{text:full,html:'<script>untrusted()</script>',destination:'Exact company account',timing:'Monday after release',media:[],links:[],evidence:[]},reviewUrl:'javascript:alert(1)'})]));
+ nodes.get('review-dialog').showModal=()=>{nodes.get('review-dialog').open=true;};
+ walk(lane(nodes,'Ready for your review')).find(x=>x.className==='card-title').listeners.click();
+ assert.equal(nodes.get('review-dialog').open,true);assert.match(text(nodes.get('review-content')),/Complete draft.*Exact company account|Exact company account.*Complete draft/s);
+ assert.equal(walk(nodes.get('review-content')).some(x=>x.tag==='script'),false);
+ const frame=walk(nodes.get('review-content')).find(x=>x.tag==='iframe');assert.equal(frame.attributes.sandbox,'');assert.match(frame.srcdoc,/default-src/);
+ assert.equal(walk(nodes.get('review-content')).some(x=>x.tag==='a'),false);
+ assert.match(text(nodes.get('review-actions')),/Approve.*Request changes.*Decline/);
 });
-
-test('a slow refresh cannot resurrect a notification after Mark handled succeeds', async () => {
-  const pending=item('Bounce','Gmail','pending',{source:'gmail',impact:'prospect',notificationRevision:'abc123'});
-  let release;
-  const view=ui({fetch:async url=>{
-    if(url==='/api/overview')throw new Error('Numbers unrelated to board');
-    if(url==='/api/campaigns')return new Promise(resolve=>{release=()=>resolve({ok:true,json:async()=>data([pending])});});
-    return {ok:true,json:async()=>data([{...pending,state:'handled'}])};
-  }});
-  view.render(data([pending]));
-  const refreshing=view.run('refresh()');
-  const button=walk(lane(view.nodes,'Requests and emails to review')).find(x=>x.tag==='button'&&x.textContent==='Mark handled');
-  await button.listeners.click();release();await refreshing;
-  assert.doesNotMatch(text(lane(view.nodes,'Requests and emails to review')),/Bounce/);
-  assert.match(text(lane(view.nodes,'Handled notifications')),/Bounce.*Reopen/);
+test('incomplete summaries cannot expose an approval button and empty decisions explain real work',()=>{
+ const {render,nodes}=ui();render(data([item('Incomplete','Facebook','pending')]));
+ nodes.get('review-dialog').showModal=()=>{};
+ walk(lane(nodes,'In progress')).find(x=>x.className==='card-title').listeners.click();
+ assert.doesNotMatch(text(nodes.get('review-actions')),/Approve/);
+ assert.match(text(nodes.get('review-content')),/complete draft, destination and media have not been verified/);
+ assert.match(nodes.get('focus-text').textContent,/1 items in progress/);
+ assert.doesNotMatch(nodes.get('focus-text').textContent,/caught up/i);
 });

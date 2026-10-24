@@ -32,8 +32,10 @@ export async function registerMessage(db, input, now = Date.now()) {
 }
 
 export async function gateIssues(db, record, now = Date.now(), snapshot = null) {
+  const feedback = snapshot ? snapshot.feedback.get(`${record.id}:${record.revision}`) : await db.prepare('SELECT action,note FROM outreach_feedback WHERE message_id=? AND revision=?').bind(record.id,record.revision).first();
   const packet = parse(record.packet);
   const issues = historyIssues(packet, parse(record.history), now);
+  if(feedback)issues.push(`Owner ${feedback.action==='decline'?'declined this revision':'requested changes'}: ${feedback.note}`);
   if (!fresh(packet.evidence.checkedAt, now, 86400000)) issues.push('Refresh first-party contact and business-fit evidence before release.');
   const routing = parse(record.routing);
   if (!routing || !fresh(routing.checkedAt, now) || routing.status !== 'routing_present_mailbox_unknown') issues.push(`Mail routing is not cleared: ${routing?.status || 'not checked'}.`);
@@ -52,17 +54,20 @@ export async function outreachRecords(db, now = Date.now()) {
   const blocks = new Map((await db.prepare('SELECT recipient,reason,evidence_id FROM outreach_blocks').all()).results.map(block => [block.recipient, block]));
   const active = (await db.prepare("SELECT id,business_key,recipient,state,sent_thread_id,sent_message_id,json_extract(packet,'$.phase') AS phase FROM outreach_messages WHERE state IN ('queued','sending','sent','uncertain')").all()).results;
   const senderAvailable = !!relay && relay.can_send === 1 && fresh(relay.checked_at, now, 10 * 60000);
+  const feedbackRows=(await db.prepare('SELECT * FROM outreach_feedback').all()).results;
+  const feedback=new Map(feedbackRows.map(f=>[`${f.message_id}:${f.revision}`,f]));
   const items = [];
   for (const record of rows) {
     const packet = parse(record.packet);
     const block = blocks.get(record.recipient);
-    const issues = terminal(record.state) ? (block ? [`${block.reason} (${block.evidence_id})`] : []) : await gateIssues(db, record, now, { blocks, rows: active });
+    const issues = terminal(record.state) ? (block ? [`${block.reason} (${block.evidence_id})`] : []) : await gateIssues(db, record, now, { blocks, rows: active, feedback });
     const approved = record.approved_revision === record.revision;
     const replied = record.state === 'sent' && block?.reason === 'received_reply_review';
     const state = replied ? 'pending' : issues.length ? 'hold' : record.state === 'sent' ? 'sent' : ['sending', 'uncertain'].includes(record.state) ? 'hold' : record.state === 'queued' ? 'approved' : approved ? 'approved' : 'pending';
     items.push({ id: `outreach-${record.id}`, source: 'outreach', outreachId: record.id, channel: 'Stan · Email', impact: replied ? 'prospect' : 'campaign',
       title: packet.message.subject, detail: packet.message.recipient, reviewUrl: packet.evidence.sourceUrl,
       state, updatedAt: record.updated_at, revision: record.revision, message: packet.message, sourceEvidence: packet.evidence,
+      feedback:feedbackRows.find(f=>f.message_id===record.id&&f.revision===record.revision)||null,
       issues, approved, deliveryState: record.state, senderAvailable, sentThreadId: record.sent_thread_id,
       evidence: block ? `${block.reason} · native evidence ${block.evidence_id}. Sent history is retained; further outreach is held.` : record.state === 'sent' ? `Sent verified · message ${record.sent_message_id}; inbox delivery is unverified.` : record.state === 'uncertain' ? 'Send result uncertain. Reconcile Gmail before any further action; automatic retry is disabled.' : record.state === 'sending' ? 'One send attempt is reserved. A missing receipt requires reconciliation; do not retry.' : issues.join(' ') || 'Source, routing and all-folder Gmail checks are current. Mailbox existence remains unverified.',
       nextAction: replied ? 'Review and answer the received message individually in Gmail.' : record.state === 'sent' ? 'Await the recipient; do not repeat this send.' : issues.length ? 'Resolve the listed hold before release.' : approved ? 'Send this exact approved email when ready.' : 'Review the complete recipient, copy and links before approving.' });
@@ -137,6 +142,18 @@ export async function ownerOutreach(request, env, now = Date.now()) {
     const input = JSON.parse(new TextDecoder().decode(bytes));
     if (path === '/api/outreach/prepare') return json(await registerMessage(env.DASHBOARD_DB,input,now));
     if (!input || !/^[a-z0-9-]{1,64}$/.test(input.id || '') || !/^[a-f0-9]{64}$/.test(input.revision || '')) return json({error:'Exact message ID and revision required'},400);
+    if(path==='/api/outreach/feedback'){
+      if(!['changes','decline'].includes(input.action)||typeof input.note!=='string'||input.note.length>4000||(input.action==='changes'&&!input.note.trim()))return json({error:'A valid decision and change note are required.'},400);
+      const result=await env.DASHBOARD_DB.batch([
+        env.DASHBOARD_DB.prepare(`INSERT INTO outreach_feedback(message_id,revision,action,note,recorded_at)
+          SELECT id,revision,?,?,? FROM outreach_messages WHERE id=? AND revision=? AND state='review'
+          ON CONFLICT(message_id,revision) DO UPDATE SET action=excluded.action,note=excluded.note,recorded_at=excluded.recorded_at`).bind(input.action,input.note,iso(now),input.id,input.revision),
+        env.DASHBOARD_DB.prepare(`UPDATE outreach_messages SET approved_revision=NULL,approved_at=NULL,updated_at=? WHERE id=? AND revision=? AND state='review' AND EXISTS(SELECT 1 FROM outreach_feedback WHERE message_id=? AND revision=?)`).bind(iso(now),input.id,input.revision,input.id,input.revision),
+      ]);
+      if(!result[0].meta.changes)return json({error:'This message changed or already has a reserved release.'},409);
+      await env.DASHBOARD_DB.batch([await event(env.DASHBOARD_DB,input.id,input.revision,`owner_${input.action}`,{note:input.note},now)]);
+      return json({ok:true});
+    }
     if (path === '/api/outreach/approve') return approve(env.DASHBOARD_DB,input,now);
     if (path === '/api/outreach/send') return queue(env,input,now);
     if (path === '/api/outreach/cancel') {

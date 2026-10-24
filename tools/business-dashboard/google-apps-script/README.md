@@ -2,7 +2,9 @@
 
 The existing Google Apps Script belongs to the business mailbox owner. Keep the existing project, secret, label and five-minute trigger. `Code.gs` synchronizes metadata for conversations selected by `0: JobHackAI / Track` plus every verified outbound thread returned by the signed dashboard feed. Missing labels cannot hide a recorded outbound conversation. The feed includes native thread IDs from exact sender receipts and legacy saved sent receipts; draft links never count. The combined scan is bounded to 200 conversations and fails without replacing the last successful snapshot if incomplete. `Outreach.gs` adds independent lead history checks and an optional guarded sender.
 
-## Read-only upgrade
+## Initial read-only installation
+
+These initial-installation steps are not rollback instructions for an already approved sender. On an existing installation, preserve current owner-authorized permissions and flags. Reconcile the authorization receipt before any permission change; runtime enabled status alone never authorizes an email. See the [current operating guide](../OPERATING-GUIDE.md).
 
 1. Apply dashboard D1 migration `003-outreach-gate.sql`, then deploy the dashboard and ingestion Workers from the same reviewed source. Keep `OUTREACH_SENDER_ENABLED=false` on **both** Workers.
 2. In the existing Apps Script project, update `Code.gs`, add `Outreach.gs` and keep `appsscript.json`. The normal manifest still requests `gmail.readonly`, external requests and trigger management. No new trigger is needed.
