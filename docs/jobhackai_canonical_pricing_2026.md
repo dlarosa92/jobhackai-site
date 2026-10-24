@@ -209,7 +209,7 @@ A voice entitlement is valuable and must be consumed predictably.
 
 A session counts when the server creates the session record and successfully returns a usable OpenAI Realtime client credential.
 
-A customer ending an interview early still consumes the session because provider resources were used and the session was available.
+A customer ending an interview early still consumes the session because provider resources were used and the session was available, with one exception: a free or pack session the candidate ends within 150 seconds of the session record's start (2 minutes of interview plus time to connect and run the audio check) has its credit restored, once per account. The server measures the time from the session record and records the grace on the user row (migration 033). Subscription sessions are never restored and always count toward the monthly allowance.
 
 ### 8.2 Reconnection
 

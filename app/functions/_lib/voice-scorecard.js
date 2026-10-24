@@ -120,6 +120,12 @@ export function interviewEvidenceTranscript(transcript) {
   });
 }
 
+/** Interviewer turns that asked something, for the report's meta line. */
+export function interviewerQuestionCount(transcript) {
+  return interviewEvidenceTranscript(transcript)
+    .filter(t => t?.speaker === 'assistant' && String(t.text || '').includes('?')).length;
+}
+
 export function transcriptToText(transcript) {
   if (!Array.isArray(transcript)) return '';
   return transcript
@@ -303,13 +309,25 @@ export async function generateAndStoreScorecard(env, sessionId) {
   }
 }
 
+// Free reports show the overall practice score. The repositioning brief
+// limited the free view to one strength and one fix; this flag is the single
+// switch back to that.
+export const FREE_REPORT_SHOWS_SCORE = true;
+
+// Longest candidate quote the free report may tease.
+const TEASER_MAX_CHARS = 200;
+
 /**
- * Reduce a full scorecard to the free-taste partial view:
- * top strength + one improvement area. Everything else is withheld.
+ * Reduce a full scorecard to the free-taste partial view: top strength, one
+ * improvement area, the overall score (FREE_REPORT_SHOWS_SCORE), and at most
+ * one short quote of the candidate's own words, taken only from a moment
+ * grounded in the transcript. Dimension scores, moment feedback, the summary
+ * and the transcript are withheld. tooShort survives so the client never
+ * offers a full report that does not exist.
  */
-export function partialScorecard(scorecard) {
+export function partialScorecard(scorecard, { transcript = null } = {}) {
   if (!scorecard) return null;
-  return {
+  const partial = {
     partial: true,
     topStrength: scorecard.topStrength,
     topImprovement: scorecard.topImprovement,
@@ -318,4 +336,18 @@ export function partialScorecard(scorecard) {
     moments: null,
     summary: null
   };
+  if (scorecard.tooShort) {
+    partial.tooShort = true;
+    return partial;
+  }
+  const overall = Number(scorecard.overall);
+  if (FREE_REPORT_SHOWS_SCORE && scorecard.overall != null && Number.isFinite(overall)) {
+    partial.overall = Math.round(overall);
+    partial.methodologyVersion = scorecard.methodologyVersion || 1;
+  }
+  const teaser = transcript ? groundedMoments(scorecard.moments, transcript)
+    .map(m => String(m.quote || '').trim())
+    .find(q => q && q.length <= TEASER_MAX_CHARS) : null;
+  if (teaser) partial.teaserQuote = teaser;
+  return partial;
 }

@@ -44,10 +44,15 @@ const ELEMENT_IDS = [
   'vi-setup-view', 'vi-live-view', 'vi-done-view', 'vi-disabled-view',
   'vi-status', 'vi-caption', 'vi-timer', 'vi-speaking',
   'vi-done-status', 'vi-scorecard', 'vi-save-status', 'vi-save-retry',
-  'vi-entitlement', 'vi-role', 'vi-seniority', 'vi-jd',
+  'vi-entitlement', 'vi-entitlement-retry', 'vi-role', 'vi-seniority', 'vi-jd',
   'vi-start-btn', 'vi-end-btn', 'vi-mute-btn', 'vi-reconnect-btn',
-  'vi-remote-audio'
+  'vi-remote-audio', 'vi-question', 'vi-speaking-label', 'vi-time-note',
+  'vi-recent', 'vi-recent-turns', 'vi-end-confirm', 'vi-end-keep',
+  'vi-end-confirm-btn', 'vi-grace-note', 'vi-plan-continue', 'vi-plan-note'
 ];
+
+// Elements voice-interview.html ships hidden with an inline display:none.
+const HIDDEN_IDS = ['vi-entitlement-retry', 'vi-time-note', 'vi-recent', 'vi-end-confirm', 'vi-grace-note'];
 
 // The browser's textContent -> innerHTML escaping, which escapeHtml() in the
 // client leans on (it round-trips a detached div).
@@ -108,12 +113,16 @@ function makeElement(id) {
  * `withoutModules` deletes named browser-module globals before the client
  * loads, so a test can prove the client's hand-synced fallbacks still hold when
  * a module script fails to execute.
+ *
+ * `elementIds` adds elements beyond ELEMENT_IDS; 'vi-history-panel' switches
+ * the history rail on, which the report's "vs your last session" line reads.
  */
 export function createVoiceClientHarness(options = {}) {
-  const { search = '', routes = {}, withoutModules = [] } = options;
+  const { search = '', routes = {}, withoutModules = [], elementIds = [] } = options;
 
   const elements = Object.create(null);
-  for (const id of ELEMENT_IDS) elements[id] = makeElement(id);
+  for (const id of ELEMENT_IDS.concat(elementIds)) elements[id] = makeElement(id);
+  for (const id of HIDDEN_IDS) elements[id].style.display = 'none';
 
   const timers = new Set();
   const logs = [];
@@ -126,11 +135,13 @@ export function createVoiceClientHarness(options = {}) {
 
   const trackTimer = (handle) => { timers.add(handle); return handle; };
 
+  // The page wrapper carries the live/done page-mode classes.
+  const wrapEl = makeElement('__vi-wrap');
   const documentStub = {
     readyState: 'loading',
     getElementById: (id) => elements[id] || null,
     createElement: (tag) => makeElement('__' + tag),
-    querySelector: () => null,
+    querySelector: (selector) => (selector === '.vi-wrap' ? wrapEl : null),
     querySelectorAll: () => [],
     addEventListener: (type, fn) => { if (type === 'DOMContentLoaded') domReadyHandler = fn; },
     removeEventListener: () => {}
@@ -250,6 +261,7 @@ export function createVoiceClientHarness(options = {}) {
   return {
     windowEvent: (type, event) => (windowListeners[type] || []).forEach(fn => fn(event)),
     el: (id) => elements[id],
+    wrap: () => wrapEl,
     logs,
     analyticsEvents,
     requests,
@@ -269,6 +281,11 @@ export function createVoiceClientHarness(options = {}) {
       if (!handlers.length) throw new Error(`#${id} has no click handler`);
       for (const fn of handlers) await fn({ type: 'click', preventDefault() {} });
       await settle();
+    },
+    /** Press End and, once the official interview is running, confirm it. */
+    async endInterview() {
+      await this.click('vi-end-btn');
+      if (elements['vi-end-confirm'].style.display !== 'none') await this.click('vi-end-confirm-btn');
     },
     /** Open the realtime data channel (the client requests the greeting here). */
     async openDataChannel() {
