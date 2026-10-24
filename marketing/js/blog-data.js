@@ -13,6 +13,16 @@
 
 window.BLOG_POSTS = [
   {
+    "slug": "how-to-prepare-for-a-phone-screen-interview",
+    "title": "How to Prepare for a Phone Screen Interview",
+    "excerpt": "Prepare for a phone screen with a practical plan for your space, materials, spoken answers, salary and scheduling questions, and a read-aloud practice drill.",
+    "category": "Interview Prep",
+    "date": "2026-10-24",
+    "readTime": 7,
+    "author": "JobHackAI",
+    "featured": false
+  },
+  {
     "slug": "behavioral-interview-answers-real-evidence",
     "title": "Behavioral Interview Answers: Show Real Impact With the Evidence You Have",
     "excerpt": "Prepare behavioral interview answers with a practical evidence worksheet, a fictional worked example and follow-up questions, even without impressive metrics.",

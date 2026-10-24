@@ -30,6 +30,18 @@ October 10, 20268 min readInterview Prep
 
 Interview Prep
 
+### How to Prepare for a Phone Screen Interview
+
+Prepare for a phone screen with a practical plan for your space, materials, spoken answers, salary and scheduling questions, and a read-aloud practice drill.
+
+October 24, 20267 min read
+
+
+
+](https://jobhackai.io/blog/how-to-prepare-for-a-phone-screen-interview)[
+
+Interview Prep
+
 ### How to Prepare a Salary Range and a Private Minimum for an Interview
 
 Prepare two numbers before the salary conversation: a defensible range to share and a private minimum to keep. Includes early-screen and later-stage answer examples.

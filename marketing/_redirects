@@ -29,3 +29,15 @@
 # Do NOT add rewrite rules here for blog posts — they cause redirect loops (308 loop).
 # Simply place the HTML file in /blog/ (e.g., /blog/my-post.html) and Cloudflare will
 # serve it at /blog/my-post automatically.
+
+# Owner-approved move-out follow-up aliases, also live in Cloudflare Bulk Redirects.
+/go/kit-1 https://jobhackai.io/directory/move-out-kit?utm_source=email&utm_medium=outreach&utm_campaign=local_moveout_partners_2026_10&utm_content=property_001_followup_01 302
+/go/kit-2 https://jobhackai.io/directory/move-out-kit?utm_source=email&utm_medium=outreach&utm_campaign=local_moveout_partners_2026_10&utm_content=property_002_followup_01 302
+/go/kit-4 https://jobhackai.io/directory/move-out-kit?utm_source=email&utm_medium=outreach&utm_campaign=local_moveout_partners_2026_10&utm_content=property_004_followup_01 302
+/go/kit-5 https://jobhackai.io/directory/move-out-kit?utm_source=email&utm_medium=outreach&utm_campaign=local_moveout_partners_2026_10&utm_content=property_005_followup_01 302
+/go/kit-6 https://jobhackai.io/directory/move-out-kit?utm_source=email&utm_medium=outreach&utm_campaign=local_moveout_partners_2026_10&utm_content=property_006_followup_01 302
+/go/kit-7 https://jobhackai.io/directory/move-out-kit?utm_source=email&utm_medium=outreach&utm_campaign=local_moveout_partners_2026_10&utm_content=property_007_followup_01 302
+/go/kit-8 https://jobhackai.io/directory/move-out-kit?utm_source=email&utm_medium=outreach&utm_campaign=local_moveout_partners_2026_10&utm_content=property_008_followup_01 302
+/go/kit-9 https://jobhackai.io/directory/move-out-kit?utm_source=email&utm_medium=outreach&utm_campaign=local_moveout_partners_2026_10&utm_content=property_009_followup_01 302
+/go/kit-10 https://jobhackai.io/directory/move-out-kit?utm_source=email&utm_medium=outreach&utm_campaign=local_moveout_partners_2026_10&utm_content=property_010_followup_01 302
+/go/phone-screen https://jobhackai.io/blog/how-to-prepare-for-a-phone-screen-interview 302
