@@ -11,7 +11,7 @@ function fixture(){
  const sql=new DatabaseSync(':memory:');sql.exec(readFileSync(new URL('./schema.sql',import.meta.url),'utf8'));
  const db={prepare(query){return {args:[],bind(...args){this.args=args;return this;},async first(){return sql.prepare(query).get(...this.args)||null;},async all(){return {results:sql.prepare(query).all(...this.args)};},async run(){return {meta:{changes:sql.prepare(query).run(...this.args).changes}};},query};},async batch(statements){sql.exec('BEGIN');try{const r=statements.map(s=>({meta:{changes:sql.prepare(s.query).run(...s.args).changes}}));sql.exec('COMMIT');return r;}catch(e){sql.exec('ROLLBACK');throw e;}}};
  const env={DASHBOARD_DB:db};const board=()=>workRecords(db,{items:[],asOf:new Date().toISOString()});
- const call=async(action,input,identity=owner)=>{const response=await workApi(new Request(`https://dashboard.jobhackai.io/api/work-items/${action}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)}),env,identity,board);return {status:response.status,body:await response.json()};};
+ const call=async(action,input,identity=owner,loadBoard=board)=>{const response=await workApi(new Request(`https://dashboard.jobhackai.io/api/work-items/${action}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)}),env,identity,loadBoard);return {status:response.status,body:await response.json()};};
  return {sql,db,env,board,call};
 }
 const doc=(overrides={})=>({title:'Source-backed product improvement',department:'product',product:'core',preparation:'ready',channel:'Product',contributors:['marketing'],expectedValue:'Reliable measurement of software signups',effort:'Small',dependencies:[],nextAction:'Review the exact change',completionCriteria:'Verified signup source and deployed behavior',reason:'Measurement supports the 250-user goal',impact:'growth',sourceRefs:[{id:'issue-1',url:'https://github.com/example/repo/issues/1'}],...overrides});
@@ -116,4 +116,19 @@ test('directory source failure retains the last verified cache and exposes a blo
  const board=await workRecords(c.db,{items:[],directorySource:{status:'unavailable'}});
  assert.equal(board.items[0].title,'Verified source request');assert.equal(board.items[0].boardLane,'blocked');assert.ok(board.directorySource.lastSuccessfulCheckAt);
  assert.equal((await cacheNativeSources(c.db,{items:[],directorySource:{status:'unavailable'}})).saved,false);
+});
+test('approval uses authoritative handled dependencies and rejects already-published linked drafts',async()=>{
+ const c=fixture();c.sql.exec("INSERT INTO gmail_threads(thread_id,last_message_id,sender,subject,preview,state,last_message_at,seen_sync_id) VALUES('native-thread','message-1','sender','subject','preview','needs_review','2026-10-24','sync-1')");
+ await c.call('prepare',{id:'reviewed-conversation',source:'gmail',sourceId:'native-thread',expectedVersion:0,document:doc({preparation:'in_progress'})});
+ const item=await ready(c,'dependent-reply',{dependencies:['reviewed-conversation']});
+ const loadBoard=()=>workRecords(c.db,{items:[{id:'gmail-native-thread',source:'gmail',state:'handled',channel:'Email'}]});
+ assert.equal((await loadBoard()).items.find(i=>i.id===item.id).canApprove,true);
+ assert.equal((await c.call('feedback',{id:item.id,expectedVersion:item.version,revision:item.snapshotRevision,requestId:'native-dependency-approval',action:'approve',note:''},owner,loadBoard)).status,200);
+ c.sql.exec("INSERT INTO campaign_items(id,channel,title,detail,review_url,state,evidence,sort_order) VALUES('published-post','Facebook','Post','Copy','https://example.com/post','published','Receipt',1)");
+ await c.call('prepare',{id:'published-work',source:'campaign',sourceId:'published-post',expectedVersion:0,document:doc()});
+ const snap=snapshot();await c.call('reconcile',{id:'published-work',expectedVersion:1,sourceRevision:snap.sourceRevision,checkedAt:snap.checkedAt,nativeState:'draft',snapshot:snap});
+ await c.call('source-health',{source:'campaign',expectedVersion:0,status:'current',checkedAt:snap.checkedAt,evidenceUrl:'https://example.com/post',detail:'Native evidence',maxAgeMinutes:120});
+ const publishedBoard=()=>workRecords(c.db,{items:[{id:'published-post',source:'campaign',state:'published',channel:'Facebook'}]});
+ const published=(await publishedBoard()).items.find(i=>i.id==='published-work');
+ assert.equal((await c.call('feedback',{id:published.id,expectedVersion:published.version,revision:published.snapshotRevision,requestId:'stale-publication-approval',action:'approve',note:''},owner,publishedBoard)).status,409);
 });

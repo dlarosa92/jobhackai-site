@@ -98,7 +98,7 @@ async function reconcile(db,input,now) {
   const results=await db.batch(statements);if(results[0].meta?.changes!==1)fail('Item changed.',409);
   return get(db,id);
 }
-async function decision(db,input,now) {
+async function decision(db,input,now,loadBoard) {
   const id=key(input.id),requestId=key(input.requestId),note=text(input.note || '',4000,input.action==='changes');
   const existing=await db.prepare('SELECT * FROM work_decisions WHERE id=?').bind(requestId).first();
   if(existing){if(existing.item_id===id&&existing.revision===input.revision&&existing.action===input.action&&existing.note===note)return {saved:true};fail('Request ID already used.',409);}
@@ -106,13 +106,10 @@ async function decision(db,input,now) {
   if(!row || row.version!==expected(input.expectedVersion) || !row.snapshot_revision || row.snapshot_revision!==input.revision)fail('The reviewed revision changed.',409);
   if(['outreach','gmail','directory'].includes(row.source))fail('Use the original source review operation.');
   if(!['approve','changes','decline'].includes(input.action))fail('Invalid decision.');
-  const doc=parse(row.document);
   if(input.action==='approve') {
-    if(doc.preparation!=='ready' || row.native_state!=='draft' || Date.now()-Date.parse(row.checked_at)>86400000)fail('This draft needs fresh, complete source checks.',409);
-    const rows=await db.prepare('SELECT id,document,native_state FROM work_items').all();
-    if(doc.dependencies.some(id=>!rows.results.some(r=>r.id===id&&['published','sent','closed'].includes(r.native_state))))fail('A dependency is unfinished.',409);
-    const health=await db.prepare('SELECT * FROM source_health WHERE source=?').bind(row.source).first();
-    if(!health || health.status!=='current'||Date.now()-Date.parse(health.last_success_at)>health.max_age_minutes*60000)fail('Source verification is unavailable or stale.',409);
+    // Native feeds own execution and handled status; the projection also checks freshness and dependencies.
+    const reviewed=(await loadBoard()).items.find(item=>item.workId===row.id);
+    if(!reviewed || reviewed.version!==row.version || !reviewed.canApprove)fail('This draft needs current source checks, completed dependencies and an undecided exact revision.',409);
   }
   const mutation=crypto.randomUUID();
   const result=await db.batch([
@@ -215,7 +212,7 @@ export async function workApi(request,env,identity,loadBoard) {
     if(path==='/api/work-items/reconcile')return reply(await reconcile(db,input,now));
     if(path==='/api/work-items/feedback'){
       if(identity.role!=='owner')return reply({error:'Owner decision required'},403);
-      return reply(await decision(db,input,now));
+      return reply(await decision(db,input,now,loadBoard));
     }
     if(path==='/api/work-items/contribute'){
       const id=key(input.id),version=expected(input.expectedVersion),dept=input.department;

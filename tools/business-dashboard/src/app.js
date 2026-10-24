@@ -44,7 +44,7 @@ function stateLabel(item) {
   if(item.decision?.action==='changes'||item.feedback?.action==='changes')return 'Changes requested';
   if(item.decision?.action==='decline'||item.feedback?.action==='decline')return 'Declined';
   if(item.preparation==='up_next')return 'Up next';
-  if (item.state === 'approved') return channelName(item) === 'Email' ? 'Approved, not sent' : 'Approved, not scheduled';
+  if (item.state === 'approved') return 'Approved, awaiting separate release';
   return { pending: item.impact === 'campaign' ? 'Needs your approval' : 'Needs your review', handled: 'Handled', closed: 'Closed in directory source', waiting: 'Waiting for an email reply', sent: 'Email sent', scheduled: 'Post scheduled', published: 'Published', hold: 'Not ready for approval' }[item.state] || item.state;
 }
 function plainEmailText(value) {
