@@ -193,7 +193,7 @@ export async function workRecords(db, base, now=new Date()) {
 function completedWork(item) {
   return ['sent','published','closed','handled'].includes(item.state) ||
     (['operations','github','analytics'].includes(item.source) && item.preparation==='complete' &&
-      !item.blocker && !item.staleSource && !item.unfinishedDependencies?.length);
+      !item.blocker && !item.staleSource && (!item.sourceHealth || item.sourceHealth.status==='current') && !item.unfinishedDependencies?.length);
 }
 export function boardLane(item) {
   if(item.staleSource)return 'blocked';

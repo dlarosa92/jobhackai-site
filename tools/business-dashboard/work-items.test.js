@@ -163,3 +163,17 @@ test('internal completion cannot bypass prerequisite chains or explicit blockers
  await c.call('prepare',{id:'root',source:'operations',sourceId:'root',expectedVersion:2,document:doc({preparation:'complete'})});
  const board=await c.board();assert.equal(board.items.find(i=>i.id==='middle').boardLane,'completed');assert.equal(board.items.find(i=>i.id==='grandchild').canApprove,true);
 });
+test('unavailable, incomplete and stale internal source health holds dependent approvals',async()=>{
+ const c=fixture();
+ await c.call('prepare',{id:'internal',source:'operations',sourceId:'internal',expectedVersion:0,document:doc({preparation:'complete'})});
+ await ready(c,'dependent',{dependencies:['internal']});
+ let version=0;
+ for(const status of ['unavailable','incomplete','current']){
+  const checkedAt=new Date().toISOString();
+  await c.call('source-health',{source:'operations',expectedVersion:version++,status,checkedAt,evidenceUrl:'https://example.com/operations',detail:'Native status check',maxAgeMinutes:5});
+  if(status==='current')c.sql.exec("UPDATE source_health SET last_success_at='2020-01-01T00:00:00Z' WHERE source='operations'");
+  const board=await c.board();assert.equal(board.items.find(i=>i.id==='internal').boardLane,'blocked');assert.equal(board.items.find(i=>i.id==='dependent').canApprove,false);
+ }
+ await c.call('source-health',{source:'operations',expectedVersion:version,status:'current',checkedAt:new Date().toISOString(),evidenceUrl:'https://example.com/operations',detail:'Recovered native check',maxAgeMinutes:5});
+ assert.equal((await c.board()).items.find(i=>i.id==='dependent').canApprove,true);
+});
