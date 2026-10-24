@@ -152,3 +152,14 @@ test('completed internal preparation satisfies dependencies without fabricating 
  await c.call('prepare',{id:'content',source:'marblism',sourceId:'content',expectedVersion:0,document:doc({preparation:'complete'})});
  assert.notEqual((await c.board()).items.find(i=>i.id==='content').boardLane,'completed');
 });
+test('internal completion cannot bypass prerequisite chains or explicit blockers',async()=>{
+ const c=fixture();
+ await c.call('prepare',{id:'root',source:'operations',sourceId:'root',expectedVersion:0,document:doc({preparation:'in_progress'})});
+ await c.call('prepare',{id:'middle',source:'operations',sourceId:'middle',expectedVersion:0,document:doc({preparation:'complete',dependencies:['root']})});
+ let child=await ready(c,'grandchild',{dependencies:['middle']});
+ assert.equal(child.canApprove,false);assert.equal((await c.board()).items.find(i=>i.id==='middle').boardLane,'blocked');
+ await c.call('prepare',{id:'root',source:'operations',sourceId:'root',expectedVersion:1,document:doc({preparation:'complete',blocker:'Acceptance evidence missing'})});
+ assert.equal((await c.board()).items.find(i=>i.id==='grandchild').canApprove,false);
+ await c.call('prepare',{id:'root',source:'operations',sourceId:'root',expectedVersion:2,document:doc({preparation:'complete'})});
+ const board=await c.board();assert.equal(board.items.find(i=>i.id==='middle').boardLane,'completed');assert.equal(board.items.find(i=>i.id==='grandchild').canApprove,true);
+});
