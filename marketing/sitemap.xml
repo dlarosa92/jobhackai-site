@@ -18,12 +18,18 @@
   <!-- Blog listing -->
   <url>
     <loc>https://jobhackai.io/blog</loc>
-    <lastmod>2026-10-10</lastmod>
+    <lastmod>2026-10-24</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
 
   <!-- Blog posts — add a new <url> block for each post you publish -->
+  <url>
+    <loc>https://jobhackai.io/blog/how-to-prepare-for-a-phone-screen-interview</loc>
+    <lastmod>2026-10-24</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
   <url>
     <loc>https://jobhackai.io/blog/how-to-answer-tell-me-about-yourself</loc>
     <lastmod>2026-09-29</lastmod>
