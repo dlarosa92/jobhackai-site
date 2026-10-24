@@ -87,7 +87,8 @@ async function reconcile(db,input,now) {
   if(row.checked_at && checkedAt<row.checked_at)fail('Older evidence cannot replace newer evidence.',409);
   const snapshot=input.snapshot?snapshotInput(input.snapshot):null;
   if(snapshot && (snapshot.sourceRevision!==sourceRevision || snapshot.checkedAt!==checkedAt))fail('Snapshot and source revisions/times must match.');
-  const revision=snapshot?await snapshotRevision(snapshot):null;
+  // Metadata-only checks retain the exact packet only while its source revision is unchanged.
+  const revision=snapshot?await snapshotRevision(snapshot):row.source_revision===sourceRevision?row.snapshot_revision:null;
   if(row.snapshot_revision===revision && row.source_revision===sourceRevision && row.checked_at===checkedAt && row.native_state===input.nativeState)return row;
   const mutation=crypto.randomUUID();
   const statements=[db.prepare(`UPDATE work_items SET mutation_id=?,snapshot_revision=?,source_revision=?,native_state=?,checked_at=?,updated_at=?,version=version+1
@@ -169,7 +170,7 @@ export async function workRecords(db, base, now=new Date()) {
     dependencies:item.dependencies||[],priority:item.priority??item.sortOrder??1000,
     reason:item.reason||item.nextAction||item.evidence||'Review the source evidence.',
   }));
-  const complete=new Set(items.filter(i=>['sent','published','closed','handled'].includes(i.state)).map(i=>i.id));
+  const complete=new Set(items.filter(completedWork).map(i=>i.id));
   for(const item of items){
     item.unfinishedDependencies=item.dependencies.filter(id=>!complete.has(id));
     item.canApprove=!!item.workId && !['outreach','gmail','directory'].includes(item.source) && !!item.snapshot && item.fresh && item.preparation==='ready' && item.nativeState==='draft' && !item.unfinishedDependencies.length && item.decision?.action!=='approve' && !['changes','decline'].includes(item.decision?.action);
@@ -182,10 +183,14 @@ export async function workRecords(db, base, now=new Date()) {
   const visit=item=>{if(seen.has(item.id)||visiting.has(item.id))return;visiting.add(item.id);for(const id of item.dependencies)if(byId.has(id))visit(byId.get(id));visiting.delete(item.id);seen.add(item.id);ordered.push(item);};items.forEach(visit);
   return {...base,items:ordered,sources:freshness,coordination:runs.results.map(r=>({...r,document:parse(r.document)}))};
 }
+function completedWork(item) {
+  return ['sent','published','closed','handled'].includes(item.state) ||
+    (['operations','github','analytics'].includes(item.source) && item.preparation==='complete');
+}
 export function boardLane(item) {
   if(item.staleSource)return 'blocked';
   if(['sending','uncertain'].includes(item.deliveryState)||item.feedback?.action==='changes'||(item.source==='outreach'&&item.issues?.length&&item.feedback?.action!=='decline'))return 'blocked';
-  if(['handled','closed','sent','published'].includes(item.state)||item.decision?.action==='decline')return 'completed';
+  if(completedWork(item)||item.decision?.action==='decline')return 'completed';
   if(item.unfinishedDependencies?.length||item.preparation==='blocked'||item.blocker||item.state==='waiting'||['sending','uncertain'].includes(item.deliveryState))return 'blocked';
   if(item.source==='gmail'||item.source==='directory')return item.state==='pending'?'ready':'blocked';
   if(item.feedback?.action==='decline')return 'completed';
