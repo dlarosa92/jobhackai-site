@@ -292,7 +292,7 @@ export async function restoreEarlyEndCredit(env, { userRowId, sessionId }) {
            AND EXISTS (SELECT 1 FROM voice_sessions s WHERE s.id = ? AND s.user_id = users.id
              AND s.status = 'completed' AND s.end_reason = 'user_ended' AND s.entitlement_mode = ?
              AND s.started_at IS NOT NULL AND s.ended_at IS NOT NULL
-             AND (julianday(s.ended_at) - julianday(s.started_at)) * 86400 <= ?)`
+             AND (unixepoch(s.ended_at) - unixepoch(s.started_at)) BETWEEN 0 AND ?)`
       ).bind(sessionId, userRowId, sessionId, mode, EARLY_END_GRACE_SECONDS).run();
     }
     const held = await db.prepare(
