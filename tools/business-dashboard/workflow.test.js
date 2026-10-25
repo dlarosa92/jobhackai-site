@@ -56,12 +56,29 @@ test('missing and no-tool runs cannot become healthy, and an independent deadlin
   assert.equal((await c.flow('finish',{id:run.id,outcome:'failed',summary:'Late'},machine,later)).status,409);
 });
 test('fresh source checks do not disguise an untouched preparation backlog',async()=>{
-  const c=fixture();await prepare(c);const run=(await c.flow('start',{workflow:'preparation'})).body;
+  const c=fixture();await prepare(c);
+  await c.work('prepare',{id:'unfinished',source:'marblism',sourceId:'unfinished',expectedVersion:0,document:{...doc,preparation:'in_progress'}});
+  const run=(await c.flow('start',{workflow:'preparation'})).body;
   const next=new Date(c.now.getTime()+1000);await c.work('source-health',{runId:run.id,source:'marblism',expectedVersion:1,status:'current',checkedAt:next.toISOString(),evidenceUrl:proof[0].url,detail:'Native source re-read',maxAgeMinutes:120});
   assert.equal((await c.flow('finish',{id:run.id,outcome:'checked',summary:'Weekend email hold',evidence:proof},machine,next)).status,400);
   assert.equal((await c.flow('finish',{id:run.id,outcome:'blocked',summary:'Needs a short URL',blocker:'Product must deploy the verified redirect',evidence:proof},machine,next)).status,400);
-  const done=await c.flow('finish',{id:run.id,outcome:'blocked',summary:'Draft cannot be finished yet',blocker:'Product must deploy the verified redirect',nextCheckAt:new Date(c.now.getTime()+3600000).toISOString(),evidence:proof},machine,next);
+  const held={id:run.id,outcome:'blocked',summary:'Draft cannot be finished yet',blocker:'Product must deploy the verified redirect',nextCheckAt:new Date(c.now.getTime()+3600000).toISOString(),evidence:proof};
+  const rejected=await c.flow('finish',held,machine,next);assert.equal(rejected.status,400);assert.match(rejected.body.error,/unfinished/);
+  await c.work('prepare',{runId:run.id,id:'unfinished',source:'marblism',sourceId:'unfinished',expectedVersion:1,document:{...doc,preparation:'blocked',blocker:'Required redirect deployment is held for a separate owner release.'}});
+  const done=await c.flow('finish',held,machine,next);
   assert.equal(done.status,200);assert.equal((await workflowStatus(c.db,next)).workflows.find(w=>w.id==='preparation').status,'blocked');
+});
+test('finished owner-review packets do not prevent a verified quiet check or hide independent work',async()=>{
+  const c=fixture();await prepare(c);
+  let response=await workflowApi(new Request('https://dashboard.jobhackai.io/api/workflow'),c.env,machine,c.now,c.board);
+  let status=await response.json();assert.deepEqual(status.preparationQueue,{eligibleCount:0,items:[],awaitingOwner:['post']});
+  const run=(await c.flow('start',{workflow:'preparation'})).body;
+  const next=new Date(c.now.getTime()+1000);
+  await c.work('source-health',{runId:run.id,source:'marblism',expectedVersion:1,status:'current',checkedAt:next.toISOString(),evidenceUrl:proof[0].url,detail:'Native source re-read',maxAgeMinutes:120});
+  assert.equal((await c.flow('finish',{id:run.id,outcome:'checked',summary:'Finished packet awaits owner; no unfinished preparation',evidence:proof},machine,next)).status,200);
+  await c.work('prepare',{id:'independent',source:'marblism',sourceId:'independent',expectedVersion:0,document:{...doc,preparation:'in_progress',nextAction:'Verify the saved source and prepare its packet'}});
+  response=await workflowApi(new Request('https://dashboard.jobhackai.io/api/workflow'),c.env,machine,c.now,c.board);
+  status=await response.json();assert.equal(status.preparationQueue.eligibleCount,1);assert.equal(status.preparationQueue.items[0].id,'independent');assert.deepEqual(status.preparationQueue.awaitingOwner,['post']);
 });
 test('claims are exclusive and requested changes require a fresh complete revised snapshot',async()=>{
   const c=fixture();await decision(c,'changes','Use the verified short link');const run=(await c.flow('start',{workflow:'preparation'})).body;
@@ -82,10 +99,13 @@ test('claims are exclusive and requested changes require a fresh complete revise
 });
 test('a blocked handoff needs a checkpoint and does not delay independent work',async()=>{
   const c=fixture();await decision(c);const run=(await c.flow('start',{workflow:'preparation'})).body;
+  const held={id:run.id,outcome:'blocked',summary:'Waiting for owner',blocker:'Separate release is unavailable',nextCheckAt:new Date(c.now.getTime()+3600000).toISOString(),evidence:proof};
+  assert.equal((await c.flow('finish',held)).status,400);
   await c.flow('handoff',{runId:run.id,decisionId:'owner-decision',expectedVersion:1,action:'claim'});
   const input={runId:run.id,decisionId:'owner-decision',expectedVersion:2,action:'block',summary:'Awaiting current source',blocker:'Browser source unavailable',evidence:proof};
   assert.equal((await c.flow('handoff',input)).status,400);
   assert.equal((await c.flow('handoff',{...input,nextCheckAt:new Date(c.now.getTime()+3600000).toISOString()})).status,200);
+  assert.equal((await c.flow('finish',held)).status,200);
   const item=(await c.board()).items[0];assert.equal(item.boardLane,'blocked');assert.match(item.nextAction,/Browser source unavailable/);
   assert.equal((await workflowStatus(c.db,new Date(c.now.getTime()+3600001))).handoffs[0].overdue,true);
 });

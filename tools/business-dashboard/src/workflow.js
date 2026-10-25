@@ -19,6 +19,16 @@ async function readBody(request) {
 }
 const actor = identity => identity.id || (identity.role==='owner'?'owner':'unknown');
 function canRun(identity,workflow) { return Object.hasOwn(policies,workflow)&&(identity.role==='owner'||identity.capabilities?.includes(policies[workflow])); }
+function preparationWork(board) {
+  return board.items.filter(i=>i.workId&&['up_next','in_progress','ready'].includes(i.preparation)&&
+    i.boardLane!=='ready'&&!i.blocker&&!i.handoff&&!i.unfinishedDependencies?.length&&
+    !['sent','published','closed','scheduled'].includes(i.nativeState)&&!['approve','decline'].includes(i.decision?.action));
+}
+function preparationQueue(board) {
+  const items=preparationWork(board);
+  return {eligibleCount:items.length,items:items.slice(0,20).map(i=>({id:i.id,title:i.title,department:i.department,nextAction:i.nextAction})),
+    awaitingOwner:board.items.filter(i=>i.boardLane==='ready').map(i=>i.id)};
+}
 async function baseline(db) {
   const [items,sources,handoffs,runs]=await Promise.all([
     db.prepare('SELECT id,version,document,snapshot_revision,checked_at,native_state FROM work_items').all(),
@@ -73,10 +83,11 @@ async function finish(db,input,identity,now,loadBoard) {
   const handoffs=(await db.prepare("SELECT * FROM work_handoffs WHERE status IN ('pending','claimed','blocked')").all()).results;
   if(input.outcome==='advanced'&&!result.advancedItems.length&&!result.completedHandoffs.length)fail('No saved work changed. A run cannot claim advancement without an artifact.');
   if(run.workflow!=='coordination'&&['advanced','checked'].includes(input.outcome)&&!result.checkedSources.length&&!result.checkedItems.length)fail('Record fresh source or item checks owned by this run before reporting success.');
-  if(run.workflow==='preparation'&&input.outcome==='checked'){
+  if(run.workflow==='preparation'&&['checked','blocked'].includes(input.outcome)){
     if(!loadBoard)fail('Preparation completion requires the canonical dependency projection.',500);
-    const runnable=(await loadBoard()).items.filter(i=>i.workId&&['up_next','in_progress','ready'].includes(i.preparation)&&!i.blocker&&!i.unfinishedDependencies?.length&&!['sent','published','closed','scheduled'].includes(i.nativeState)&&i.decision?.action!=='decline');
-    if(runnable.length||handoffs.some(h=>h.status!=='blocked'||h.next_check_at<=now))fail('Eligible preparation remains. Advance work or record a specific blocker and checkpoint.');
+    const runnable=preparationWork(await loadBoard());
+    if(runnable.length)fail(`Eligible preparation remains: ${runnable.slice(0,5).map(i=>i.id).join(', ')}. Advance independent work or record its specific verified blocker on that item. Finished packets awaiting owner review do not block other preparation.`);
+    if(handoffs.some(h=>h.status!=='blocked'||h.next_check_at<=now))fail('A decision handoff still needs follow-up. Resolve it or record its specific blocker and checkpoint before closing this run.');
   }
   if(run.workflow==='coordination'&&['advanced','checked'].includes(input.outcome)&&!result.coordination.length)fail('Record the department assessment before completing coordination.');
   const saved=await db.prepare("UPDATE workflow_runs SET status=?,finished_at=?,result=? WHERE id=? AND status='running' AND lease_until>?")
@@ -164,7 +175,11 @@ export async function checkWorkflowDeadlines(env,now=new Date()) {
 export async function workflowApi(request,env,identity,now=new Date(),loadBoard) {
   try {
     const path=new URL(request.url).pathname,db=env.DASHBOARD_DB;
-    if(request.method==='GET'&&path==='/api/workflow')return Response.json(await workflowStatus(db,now),{headers:{'Cache-Control':'no-store'}});
+    if(request.method==='GET'&&path==='/api/workflow'){
+      const status=await workflowStatus(db,now);
+      if(loadBoard)status.preparationQueue=preparationQueue(await loadBoard());
+      return Response.json(status,{headers:{'Cache-Control':'no-store'}});
+    }
     if(request.method!=='POST')fail('Method not allowed.',405);
     const input=await readBody(request),stamp=now.toISOString();let result;
     if(!input||typeof input!=='object'||Array.isArray(input))fail('A JSON object is required.');
