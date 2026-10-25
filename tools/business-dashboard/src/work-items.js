@@ -1,5 +1,5 @@
 import { digest, OWNER } from './outreach-policy.js';
-import { workflowStatus } from './workflow.js';
+import { workflowStatus, verifyRunWrite, recordRunWrite } from './workflow.js';
 
 export const departments = ['marketing', 'sales', 'product'];
 const idPattern = /^[a-z0-9][a-z0-9_-]{0,127}$/;
@@ -226,8 +226,23 @@ export async function workApi(request,env,identity,loadBoard) {
     }
     if(request.method!=='POST')return reply({error:'Method not allowed'},405);
     const input=await body(request);
-    if(path==='/api/work-items/prepare')return reply(await updateItem(db,input,now));
-    if(path==='/api/work-items/reconcile')return reply(await reconcile(db,input,now));
+    const run=await verifyRunWrite(db,input,identity,now);
+    if(path==='/api/work-items/prepare'||path==='/api/work-items/reconcile'){
+      const old=run?await get(db,input.id):null;
+      if(run&&(old?.version||0)!==expected(input.expectedVersion))fail('Item changed before the attributed write.',409);
+      const saved=path.endsWith('/prepare')?await updateItem(db,input,now):await reconcile(db,input,now);
+      if(run&&saved.version!==input.expectedVersion){
+        // The trailing read may already contain another writer's newer version. Attribute only
+        // the fields and version committed by this request's successful compare-and-swap.
+        const preparing=path.endsWith('/prepare');
+        const revision=preparing?null:input.snapshot?await snapshotRevision(snapshotInput(input.snapshot)):old.source_revision===input.sourceRevision?old.snapshot_revision:null;
+        await recordRunWrite(db,run,'item',input.id,input.expectedVersion+1,{
+          advanced:preparing?!old||old.document!==JSON.stringify(documentInput(input.document)):old.snapshot_revision!==revision||old.native_state!==input.nativeState,
+          checked:!preparing&&date(input.checkedAt)>=run.started_at&&date(input.checkedAt)!==old.checked_at,
+        },now);
+      }
+      return reply(saved);
+    }
     if(path==='/api/work-items/feedback'){
       if(identity.role!=='owner')return reply({error:'Owner decision required'},403);
       return reply(await decision(db,input,now,loadBoard));
@@ -255,16 +270,20 @@ export async function workApi(request,env,identity,loadBoard) {
       const success=input.status==='current'?checkedAt:old?.last_success_at||null;
       const args=[input.status,checkedAt,success,url(input.evidenceUrl),text(input.detail),input.maxAgeMinutes,input.requiresMac===true?1:0];
       const result=old?await db.prepare('UPDATE source_health SET status=?,checked_at=?,last_success_at=?,evidence_url=?,detail=?,max_age_minutes=?,requires_mac=?,version=version+1 WHERE source=? AND version=?').bind(...args,input.source,version).run():await db.prepare('INSERT INTO source_health(status,checked_at,last_success_at,evidence_url,detail,max_age_minutes,requires_mac,source,version) VALUES(?,?,?,?,?,?,?,?,1) ON CONFLICT DO NOTHING').bind(...args,input.source).run();
-      if(!result.meta?.changes)fail('Source status changed.',409);return reply({saved:true});
+      if(!result.meta?.changes)fail('Source status changed.',409);
+      await recordRunWrite(db,run,'source',input.source,version+1,{checked:!!run&&checkedAt>=run.started_at&&checkedAt!==old?.checked_at},now);
+      return reply({saved:true});
     }
     if(path==='/api/work-items/coordination'){
       if(identity.role!=='owner'&&!identity.capabilities?.includes('coordinate'))return reply({error:'Coordinator capability required'},403);
+      if(run&&run.workflow!=='coordination')fail('Department assessments belong to the coordination run.',403);
       if(!['hourly','daily','weekly','lesson'].includes(input.cadence))fail('Invalid cadence.');
       const document={assessments:list(input.assessments,3),worked:text(input.worked||'',6000,false),failed:text(input.failed||'',6000,false),adjustments:text(input.adjustments),evidence:list(input.evidence).map(url)};
       if(['daily','weekly'].includes(input.cadence)&&(!departments.every(d=>document.assessments.some(a=>a.department===d&&typeof a.summary==='string'&&a.summary.trim()))||document.assessments.length!==3))fail('All three department assessments are required.');
       const id=key(input.id),period=text(input.period,100);
       const result=await db.prepare('INSERT INTO coordination_runs(id,cadence,period,document,created_at) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING').bind(id,input.cadence,period,JSON.stringify(document),now).run();
       if(!result.meta?.changes){const old=await db.prepare('SELECT document FROM coordination_runs WHERE cadence=? AND period=?').bind(input.cadence,period).first();if(old?.document!==JSON.stringify(document))fail('This coordination period already has a different record.',409);}
+      else await recordRunWrite(db,run,'coordination',id,1,{cadence:input.cadence,period},now);
       return reply({saved:true});
     }
     return reply({error:'Not found'},404);
