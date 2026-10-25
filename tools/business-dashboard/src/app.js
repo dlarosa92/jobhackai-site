@@ -128,6 +128,7 @@ function renderCampaigns(data) {
     board.append(lane);
   }
   $('campaign-checked').textContent=`Board loaded ${time(data.asOf)} ET. Source verification times are shown separately.`;
+  renderWorkflow(data.workflow,data.analytics);
   const sync=data.gmailSync||{status:'not_connected'};
   $('gmail-sync').textContent=sync.lastSuccessfulSyncAt?`Gmail last synced ${time(sync.lastSuccessfulSyncAt)} ET · ${sync.trackedCount} conversations · ${sync.status}.`:'Gmail has no successful sync timestamp.';
   $('gmail-sync').className=`sync-status${sync.status==='current'?'':' stale'}`;
@@ -148,6 +149,29 @@ function renderCampaigns(data) {
   if(openItemId){const current=data.items.find(i=>i.id===openItemId);if(current)openReview(current,lastReviewTrigger,true);else closeReview();}
 }
 function closeReview(){openItemId=null;$('review-dialog').close();lastReviewTrigger?.focus();}
+function renderWorkflow(workflow,analytics){
+  const alerts=$('workflow-alerts'),runs=$('workflow-runs');alerts.replaceChildren();runs.replaceChildren();
+  $('workflow-summary').textContent=!workflow?'Execution receipts unavailable':workflow.alerts.length?`${workflow.alerts.length} ${workflow.alerts.length===1?'follow-up needs':'follow-ups need'} attention`:'No overdue checks or handoffs';
+  for(const alert of workflow?.alerts||[])alerts.append(element('p',alert.detail,'caution'));
+  for(const run of workflow?.workflows||[]){
+    const card=element('div',undefined,'workflow-run');card.append(element('strong',run.label),element('p',run.status,'state-label'));
+    card.append(element('p',run.lastSuccessAt?`Last completed check: ${time(run.lastSuccessAt)} ET`:'No completed run receipt yet.','evidence'));
+    if(run.lastRun?.result)card.append(element('p',run.lastRun.result.summary));
+    if(run.lastRun?.result?.nextCheckAt)card.append(element('p',`Next checkpoint: ${time(run.lastRun.result.nextCheckAt)} ET`,'next-action'));
+    runs.append(card);
+  }
+  const report=analytics?.report,content=$('analytics-report');content.replaceChildren();
+  $('analytics-status').textContent=report?`${analytics.status} · ${report.startDate} to ${report.endDate}`:'No verified report imported';
+  if(!report){content.append(element('p','The dashboard has no current GA4 report. This does not mean events stopped collecting.','caution'));return;}
+  content.append(element('p',`Rolling 28 days · source checked ${time(report.checkedAt)} ET. ${analytics.detail}`,'evidence'));
+  const table=element('table',undefined,'measurement-table'),head=element('tr');for(const title of ['Collected event','Events','Reported users'])head.append(element('th',title));table.append(head);
+  const names=['session_start','sign_up','voice_session_start','voice_session_complete','begin_checkout','purchase','refund','partner_kit_action','directory_contact_click'];
+  for(const name of names){const event=report.events.find(e=>e.name===name),row=element('tr');row.append(element('td',name.replaceAll('_',' ')),element('td',event?String(event.count):'Not observed'),element('td',event?String(event.users):'Unverified'));table.append(row);}
+  content.append(table);
+  const gaps=Object.entries(report.coverage).filter(([,value])=>!value).map(([key])=>({internalTrafficExcluded:'staff/QA exclusions',attributionVerified:'signup and checkout attribution',purchasesReconciled:'collected purchase reconciliation',campaignBreakdownComplete:'complete campaign breakdown',kitActionBreakdownComplete:'kit action breakdown'}[key]));
+  if(gaps.length)content.append(element('p',`Still unverified: ${gaps.join('; ')}.`,'caution'));
+  content.append(element('p',report.notes));const link=safeLink(report.sourceUrl,'Open the source report ↗');if(link)content.append(link);
+}
 function openReview(item,trigger,refreshing=false){
   openItemId=item.id;if(trigger)lastReviewTrigger=trigger;
   $('review-title').textContent=item.title;
@@ -178,6 +202,7 @@ function openReview(item,trigger,refreshing=false){
   if(item.sourceEvidence){content.append(element('p',item.sourceEvidence.fitFact));const link=safeLink(item.sourceEvidence.sourceUrl,'First-party contact evidence ↗');if(link)content.append(link);}
   const sourceLink=safeLink(item.reviewUrl,'Open original source ↗');if(sourceLink)content.append(sourceLink);
   if(item.decision)content.append(element('p',`Your decision: ${item.decision.action}${item.decision.note?` · ${item.decision.note}`:''} · ${time(item.decision.created_at)} ET`));
+  if(item.handoff)content.append(element('p',`Follow-up: ${item.handoff.status}. ${item.handoff.nextAction} Due ${time(item.handoff.due_at)} ET.`,item.handoff.overdue?'caution':'next-action'));
   const actions=$('review-actions');actions.replaceChildren();
   const notificationId=item.sourceItemId||item.id;
   if(['gmail','directory'].includes(item.source)&&item.notificationRevision){
