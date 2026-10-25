@@ -123,10 +123,16 @@ async function completeRequest(context) {
     // impossible to audit or count.
     const endReason = normalizeEndReason(body.reason);
 
+    // The first authenticated End intent is the server-owned end time.
+    // Transcript collection, hangup and save retries must not consume grace.
     const completion = await db.prepare(
       `UPDATE voice_sessions SET
          status = 'completed',
-         ended_at = datetime('now'),
+         ended_at = ${managed ? `COALESCE(
+           (SELECT c.closed_at FROM voice_interview_controls c
+            JOIN users u ON u.auth_id=c.auth_id
+            WHERE c.session_id=voice_sessions.id AND u.id=voice_sessions.user_id),
+           datetime('now'))` : "datetime('now')"},
          end_reason = ?,
          duration_seconds = ?,
          transcript_json = ?,
