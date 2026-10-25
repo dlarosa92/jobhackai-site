@@ -229,11 +229,18 @@ export async function workApi(request,env,identity,loadBoard) {
     const run=await verifyRunWrite(db,input,identity,now);
     if(path==='/api/work-items/prepare'||path==='/api/work-items/reconcile'){
       const old=run?await get(db,input.id):null;
+      if(run&&(old?.version||0)!==expected(input.expectedVersion))fail('Item changed before the attributed write.',409);
       const saved=path.endsWith('/prepare')?await updateItem(db,input,now):await reconcile(db,input,now);
-      if(run&&saved.version!==old?.version)await recordRunWrite(db,run,'item',saved.id,saved.version,{
-        advanced:!old||old.document!==saved.document||old.snapshot_revision!==saved.snapshot_revision||old.native_state!==saved.native_state,
-        checked:!!saved.checked_at&&saved.checked_at>=run.started_at&&saved.checked_at!==old?.checked_at,
-      },now);
+      if(run&&saved.version!==input.expectedVersion){
+        // The trailing read may already contain another writer's newer version. Attribute only
+        // the fields and version committed by this request's successful compare-and-swap.
+        const preparing=path.endsWith('/prepare');
+        const revision=preparing?null:input.snapshot?await snapshotRevision(snapshotInput(input.snapshot)):old.source_revision===input.sourceRevision?old.snapshot_revision:null;
+        await recordRunWrite(db,run,'item',input.id,input.expectedVersion+1,{
+          advanced:preparing?!old||old.document!==JSON.stringify(documentInput(input.document)):old.snapshot_revision!==revision||old.native_state!==input.nativeState,
+          checked:!preparing&&date(input.checkedAt)>=run.started_at&&date(input.checkedAt)!==old.checked_at,
+        },now);
+      }
       return reply(saved);
     }
     if(path==='/api/work-items/feedback'){
