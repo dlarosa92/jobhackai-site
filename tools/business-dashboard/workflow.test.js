@@ -145,3 +145,21 @@ test('completed dependency chains do not hide eligible preparation work',async()
   await c.work('prepare',{runId:run.id,id:item.id,source:item.source,sourceId:item.sourceId,expectedVersion:item.version,document:{...doc,dependencies:['middle'],preparation:'blocked',blocker:'Saved draft needs the verified media asset'}});
   assert.equal((await c.flow('finish',{id:run.id,outcome:'checked',summary:'Independent checks complete; remaining media blocker is recorded',evidence:proof})).status,200);
 });
+
+test('a later concurrent item write cannot contaminate the first mutation receipt',async()=>{
+  const c=fixture(),initial={...doc,preparation:'in_progress'};
+  await c.work('prepare',{id:'racing',source:'operations',sourceId:'racing',expectedVersion:0,document:initial});
+  const run=(await c.flow('start',{workflow:'preparation'})).body;
+  const original=c.db.prepare.bind(c.db);let reads=0;
+  c.db.prepare=query=>{const statement=original(query);if(query==='SELECT * FROM work_items WHERE id=?'){
+    const first=statement.first.bind(statement);statement.first=async()=>{
+      if(++reads===2)c.sql.prepare('UPDATE work_items SET document=?,checked_at=?,version=version+1 WHERE id=?').run(JSON.stringify({...initial,title:'Another run changed this'}),new Date(c.now.getTime()+1000).toISOString(),'racing');
+      return first();
+    };
+  }return statement;};
+  const result=await c.work('prepare',{runId:run.id,id:'racing',source:'operations',sourceId:'racing',expectedVersion:1,document:initial});
+  assert.equal(result.status,200);assert.equal(result.body.version,3,'Shared read observes the racing writer');
+  const receipt=c.sql.prepare('SELECT version,result FROM workflow_run_writes WHERE run_id=?').get(run.id);
+  assert.equal(receipt.version,2);assert.deepEqual(JSON.parse(receipt.result),{advanced:false,checked:false});
+  assert.equal((await c.flow('finish',{id:run.id,outcome:'advanced',summary:'Must not borrow the later write',evidence:proof})).status,400);
+});
