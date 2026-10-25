@@ -91,6 +91,16 @@ test('finished owner-review packets do not prevent a verified quiet check or hid
   const c=fixture();await prepare(c);
   let response=await workflowApi(new Request('https://dashboard.jobhackai.io/api/workflow'),c.env,machine,c.now,c.board);
   let status=await response.json();assert.deepEqual(status.preparationQueue,{eligibleCount:0,items:[],awaitingOwner:['post']});
+  const withNotifications=()=>workRecords(c.db,{items:[
+    {id:'gmail-new',source:'gmail',title:'Unread reply',state:'pending'},
+    {id:'directory-new',source:'directory',title:'New listing request',state:'pending'},
+    {id:'outreach-draft',source:'outreach',outreachId:'draft',title:'Prepared email',state:'pending',deliveryState:'review',issues:[],approved:false},
+    {id:'outreach-approved',source:'outreach',outreachId:'approved',title:'Approved email awaiting separate release',state:'approved',deliveryState:'review',issues:[],approved:true},
+    {id:'outreach-held',source:'outreach',outreachId:'held',title:'Email with unresolved checks',state:'hold',deliveryState:'review',issues:['Verify current routing'],approved:false},
+  ]},c.now);
+  assert.equal((await withNotifications()).items.filter(i=>i.boardLane==='ready').length,5);
+  response=await workflowApi(new Request('https://dashboard.jobhackai.io/api/workflow'),c.env,machine,c.now,withNotifications);
+  assert.deepEqual((await response.json()).preparationQueue.awaitingOwner,['outreach-approved','outreach-draft','post']);
   const run=(await c.flow('start',{workflow:'preparation'})).body;
   const next=new Date(c.now.getTime()+1000);
   await c.work('source-health',{runId:run.id,source:'marblism',expectedVersion:1,status:'current',checkedAt:next.toISOString(),evidenceUrl:proof[0].url,detail:'Native source re-read',maxAgeMinutes:120});
