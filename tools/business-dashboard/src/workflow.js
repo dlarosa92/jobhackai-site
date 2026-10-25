@@ -28,7 +28,7 @@ function preparationWork(board) {
 function preparationQueue(board) {
   const items=preparationWork(board);
   return {eligibleCount:items.length,items:items.slice(0,20).map(i=>({id:i.id,title:i.title,department:i.department,nextAction:i.nextAction})),
-    awaitingOwner:board.items.filter(i=>i.boardLane==='ready').map(i=>i.id)};
+    awaitingOwner:board.items.filter(i=>i.boardLane==='ready'&&!['gmail','directory'].includes(i.source)).map(i=>i.id)};
 }
 async function baseline(db) {
   const [items,sources,handoffs,runs]=await Promise.all([
