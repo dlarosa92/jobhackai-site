@@ -134,7 +134,7 @@ export default {
       if(request.method!=='GET' && (request.headers.get('content-type')?.split(';')[0]!=='application/json' || (identity.role==='owner' && request.headers.get('origin')!==url.origin)))return json({error:'Invalid request origin or type'},403);
       if(request.method==='GET'&&url.pathname==='/api/session')return json({role:identity.role,capabilities:identity.capabilities||[]});
       if(request.method==='GET'&&url.pathname==='/api/operating-guide')return json({version:'2026-10-25',text:GUIDE});
-      if(url.pathname==='/api/workflow'||url.pathname.startsWith('/api/workflow/'))return workflowApi(request,env,identity);
+      if(url.pathname==='/api/workflow'||url.pathname.startsWith('/api/workflow/'))return workflowApi(request,env,identity,new Date(),async()=>workRecords(env.DASHBOARD_DB,await campaignRecords(env)));
       if(url.pathname==='/api/analytics')return analyticsApi(request,env);
       if(request.method==='POST'&&url.pathname==='/api/work-items/capture-native')return json(await cacheNativeSources(env.DASHBOARD_DB,await campaignRecords(env)));
       if(url.pathname==='/api/work-items'||url.pathname.startsWith('/api/work-items/'))return workApi(request,env,identity,async()=>{

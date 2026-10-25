@@ -48,24 +48,36 @@ async function activeRun(db,id,identity,now) {
   if(run.status!=='running'||run.lease_until<=now)fail('Run finished or expired. Start the next scheduled period.',409);
   return run;
 }
-async function finish(db,input,identity,now) {
+export async function verifyRunWrite(db,input,identity,now) {
+  return input.runId ? activeRun(db,input.runId,identity,now) : null;
+}
+export async function recordRunWrite(db,run,kind,reference,version,result,now) {
+  if(!run)return;
+  const saved=await db.prepare(`INSERT INTO workflow_run_writes(run_id,kind,reference,version,result,recorded_at)
+    SELECT id,?,?,?,?,? FROM workflow_runs WHERE id=? AND status='running' AND lease_until>? ON CONFLICT DO NOTHING`)
+    .bind(kind,reference,version,JSON.stringify(result),now,run.id,now).run();
+  if(!saved.meta?.changes)fail('The write completed but its run receipt changed. Reload workflow status.',409);
+}
+async function finish(db,input,identity,now,loadBoard) {
   const run=await activeRun(db,input.id,identity,now);
   if(!['advanced','checked','blocked','failed'].includes(input.outcome))fail('Invalid run outcome.');
   const result={summary:text(input.summary),evidence:input.outcome==='failed'?[]:evidence(input.evidence)};
   if(input.outcome==='blocked'){result.blocker=text(input.blocker);result.nextCheckAt=future(input.nextCheckAt,now);}
-  const before=parse(run.baseline),after=await baseline(db),byId=new Map(before.items.map(i=>[i.id,i]));
-  result.advancedItems=after.items.filter(i=>{
-    const prior=byId.get(i.id);return !prior||prior.document!==i.document||prior.snapshot_revision!==i.snapshot_revision||prior.native_state!==i.native_state;
-  }).map(i=>i.id);
-  result.checkedSources=after.sources.filter(s=>s.checked_at>=run.started_at&&s.version!==(before.sources.find(b=>b.source===s.source)?.version||0)).map(s=>s.source);
-  result.checkedItems=after.items.filter(i=>i.checked_at>=run.started_at&&i.checked_at!==byId.get(i.id)?.checked_at).map(i=>i.id);
-  result.coordination=after.coordination.filter(id=>!before.coordination.includes(id));
+  const writes=(await db.prepare('SELECT kind,reference,result FROM workflow_run_writes WHERE run_id=?').bind(run.id).all()).results.map(w=>({...w,result:parse(w.result)}));
+  const refs=(kind,predicate)=>[...new Set(writes.filter(w=>w.kind===kind&&predicate(w.result)).map(w=>w.reference))];
+  result.advancedItems=refs('item',r=>r.advanced);
+  result.checkedSources=refs('source',r=>r.checked);
+  result.checkedItems=refs('item',r=>r.checked);
+  result.coordination=refs('coordination',r=>r.cadence==='daily'&&r.period===run.period);
   result.completedHandoffs=(await db.prepare("SELECT decision_id FROM work_handoffs WHERE claimed_by=? AND status='completed' AND updated_at>=?").bind(run.id,run.started_at).all()).results.map(h=>h.decision_id);
   const handoffs=(await db.prepare("SELECT * FROM work_handoffs WHERE status IN ('pending','claimed','blocked')").all()).results;
-  const runnable=after.items.filter(i=>{const d=parse(i.document);return ['up_next','in_progress','ready'].includes(d.preparation)&&!d.blocker&&!d.dependencies?.length&&!['sent','published','closed','scheduled'].includes(i.native_state);});
   if(input.outcome==='advanced'&&!result.advancedItems.length&&!result.completedHandoffs.length)fail('No saved work changed. A run cannot claim advancement without an artifact.');
-  if(['advanced','checked'].includes(input.outcome)&&!result.checkedSources.length&&!result.checkedItems.length&&!result.coordination.length)fail('Record fresh source checks or a completed coordination review before reporting success.');
-  if(run.workflow==='preparation'&&input.outcome==='checked'&&(runnable.length||handoffs.some(h=>h.status!=='blocked'||h.next_check_at<=now)))fail('Eligible preparation remains. Advance work or record a specific blocker and checkpoint.');
+  if(run.workflow!=='coordination'&&['advanced','checked'].includes(input.outcome)&&!result.checkedSources.length&&!result.checkedItems.length)fail('Record fresh source or item checks owned by this run before reporting success.');
+  if(run.workflow==='preparation'&&input.outcome==='checked'){
+    if(!loadBoard)fail('Preparation completion requires the canonical dependency projection.',500);
+    const runnable=(await loadBoard()).items.filter(i=>i.workId&&['up_next','in_progress','ready'].includes(i.preparation)&&!i.blocker&&!i.unfinishedDependencies?.length&&!['sent','published','closed','scheduled'].includes(i.nativeState)&&i.decision?.action!=='decline');
+    if(runnable.length||handoffs.some(h=>h.status!=='blocked'||h.next_check_at<=now))fail('Eligible preparation remains. Advance work or record a specific blocker and checkpoint.');
+  }
   if(run.workflow==='coordination'&&['advanced','checked'].includes(input.outcome)&&!result.coordination.length)fail('Record the department assessment before completing coordination.');
   const saved=await db.prepare("UPDATE workflow_runs SET status=?,finished_at=?,result=? WHERE id=? AND status='running' AND lease_until>?")
     .bind(input.outcome,now,JSON.stringify(result),run.id,now).run();
@@ -149,7 +161,7 @@ export async function checkWorkflowDeadlines(env,now=new Date()) {
   console.log(JSON.stringify({event:'workflow_deadlines_checked',checkedAt:stamp,alerts:ids}));
   return status;
 }
-export async function workflowApi(request,env,identity,now=new Date()) {
+export async function workflowApi(request,env,identity,now=new Date(),loadBoard) {
   try {
     const path=new URL(request.url).pathname,db=env.DASHBOARD_DB;
     if(request.method==='GET'&&path==='/api/workflow')return Response.json(await workflowStatus(db,now),{headers:{'Cache-Control':'no-store'}});
@@ -157,7 +169,7 @@ export async function workflowApi(request,env,identity,now=new Date()) {
     const input=await readBody(request),stamp=now.toISOString();let result;
     if(!input||typeof input!=='object'||Array.isArray(input))fail('A JSON object is required.');
     if(path==='/api/workflow/start')result=await start(db,input,identity,stamp);
-    else if(path==='/api/workflow/finish')result=await finish(db,input,identity,stamp);
+    else if(path==='/api/workflow/finish')result=await finish(db,input,identity,stamp,loadBoard);
     else if(path==='/api/workflow/handoff')result=await handoff(db,input,identity,stamp);
     else fail('Not found.',404);
     return Response.json(result,{headers:{'Cache-Control':'no-store'}});

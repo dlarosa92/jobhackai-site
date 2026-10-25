@@ -15,9 +15,9 @@ function fixture(){
   const db={prepare(query){return {args:[],bind(...args){this.args=args;return this;},async first(){return sql.prepare(query).get(...this.args)||null;},async all(){return {results:sql.prepare(query).all(...this.args)};},async run(){return {meta:{changes:sql.prepare(query).run(...this.args).changes}};},query};},async batch(statements){sql.exec('BEGIN');try{const values=statements.map(s=>({meta:{changes:sql.prepare(s.query).run(...s.args).changes}}));sql.exec('COMMIT');return values;}catch(error){sql.exec('ROLLBACK');throw error;}}};
   const env={DASHBOARD_DB:db},now=new Date();
   const request=(path,input)=>new Request(`https://dashboard.jobhackai.io${path}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)});
-  const flow=async(path,input,identity=machine,time=now)=>{const response=await workflowApi(request(`/api/workflow/${path}`,input),env,identity,time);return {status:response.status,body:await response.json()};};
+  const flow=async(path,input,identity=machine,time=now)=>{const response=await workflowApi(request(`/api/workflow/${path}`,input),env,identity,time,board);return {status:response.status,body:await response.json()};};
   const board=()=>workRecords(db,{items:[]},now);
-  const work=async(path,input)=>{const response=await workApi(request(`/api/work-items/${path}`,input),env,owner,board);return {status:response.status,body:await response.json()};};
+  const work=async(path,input,identity=input.runId?machine:owner)=>{const response=await workApi(request(`/api/work-items/${path}`,input),env,identity,board);return {status:response.status,body:await response.json()};};
   return {sql,db,env,flow,work,board,now,request};
 }
 const doc={title:'Move-out worksheet post',department:'marketing',product:'local',preparation:'ready',channel:'Facebook',contributors:[],expectedValue:'Useful move-out comparison guidance',effort:'Small',dependencies:[],nextAction:'Review the exact copy',completionCriteria:'Complete verified packet',reason:'Existing campaign continuation',sourceRefs:[{id:'saved-post',url:'https://example.com/saved-draft'}]};
@@ -57,7 +57,7 @@ test('missing and no-tool runs cannot become healthy, and an independent deadlin
 });
 test('fresh source checks do not disguise an untouched preparation backlog',async()=>{
   const c=fixture();await prepare(c);const run=(await c.flow('start',{workflow:'preparation'})).body;
-  const next=new Date(c.now.getTime()+1000);await c.work('source-health',{source:'marblism',expectedVersion:1,status:'current',checkedAt:next.toISOString(),evidenceUrl:proof[0].url,detail:'Native source re-read',maxAgeMinutes:120});
+  const next=new Date(c.now.getTime()+1000);await c.work('source-health',{runId:run.id,source:'marblism',expectedVersion:1,status:'current',checkedAt:next.toISOString(),evidenceUrl:proof[0].url,detail:'Native source re-read',maxAgeMinutes:120});
   assert.equal((await c.flow('finish',{id:run.id,outcome:'checked',summary:'Weekend email hold',evidence:proof},machine,next)).status,400);
   assert.equal((await c.flow('finish',{id:run.id,outcome:'blocked',summary:'Needs a short URL',blocker:'Product must deploy the verified redirect',evidence:proof},machine,next)).status,400);
   const done=await c.flow('finish',{id:run.id,outcome:'blocked',summary:'Draft cannot be finished yet',blocker:'Product must deploy the verified redirect',nextCheckAt:new Date(c.now.getTime()+3600000).toISOString(),evidence:proof},machine,next);
@@ -71,7 +71,7 @@ test('claims are exclusive and requested changes require a fresh complete revise
   const complete={runId:run.id,decisionId:'owner-decision',expectedVersion:2,action:'complete',resolution:'revised',summary:'Saved and verified the new full packet',evidence:proof};
   assert.equal((await c.flow('handoff',complete)).status,400);
   const item=(await c.board()).items[0],next=snap(new Date(c.now.getTime()+1000),'source-2');
-  await c.work('reconcile',{id:item.id,expectedVersion:item.version,sourceRevision:next.sourceRevision,checkedAt:next.checkedAt,nativeState:'draft',snapshot:next});
+  await c.work('reconcile',{runId:run.id,id:item.id,expectedVersion:item.version,sourceRevision:next.sourceRevision,checkedAt:next.checkedAt,nativeState:'draft',snapshot:next});
   assert.equal((await c.board()).items[0].canApprove,false);
   assert.equal((await c.flow('handoff',complete)).status,200);
   assert.equal((await c.board()).items[0].canApprove,true);
@@ -108,4 +108,40 @@ test('analytics rejects frozen dates, preserves unknown coverage, and ages indep
   let current=await analyticsReport(c.db,now);assert.equal(current.status,'current');assert.equal(current.report.coverage.attributionVerified,false);
   assert.equal((await analyticsApi(c.request('/api/analytics',{...report(now),events:[{name:'partner_kit_action',count:7,users:1}]}),c.env,now)).status,409);
   current=await analyticsReport(c.db,new Date('2026-10-26T14:00:00Z'));assert.equal(current.status,'stale');assert.equal(current.report.events[0].count,6);
+});
+
+test('overlapping workflows cannot borrow source checks, artifacts or coordination',async()=>{
+  const c=fixture();
+  const prep=(await c.flow('start',{workflow:'preparation'})).body;
+  const recon=(await c.flow('start',{workflow:'reconciliation'})).body;
+  const coord=(await c.flow('start',{workflow:'coordination'})).body;
+  const assessment={runId:coord.id,id:'daily-own',cadence:'daily',period:coord.period,assessments:['marketing','sales','product'].map(department=>({department,summary:'Checked current department evidence'})),adjustments:'Retain actual priorities',evidence:[proof[0].url]};
+  assert.equal((await c.work('coordination',assessment)).status,200);
+  for(const run of [prep,recon]){
+    const finished=await c.flow('finish',{id:run.id,outcome:'checked',summary:'Borrowed another workflow check',evidence:proof});
+    assert.equal(finished.status,400);assert.match(finished.body.error,/owned by this run/);
+  }
+  assert.equal((await c.work('prepare',{runId:prep.id,id:'own-item',source:'operations',sourceId:'own-item',expectedVersion:0,document:{...doc,preparation:'complete'}})).status,200);
+  const check={source:'operations',expectedVersion:0,status:'current',checkedAt:new Date().toISOString(),evidenceUrl:proof[0].url,detail:'Independent source check',maxAgeMinutes:120};
+  assert.equal((await c.work('source-health',{...check,runId:recon.id},{...machine,id:'foreign.access'})).status,403);
+  assert.equal(c.sql.prepare('SELECT COUNT(*) n FROM source_health').get().n,0);
+  assert.equal((await c.work('source-health',{...check,runId:recon.id})).status,200);
+  assert.equal((await c.flow('finish',{id:prep.id,outcome:'advanced',summary:'Changed own artifact but borrowed reconciliation check',evidence:proof})).status,400);
+  assert.equal((await c.flow('finish',{id:recon.id,outcome:'advanced',summary:'Borrowed preparation artifact',evidence:proof})).status,400);
+  assert.equal((await c.flow('finish',{id:recon.id,outcome:'checked',summary:'Own current source check',evidence:proof})).status,200);
+  assert.equal((await c.flow('finish',{id:coord.id,outcome:'checked',summary:'Own completed daily review',evidence:proof})).status,200);
+});
+test('completed dependency chains do not hide eligible preparation work',async()=>{
+  const c=fixture();
+  await c.work('prepare',{id:'prerequisite',source:'operations',sourceId:'prerequisite',expectedVersion:0,document:{...doc,preparation:'complete'}});
+  await c.work('prepare',{id:'middle',source:'operations',sourceId:'middle',expectedVersion:0,document:{...doc,preparation:'complete',dependencies:['prerequisite']}});
+  await c.work('prepare',{id:'dependent',source:'marblism',sourceId:'dependent',expectedVersion:0,document:{...doc,dependencies:['middle']}});
+  const run=(await c.flow('start',{workflow:'preparation'})).body;
+  assert.equal((await c.work('source-health',{runId:run.id,source:'marblism',expectedVersion:0,status:'current',checkedAt:new Date().toISOString(),evidenceUrl:proof[0].url,detail:'Saved source checked',maxAgeMinutes:120})).status,200);
+  assert.deepEqual((await c.board()).items.find(i=>i.id==='dependent').unfinishedDependencies,[]);
+  const rejected=await c.flow('finish',{id:run.id,outcome:'checked',summary:'Freshness only despite eligible dependent',evidence:proof});
+  assert.equal(rejected.status,400);assert.match(rejected.body.error,/Eligible preparation remains/);
+  const item=(await c.board()).items.find(i=>i.id==='dependent');
+  await c.work('prepare',{runId:run.id,id:item.id,source:item.source,sourceId:item.sourceId,expectedVersion:item.version,document:{...doc,dependencies:['middle'],preparation:'blocked',blocker:'Saved draft needs the verified media asset'}});
+  assert.equal((await c.flow('finish',{id:run.id,outcome:'checked',summary:'Independent checks complete; remaining media blocker is recorded',evidence:proof})).status,200);
 });
