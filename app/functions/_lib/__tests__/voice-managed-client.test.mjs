@@ -383,3 +383,23 @@ test('cancelled paraphrased greeting does not authorize pre-interview speech',as
   assert.match(h.el('vi-your-answer').textContent,/checking my microphone/);
   await h.endInterview();assert.equal(h.completeBodies()[0].transcript.length,0);
 });
+
+for (const result of ['', '   ', null]) {
+  test('empty or failed transcription clears its partial caption: '+JSON.stringify(result),async t=>{
+    const f=fixture(t);await f.start();await f.h.openDataChannel();const h=f.h;
+    h.event({type:'input_audio_buffer.speech_started',item_id:'noise'});
+    h.event({type:'conversation.item.input_audio_transcription.delta',item_id:'noise',delta:'unfinished words'});
+    h.event({type:'input_audio_buffer.speech_stopped',item_id:'noise'});
+    h.event({type:'conversation.item.input_audio_transcription.'+(result===null?'failed':'completed'),item_id:'noise',transcript:result});
+    assert.match(h.el('vi-your-answer').textContent,/No words captured/);
+    assert.doesNotMatch(h.el('vi-input-status').textContent,/Transcribing/);
+    // A replayed delta starts fresh rather than retaining the discarded draft.
+    h.event({type:'conversation.item.input_audio_transcription.delta',item_id:'noise',delta:'fresh'});
+    assert.equal(h.el('vi-your-answer').textContent,'fresh');
+    h.event({type:'input_audio_buffer.speech_started',item_id:'newer'});
+    h.event({type:'conversation.item.input_audio_transcription.delta',item_id:'newer',delta:'My next answer'});
+    h.event({type:'conversation.item.input_audio_transcription.completed',item_id:'noise',transcript:''});
+    assert.equal(h.el('vi-your-answer').textContent,'My next answer','older empty result cannot erase a newer caption');
+    await h.endInterview();assert.equal(h.completeBodies()[0].transcript.length,0,'partial and empty text is never scored');
+  });
+}
