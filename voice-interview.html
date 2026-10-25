@@ -65,7 +65,7 @@
     .vi-live-top { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
     .vi-live-top .vi-status { margin-bottom: 0; }
     .vi-timer { font-size: 1.15rem; font-weight: 700; color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
-    .vi-timer--held { color: var(--color-text-muted); }
+    .vi-timer-label { font-size: 0.75rem; font-weight: 500; color: var(--color-text-muted); text-align: right; }
     .vi-presence { display: flex; align-items: center; gap: 0.6rem; margin: 0 0 0.9rem; }
     .vi-speaking { display: inline-block; width: 16px; height: 16px; border-radius: 50%; background: #D1D5DB; flex-shrink: 0; }
     .vi-speaking-on { background: var(--color-cta-green); box-shadow: 0 0 0 5px rgba(0,122,48,0.22); }
@@ -73,18 +73,22 @@
     .vi-question-card { border: 1px solid var(--color-divider); border-left: 4px solid var(--color-accent-blue); border-radius: 10px; padding: 0.9rem 1.1rem; margin: 0 0 0.8rem; background: #fff; }
     .vi-question-label { color: var(--color-text-muted); font-size: 12px; font-weight: var(--font-weight-semibold); letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 0.35rem; }
     .vi-question { font-size: 1.15rem; line-height: 1.45; color: var(--color-text-main); margin: 0; }
+    .vi-answer-card { border-left-color: var(--color-cta-green); background: #F4FAF5; }
+    .vi-input-status { color: var(--color-text-secondary); font-size: 0.82rem; margin-top: 0.6rem; }
     .vi-caption { color: var(--color-text-secondary); font-size: 0.92rem; margin: 0 0 0.9rem; }
     .vi-caption:empty { display: none; }
     .vi-time-note { background: #FFF7E6; color: #92400E; border-radius: 8px; padding: 0.55rem 0.8rem; font-size: 0.92rem; margin: 0 0 0.9rem; }
     .vi-recent { margin: 0 0 1.2rem; }
     .vi-recent-label { color: var(--color-text-muted); font-size: 12px; font-weight: var(--font-weight-semibold); letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 0.35rem; }
-    .vi-recent-turns { max-height: 9.5rem; overflow-y: auto; background: var(--color-bg-light); border-radius: 8px; padding: 0.55rem 0.8rem; }
+    .vi-recent-turns { max-height: 15rem; overflow-y: auto; background: var(--color-bg-light); border-radius: 8px; padding: 0.55rem 0.8rem; }
     .vi-recent-turn { font-size: 0.88rem; color: var(--color-text-secondary); margin: 0 0 0.35rem; }
     .vi-recent-turn:last-child { margin-bottom: 0; }
     .vi-end-confirm { margin-top: 1rem; border: 1px solid var(--color-divider); border-radius: 10px; padding: 0.9rem 1rem; background: var(--color-bg-light); }
     .vi-end-confirm p { margin: 0 0 0.7rem; color: var(--color-text-main); font-weight: 600; }
     .vi-end-confirm-actions { display: flex; gap: 0.7rem; flex-wrap: wrap; }
-    .vi-grace-note { background: #E8F5E9; color: var(--color-cta-green); border-radius: 8px; padding: 0.6rem 0.9rem; margin: 0 0 1.2rem; }
+    .vi-grace-note { background: #E8F5E9; color: var(--color-cta-green); border-radius: 8px; padding: 1rem; margin: 0 0 1.2rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+    .vi-grace-note p { flex: 1 1 18rem; margin: 0; }
+    .vi-grace-note a.vi-btn-secondary, .vi-grace-note a.vi-btn-secondary:visited { color: var(--color-cta-green); text-decoration: none; white-space: nowrap; }
     /* Live and done views take the whole column: no intro, no history rail. */
     .vi-mode-live .vi-sub, .vi-mode-done .vi-sub { display: none; }
     .vi-mode-live #vi-history-panel { display: none !important; }
@@ -360,21 +364,26 @@
     <div id="vi-live-view" class="vi-card vi-live-card" style="display:none">
       <div class="vi-live-top">
         <div id="vi-status" class="vi-status vi-connecting">Connecting...</div>
-        <div class="vi-timer" id="vi-timer" role="timer" aria-label="Time left in the interview">20:00</div>
+        <div><div class="vi-timer-label">Session time left</div><div class="vi-timer" id="vi-timer" role="timer" aria-label="Session time remaining">20:00</div></div>
       </div>
       <div class="vi-presence">
         <span id="vi-speaking" class="vi-speaking" aria-hidden="true"></span>
         <span id="vi-speaking-label" class="vi-speaking-label">Interviewer</span>
       </div>
       <div class="vi-question-card">
-        <div class="vi-question-label">Current question</div>
+        <div class="vi-question-label">Interviewer</div>
         <p id="vi-question" class="vi-question" aria-live="polite">The interviewer will start in a moment.</p>
+      </div>
+      <div class="vi-question-card vi-answer-card">
+        <div class="vi-question-label">You</div>
+        <p id="vi-your-answer" class="vi-question" aria-live="polite">Your words will appear here after you speak.</p>
+        <div id="vi-input-status" class="vi-input-status" role="status">Listening when you speak</div>
       </div>
       <p id="vi-caption" class="vi-caption">Speak naturally and take your time.</p>
       <p id="vi-time-note" class="vi-time-note" role="status" style="display:none">About 2 minutes left. The interviewer will start wrapping up.</p>
       <div id="vi-recent" class="vi-recent" style="display:none">
-        <div class="vi-recent-label">Recent conversation</div>
-        <div id="vi-recent-turns" class="vi-recent-turns"></div>
+        <div class="vi-recent-label">Conversation</div>
+        <div id="vi-recent-turns" class="vi-recent-turns" role="log" aria-label="Conversation transcript"></div>
       </div>
       <div class="vi-sao-cue">
         <div class="vi-sao-cue-label">ANSWER CUE: S + A = O</div>
@@ -403,7 +412,7 @@
     <div id="vi-done-view" class="vi-card" style="display:none">
       <p id="vi-done-status">Interview finished. Preparing your report...</p>
       <p id="vi-save-status" role="status" aria-live="polite"></p>
-      <p id="vi-grace-note" class="vi-grace-note" role="status" style="display:none">You ended within the first 2 minutes, so this interview did not use your session. This applies once per account. <a href="voice-interview.html">Start again</a></p>
+      <div id="vi-grace-note" class="vi-grace-note" role="status" style="display:none"><p>Your session credit was returned because you ended early. This courtesy applies once per account.</p><a class="vi-btn-secondary" href="voice-interview.html">Start again</a></div>
       <button id="vi-save-retry" type="button" class="vi-btn-secondary" style="display:none">Retry saving interview</button>
       <div id="vi-scorecard" style="display:none"></div>
     </div>
@@ -553,8 +562,8 @@
   <script src="js/role-selector.js?v=20261017-page-tag-1" type="module"></script>
   <script src="js/voice-transcript-order.js?v=20260809-1" type="module"></script>
   <script src="js/voice-conduct.js?v=20260725-3" type="module"></script>
-  <script src="js/voice-lifecycle.js?v=20260930-controls" type="module"></script>
+  <script src="js/voice-lifecycle.js?v=20261024-audio-check" type="module"></script>
   <script src="js/voice-usage.js?v=20260920-1" type="module"></script>
-  <script src="js/voice-interview.js?v=20261024-end-timing" defer></script>
+  <script src="js/voice-interview.js?v=20261024-live-captions" defer></script>
 </body>
 </html>
