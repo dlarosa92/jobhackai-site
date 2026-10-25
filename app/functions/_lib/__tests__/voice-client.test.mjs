@@ -1219,6 +1219,22 @@ async function finishedReport(history, scorecard) {
 
 const PM_SENIOR = { role: 'Product Manager', seniority: 'Senior', status: 'ready' };
 
+test('full v2 feedback retains competencies, quoted moments and summary together', async () => {
+  const h = await finishedReport([], {
+    methodologyVersion: 2,
+    assessmentScope: 'Based on one launch example.',
+    competencies: [{ name: 'Customer judgment', status: 'demonstrated', quote: 'We interviewed five customers.', feedback: 'You tested the customer problem.' }],
+    moments: [{ quote: 'We cut drop-off by 18 percent.', comment: 'Strong, specific outcome.' }],
+    summary: 'A solid, concrete interview.'
+  });
+  try {
+    const html = h.el('vi-scorecard').innerHTML;
+    for (const text of ['Customer judgment', 'We interviewed five customers.', 'Strong, specific outcome.', 'A solid, concrete interview.']) {
+      assert.ok(html.includes(text), 'full report retains ' + text);
+    }
+  } finally { h.dispose(); }
+});
+
 test('a v2 report shows the delta against the last v2 session for the same role and level', async () => {
   const h = await finishedReport([
     { sessionId: 'other-role', role: 'Data Engineer', seniority: 'Senior', status: 'ready', overall: 95, methodologyVersion: 2 },
