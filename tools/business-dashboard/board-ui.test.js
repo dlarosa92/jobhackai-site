@@ -71,3 +71,16 @@ test('incomplete summaries cannot expose an approval button and empty decisions 
  assert.match(nodes.get('focus-text').textContent,/1 items in progress/);
  assert.doesNotMatch(nodes.get('focus-text').textContent,/caught up/i);
 });
+test('prospect review shows the format and holds copy approval behind a separate format decision',()=>{
+ const {render,nodes}=ui();nodes.get('review-dialog');
+ const outreach=item('Coach email','Email','hold',{source:'outreach',outreachId:'coach',deliveryState:'review',revision:'a'.repeat(64),message:{recipient:'coach@example.com',subject:'Practice',text:'Complete email',html:'<p>Complete email</p>'},formatRequest:{reason:'The recipient requested a formatted comparison.'},formatApproved:false,issues:['HTML needs owner format approval.']});
+ nodes.get('review-dialog').showModal=()=>{};
+ render(data([outreach]));walk(nodes.get('board')).find(x=>x.className==='card-title').listeners.click();
+ assert.match(text(nodes.get('review-content')),/Format exception: The recipient requested/);
+ assert.match(text(nodes.get('review-actions')),/Approve format exception/);
+ assert.equal(nodes.get('review-actions').children.some(x=>x.textContent==='Approve'),false);
+ outreach.message.html='';outreach.formatRequest=null;outreach.issues=[];
+ render(data([outreach]));assert.match(text(nodes.get('review-content')),/Format: Plain text with visible URLs/);
+ assert.equal(walk(nodes.get('review-content')).some(x=>x.tag==='iframe'),false);
+ assert.equal(nodes.get('review-actions').children.some(x=>x.textContent==='Approve'),true);
+});
