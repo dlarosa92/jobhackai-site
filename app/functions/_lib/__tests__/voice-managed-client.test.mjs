@@ -189,7 +189,7 @@ test('an acknowledged report remains available while call closure is separately 
     ? {__status:202,status:'completed',saved:true,connectionClosed:false}:scoredSessionPayload()}});
   await live(f);await f.h.endInterview();await new Promise(resolve=>setTimeout(resolve,10));await f.h.settle();
   assert.ok(f.h.requests.some(r=>r.method==='GET' && r.url.includes('/api/voice/session/')));
-  assert.match(f.h.el('vi-scorecard').innerHTML,/Your interview report/);
+  assert.match(f.h.el('vi-scorecard').innerHTML,/Your practice feedback/);
   assert.match(f.h.el('vi-save-status').textContent,/Connection closure still needs confirmation/);
   assert.equal(f.h.el('vi-save-retry').style.display,'');
 });
@@ -198,7 +198,7 @@ test('a saved report needing closure review offers no ineffective retry or leave
   const f=fixture(t,{timerDelay:ms=>ms===2500?0:ms,routes:{'/api/voice/session/':url=>url.includes('/complete')
     ? {__status:202,status:'completed',saved:true,connectionClosed:false,closureNeedsReview:true}:scoredSessionPayload()}});
   await live(f);await f.h.endInterview();await new Promise(resolve=>setTimeout(resolve,10));await f.h.settle();
-  assert.match(f.h.el('vi-scorecard').innerHTML,/Your interview report/);
+  assert.match(f.h.el('vi-scorecard').innerHTML,/Your practice feedback/);
   assert.match(f.h.el('vi-save-status').textContent,/interview is saved.*technical review.*can leave/);
   assert.equal(f.h.el('vi-save-retry').style.display,'none');
   assert.equal(f.h.el('vi-save-retry').disabled,true);

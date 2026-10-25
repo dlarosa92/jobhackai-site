@@ -7,7 +7,7 @@
   <style>html.auth-pending{visibility:hidden}</style>
   <script src="js/static-auth-guard.js?v=20260125-1"></script>
   <title>Voice Mock Interview | JobHackAI</title>
-  <meta name="description" content="Practice your interview out loud with a realistic AI interviewer. Get a scored report with your strengths, fixes, and full transcript.">
+  <meta name="description" content="Practice your interview out loud with a realistic AI interviewer. Get focused feedback on your answers, with strengths, next steps, and your transcript.">
   <meta name="robots" content="noindex">
   <link rel="icon" type="image/png" sizes="128x128" href="assets/jobhackai_icon_Favicon_128.png">
   <link rel="apple-touch-icon" sizes="180x180" href="assets/jobhackai_apple_touch_icon_180.png">
@@ -83,9 +83,14 @@
     .vi-recent-turns { max-height: 15rem; overflow-y: auto; background: var(--color-bg-light); border-radius: 8px; padding: 0.55rem 0.8rem; }
     .vi-recent-turn { font-size: 0.88rem; color: var(--color-text-secondary); margin: 0 0 0.35rem; }
     .vi-recent-turn:last-child { margin-bottom: 0; }
-    .vi-end-confirm { margin-top: 1rem; border: 1px solid var(--color-divider); border-radius: 10px; padding: 0.9rem 1rem; background: var(--color-bg-light); }
-    .vi-end-confirm p { margin: 0 0 0.7rem; color: var(--color-text-main); font-weight: 600; }
-    .vi-end-confirm-actions { display: flex; gap: 0.7rem; flex-wrap: wrap; }
+    .vi-end-confirm { width: min(460px, calc(100% - 2rem)); box-sizing: border-box; margin: auto; border: 1px solid var(--color-divider); border-radius: 18px; padding: 1.75rem; color: var(--color-text-main); background: #fff; box-shadow: 0 24px 80px #172b2433; }
+    .vi-end-confirm::backdrop { background: #172b245c; backdrop-filter: blur(3px); }
+    .vi-end-confirm h2 { margin: 0 0 0.8rem; font-size: 1.4rem; }
+    .vi-end-confirm p { margin: 0 0 1rem; line-height: 1.55; color: var(--color-text-secondary); }
+    .vi-end-confirm .vi-end-confirm-note { font-size: 0.8rem; }
+    .vi-end-confirm-actions { display: flex; gap: 0.6rem; justify-content: flex-end; margin-top: 1.5rem; }
+    .vi-end-confirm .vi-btn-danger { background: #b63834; color: #fff; border-color: #b63834; }
+    .vi-end-confirm .vi-btn-danger:hover { background: #9c2b28; }
     .vi-grace-note { background: #E8F5E9; color: var(--color-cta-green); border-radius: 8px; padding: 1rem; margin: 0 0 1.2rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
     .vi-grace-note p { flex: 1 1 18rem; margin: 0; }
     .vi-grace-note a.vi-btn-secondary, .vi-grace-note a.vi-btn-secondary:visited { color: var(--color-cta-green); text-decoration: none; white-space: nowrap; }
@@ -269,6 +274,56 @@
     @media (max-width: 520px) {
       .vi-history-delete-modal-actions { flex-direction: column; align-items: stretch; }
     }
+    /* Approved conversation-first workspace and feedback hierarchy. */
+    .vi-wrap.vi-has-rail.vi-mode-live, .vi-wrap.vi-has-rail.vi-mode-done { max-width: 820px; }
+    .vi-mode-done .vi-layout { grid-template-columns: minmax(0, 1fr); }
+    .vi-mode-done .vi-history { position: static; }
+    .vi-live-card { padding: 0; }
+    .vi-live-top { padding: 1.15rem 1.5rem; border-bottom: 1px solid var(--color-divider); font-size: 0.85rem; }
+    .vi-question-card { border: 0; padding: 0.6rem 1.5rem; margin: 0 0 1rem; }
+    .vi-question { overflow-wrap: anywhere; }
+    .vi-answer-card { margin: 0 1.5rem 1rem; padding: 1.2rem; border: 1px solid #dcece0; border-radius: 13px; background: #f1f8f3; }
+    .vi-answer-card .vi-question { font-size: 1.05rem; }
+    .vi-speaking { width: 8px; height: 8px; }
+    .vi-speaking-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-secondary); }
+    .vi-live-card > .vi-caption, .vi-live-card > .vi-time-note { margin-left: 1.5rem; margin-right: 1.5rem; }
+    .vi-recent, .vi-sao-cue { border: 0; border-top: 1px solid var(--color-divider); border-radius: 0; margin: 0 1.5rem; padding: 0.9rem 0; }
+    .vi-recent summary, .vi-sao-cue summary, .vi-feedback-details > summary { cursor: pointer; min-height: 28px; font-size: 0.9rem; font-weight: 600; color: var(--color-text-secondary); }
+    .vi-recent-turns, .vi-sao-strip { margin-top: 0.7rem; }
+    .vi-sao-item { background: none; border: 0; text-align: left; padding: 0; }
+    .vi-sao-label { color: var(--color-text-main); }
+    .vi-live-actions { position: sticky; bottom: 0; z-index: 10; padding: 1rem 1.5rem max(1rem, env(safe-area-inset-bottom)); border-top: 1px solid var(--color-divider); border-radius: 0 0 var(--radius-xl) var(--radius-xl); background: #fff; box-shadow: 0 -5px 18px #203b2a06; align-items: center; }
+    #vi-end-btn { margin-left: auto; }
+    .vi-live-actions button, .vi-end-confirm button { min-height: 44px; }
+    .vi-feedback-section { padding: 1.4rem 0; border-bottom: 1px solid var(--color-divider); }
+    .vi-feedback-section:first-of-type { padding-top: 0.4rem; }
+    .vi-feedback-eyebrow { color: var(--color-cta-green); font-size: 0.75rem; font-weight: 750; letter-spacing: 0.07em; text-transform: uppercase; margin: 0 0 0.65rem; }
+    .vi-feedback-priority { font-size: 1.25rem; line-height: 1.5; color: var(--color-text-main); margin: 0; overflow-wrap: anywhere; }
+    .vi-feedback-strength { color: var(--color-text-secondary); line-height: 1.6; margin: 0; }
+    .vi-feedback-details { padding: 1.1rem 0; border-bottom: 1px solid var(--color-divider); }
+    .vi-feedback-details > summary { color: var(--color-text-main); }
+    .vi-feedback-details[open] > summary { margin-bottom: 1rem; }
+    .vi-feedback-details p, .vi-feedback-details h4 { overflow-wrap: anywhere; }
+    .vi-feedback-details .vi-sc-overall { text-align: left; display: flex; gap: 0.8rem; align-items: baseline; }
+    .vi-feedback-details .vi-sc-score { font-size: 1.7rem; }
+    .vi-feedback-details .vi-sc-delta { margin: 0 0 1rem; }
+    .vi-feedback-details .vi-sc-transcript { margin: 0; }
+    .vi-feedback-details .vi-result-score { margin-bottom: 0; }
+    .vi-sc-actions { justify-content: space-between; }
+    .vi-sc-actions-link { margin-left: 0; }
+    .vi-plan-picker { margin-top: 1.3rem; }
+    summary:focus-visible, .vi-btn-secondary:focus-visible, .vi-btn-danger:focus-visible { outline: 2px solid var(--color-accent-blue); outline-offset: 3px; }
+    @media (max-width: 520px) {
+      .vi-live-top, .vi-question-card { padding-left: 1.1rem; padding-right: 1.1rem; }
+      .vi-answer-card, .vi-recent, .vi-sao-cue { margin-left: 1.1rem; margin-right: 1.1rem; }
+      .vi-live-actions { padding-left: 1.1rem; padding-right: 1.1rem; gap: 0.5rem; }
+      .vi-live-actions button { padding: 0.7rem 0.85rem; }
+      .vi-end-confirm-actions { flex-direction: column-reverse; }
+      .vi-end-confirm-actions button { width: 100%; }
+      .vi-sao-strip { flex-direction: column; gap: 0.75rem; }
+      .vi-dim-label { flex-basis: 7rem; }
+      .vi-sao-bal-note { flex-basis: 5rem; font-size: 0.8rem; }
+    }
   </style>
 </head>
 <body data-clarity-mask="true">
@@ -366,12 +421,11 @@
         <div id="vi-status" class="vi-status vi-connecting">Connecting...</div>
         <div><div class="vi-timer-label">Session time left</div><div class="vi-timer" id="vi-timer" role="timer" aria-label="Session time remaining">20:00</div></div>
       </div>
-      <div class="vi-presence">
-        <span id="vi-speaking" class="vi-speaking" aria-hidden="true"></span>
-        <span id="vi-speaking-label" class="vi-speaking-label">Interviewer</span>
-      </div>
       <div class="vi-question-card">
-        <div class="vi-question-label">Interviewer</div>
+        <div class="vi-presence">
+          <span id="vi-speaking" class="vi-speaking" aria-hidden="true"></span>
+          <span id="vi-speaking-label" class="vi-speaking-label">Interviewer</span>
+        </div>
         <p id="vi-question" class="vi-question" aria-live="polite">The interviewer will start in a moment.</p>
       </div>
       <div class="vi-question-card vi-answer-card">
@@ -381,30 +435,32 @@
       </div>
       <p id="vi-caption" class="vi-caption">Speak naturally and take your time.</p>
       <p id="vi-time-note" class="vi-time-note" role="status" style="display:none">About 2 minutes left. The interviewer will start wrapping up.</p>
-      <div id="vi-recent" class="vi-recent" style="display:none">
-        <div class="vi-recent-label">Conversation</div>
+      <details id="vi-recent" class="vi-recent" style="display:none">
+        <summary>Conversation so far</summary>
         <div id="vi-recent-turns" class="vi-recent-turns" role="log" aria-label="Conversation transcript"></div>
-      </div>
-      <div class="vi-sao-cue">
-        <div class="vi-sao-cue-label">ANSWER CUE: S + A = O</div>
+      </details>
+      <details id="vi-answer-tip" class="vi-sao-cue">
+        <summary>Answer structure tip</summary>
         <div class="vi-sao-strip">
           <div class="vi-sao-item"><span class="vi-sao-label">Situation</span><br>Context: what mattered</div>
           <div class="vi-sao-item"><span class="vi-sao-label">Action</span><br>Decisions: what you did</div>
           <div class="vi-sao-item"><span class="vi-sao-label">Outcome</span><br>Impact: what changed</div>
         </div>
-      </div>
+      </details>
       <div class="vi-live-actions">
-        <button id="vi-mute-btn" class="vi-btn-secondary">Mute</button>
+        <button id="vi-mute-btn" class="vi-btn-secondary">Mute mic</button>
         <button id="vi-reconnect-btn" class="vi-btn-secondary" style="display:none">Reconnect</button>
-        <button id="vi-end-btn" class="vi-btn-danger">End interview</button>
+        <button id="vi-end-btn" class="vi-btn-danger">Finish interview</button>
       </div>
-      <div id="vi-end-confirm" class="vi-end-confirm" role="group" aria-labelledby="vi-end-confirm-text" style="display:none">
-        <p id="vi-end-confirm-text">End the interview? You'll get feedback on what you've said so far.</p>
+      <dialog id="vi-end-confirm" class="vi-end-confirm" aria-labelledby="vi-end-confirm-text" aria-describedby="vi-end-confirm-description">
+        <h2 id="vi-end-confirm-text">Finish this interview?</h2>
+        <p id="vi-end-confirm-description">We’ll save your conversation and prepare feedback if there’s enough captured speech.</p>
+        <p class="vi-end-confirm-note">Your interview continues until you confirm.</p>
         <div class="vi-end-confirm-actions">
-          <button id="vi-end-keep" type="button" class="vi-btn-secondary">Keep going</button>
-          <button id="vi-end-confirm-btn" type="button" class="vi-btn-danger">End interview</button>
+          <button id="vi-end-keep" type="button" class="vi-btn-secondary" autofocus>Keep practicing</button>
+          <button id="vi-end-confirm-btn" type="button" class="vi-btn-danger">Finish &amp; save</button>
         </div>
-      </div>
+      </dialog>
       <audio id="vi-remote-audio" autoplay></audio>
     </div>
 
@@ -564,6 +620,6 @@
   <script src="js/voice-conduct.js?v=20260725-3" type="module"></script>
   <script src="js/voice-lifecycle.js?v=20261024-audio-check" type="module"></script>
   <script src="js/voice-usage.js?v=20260920-1" type="module"></script>
-  <script src="js/voice-interview.js?v=20261024-live-captions" defer></script>
+  <script src="js/voice-interview.js?v=20261024-approved-experience" defer></script>
 </body>
 </html>
