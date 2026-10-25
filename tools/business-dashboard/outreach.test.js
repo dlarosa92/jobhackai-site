@@ -109,6 +109,8 @@ test('HTML needs an owner-only format decision before separate copy approval and
  assert.match((await outreachRecords(c.db,now)).items[0].issues.join(' '),/format approval/);
  assert.equal(allowed({role:'machine',capabilities:['read','prepare','reconcile','coordinate','contribute']},'POST','/api/outreach/format-approve'),false);
  assert.equal((await ownerOutreach(ownerRequest('format-approve',identity),c.env,now)).status,200);
+ assert.equal((await ownerOutreach(ownerRequest('format-approve',identity),c.env,now)).status,200);
+ assert.equal(c.sql.prepare("SELECT count(*) n FROM outreach_events WHERE kind='owner_format_approved'").get().n,1);
  assert.equal(c.sql.prepare('SELECT approved_revision FROM outreach_messages').get().approved_revision,null);
  assert.equal((await ownerOutreach(ownerRequest('send',identity),c.env,now)).status,409);
  assert.equal((await outreachRecords(c.db,now)).items[0].formatApproved,true);
