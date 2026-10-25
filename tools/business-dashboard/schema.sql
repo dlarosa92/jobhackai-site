@@ -224,3 +224,13 @@ CREATE TABLE IF NOT EXISTS analytics_reports (
   checked_at TEXT NOT NULL,
   payload TEXT NOT NULL
 );
+-- Attribute successful writes to their own active executor run, never a concurrent workflow.
+CREATE TABLE IF NOT EXISTS workflow_run_writes (
+  run_id TEXT NOT NULL REFERENCES workflow_runs(id),
+  kind TEXT NOT NULL CHECK(kind IN ('item','source','coordination')),
+  reference TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  result TEXT NOT NULL,
+  recorded_at TEXT NOT NULL,
+  PRIMARY KEY(run_id,kind,reference,version)
+);
