@@ -20,8 +20,9 @@ async function readBody(request) {
 const actor = identity => identity.id || (identity.role==='owner'?'owner':'unknown');
 function canRun(identity,workflow) { return Object.hasOwn(policies,workflow)&&(identity.role==='owner'||identity.capabilities?.includes(policies[workflow])); }
 function preparationWork(board) {
-  return board.items.filter(i=>i.workId&&['up_next','in_progress','ready'].includes(i.preparation)&&
-    i.boardLane!=='ready'&&!i.blocker&&!i.handoff&&!i.unfinishedDependencies?.length&&
+  return board.items.filter(i=>i.workId&&['up_next','in_progress','ready','blocked'].includes(i.preparation)&&
+    !(i.preparation==='blocked'&&i.blocker?.trim())&&
+    i.boardLane!=='ready'&&!i.handoff&&!i.unfinishedDependencies?.length&&
     !['sent','published','closed','scheduled'].includes(i.nativeState)&&!['approve','decline'].includes(i.decision?.action));
 }
 function preparationQueue(board) {
@@ -80,7 +81,7 @@ async function finish(db,input,identity,now,loadBoard) {
   result.checkedItems=refs('item',r=>r.checked);
   result.coordination=refs('coordination',r=>r.cadence==='daily'&&r.period===run.period);
   result.completedHandoffs=(await db.prepare("SELECT decision_id FROM work_handoffs WHERE claimed_by=? AND status='completed' AND updated_at>=?").bind(run.id,run.started_at).all()).results.map(h=>h.decision_id);
-  const handoffs=(await db.prepare("SELECT * FROM work_handoffs WHERE status IN ('pending','claimed','blocked')").all()).results;
+  const handoffs=(await db.prepare("SELECT h.* FROM work_handoffs h JOIN work_items w ON w.id=h.item_id WHERE h.status IN ('pending','claimed','blocked') AND w.native_state NOT IN ('sent','published','closed','scheduled')").all()).results;
   if(input.outcome==='advanced'&&!result.advancedItems.length&&!result.completedHandoffs.length)fail('No saved work changed. A run cannot claim advancement without an artifact.');
   if(run.workflow!=='coordination'&&['advanced','checked'].includes(input.outcome)&&!result.checkedSources.length&&!result.checkedItems.length)fail('Record fresh source or item checks owned by this run before reporting success.');
   if(run.workflow==='preparation'&&['checked','blocked'].includes(input.outcome)){
