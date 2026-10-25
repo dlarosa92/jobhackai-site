@@ -4,6 +4,8 @@ import { outreachRecords, ownerOutreach, isLegacyEmail } from './outreach.js';
 import { digest } from './outreach-policy.js';
 import { requestIdentity, allowed } from './access.js';
 import { workApi, workRecords, cacheNativeSources } from './work-items.js';
+import { workflowApi, checkWorkflowDeadlines } from './workflow.js';
+import { analyticsApi, analyticsReport } from './analytics.js';
 import { directoryRecords, duplicateDirectoryRecord, applyResolutions, resolveNotification } from './notifications.js';
 
 const OWNER = 'sebastian.larosa@jobhackai.io';
@@ -121,6 +123,9 @@ function validCostInput(input, expectedMonth) {
 }
 
 export default {
+  async scheduled(controller,env,ctx) {
+    ctx.waitUntil(checkWorkflowDeadlines(env,new Date(controller.scheduledTime)));
+  },
   async fetch(request, env, ctx) {
     try {
       const url = new URL(request.url);
@@ -128,9 +133,14 @@ export default {
       if (!allowed(identity,request.method,url.pathname)) return json({error:'Forbidden'},403);
       if(request.method!=='GET' && (request.headers.get('content-type')?.split(';')[0]!=='application/json' || (identity.role==='owner' && request.headers.get('origin')!==url.origin)))return json({error:'Invalid request origin or type'},403);
       if(request.method==='GET'&&url.pathname==='/api/session')return json({role:identity.role,capabilities:identity.capabilities||[]});
-      if(request.method==='GET'&&url.pathname==='/api/operating-guide')return json({version:'2026-10-24',text:GUIDE});
+      if(request.method==='GET'&&url.pathname==='/api/operating-guide')return json({version:'2026-10-25',text:GUIDE});
+      if(url.pathname==='/api/workflow'||url.pathname.startsWith('/api/workflow/'))return workflowApi(request,env,identity,new Date(),async()=>workRecords(env.DASHBOARD_DB,await campaignRecords(env)));
+      if(url.pathname==='/api/analytics')return analyticsApi(request,env);
       if(request.method==='POST'&&url.pathname==='/api/work-items/capture-native')return json(await cacheNativeSources(env.DASHBOARD_DB,await campaignRecords(env)));
-      if(url.pathname==='/api/work-items'||url.pathname.startsWith('/api/work-items/'))return workApi(request,env,identity,async()=>workRecords(env.DASHBOARD_DB,await campaignRecords(env)));
+      if(url.pathname==='/api/work-items'||url.pathname.startsWith('/api/work-items/'))return workApi(request,env,identity,async()=>{
+        const [base,analytics]=await Promise.all([campaignRecords(env),analyticsReport(env.DASHBOARD_DB)]);
+        return workRecords(env.DASHBOARD_DB,{...base,analytics});
+      });
       if(identity.role==='machine'&&url.pathname==='/api/outreach/prepare'){
         const headers=new Headers(request.headers);headers.set('origin',url.origin);
         return ownerOutreach(new Request(request,{headers}),env);

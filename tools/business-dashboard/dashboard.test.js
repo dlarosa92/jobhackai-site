@@ -94,8 +94,8 @@ test('the owner can load the page and read a source-labelled overview', async ()
 test('the phone reload gets the new campaign script rather than a cached old script', async () => {
   const ctx = { access: { aud: audience, getIdentity: async () => ({ email: 'sebastian.larosa@jobhackai.io' }) } };
   const page = await worker.fetch(new Request('https://dashboard.jobhackai.io/'), database(), ctx);
-  assert.match(await page.text(), /app\.js\?v=2026-10-24-decisions/);
-  const script = await worker.fetch(new Request('https://dashboard.jobhackai.io/app.js?v=2026-10-24-decisions'), database(), ctx);
+  assert.match(await page.text(), /app\.js\?v=2026-10-25-workflow/);
+  const script = await worker.fetch(new Request('https://dashboard.jobhackai.io/app.js?v=2026-10-25-workflow'), database(), ctx);
   assert.equal(script.headers.get('Cache-Control'), 'no-store');
   assert.match(await script.text(), /api\/work-items/);
 });
