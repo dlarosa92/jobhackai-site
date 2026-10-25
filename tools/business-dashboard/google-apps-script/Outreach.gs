@@ -42,7 +42,8 @@ function syncOutreach(work) {
     var outgoing = claim.packet.message;
     // MIME is generated from the immutable approved packet, never from an editable
     // Gmail draft. No cc/bcc/attachments or arbitrary extra headers are accepted.
-    var raw = outreachMime(outgoing, claim.attemptId, props.getProperty('MAILBOX_EMAIL'));
+    var formatApproved=!!claim.formatApproval && claim.formatApproval.id===entry.id && claim.formatApproval.revision===entry.revision;
+    var raw = outreachMime(outgoing, claim.attemptId, props.getProperty('MAILBOX_EMAIL'),formatApproved);
     var result;
     try {
       var payload = { raw: raw };
@@ -207,7 +208,8 @@ function outreachDeliveryScan() {
     matches.forEach(function(match){var address=outreachAddress(match[1]);if(!address||seen[address])return;seen[address]=true;outreachRequest({action:'delivery',recipient:address,reason:outreachFailureKind(text),messageId:message.id});});
   });
 }
-function outreachMime(message,attemptId,mailbox) {
+function outreachMime(message,attemptId,mailbox,formatApproved) {
+  if(message.html && formatApproved!==true)throw new Error('HTML requires the server-confirmed owner format decision for this exact email.');
   if(!/^[a-f0-9-]{36}$/.test(attemptId)||!outreachAddress(mailbox)||outreachAddress(message.recipient)!==message.recipient||/[\r\n]/.test(message.subject+message.inReplyTo+message.references))throw new Error('Invalid approved envelope.');
   // Each encoded word stays within RFC 2047's 75-character limit. Chunk by
   // Unicode code points, so neither UTF-8 bytes nor surrogate pairs are split.

@@ -1,4 +1,4 @@
-import { normalizePacket, messageRevision, routingCheck, historyIssues, fresh, normalizeEmail, OWNER } from './outreach-policy.js';
+import { normalizePacket, messageRevision, routingCheck, historyIssues, fresh, normalizeEmail, formatIssues, validFormatRequest, OWNER } from './outreach-policy.js';
 
 const json = (value, status = 200) => Response.json(value, { status, headers: { 'Cache-Control': 'no-store' } });
 const parse = value => value ? JSON.parse(value) : null;
@@ -11,6 +11,13 @@ async function event(db, id, revision, kind, evidence, now) {
     .bind(crypto.randomUUID(), id, revision, kind, JSON.stringify(evidence), iso(now));
 }
 async function row(db, id) { return db.prepare('SELECT * FROM outreach_messages WHERE id=?').bind(id).first(); }
+const formatEventId = record => `outreach-format:${record.id}:${record.revision}`;
+async function formatApproval(db, record, snapshot = null) {
+  if (!parse(record.packet).message.html) return null;
+  if (snapshot) return snapshot.formatApprovals.get(`${record.id}:${record.revision}`) || null;
+  const saved = await db.prepare("SELECT evidence FROM outreach_events WHERE event_id=? AND kind='owner_format_approved'").bind(formatEventId(record)).first();
+  return parse(saved?.evidence);
+}
 
 export async function registerMessage(db, input, now = Date.now()) {
   const packet = normalizePacket(input, now);
@@ -35,6 +42,7 @@ export async function gateIssues(db, record, now = Date.now(), snapshot = null) 
   const feedback = snapshot ? snapshot.feedback.get(`${record.id}:${record.revision}`) : await db.prepare('SELECT action,note FROM outreach_feedback WHERE message_id=? AND revision=?').bind(record.id,record.revision).first();
   const packet = parse(record.packet);
   const issues = historyIssues(packet, parse(record.history), now);
+  issues.push(...formatIssues(packet, await formatApproval(db, record, snapshot)));
   if(feedback)issues.push(`Owner ${feedback.action==='decline'?'declined this revision':'requested changes'}: ${feedback.note}`);
   if (!fresh(packet.evidence.checkedAt, now, 86400000)) issues.push('Refresh first-party contact and business-fit evidence before release.');
   const routing = parse(record.routing);
@@ -56,17 +64,20 @@ export async function outreachRecords(db, now = Date.now()) {
   const senderAvailable = !!relay && relay.can_send === 1 && fresh(relay.checked_at, now, 10 * 60000);
   const feedbackRows=(await db.prepare('SELECT * FROM outreach_feedback').all()).results;
   const feedback=new Map(feedbackRows.map(f=>[`${f.message_id}:${f.revision}`,f]));
+  const formats=(await db.prepare("SELECT e.message_id,e.revision,e.evidence FROM outreach_messages m JOIN outreach_events e ON e.event_id='outreach-format:'||m.id||':'||m.revision WHERE e.kind='owner_format_approved'").all()).results;
+  const formatApprovals=new Map(formats.map(f=>[`${f.message_id}:${f.revision}`,parse(f.evidence)]));
   const items = [];
   for (const record of rows) {
     const packet = parse(record.packet);
     const block = blocks.get(record.recipient);
-    const issues = terminal(record.state) ? (block ? [`${block.reason} (${block.evidence_id})`] : []) : await gateIssues(db, record, now, { blocks, rows: active, feedback });
+    const issues = terminal(record.state) ? (block ? [`${block.reason} (${block.evidence_id})`] : []) : await gateIssues(db, record, now, { blocks, rows: active, feedback, formatApprovals });
     const approved = record.approved_revision === record.revision;
     const replied = record.state === 'sent' && block?.reason === 'received_reply_review';
     const state = replied ? 'pending' : issues.length ? 'hold' : record.state === 'sent' ? 'sent' : ['sending', 'uncertain'].includes(record.state) ? 'hold' : record.state === 'queued' ? 'approved' : approved ? 'approved' : 'pending';
     items.push({ id: `outreach-${record.id}`, source: 'outreach', outreachId: record.id, channel: 'Stan · Email', impact: replied ? 'prospect' : 'campaign',
       title: packet.message.subject, detail: packet.message.recipient, reviewUrl: packet.evidence.sourceUrl,
       state, updatedAt: record.updated_at, revision: record.revision, message: packet.message, sourceEvidence: packet.evidence,
+      formatRequest:packet.formatRequest||null, formatApproved:!!packet.message.html && !formatIssues(packet,formatApprovals.get(`${record.id}:${record.revision}`)).length,
       feedback:feedbackRows.find(f=>f.message_id===record.id&&f.revision===record.revision)||null,
       issues, approved, deliveryState: record.state, senderAvailable, sentThreadId: record.sent_thread_id,
       evidence: block ? `${block.reason} · native evidence ${block.evidence_id}. Sent history is retained; further outreach is held.` : record.state === 'sent' ? `Sent verified · message ${record.sent_message_id}; inbox delivery is unverified.` : record.state === 'uncertain' ? 'Send result uncertain. Reconcile Gmail before any further action; automatic retry is disabled.' : record.state === 'sending' ? 'One send attempt is reserved. A missing receipt requires reconciliation; do not retry.' : issues.join(' ') || 'Source, routing and all-folder Gmail checks are current. Mailbox existence remains unverified.',
@@ -108,6 +119,19 @@ async function approve(db, input, now) {
   if (result.meta.changes !== 1) return json({ error: 'Message changed during review.' }, 409);
   await db.batch([await event(db, record.id, record.revision, 'owner_approved', { owner: OWNER }, now)]);
   return json({ ok: true });
+}
+
+async function approveFormat(db, input, now) {
+  const record=await row(db,input.id), packet=record&&parse(record.packet);
+  if (!record || record.revision!==input.revision || record.state!=='review' || !packet.message.html || !validFormatRequest(packet.formatRequest)) return json({error:'A current HTML draft with a specific exception reason is required.'},409);
+  const result=await db.prepare(`INSERT INTO outreach_events(event_id,message_id,revision,kind,evidence,recorded_at)
+    SELECT ?,id,revision,'owner_format_approved',?,? FROM outreach_messages WHERE id=? AND revision=? AND state='review' AND packet=? ON CONFLICT(event_id) DO NOTHING`)
+    .bind(formatEventId(record),JSON.stringify({owner:OWNER,reason:packet.formatRequest.reason}),iso(now),record.id,record.revision,record.packet).run();
+  if(result.meta.changes!==1){
+    const current=await row(db,record.id);
+    if(!current || current.revision!==record.revision || current.state!=='review' || formatIssues(parse(current.packet),await formatApproval(db,current)).length) return json({error:'The email changed during format review.'},409);
+  }
+  return json({ok:true});
 }
 
 async function queue(env, input, now) {
@@ -154,6 +178,7 @@ export async function ownerOutreach(request, env, now = Date.now()) {
       await env.DASHBOARD_DB.batch([await event(env.DASHBOARD_DB,input.id,input.revision,`owner_${input.action}`,{note:input.note},now)]);
       return json({ok:true});
     }
+    if (path === '/api/outreach/format-approve') return approveFormat(env.DASHBOARD_DB,input,now);
     if (path === '/api/outreach/approve') return approve(env.DASHBOARD_DB,input,now);
     if (path === '/api/outreach/send') return queue(env,input,now);
     if (path === '/api/outreach/cancel') {
@@ -203,7 +228,8 @@ export async function relayOutreach(env, input, now = Date.now(), fetcher = fetc
         AND NOT (?='followup' AND other.state='sent' AND other.sent_thread_id=? AND other.sent_message_id=? AND json_extract(other.packet,'$.phase')='intro'))`)
       .bind(attemptId,JSON.stringify(routing),routing.checkedAt,iso(now),record.id,record.revision,record.revision,packet.phase,packet.message.threadId,originalId).run();
     if(reserved.meta.changes!==1)return json({error:'Already claimed, blocked or changed'},409);
-    return json({attemptId,expiresAt:iso(now+30000),packet:parse(record.packet)});
+    return json({attemptId,expiresAt:iso(now+30000),packet,
+      ...(packet.message.html ? {formatApproval:{id:record.id,revision:record.revision}} : {})});
   }
   if(!['sending','uncertain'].includes(record.state) || record.attempt_id!==input.attemptId || (record.state==='uncertain' && input.outcome!=='sent'))return json({error:'Attempt is not current; no automatic retry'},409);
   const sent=input.outcome==='sent' && /^[a-f0-9]{1,64}$/.test(input.messageId||'') && /^[a-f0-9]{1,64}$/.test(input.threadId||'');
