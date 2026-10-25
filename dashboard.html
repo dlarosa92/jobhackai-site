@@ -103,19 +103,40 @@
     guardDashboard();
   </script>
   <style>
+    #dashboard-root {
+      box-sizing: border-box;
+      max-width: 1164px;
+      margin: 0 auto;
+      padding: 0 32px;
+    }
     .dashboard-banner {
       background: var(--color-card-bg);
       border-radius: var(--radius-xl);
       box-shadow: var(--shadow-lg);
       padding: var(--space-md) var(--space-lg);
-      margin: var(--space-lg) auto var(--space-lg) auto;
-      max-width: 540px;
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-xs);
+      box-sizing: border-box;
+      width: 100%;
+      margin: var(--space-lg) auto 1.5rem;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 2rem;
       position: relative;
-      align-items: flex-start;
-      min-height: fit-content;
+      align-items: start;
+    }
+    .dashboard-account,
+    .dashboard-resume {
+      min-width: 0;
+    }
+    .dashboard-account .status-action-row {
+      justify-content: flex-start;
+    }
+    .dashboard-banner .user-email {
+      overflow-wrap: anywhere;
+    }
+    .dashboard-insights .btn-primary {
+      box-sizing: border-box;
+      max-width: 100%;
+      white-space: normal;
     }
     .dashboard-banner .welcome-row {
       display: flex;
@@ -180,12 +201,14 @@
     }
     .dashboard-features {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(min(270px, 100%), 1fr));
       gap: 1.5rem;
       max-width: 1100px;
       margin: 0 auto 2.5rem auto;
     }
     .feature-card {
+      box-sizing: border-box;
+      min-width: 0;
       background: #fff;
       border-radius: 16px;
       box-shadow: 0 2px 8px rgba(31,41,55,0.07);
@@ -215,7 +238,8 @@
       margin-top: auto;
       width: 100%;
       display: flex;
-      align-items: center;
+      flex-direction: column;
+      align-items: stretch;
       gap: 0.5rem;
     }
     .feature-card .feature-action .btn-primary,
@@ -232,7 +256,10 @@
       font-weight: 600;
       border-radius: 12px;
       font-size: 1.02rem;
-      min-width: 160px;
+      box-sizing: border-box;
+      min-width: 0;
+      width: 100%;
+      max-width: 100%;
       font-family: 'Inter', Arial, sans-serif;
       text-align: center;
       text-decoration: none;
@@ -309,12 +336,13 @@
       stroke: #6B7280;
     }
     @media (max-width: 700px) {
-      .dashboard-banner, .dashboard-features {
-        padding-left: 0.5rem;
-        padding-right: 0.5rem;
+      #dashboard-root {
+        padding: 0 1rem;
       }
       .dashboard-banner {
-        max-width: 98vw;
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+        padding: 1.5rem;
       }
       .dashboard-features {
         grid-template-columns: 1fr;
@@ -327,6 +355,7 @@
       margin: 0.5rem 0 0.2rem 0;
     }
     .ats-donut {
+      flex-shrink: 0;
       width: 54px;
       height: 54px;
       position: relative;
@@ -577,12 +606,15 @@
       display: block;
       pointer-events: auto;
     }
-    .feature-card .feature-action     .usage-indicator {
-      flex-basis: 100%;
+    .feature-card .feature-action > .usage-indicator {
+      min-width: 0;
       margin-top: 0.45rem;
       color: #6B7280;
       line-height: 1.35;
       font-size: 0.95rem;
+    }
+    .feature-card .feature-action > .usage-indicator:empty {
+      display: none;
     }
     /* Upgrade Pop-up Modal Styles */
     .upgrade-popup-overlay {
@@ -718,7 +750,7 @@
       height: 200px;
       border-radius: 16px;
       margin: 2rem auto;
-      max-width: 540px;
+      width: 100%;
     }
     .skeleton-card {
       height: 210px;
@@ -2140,7 +2172,7 @@
           const shouldShow = user.plan === 'free' && !hasRoleFeedback && atsScore.percent !== null;
           
           if (shouldShow) {
-            unlockInsightsHTML = '<div style="margin-top:1rem;padding:1rem;background:rgba(5,150,105,0.08);border:1px solid rgba(5,150,105,0.2);border-radius:8px;"><div style="display:flex;align-items:flex-start;gap:0.75rem;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:0.125rem;color:#007A30;"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg><div style="flex:1;"><div style="font-weight:600;color:#232B36;margin-bottom:0.25rem;font-size:0.95rem;">Unlock Deeper Insights</div><div style="color:#6B7280;margin-bottom:0.75rem;line-height:1.4;font-size:0.9rem;">We\'ve scored this resume against ATS rules. Get detailed feedback and role-specific suggestions.</div><a href="resume-feedback-pro.html" class="btn-primary" style="display:inline-block;padding:0.5rem 1rem;font-size:0.9rem;text-decoration:none;white-space:nowrap;">Get Detailed Feedback</a></div></div></div>';
+            unlockInsightsHTML = '<div class="dashboard-insights" style="margin-top:1rem;padding:1rem;background:rgba(5,150,105,0.08);border:1px solid rgba(5,150,105,0.2);border-radius:8px;"><div style="display:flex;align-items:flex-start;gap:0.75rem;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:0.125rem;color:#007A30;"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg><div style="flex:1;"><div style="font-weight:600;color:#232B36;margin-bottom:0.25rem;font-size:0.95rem;">Unlock Deeper Insights</div><div style="color:#6B7280;margin-bottom:0.75rem;line-height:1.4;font-size:0.9rem;">We\'ve scored this resume against ATS rules. Get detailed feedback and role-specific suggestions.</div><a href="resume-feedback-pro.html" class="btn-primary" style="display:inline-block;padding:0.5rem 1rem;font-size:0.9rem;text-decoration:none;">Get Detailed Feedback</a></div></div></div>';
           }
         } catch (e) {
           // If state persistence not available, don't show the box
@@ -2148,6 +2180,7 @@
       }
       
       let banner = `<div class="dashboard-banner">
+        <div class="dashboard-account">
         <div class="welcome-row">
           <h2>${user.firstName && user.lastName ? `Hi, ${escapeHtmlText(user.firstName)} ${escapeHtmlText(user.lastName)}` : user.firstName ? `Hi, ${escapeHtmlText(user.firstName)}` : user.name ? `Hi, ${escapeHtmlText(user.name)}` : 'Hi, User'}</h2>
           ${user.plan === 'trial' && user.trialEndsAt ? `<div class="trial-countdown">You have ${daysLeft(user.trialEndsAt)} day${daysLeft(user.trialEndsAt) !== 1 ? 's' : ''} left in your trial!</div>` : ''}
@@ -2173,6 +2206,16 @@
             Your command center — see your ATS score, access all tools, and track your progress.
           </div>
         </div>
+        <div class="status-action-row">
+          <span class="user-plan-badge ${user.plan}">${planIcon(user.plan)}${user.plan === 'trial' && user.trialEndsAt
+  ? `Trial (${daysLeft(user.trialEndsAt)} days left)`
+  : user.plan === 'trial' && !user.trialEndsAt
+  ? 'Trial' // Show "Trial" without days if date not available
+  : user.plan.charAt(0).toUpperCase() + user.plan.slice(1)}</span>
+          ${(user.plan === 'cancelled') ? `<a href="pricing.html" class="upgrade-btn">Reactivate</a>` : ''}
+        </div>
+        </div>
+        <div class="dashboard-resume">
         <div class="ats-score-row">
           ${atsScore.percent !== null && atsScore.percent !== undefined ? `
             ${atsDonut(atsScore.percent)}
@@ -2195,13 +2238,6 @@
           `}
         </div>
         ${unlockInsightsHTML}
-        <div class="status-action-row">
-          <span class="user-plan-badge ${user.plan}">${planIcon(user.plan)}${user.plan === 'trial' && user.trialEndsAt 
-  ? `Trial (${daysLeft(user.trialEndsAt)} days left)` 
-  : user.plan === 'trial' && !user.trialEndsAt
-  ? 'Trial' // Show "Trial" without days if date not available
-  : user.plan.charAt(0).toUpperCase() + user.plan.slice(1)}</span>
-          ${(user.plan === 'cancelled') ? `<a href="pricing.html" class="upgrade-btn">Reactivate</a>` : ''}
         </div>
       </div>`;
       
