@@ -47,6 +47,7 @@
     micMuted: false,
     liveOrder: null,           // captions include setup; scoring still uses lifecycle-gated order
     captionDrafts: Object.create(null),
+    userCaptionItemId: null,
     sessionId: null,
     startRequestId: null, // retained across failed starts to recover without spending twice
     managedTransport: false,
@@ -511,6 +512,7 @@
       if (!state.liveOrder) state.liveOrder = newTranscriptOrder();
       state.liveOrder.setText(itemId || null, speaker, text);
       if (speaker === 'user') {
+        state.userCaptionItemId = itemId || null;
         var userTurns = state.liveOrder.list().filter(function (t) { return t.speaker === 'user'; });
         var answer = $('vi-your-answer');
         if (answer) answer.textContent = userTurns.length ? userTurns[userTurns.length - 1].text : text;
@@ -551,6 +553,16 @@
     if (label) label.textContent = state.micMuted ? 'Microphone muted' : text;
   }
 
+  function clearUncapturedAnswer(itemId, message) {
+    if (itemId) delete state.captionDrafts[itemId];
+    if (state.ending || !(lifecycle().is(PHASES.AUDIO_CHECK) || lifecycle().is(PHASES.ACTIVE_INTERVIEW))) return;
+    // A late empty result must not replace a newer answer in progress.
+    if (state.userCaptionItemId && itemId !== state.userCaptionItemId) return;
+    var answer = $('vi-your-answer');
+    if (answer) answer.textContent = 'No words captured for this turn. Please try speaking again.';
+    setInputStatus(message);
+  }
+
   // Captions are immediate visual feedback, separate from the scoring gate.
   // Partial text never reaches history/scoring; completed turns still do.
   function showCaptionDelta(speaker, evt) {
@@ -562,7 +574,10 @@
     state.captionDrafts[id] = draft;
     var el = $(speaker === 'assistant' ? 'vi-question' : 'vi-your-answer');
     if (el) el.textContent = draft;
-    if (speaker === 'user') setInputStatus('Transcribing your answer…');
+    if (speaker === 'user') {
+      state.userCaptionItemId = id;
+      setInputStatus('Transcribing your answer…');
+    }
   }
 
   // Fresh live view for a new session.
@@ -570,6 +585,7 @@
     state.micMuted = false;
     state.liveOrder = newTranscriptOrder();
     state.captionDrafts = Object.create(null);
+    state.userCaptionItemId = null;
     var answer = $('vi-your-answer');
     if (answer) answer.textContent = 'Your words will appear here after you speak.';
     setInputStatus('Listening when you speak');
@@ -1157,10 +1173,14 @@
       return;
     }
     if (type === 'conversation.item.input_audio_transcription.failed') {
-      if (!state.ending) setInputStatus('Could not transcribe that. Please try saying it again.');
+      clearUncapturedAnswer(evt.item_id, 'Could not transcribe that. Please try saying it again.');
       return;
     }
     if (type === 'conversation.item.input_audio_transcription.completed') {
+      if (!String(evt.transcript || '').trim()) {
+        clearUncapturedAnswer(evt.item_id, 'No words captured. Please try saying it again.');
+        return;
+      }
       // An unambiguous "end this interview" is a control utterance, not an
       // answer: it ends the session through the manual-end path and is never
       // recorded, so it cannot reach the stored transcript or the evaluation.
@@ -1171,7 +1191,10 @@
     if (type === 'input_audio_buffer.speech_started') {
       // The candidate is talking again; they are not waiting on a reply.
       clearTurnWait();
-      if (!state.ending) setInputStatus('Hearing you…');
+      if (!state.ending) {
+        state.userCaptionItemId = evt.item_id || null;
+        setInputStatus('Hearing you…');
+      }
       return;
     }
     if (type === 'input_audio_buffer.speech_stopped') {
