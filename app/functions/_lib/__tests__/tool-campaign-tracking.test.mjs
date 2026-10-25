@@ -73,6 +73,7 @@ test('role selection sends the canonical known role through campaign enrichment'
   const events = h.events('role_selected'); assert.equal(events.length, 1);
   assert.equal(events[0][2].role_name, 'Product Manager');
   assert.equal(events[0][2].role_type, 'standard');
+  assert.equal(events[0][2].event_category, 'interview_questions', 'tagged by the page it fired on');
   assert.equal(events[0][2].jha_last_campaign, 'voice_beta_2026_09');
 });
 test('custom role input never leaves the page in the analytics payload', async () => {

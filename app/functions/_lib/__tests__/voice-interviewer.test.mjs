@@ -22,7 +22,9 @@ import {
   shouldGenerateScorecard,
   voiceFirstName,
   realtimeSessionConfig,
-  VOICE_OUTPUT_SPEED
+  VOICE_OUTPUT_SPEED,
+  MAX_FOLLOW_UPS_PER_QUESTION,
+  BANNED_PRAISE_WORDS
 } from '../voice-interviewer.js';
 
 let passed = 0;
@@ -617,6 +619,38 @@ test('acknowledgment is selective and never repetitive', () => {
   // The neutrality ban is preserved verbatim.
   assert.ok(out.includes('never "great", "excellent", or "that makes sense"'));
   assert.ok(!out.includes('Vary your acknowledgments'));
+});
+
+// ---- follow-up budget and praise (live QA: five follow-ups, then "Great.") ----
+
+test('follow-ups are capped at two per question, then the interviewer moves on', () => {
+  const out = interviewerInstructions(BASE);
+  assert.equal(MAX_FOLLOW_UPS_PER_QUESTION, 2);
+  assert.ok(out.includes('ask at most 2 follow-ups on any one question, and count them'));
+  assert.ok(out.includes('never ask a third'));
+  assert.ok(out.includes('"Let\'s try a different example."'));
+  assert.ok(out.includes('offer one scaffold, once'));
+  assert.ok(out.includes('then move on whatever they say'));
+  // The old soft wording is gone, so the two rules cannot disagree.
+  assert.ok(!out.includes('Push at most twice'));
+});
+
+test('praise words are banned outright, including as a one-word opener', () => {
+  const out = interviewerInstructions(BASE);
+  for (const word of ['great', 'awesome', 'excellent', 'perfect']) {
+    assert.ok(BANNED_PRAISE_WORDS.includes(word), word);
+    assert.ok(out.includes(`"${word}"`), `the prompt names "${word}"`);
+  }
+  assert.ok(out.includes('Never praise, not even as a one-word opener'));
+  assert.ok(out.includes('name one specific detail they gave, neutrally'));
+});
+
+test('the follow-up and praise rules reach every opening, including resumes', () => {
+  for (const extra of [{}, { interviewStarted: true }, { resumeContext: 'Interviewer: A question.\nCandidate: An answer.' }]) {
+    const out = interviewerInstructions({ ...BASE, ...extra });
+    assert.ok(out.includes('Follow-up limit, a hard rule'));
+    assert.ok(out.includes('Never praise'));
+  }
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

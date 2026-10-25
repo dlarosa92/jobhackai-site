@@ -351,9 +351,14 @@ export function createInterviewLifecycle() {
    * interview. A response whose transcript was seen and was NOT the hearing
    * question does not arm anything.
    */
-  function noteGreetingDone() {
+  function noteGreetingDone(confirmedAudioCheck) {
     if (phase !== LIFECYCLE.AUDIO_CHECK) return;
-    if (!spokeThisResponse) greetingDone = true;
+    // The app tags its requested audio check. A completed tagged response
+    // is authoritative even when the model paraphrases the hearing question.
+    if (confirmedAudioCheck === true) {
+      greetingDone = true;
+      greetingContentConfirmed = true;
+    } else if (!spokeThisResponse) greetingDone = true;
     spokeThisResponse = false;
   }
 

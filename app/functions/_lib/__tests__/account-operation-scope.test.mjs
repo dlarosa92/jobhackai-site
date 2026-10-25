@@ -182,7 +182,7 @@ test('actual voice completion cannot release admission before the delayed scorec
   const source=readFileSync(new URL('../../api/voice/session/[id]/complete.js',import.meta.url),'utf8');
   const sandbox={queueAccountWork,Response,console:{log(){},warn(){},error(){}},
     getBearer:()=> 'valid', verifyFirebaseIdToken:async()=>({uid:'owner'}),
-    getDb:()=>f.db,getOrCreateUserByAuthId:async()=>({id:1}),voiceFeatureEnabled:()=>true,
+    getDb:()=>f.db,getOrCreateUserByAuthId:async()=>({id:1}),voiceFeatureEnabled:()=>true,restoreEarlyEndCredit:async()=>false,
     generateRequestId:()=> 'fixture',normalizeEndReason:()=> 'user_ended',shouldGenerateScorecard:()=>true,
     normalizeVoiceUsage:()=>null,responseTokenTotals:()=>({input:null,output:null}),
     successResponse:(body,status)=>Response.json(body,{status}),errorResponse:(error,status)=>Response.json({error},{status}),

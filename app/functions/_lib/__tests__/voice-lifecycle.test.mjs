@@ -749,5 +749,18 @@ test('live QA pronoun requests end only as complete immediate requests', () => {
   ]) assert.equal(isExplicitEndRequest(answer), false, answer);
 });
 
+
+test('a completed app-requested audio check arms even when its wording is paraphrased',()=>{
+  const lc=createInterviewLifecycle();lc.to(LIFECYCLE.AUDIO_CHECK);
+  lc.noteAudioCheckTranscript('How does my audio sound today?');
+  lc.noteGreetingDone(true);
+  lc.noteAudioCheckTranscript('How does my audio sound today?');
+  assert.equal(lc.isGreetingDone(),true,'late delivery cannot revoke the tagged check');
+  assert.equal(lc.noteUserCommitted('ack','greet'),'begin_interview');
+  assert.equal(lc.shouldCommit('ack'),false);
+  assert.equal(lc.noteAssistantTurn('q','Tell me about a project you led.','opening'),'confirmed');
+  assert.equal(lc.shouldCommit('q'),true);
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
