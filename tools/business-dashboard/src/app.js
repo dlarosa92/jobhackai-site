@@ -159,6 +159,7 @@ function openReview(item,trigger,refreshing=false){
     const copy=message||snapshot;
     content.append(element('p',`Destination: ${copy.recipient||copy.destination}\n${copy.subject?`Subject: ${copy.subject}`:''}`,'email-envelope'));
     if(snapshot)content.append(element('p',`Proposed timing: ${snapshot.timing}`));
+    if(message)content.append(element('p',message.html ? `Format exception: ${item.formatRequest?.reason||'No reason recorded; reprepare this draft.'}${item.formatApproved?' · Format approved for this revision.':' · Owner format decision required.'}` : 'Format: Plain text with visible URLs.'));
     content.append(element('pre',copy.text,'email-copy'));
     if(copy.html){const frame=element('iframe');frame.title='Exact formatted draft';frame.setAttribute('sandbox','');frame.setAttribute('referrerpolicy','no-referrer');frame.srcdoc='<meta http-equiv="Content-Security-Policy" content="default-src &#39;none&#39;; style-src &#39;unsafe-inline&#39;; base-uri &#39;none&#39;; form-action &#39;none&#39;">'+copy.html;content.append(frame);}
     for(const media of snapshot?.media||[]){const link=safeLink(media.url,'Open source media ↗');if(link){const img=element('img');img.src=media.url;img.alt=media.alt;img.loading='lazy';img.referrerPolicy='no-referrer';img.className='review-media';content.append(img,element('p',media.alt),link);}}
@@ -183,6 +184,9 @@ function openReview(item,trigger,refreshing=false){
     const handled=item.state==='handled';const control=button(handled?'Reopen':'Mark reviewed',()=>resolveNotification({...item,id:notificationId},handled?'reopen':'handle',control));actions.append(control);
   }
   if(item.source==='outreach'){
+    if(item.deliveryState==='review'&&item.message.html&&item.formatRequest&&!item.formatApproved){
+      const control=button('Approve format exception',()=>outreachAction(item,'format-approve',control));actions.append(control);
+    }
     if(item.deliveryState==='review'&&!item.issues.length){
       const action=item.approved?'send':'approve';const control=button(item.approved?'Send approved email':'Approve',()=>outreachAction(item,action,control),'approve');
       control.disabled=item.approved&&(!boardData.outreachSendingEnabled||!item.senderAvailable);actions.append(control);
@@ -215,8 +219,8 @@ async function resolveNotification(item,action,control){
 }
 
 async function outreachAction(item,action,button) {
-  const verb=action==='approve'?'Approve':action==='cancel'?'Cancel the queued send of':'Send';
-  if(!confirm(`${verb} this exact email to ${item.message.recipient}?\nSubject: ${item.message.subject}\n${action==='send'?'The guarded sender checks Gmail and routing again before one send attempt.':action==='cancel'?'Cancellation succeeds only before a send attempt is reserved.':'Approval does not send it.'}`))return;
+  const verb=action==='format-approve'?'Allow the formatted version of':action==='approve'?'Approve':action==='cancel'?'Cancel the queued send of':'Send';
+  if(!confirm(`${verb} this exact email to ${item.message.recipient}?\nSubject: ${item.message.subject}\n${action==='format-approve'?`Reason: ${item.formatRequest.reason}\nThis approves only the format. Copy approval and sending remain separate.`:action==='send'?'The guarded sender checks Gmail and routing again before one send attempt.':action==='cancel'?'Cancellation succeeds only before a send attempt is reserved.':'Approval does not send it.'}`))return;
   button.disabled=true;
   try {
     const response=await fetch(`/api/outreach/${action}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:item.outreachId,revision:item.revision})});
@@ -228,7 +232,7 @@ async function outreachAction(item,action,button) {
 $('outreach-form').addEventListener('submit',async event=>{
   event.preventDefault();const form=event.currentTarget;const values=new FormData(form);const button=form.querySelector('button');button.disabled=true;
   try{
-    const packet={id:values.get('id'),lane:values.get('lane'),phase:values.get('phase'),message:{recipient:values.get('recipient'),subject:values.get('subject'),text:values.get('text'),html:values.get('html'),threadId:values.get('threadId'),inReplyTo:values.get('inReplyTo'),references:values.get('references')},evidence:{sourceUrl:values.get('sourceUrl'),profileUrl:values.get('profileUrl'),publishedEmail:values.get('publishedEmail'),mailtoEmail:values.get('mailtoEmail'),fit:'current',fitFact:values.get('fitFact'),checkedBy:'sebastian.larosa@jobhackai.io',checkedAt:new Date().toISOString()}};
+    const packet={id:values.get('id'),lane:values.get('lane'),phase:values.get('phase'),message:{recipient:values.get('recipient'),subject:values.get('subject'),text:values.get('text'),html:values.get('html'),threadId:values.get('threadId'),inReplyTo:values.get('inReplyTo'),references:values.get('references')},...(values.get('html')?{formatRequest:{reason:values.get('formatReason')}}:{}),evidence:{sourceUrl:values.get('sourceUrl'),profileUrl:values.get('profileUrl'),publishedEmail:values.get('publishedEmail'),mailtoEmail:values.get('mailtoEmail'),fit:'current',fitFact:values.get('fitFact'),checkedBy:'sebastian.larosa@jobhackai.io',checkedAt:new Date().toISOString()}};
     const response=await fetch('/api/outreach/prepare',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(packet)});
     const result=await response.json();if(!response.ok)throw new Error(result.error||'Could not save the prepared email.');
     $('outreach-status').textContent='Saved for source, routing and Gmail checks. This does not approve or send the email.';await refresh();
