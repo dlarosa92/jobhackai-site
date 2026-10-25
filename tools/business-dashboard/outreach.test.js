@@ -4,7 +4,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { createHmac } from 'node:crypto';
 import vm from 'node:vm';
-import { normalizePacket, messageRevision, routingCheck, historyIssues, fiveBusinessDaysElapsed } from './src/outreach-policy.js';
+import { normalizePacket, messageRevision, routingCheck, historyIssues, fiveBusinessDaysElapsed, digest } from './src/outreach-policy.js';
+import { allowed } from './src/access.js';
 import { registerMessage, recordHistory, ownerOutreach, relayOutreach, outreachRecords, recordDeliveryEvent } from './src/outreach.js';
 import ingest from './src/gmail-ingest.js';
 import worker from './worker.bundle.js';
@@ -88,6 +89,57 @@ test('approval binds exact copy, source refresh retains it, changed copy loses i
  assert.equal((await ownerOutreach(ownerRequest('approve',changed),c.env,now)).status,409);
  assert.equal(c.sql.prepare('SELECT count(*) n FROM outreach_versions').get().n,2);
 });
+
+const formatted=()=>({...packet(),message:{...packet().message,html:'<p>Hello, a complete reviewed message.</p>'},formatRequest:{reason:'This specific recipient requested a formatted comparison.'}});
+test('plain-text defaults preserve old approval hashes and reject unrequested formatting',async()=>{
+ const p=normalizePacket(packet(),now);
+ assert.equal(await messageRevision(p),await digest({lane:p.lane,phase:p.phase,businessKey:p.businessKey,message:p.message}));
+ for(const alter of [p=>delete p.formatRequest,p=>p.formatRequest={reason:'Because',approved:true},p=>p.message.text='<div>Raw HTML in the text body</div>']){
+  const p=formatted();alter(p);assert.throws(()=>normalizePacket(p,now),/plain.text|exception|HTML/i);
+ }
+ assert.equal(normalizePacket(formatted(),now).formatRequest.reason,formatted().formatRequest.reason);
+ const linked=formatted();linked.message.html='<p><a href="https://example.com/practice?a=1&amp;b=2">Practice</a></p>';
+ assert.throws(()=>normalizePacket(linked,now),/complete destination/);
+ linked.message.text+='\nhttps://example.com/practice?a=1&b=2';assert.doesNotThrow(()=>normalizePacket(linked,now));
+});
+test('HTML needs an owner-only format decision before separate copy approval and release',async()=>{
+ const c=database(),identity=await registerMessage(c.db,formatted(),now);
+ await recordHistory(c.env,{...identity,history:clean()},now,goodDns);
+ assert.equal((await ownerOutreach(ownerRequest('approve',identity),c.env,now)).status,409);
+ assert.match((await outreachRecords(c.db,now)).items[0].issues.join(' '),/format approval/);
+ assert.equal(allowed({role:'machine',capabilities:['read','prepare','reconcile','coordinate','contribute']},'POST','/api/outreach/format-approve'),false);
+ assert.equal((await ownerOutreach(ownerRequest('format-approve',identity),c.env,now)).status,200);
+ assert.equal(c.sql.prepare('SELECT approved_revision FROM outreach_messages').get().approved_revision,null);
+ assert.equal((await ownerOutreach(ownerRequest('send',identity),c.env,now)).status,409);
+ assert.equal((await outreachRecords(c.db,now)).items[0].formatApproved,true);
+ assert.equal((await ownerOutreach(ownerRequest('approve',identity),c.env,now)).status,200);
+ await relayOutreach(c.env,{action:'poll',mailbox,canSend:true},now);
+ assert.equal((await ownerOutreach(ownerRequest('send',identity),c.env,now)).status,200);
+ const claim=await (await relayOutreach(c.env,{action:'claim',mailbox,...identity},now,goodDns)).json();
+ assert.deepEqual(claim.formatApproval,identity);
+});
+test('a changed HTML reason cannot inherit the earlier format decision',async()=>{
+ const c=database(),p=formatted(),identity=await registerMessage(c.db,p,now);
+ assert.equal((await ownerOutreach(ownerRequest('format-approve',identity),c.env,now)).status,200);
+ p.formatRequest.reason='A different business reason needs a fresh owner decision.';
+ const changed=await registerMessage(c.db,p,now);assert.notEqual(changed.revision,identity.revision);
+ await recordHistory(c.env,{...changed,history:clean()},now,goodDns);
+ assert.equal((await outreachRecords(c.db,now)).items[0].formatApproved,false);
+ assert.equal((await ownerOutreach(ownerRequest('format-approve',identity),c.env,now)).status,409);
+ assert.equal((await ownerOutreach(ownerRequest('approve',changed),c.env,now)).status,409);
+ assert.equal(c.sql.prepare("SELECT count(*) n FROM outreach_events WHERE kind='owner_format_approved'").get().n,1);
+});
+test('legacy HTML with an old copy approval is held at queue and at claim without reserving a send',async()=>{
+ const c=database(),identity=await approved(c),p=normalizePacket(packet(),now);
+ p.message.html='<p>Previously prepared formatting without an exception.</p>';
+ c.sql.prepare('UPDATE outreach_messages SET packet=?').run(JSON.stringify(p));
+ assert.equal((await ownerOutreach(ownerRequest('send',identity),c.env,now)).status,409);
+ c.sql.prepare("UPDATE outreach_messages SET state='queued'").run();
+ assert.equal((await relayOutreach(c.env,{action:'claim',mailbox,...identity},now,goodDns)).status,409);
+ assert.equal(c.sql.prepare('SELECT attempt_id FROM outreach_messages').get().attempt_id,null);
+ c.sql.prepare("UPDATE outreach_messages SET state='sent',sent_message_id='a1',sent_thread_id='b1'").run();
+ assert.equal((await outreachRecords(c.db,now)).items[0].state,'sent');
+});
 test('bounce suppression survives disappearance from Gmail, even with later clean DNS/history',async()=>{
  const c=database(),identity=await prepared(c,'lead-a',{...clean(),failures:[{messageId:'fa11',kind:'hard_bounce'}]});
  await recordHistory(c.env,{...identity,history:clean()},now,goodDns);
@@ -147,7 +199,7 @@ test('even stale Gmail evidence cannot authorize a second follow-up in the same 
 });
 test('large action board uses bounded SQL queries',async()=>{
  const c=database();for(let i=0;i<60;i++)await registerMessage(c.db,packet('lead-'+i),now);
- const before=c.queries();assert.equal((await outreachRecords(c.db,now)).items.length,60);assert.ok(c.queries()-before<=5);
+ const before=c.queries();assert.equal((await outreachRecords(c.db,now)).items.length,60);assert.ok(c.queries()-before<=6);
 });
 test('signed relay rejects unauthenticated, oversized and wrong-mailbox requests',async()=>{
  const c=database();
@@ -170,6 +222,20 @@ function googleContext(){
  vm.runInContext(readFileSync(new URL('./google-apps-script/Outreach.gs',import.meta.url),'utf8'),context);
  return {context,props,queries,uploads,sends};
 }
+test('the Google sender refuses HTML without a matching owner format permit from the server',()=>{
+ const p=normalizePacket(formatted(),now),identity={id:p.id,revision:'a'.repeat(64)},attemptId='00000000-0000-4000-a000-000000000000';
+ for(const permit of [null,{id:'other',revision:identity.revision},{...identity,revision:'b'.repeat(64)},identity]){
+  const c=googleContext();Object.assign(c.props,{OUTREACH_CHECKS_ENABLED:'true',OUTREACH_SEND_ENABLED:'true',MAILBOX_EMAIL:mailbox});
+  c.context.outreachHistory=()=>clean();c.context.outreachDeliveryScan=()=>{};
+  c.context.outreachRequest=input=>input.action==='claim'?{packet:p,attemptId,expiresAt:new Date(Date.now()+30000).toISOString(),formatApproval:permit}:input.action==='check'?{issues:[]}:{};
+  assert.throws(()=>c.context.syncOutreach({messages:[{...identity,packet:p,queued:true}],reconcile:[],sendingEnabled:true}));
+  assert.equal(c.sends.length,permit===identity?1:0);
+ }
+ const c=googleContext();assert.throws(()=>c.context.outreachMime(p.message,attemptId,mailbox),/format decision/);
+ const raw=Buffer.from(c.context.outreachMime(p.message,attemptId,mailbox,true),'base64url').toString();assert.match(raw,/multipart\/alternative/);
+ const plain=Buffer.from(c.context.outreachMime(normalizePacket(packet(),now).message,attemptId,mailbox),'base64url').toString();
+ assert.match(plain,/Content-Type: text\/plain/);assert.doesNotMatch(plain,/text\/html|multipart\/alternative/);
+});
 test('Google sender is off by default and normal manifest retains read-only access',()=>{
  const c=googleContext();c.context.syncOutreach();assert.equal(c.uploads.length,0);assert.equal(c.sends.length,0);
  assert.ok(!readFileSync(new URL('./google-apps-script/appsscript.json',import.meta.url),'utf8').includes('gmail.send'));
