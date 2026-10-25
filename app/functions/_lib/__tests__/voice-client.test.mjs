@@ -780,7 +780,7 @@ test('without audio buffer events the indicator falls back to response.done', as
   } finally { h.dispose(); }
 });
 
-test('the countdown holds through the audio check and starts with the interview', async () => {
+test('the countdown remains active across the audio check and interview', async () => {
   const h = createVoiceClientHarness({ routes: LIVE_ROUTES });
   try {
     await h.ready();
@@ -788,7 +788,7 @@ test('the countdown holds through the audio check and starts with the interview'
     await h.click('vi-start-btn');
     await h.openDataChannel();
     assert.equal(h.el('vi-timer').textContent, '20:00');
-    assert.ok(h.el('vi-timer')._classes.has('vi-timer--held'), 'held during the audio check');
+    assert.ok(!h.el('vi-timer')._classes.has('vi-timer--held'), 'session clock also runs during the audio check');
     h.event({ type: 'response.created', response: { id: 'r1' } });
     h.event({ type: 'conversation.item.created', item: { id: 'a1' } });
     h.event({ type: 'response.output_audio_transcript.done', item_id: 'a1', response_id: 'r1', transcript: 'Hi. Before we begin, can you hear me clearly?' });
@@ -949,13 +949,15 @@ test('a free session too short to score says so, with no score and no locked rep
   const h = await openPastSession(scoredSessionPayload({ fullAccess: false, transcript: null, scorecard: FREE_TOO_SHORT }));
   try {
     const html = h.el('vi-scorecard').innerHTML;
-    assert.ok(html.includes('Interview complete'));
-    assert.ok(html.includes('Not enough candidate speech to score this session.'));
-    assert.ok(html.includes('There is no full report for this session.'));
+    assert.ok(html.includes('Not enough captured speech for feedback'));
+    assert.ok(html.includes('Start another interview'));
+    assert.ok(!html.includes('Top strength'));
+    assert.ok(!html.includes('Run a full session so the interviewer can hear complete answers.'));
     for (const marker of ['vi-result-score', 'Your full report is ready', 'vi-sc-blur', 'What went well', 'Hear a strong answer', 'vi-locked-dims']) {
       assert.ok(!html.includes(marker), marker);
     }
-    assert.ok(html.includes('href="/pricing?plan=monthly#plans"'));
+    assert.ok(html.includes('href="voice-interview.html"'));
+    assert.ok(!html.includes('/pricing?plan='));
   } finally { h.dispose(); }
 });
 

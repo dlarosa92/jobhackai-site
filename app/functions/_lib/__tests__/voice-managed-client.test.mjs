@@ -304,11 +304,11 @@ async function beginInterview(h) {
   await h.settle();
 }
 
-test('the managed countdown holds through the audio check, then shows the server deadline',async t=>{
+test('the managed countdown follows the server deadline even during the audio check',async t=>{
   // 30 seconds of the server's 20 minutes went to connecting and the audio check.
   const f=deadlineFixture(t,19*60+30);
   await f.start();await f.h.openDataChannel();
-  assert.equal(f.h.el('vi-timer').textContent,'20:00');
+  assert.match(f.h.el('vi-timer').textContent,/^19:(29|30)$/,'audio check cannot freeze the actual session clock');
   await beginInterview(f.h);
   assert.match(f.h.el('vi-timer').textContent,/^19:(29|30)$/,'never more time than the server allows');
 });
@@ -335,3 +335,71 @@ test('two minutes before the server deadline the interviewer is told to wrap up,
   assert.ok(!JSON.stringify(transcript).includes('two minutes'));
   assert.ok(transcript.some(turn=>turn.text.includes('shipped it a week early')));
 });
+
+for (const withoutModules of [[],['createInterviewLifecycle']]) {
+  test('tagged paraphrased audio check starts the interview and keeps both speakers'+withoutModules.join(),async t=>{
+    const f=fixture(t,{withoutModules});await f.start();await f.h.openDataChannel();const h=f.h;
+    assert.equal(h.sends.find(e=>e.type==='response.create').response.metadata.jobhackai_purpose,'audio_check');
+    h.event({type:'response.created',response:{id:'greet'}});
+    h.event({type:'conversation.item.created',item:{id:'greeting',role:'assistant'}});
+    h.event({type:'response.output_audio_transcript.delta',item_id:'greeting',response_id:'greet',delta:'How does my audio sound'});
+    assert.equal(h.el('vi-question').textContent,'How does my audio sound');
+    h.event({type:'response.output_audio_transcript.done',item_id:'greeting',response_id:'greet',transcript:'How does my audio sound today?'});
+    h.event({type:'response.done',response:{id:'greet',status:'completed',metadata:{jobhackai_purpose:'audio_check'}}});
+    h.event({type:'conversation.item.created',item:{id:'ack',role:'user'}});
+    h.event({type:'input_audio_buffer.committed',item_id:'ack'});
+    h.event({type:'conversation.item.input_audio_transcription.completed',item_id:'ack',transcript:'Yes, loud and clear.'});
+    assert.match(h.el('vi-status').textContent,/Live/);
+    assert.equal(h.el('vi-your-answer').textContent,'Yes, loud and clear.');
+    h.event({type:'response.created',response:{id:'opening'}});
+    h.event({type:'conversation.item.created',item:{id:'question',role:'assistant'}});
+    h.event({type:'response.output_audio_transcript.done',item_id:'question',response_id:'opening',transcript:'Tell me about a project you led.'});
+    h.event({type:'conversation.item.created',item:{id:'answer',role:'user'}});
+    h.event({type:'input_audio_buffer.speech_started',item_id:'answer'});
+    assert.match(h.el('vi-input-status').textContent,/Hearing you/);
+    h.event({type:'input_audio_buffer.committed',item_id:'answer'});
+    h.event({type:'input_audio_buffer.speech_stopped',item_id:'answer'});
+    assert.match(h.el('vi-input-status').textContent,/Transcribing/);
+    h.event({type:'conversation.item.input_audio_transcription.completed',item_id:'answer',transcript:'I reduced checkout failures by eighteen percent.'});
+    assert.match(h.el('vi-your-answer').textContent,/eighteen percent/);
+    assert.match(h.el('vi-recent-turns').innerHTML,/Interviewer/);
+    assert.match(h.el('vi-recent-turns').innerHTML,/You/);
+    assert.match(h.el('vi-recent-turns').innerHTML,/loud and clear/,'setup speech stays visible');
+    await h.endInterview();
+    const saved=h.completeBodies()[0].transcript;
+    assert.equal(saved.length,2);
+    assert.match(saved[1].text,/eighteen percent/);
+    assert.ok(!JSON.stringify(saved).includes('loud and clear'),'audio-check speech is never scored');
+  });
+}
+
+test('cancelled paraphrased greeting does not authorize pre-interview speech',async t=>{
+  const f=fixture(t);await f.start();await f.h.openDataChannel();const h=f.h;
+  h.event({type:'response.output_audio_transcript.done',item_id:'greet',transcript:'How does my audio'});
+  h.event({type:'response.done',response:{id:'greet',status:'cancelled',metadata:{jobhackai_purpose:'audio_check'}}});
+  h.event({type:'input_audio_buffer.committed',item_id:'early'});
+  h.event({type:'conversation.item.input_audio_transcription.completed',item_id:'early',transcript:'I am still checking my microphone.'});
+  assert.match(h.el('vi-status').textContent,/audio check/);
+  assert.match(h.el('vi-your-answer').textContent,/checking my microphone/);
+  await h.endInterview();assert.equal(h.completeBodies()[0].transcript.length,0);
+});
+
+for (const result of ['', '   ', null]) {
+  test('empty or failed transcription clears its partial caption: '+JSON.stringify(result),async t=>{
+    const f=fixture(t);await f.start();await f.h.openDataChannel();const h=f.h;
+    h.event({type:'input_audio_buffer.speech_started',item_id:'noise'});
+    h.event({type:'conversation.item.input_audio_transcription.delta',item_id:'noise',delta:'unfinished words'});
+    h.event({type:'input_audio_buffer.speech_stopped',item_id:'noise'});
+    h.event({type:'conversation.item.input_audio_transcription.'+(result===null?'failed':'completed'),item_id:'noise',transcript:result});
+    assert.match(h.el('vi-your-answer').textContent,/No words captured/);
+    assert.doesNotMatch(h.el('vi-input-status').textContent,/Transcribing/);
+    // A replayed delta starts fresh rather than retaining the discarded draft.
+    h.event({type:'conversation.item.input_audio_transcription.delta',item_id:'noise',delta:'fresh'});
+    assert.equal(h.el('vi-your-answer').textContent,'fresh');
+    h.event({type:'input_audio_buffer.speech_started',item_id:'newer'});
+    h.event({type:'conversation.item.input_audio_transcription.delta',item_id:'newer',delta:'My next answer'});
+    h.event({type:'conversation.item.input_audio_transcription.completed',item_id:'noise',transcript:''});
+    assert.equal(h.el('vi-your-answer').textContent,'My next answer','older empty result cannot erase a newer caption');
+    await h.endInterview();assert.equal(h.completeBodies()[0].transcript.length,0,'partial and empty text is never scored');
+  });
+}

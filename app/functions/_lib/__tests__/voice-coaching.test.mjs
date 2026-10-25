@@ -108,5 +108,7 @@ test('too-short report has no numeric grade or dimensions',async()=>{
   const h=createHarness({report:{sessionId:'short',fullAccess:true,status:'completed',scorecardReady:true,scorecard:{methodologyVersion:2,tooShort:true,overall:null,topStrength:'Too short.',topImprovement:'Try a complete answer.'}}});
   await h.ready();
   const html=h.el('vi-scorecard').innerHTML;
-  assert.match(html,/Not enough candidate speech/);assert.doesNotMatch(html,/vi-sc-score|vi-sc-dims/);h.dispose();
+  assert.match(html,/Not enough captured speech for feedback/);
+  assert.doesNotMatch(html,/vi-sc-score|vi-sc-dims|Top strength/);
+  h.dispose();
 });
