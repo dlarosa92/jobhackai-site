@@ -11,10 +11,11 @@ async function event(db, id, revision, kind, evidence, now) {
     .bind(crypto.randomUUID(), id, revision, kind, JSON.stringify(evidence), iso(now));
 }
 async function row(db, id) { return db.prepare('SELECT * FROM outreach_messages WHERE id=?').bind(id).first(); }
+const formatEventId = record => `outreach-format:${record.id}:${record.revision}`;
 async function formatApproval(db, record, snapshot = null) {
   if (!parse(record.packet).message.html) return null;
   if (snapshot) return snapshot.formatApprovals.get(`${record.id}:${record.revision}`) || null;
-  const saved = await db.prepare("SELECT evidence FROM outreach_events WHERE message_id=? AND revision=? AND kind='owner_format_approved' ORDER BY recorded_at DESC,event_id DESC LIMIT 1").bind(record.id,record.revision).first();
+  const saved = await db.prepare("SELECT evidence FROM outreach_events WHERE event_id=? AND kind='owner_format_approved'").bind(formatEventId(record)).first();
   return parse(saved?.evidence);
 }
 
@@ -63,7 +64,7 @@ export async function outreachRecords(db, now = Date.now()) {
   const senderAvailable = !!relay && relay.can_send === 1 && fresh(relay.checked_at, now, 10 * 60000);
   const feedbackRows=(await db.prepare('SELECT * FROM outreach_feedback').all()).results;
   const feedback=new Map(feedbackRows.map(f=>[`${f.message_id}:${f.revision}`,f]));
-  const formats=(await db.prepare("SELECT message_id,revision,evidence FROM outreach_events WHERE kind='owner_format_approved' ORDER BY recorded_at,event_id").all()).results;
+  const formats=(await db.prepare("SELECT e.message_id,e.revision,e.evidence FROM outreach_messages m JOIN outreach_events e ON e.event_id='outreach-format:'||m.id||':'||m.revision WHERE e.kind='owner_format_approved'").all()).results;
   const formatApprovals=new Map(formats.map(f=>[`${f.message_id}:${f.revision}`,parse(f.evidence)]));
   const items = [];
   for (const record of rows) {
@@ -124,9 +125,12 @@ async function approveFormat(db, input, now) {
   const record=await row(db,input.id), packet=record&&parse(record.packet);
   if (!record || record.revision!==input.revision || record.state!=='review' || !packet.message.html || !validFormatRequest(packet.formatRequest)) return json({error:'A current HTML draft with a specific exception reason is required.'},409);
   const result=await db.prepare(`INSERT INTO outreach_events(event_id,message_id,revision,kind,evidence,recorded_at)
-    SELECT ?,id,revision,'owner_format_approved',?,? FROM outreach_messages WHERE id=? AND revision=? AND state='review' AND packet=?`)
-    .bind(crypto.randomUUID(),JSON.stringify({owner:OWNER,reason:packet.formatRequest.reason}),iso(now),record.id,record.revision,record.packet).run();
-  if(result.meta.changes!==1)return json({error:'The email changed during format review.'},409);
+    SELECT ?,id,revision,'owner_format_approved',?,? FROM outreach_messages WHERE id=? AND revision=? AND state='review' AND packet=? ON CONFLICT(event_id) DO NOTHING`)
+    .bind(formatEventId(record),JSON.stringify({owner:OWNER,reason:packet.formatRequest.reason}),iso(now),record.id,record.revision,record.packet).run();
+  if(result.meta.changes!==1){
+    const current=await row(db,record.id);
+    if(!current || current.revision!==record.revision || current.state!=='review' || formatIssues(parse(current.packet),await formatApproval(db,current)).length) return json({error:'The email changed during format review.'},409);
+  }
   return json({ok:true});
 }
 
