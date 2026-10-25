@@ -111,3 +111,15 @@ test('before migration 033 every session keeps its credit and nothing throws', a
   assert.equal(await h.restore('s1'), false);
   assert.equal((await h.user()).free_session_used, 1);
 });
+
+for (const [seconds,expected] of [[150,true],[151,false]]) {
+  test('the exact server cutoff is inclusive at '+seconds+' seconds',async t=>{
+    const h=setup(t);
+    h.db.exec("UPDATE users SET free_session_used=1 WHERE id=1");
+    h.session('boundary');
+    // This start second produces 150.000031s with julianday floating math.
+    await h.db.prepare("UPDATE voice_sessions SET started_at='2026-10-24 12:00:03',ended_at=datetime('2026-10-24 12:00:03',?) WHERE id='boundary'")
+      .bind('+'+seconds+' seconds').run();
+    assert.equal(await h.restore('boundary'),expected);
+  });
+}
