@@ -57,7 +57,7 @@ test('missing and no-tool runs cannot become healthy, and an independent deadlin
 });
 test('fresh source checks do not disguise an untouched preparation backlog',async()=>{
   const c=fixture();await prepare(c);
-  await c.work('prepare',{id:'unfinished',source:'marblism',sourceId:'unfinished',expectedVersion:0,document:{...doc,preparation:'in_progress'}});
+  await c.work('prepare',{id:'unfinished',source:'marblism',sourceId:'unfinished',expectedVersion:0,document:{...doc,preparation:'in_progress',blocker:'Copy and timing still need checking'}});
   const run=(await c.flow('start',{workflow:'preparation'})).body;
   const next=new Date(c.now.getTime()+1000);await c.work('source-health',{runId:run.id,source:'marblism',expectedVersion:1,status:'current',checkedAt:next.toISOString(),evidenceUrl:proof[0].url,detail:'Native source re-read',maxAgeMinutes:120});
   assert.equal((await c.flow('finish',{id:run.id,outcome:'checked',summary:'Weekend email hold',evidence:proof},machine,next)).status,400);
@@ -67,6 +67,25 @@ test('fresh source checks do not disguise an untouched preparation backlog',asyn
   await c.work('prepare',{runId:run.id,id:'unfinished',source:'marblism',sourceId:'unfinished',expectedVersion:1,document:{...doc,preparation:'blocked',blocker:'Required redirect deployment is held for a separate owner release.'}});
   const done=await c.flow('finish',held,machine,next);
   assert.equal(done.status,200);assert.equal((await workflowStatus(c.db,next)).workflows.find(w=>w.id==='preparation').status,'blocked');
+});
+test('a blocked classification without a reason remains unfinished preparation',async()=>{
+  const c=fixture();await c.work('prepare',{id:'unexplained',source:'marblism',sourceId:'unexplained',expectedVersion:0,document:{...doc,preparation:'blocked'}});
+  const response=await workflowApi(new Request('https://dashboard.jobhackai.io/api/workflow'),c.env,machine,c.now,c.board);
+  assert.equal((await response.json()).preparationQueue.eligibleCount,1);
+  const run=(await c.flow('start',{workflow:'preparation'})).body;
+  const result=await c.flow('finish',{id:run.id,outcome:'blocked',summary:'Nothing to do',blocker:'Waiting for owner',nextCheckAt:new Date(c.now.getTime()+3600000).toISOString(),evidence:proof});
+  assert.equal(result.status,400);assert.match(result.body.error,/unexplained/);
+});
+test('terminal native work cannot leave an invisible handoff blocking completion',async()=>{
+  for(const nativeState of ['sent','published','closed','scheduled']){
+    const c=fixture();await decision(c);const run=(await c.flow('start',{workflow:'preparation'})).body;
+    const item=(await c.board()).items[0],next=new Date(c.now.getTime()+1000);
+    assert.equal((await c.work('reconcile',{runId:run.id,id:item.id,expectedVersion:item.version,sourceRevision:item.snapshot.sourceRevision,checkedAt:next.toISOString(),nativeState,snapshot:{...item.snapshot,checkedAt:next.toISOString()}})).status,200);
+    assert.equal((await workflowStatus(c.db,c.now)).handoffs.length,0);
+    const finished=await c.flow('finish',{id:run.id,outcome:'checked',summary:'Native execution verified; no unfinished preparation',evidence:proof},machine,next);
+    assert.equal(finished.status,200,nativeState);
+    assert.equal(c.sql.prepare('SELECT count(*) n FROM work_handoffs').get().n,1);
+  }
 });
 test('finished owner-review packets do not prevent a verified quiet check or hide independent work',async()=>{
   const c=fixture();await prepare(c);
