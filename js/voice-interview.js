@@ -41,9 +41,12 @@
     'ask at most one short follow-up, then give your normal closing statement. Do not start a new topic.';
 
   // How many recent turns the live view shows under the pinned question.
-  var RECENT_TURNS = 4;
+  var RECENT_TURNS = 12;
 
   var state = {
+    micMuted: false,
+    liveOrder: null,           // captions include setup; scoring still uses lifecycle-gated order
+    captionDrafts: Object.create(null),
     sessionId: null,
     startRequestId: null, // retained across failed starts to recover without spending twice
     managedTransport: false,
@@ -80,7 +83,7 @@
     lifecycle: null,           // interview lifecycle (voice-lifecycle.js); owns commit boundaries
     turnWait: null,            // { committedAtMs, cueTimer } — turn-start latency + waiting cue
     lastAssistantResponseId: '',  // most recent assistant response seen; straggler guard for the settling window
-    interviewStartedAtMs: null,   // official interview start; the visible countdown waits for it
+    interviewStartedAtMs: null,   // official interview start; enables the wrap-up cue
     wrapUpNoted: false,           // the 2-minute notice went out (screen and interviewer)
     audioEventsSeen: false,       // output_audio_buffer events drive the speaking indicator once seen
     heardInterviewer: false,      // "Your turn" only makes sense after the interviewer has spoken
@@ -326,9 +329,12 @@
           greetingDone = false;
         }
       },
-      noteGreetingDone: function () {
+      noteGreetingDone: function (confirmedAudioCheck) {
         if (phase !== PHASES.AUDIO_CHECK) return;
-        if (!spokeThisResponse) greetingDone = true;
+        if (confirmedAudioCheck === true) {
+          greetingDone = true;
+          greetingContentConfirmed = true;
+        } else if (!spokeThisResponse) greetingDone = true;
         spokeThisResponse = false;
       },
       isGreetingDone: function () { return greetingDone; },
@@ -500,7 +506,18 @@
     // Whisper transcripts of the candidate routinely land after the next
     // question, so only the interviewer's own line can replace the pinned
     // question. Candidate turns join the recent conversation in item order.
-    if (live && speaker === 'assistant') showQuestion(text);
+    if (live) {
+      if (speaker === 'assistant') showQuestion(text);
+      if (!state.liveOrder) state.liveOrder = newTranscriptOrder();
+      state.liveOrder.setText(itemId || null, speaker, text);
+      if (speaker === 'user') {
+        var userTurns = state.liveOrder.list().filter(function (t) { return t.speaker === 'user'; });
+        var answer = $('vi-your-answer');
+        if (answer) answer.textContent = userTurns.length ? userTurns[userTurns.length - 1].text : text;
+        setInputStatus('Transcript received');
+      }
+      if (itemId) delete state.captionDrafts[itemId];
+    }
     if (lc.shouldCommit(itemId || null)) {
       if (!state.order) state.order = newTranscriptOrder();
       state.order.setText(itemId || null, speaker, text);
@@ -519,7 +536,7 @@
   function renderRecentTurns() {
     var box = $('vi-recent-turns');
     if (!box) return;
-    var turns = getTranscript().slice(-RECENT_TURNS);
+    var turns = state.liveOrder ? state.liveOrder.list().slice(-RECENT_TURNS) : [];
     var wrap = $('vi-recent');
     if (wrap) wrap.style.display = turns.length ? '' : 'none';
     box.innerHTML = turns.map(function (t) {
@@ -529,8 +546,33 @@
     if (typeof box.scrollHeight === 'number') box.scrollTop = box.scrollHeight;
   }
 
+  function setInputStatus(text) {
+    var label = $('vi-input-status');
+    if (label) label.textContent = state.micMuted ? 'Microphone muted' : text;
+  }
+
+  // Captions are immediate visual feedback, separate from the scoring gate.
+  // Partial text never reaches history/scoring; completed turns still do.
+  function showCaptionDelta(speaker, evt) {
+    if (state.ending || !(lifecycle().is(PHASES.AUDIO_CHECK) || lifecycle().is(PHASES.ACTIVE_INTERVIEW))) return;
+    var id = evt.item_id;
+    if (!id || typeof evt.delta !== 'string') return;
+    var draft = state.captionDrafts[id] || '';
+    draft = (draft + evt.delta).slice(0, 12000);
+    state.captionDrafts[id] = draft;
+    var el = $(speaker === 'assistant' ? 'vi-question' : 'vi-your-answer');
+    if (el) el.textContent = draft;
+    if (speaker === 'user') setInputStatus('Transcribing your answer…');
+  }
+
   // Fresh live view for a new session.
   function resetLiveView() {
+    state.micMuted = false;
+    state.liveOrder = newTranscriptOrder();
+    state.captionDrafts = Object.create(null);
+    var answer = $('vi-your-answer');
+    if (answer) answer.textContent = 'Your words will appear here after you speak.';
+    setInputStatus('Listening when you speak');
     var question = $('vi-question');
     if (question) question.textContent = 'The interviewer will start in a moment.';
     var caption = $('vi-caption');
@@ -1088,6 +1130,9 @@
     // the assembler, so excluded items never leave pending slots for a
     // teardown flush to wait on.
     if (type === 'conversation.item.created' || type === 'conversation.item.added') {
+      if (!state.ending && state.liveOrder && evt.item && evt.item.role !== 'system' && evt.item.type !== 'function_call') {
+        state.liveOrder.noteItem(evt.item.id, evt.previous_item_id);
+      }
       if (!lifecycle().noteItem(evt.item && evt.item.id)) return;
       if (!state.order) state.order = newTranscriptOrder();
       // previous_item_id says which item this one follows, so an item inserted
@@ -1103,6 +1148,18 @@
     // the warning, so it must never count here.
     if (state.conduct) state.conduct.noteCandidateSpoke(type);
 
+    if (type === 'conversation.item.input_audio_transcription.delta') {
+      showCaptionDelta('user', evt);
+      return;
+    }
+    if (type === 'response.output_audio_transcript.delta' || type === 'response.audio_transcript.delta') {
+      showCaptionDelta('assistant', evt);
+      return;
+    }
+    if (type === 'conversation.item.input_audio_transcription.failed') {
+      if (!state.ending) setInputStatus('Could not transcribe that. Please try saying it again.');
+      return;
+    }
     if (type === 'conversation.item.input_audio_transcription.completed') {
       // An unambiguous "end this interview" is a control utterance, not an
       // answer: it ends the session through the manual-end path and is never
@@ -1114,6 +1171,11 @@
     if (type === 'input_audio_buffer.speech_started') {
       // The candidate is talking again; they are not waiting on a reply.
       clearTurnWait();
+      if (!state.ending) setInputStatus('Hearing you…');
+      return;
+    }
+    if (type === 'input_audio_buffer.speech_stopped') {
+      if (!state.ending) setInputStatus('Transcribing your answer…');
       return;
     }
     if (type === 'input_audio_buffer.committed') {
@@ -1135,7 +1197,7 @@
       if (opening === 'demoted') {
         console.warn('[VOICE] candidate could not hear; audio check repeating — round excluded');
         setStatus('Connected. Quick audio check...', 'vi-connecting');
-        // Back in the audio check: the visible countdown holds again.
+        // Back in the audio check; session time still follows the deadline.
         state.interviewStartedAtMs = null;
         tickTimer();
         track('voice_audio_check_repeat', {});
@@ -1184,7 +1246,11 @@
       if (!state.audioEventsSeen) setSpeaking(false);
       // The audio-check greeting finished generating; the next candidate
       // turn is the acknowledgement that begins the official interview.
-      lifecycle().noteGreetingDone();
+      var response = evt.response || {};
+      if (!response.status || response.status === 'completed') {
+        lifecycle().noteGreetingDone(response.status === 'completed' &&
+          response.metadata && response.metadata.jobhackai_purpose === 'audio_check');
+      }
       if (state.conductEnd) state.conductEnd.noteResponseDone();
       return;
     }
@@ -1257,6 +1323,9 @@
       // finally without ever attaching it to a peer connection.
       if (!current()) return false;
       state.micStream = stream;
+      state.micMuted = false;
+      if ($('vi-mute-btn')) $('vi-mute-btn').textContent = 'Mute';
+      setInputStatus('Listening when you speak');
 
       pc = new RTCPeerConnection();
       state.pc = pc;
@@ -1306,7 +1375,7 @@
         if (!lc.is(PHASES.ACTIVE_INTERVIEW)) {
           setStatus('Connected. Quick audio check...', 'vi-connecting');
         }
-        sendRealtime({ type: 'response.create' });
+        sendRealtime({ type: 'response.create', response: { metadata: { jobhackai_purpose: 'audio_check' } } });
       };
 
       pc.onconnectionstatechange = function () {
@@ -1465,11 +1534,9 @@
 
   // ---------- timer ----------
 
-  // The session limit runs from the connection: the server's deadline when
-  // managed (the authority), the connection time otherwise. The visible
-  // countdown holds at the full length through the audio check and starts
-  // with the official interview, always showing the real time left, so it
-  // never promises more than the server allows.
+  // Session time follows the server deadline (or connection time on legacy
+  // transport), including the audio check. A stuck setup phase must never
+  // freeze the clock or promise time the server will not allow.
   function startTimer(maxMinutes) {
     if (!state.startedAtMs || !state.managedTransport) state.startedAtMs = Date.now();
     tickTimer();
@@ -1494,8 +1561,7 @@
     var counting = !!state.interviewStartedAtMs;
     var timerEl = $('vi-timer');
     if (timerEl) {
-      timerEl.textContent = formatClock(counting ? remaining : state.maxMinutes * 60);
-      if (timerEl.classList) timerEl.classList.toggle('vi-timer--held', !counting);
+      timerEl.textContent = formatClock(Math.max(0, remaining));
     }
     if (counting && remaining <= WRAP_UP_SECONDS) noteWrapUpTime();
     if (remaining <= 0) {
@@ -1800,6 +1866,8 @@
       enabled = t.enabled;
     });
     if (btn && enabled !== null) btn.textContent = enabled ? 'Mute' : 'Unmute';
+    state.micMuted = enabled === false;
+    setInputStatus('Listening when you speak');
   }
 
   // The End button asks first once the official interview is running, so an
@@ -2296,7 +2364,7 @@
     if (doneStatus) doneStatus.style.display = 'none';
     if (!wrap) return;
     var sc = data.scorecard || {};
-    if (!data.fullAccess && !data.expired) {
+    if (!data.fullAccess && !data.expired && !sc.tooShort) {
       renderFreeReport(data, sc, wrap);
       return;
     }
@@ -2306,7 +2374,21 @@
     if (!data.expired) html += savedLine(data);
 
     if (sc.tooShort && !data.expired) {
-      html += '<p class="vi-sc-block">Not enough candidate speech to score this session.</p>';
+      html += '<div class="vi-sc-block"><h3>Not enough captured speech for feedback</h3>' +
+        '<p>We saved this session, but the transcript does not contain enough of your answers to give useful feedback.</p>' +
+        '<p>On your next interview, check the “You” caption to confirm your words are appearing as you speak.</p></div>';
+      if (data.transcript && data.transcript.length) {
+        html += '<details class="vi-sc-transcript"><summary>Captured conversation</summary>';
+        data.transcript.forEach(function (t) {
+          html += '<p><strong>' + (t.speaker === 'assistant' ? 'Interviewer' : 'You') + ':</strong> ' + escapeHtml(t.text) + '</p>';
+        });
+        html += '</details>';
+      }
+      html += '<div class="vi-sc-actions"><a class="vi-btn-primary" href="voice-interview.html">Start another interview</a>' +
+        '<a class="vi-btn-secondary" href="dashboard.html">Back to Dashboard</a></div>';
+      wrap.innerHTML = html;
+      wrap.style.display = '';
+      return;
     }
     if (data.fullAccess && !sc.tooShort) {
       if (sc.assessmentScope) html += '<p class="vi-sc-block">' + escapeHtml(sc.assessmentScope) + '</p>';
