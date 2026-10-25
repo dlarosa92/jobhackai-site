@@ -2,6 +2,7 @@
 const encoder = new TextEncoder();
 const EMAIL = /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}$/i;
 const HEADER_CONTROL = /[\r\n\u0000]/;
+const EMAIL_MARKUP = /<\/?(?:a|p|div|span|br|strong|b|i|em|font|table|tr|td|th|h[1-6]|ul|ol|li|html|body|script|style|img)\b[^>]*>/i;
 export const CHECK_TTL = 5 * 60 * 1000;
 export const SOURCE_TTL = 7 * 86400000;
 export const OWNER = 'sebastian.larosa@jobhackai.io';
@@ -33,8 +34,13 @@ export function normalizePacket(input, now = Date.now()) {
   const recipient = normalizeEmail(m.recipient);
   if (!recipient || typeof m.subject !== 'string' || !m.subject.trim() || m.subject.length > 300 || HEADER_CONTROL.test(m.subject)) throw new Error('One exact recipient and a valid subject are required.');
   if (typeof m.text !== 'string' || !m.text.trim() || m.text.length > 30000 || /\u0000/.test(m.text)) throw new Error('Complete review copy is required.');
-  const html = m.html || '';
+  if (EMAIL_MARKUP.test(m.text)) throw new Error('The plain-text email must contain readable text and visible URLs, not HTML markup.');
+  const html = m.html ?? '';
   if (typeof html !== 'string' || html.length > 40000 || /\u0000|<(?:script|style|link|iframe|object|embed|form|input|svg|math|meta|base|img|video|audio)\b|\son\w+\s*=/i.test(html)) throw new Error('Email HTML must contain only the reviewed copy, formatting and links.');
+  if (html && !formatLinksVisible(m.text, html)) throw new Error('Every formatted link must use HTTPS or mailto and its complete destination must also be visible in the plain-text email.');
+  const formatRequest = input.formatRequest;
+  if (html && (!validFormatRequest(formatRequest))) throw new Error('Prospect emails default to plain text. HTML requires a specific format-exception reason for Sebastian to review.');
+  if (!html && formatRequest != null) throw new Error('A format exception is only needed for an HTML email.');
   if (Object.keys(m).some(key => !['recipient', 'subject', 'text', 'html', 'threadId', 'inReplyTo', 'references'].includes(key))) throw new Error('Extra recipients, headers and attachments are not supported.');
   const threadId = m.threadId || '';
   const inReplyTo = m.inReplyTo || '';
@@ -48,10 +54,32 @@ export function normalizePacket(input, now = Date.now()) {
   const businessKey = new URL(e.sourceUrl).hostname.toLowerCase().replace(/^www\./, '');
   const message = { recipient, subject: m.subject, text: m.text.replace(/\r\n/g, '\n'), html: html.replace(/\r\n/g, '\n'), threadId, inReplyTo, references };
   return { id: input.id, lane: input.lane, phase: input.phase, businessKey, message,
+    ...(html ? { formatRequest: { reason: formatRequest.reason.trim() } } : {}),
     evidence: { sourceUrl: e.sourceUrl, checkedAt: e.checkedAt, checkedBy: e.checkedBy, publishedEmail: recipient, mailtoEmail: e.mailtoEmail || '', fit: 'current', fitFact: e.fitFact, profileUrl: e.profileUrl || '' } };
 }
 export function messageRevision(packet) {
-  return digest({ lane: packet.lane, phase: packet.phase, businessKey: packet.businessKey, message: packet.message });
+  // Keep existing plain-text approval hashes unchanged. An HTML reason belongs
+  // to its exact revision, so changing it cannot inherit a format decision.
+  return digest({ lane: packet.lane, phase: packet.phase, businessKey: packet.businessKey, message: packet.message,
+    ...(packet.formatRequest ? { formatRequest: packet.formatRequest } : {}) });
+}
+export function validFormatRequest(value) {
+  return !!value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 1 &&
+    typeof value.reason === 'string' && value.reason.trim().length >= 20 && value.reason.length <= 1000 && !/\u0000/.test(value.reason);
+}
+export function formatIssues(packet, approval = null) {
+  const issues = EMAIL_MARKUP.test(packet.message.text) ? ['The plain-text email contains HTML markup. Reprepare readable text with visible URLs.'] : [];
+  if (!packet.message.html) return issues;
+  if (!formatLinksVisible(packet.message.text,packet.message.html)) issues.push('The plain-text email must include every formatted link destination. Reprepare the draft.');
+  if (!validFormatRequest(packet.formatRequest)) issues.push('Reprepare this email as plain text, or request an HTML exception with a specific reason.');
+  else if (approval?.owner !== OWNER || approval.reason !== packet.formatRequest.reason) issues.push('HTML needs Sebastian’s format approval for this exact revision.');
+  return issues;
+}
+function formatLinksVisible(text, html) {
+  return Array.from(html.matchAll(/\bhref\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/ig)).every(match => {
+    const value=match[1].replace(/^["']|["']$/g,'').replace(/&amp;/gi,'&');
+    return (publicUrl(value) && text.includes(value)) || (value.startsWith('mailto:') && normalizeEmail(value.slice(7)) && text.includes(value.slice(7)));
+  });
 }
 export function fiveBusinessDaysElapsed(sentAt, now) {
   const start = Date.parse(sentAt);

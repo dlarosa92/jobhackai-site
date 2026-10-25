@@ -32,6 +32,7 @@
     <section class="panel"><h2>Department coordination</h2><div id="coordination-status"></div></section>
     <dialog id="review-dialog" aria-labelledby="review-title"><header class="review-header"><h2 id="review-title"></h2><button type="button" id="review-close" aria-label="Close review">Close</button></header><div id="review-content"></div><p id="review-error" role="alert"></p><label id="review-note-label" for="review-note">Feedback<textarea id="review-note" maxlength="4000" rows="3" placeholder="Changes needed or a decision note"></textarea></label><div id="review-actions"></div><p class="evidence">Approval records your decision. Sending, scheduling and publishing require their separate release step.</p></dialog>
     <details class="panel prepare-email"><summary>Add a prepared email for review</summary>
+      <p>Prospect emails use plain text with visible URLs. A formatted version requires a specific reason and Sebastian’s separate format decision.</p>
       <p>Save the complete researched message. It stays on hold until independent routing and Gmail checks are current.</p>
       <form id="outreach-form" class="email-form">
         <label>Message reference<input name="id" pattern="[a-z0-9-]{1,64}" required placeholder="Stable reference for this message"></label>
@@ -41,7 +42,11 @@
         <label>Subject<input name="subject" maxlength="300" required></label>
         <label>Complete email, including signature and footer<textarea name="text" rows="12" maxlength="30000" required></textarea></label>
         <details><summary>Formatted copy and original-thread details</summary>
-          <label>Exact formatted email HTML, if used<textarea name="html" rows="5" maxlength="40000"></textarea></label>
+          <details><summary>Request a formatted-email exception</summary>
+            <label>Why this email needs formatting<textarea name="formatReason" rows="2" maxlength="1000"></textarea></label>
+            <label>Proposed formatted version<textarea name="html" rows="5" maxlength="40000"></textarea></label>
+            <p>This remains held until Sebastian approves the format for the exact revision. Copy approval and sending remain separate.</p>
+          </details>
           <label>Original Gmail thread ID, for a follow-up<input name="threadId"></label>
           <label>Original Message-ID, for a follow-up<input name="inReplyTo" placeholder="&lt;original-message-id@example.com&gt;"></label>
           <label>Original References header, if present<input name="references"></label>
