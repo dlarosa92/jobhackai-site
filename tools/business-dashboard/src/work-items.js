@@ -1,4 +1,5 @@
 import { digest, OWNER } from './outreach-policy.js';
+import { workflowStatus } from './workflow.js';
 
 export const departments = ['marketing', 'sales', 'product'];
 const idPattern = /^[a-z0-9][a-z0-9_-]{0,127}$/;
@@ -129,6 +130,7 @@ export async function cacheNativeSources(db,base) {
   return {saved:result.meta.changes===1};
 }
 export async function workRecords(db, base, now=new Date()) {
+  const workflow=await workflowStatus(db,now);
   if(base.directorySource?.status==='unavailable'){
     const cached=await db.prepare("SELECT * FROM source_cache WHERE source='directory'").first();
     if(cached)base={...base,items:[...base.items,...parse(cached.payload).map(i=>({...i,staleSource:true}))],directorySource:{...base.directorySource,lastSuccessfulCheckAt:cached.checked_at}};
@@ -161,6 +163,8 @@ export async function workRecords(db, base, now=new Date()) {
       sourceItemId:linked?.id,
       state:linked?.state||({draft:'hold',unknown:'hold',received:'pending',failed:'hold'}[row.native_state]||row.native_state),
     };
+    item.handoff=workflow.handoffs.find(h=>h.item_id===row.id)||null;
+    if(item.handoff&&!['sent','published','closed','scheduled'].includes(nativeState))item.nextAction=item.handoff.nextAction;
     if(decision?.action==='approve' && nativeState==='draft')item.state='approved';
     return item;
   });
@@ -180,7 +184,7 @@ export async function workRecords(db, base, now=new Date()) {
   }}
   for(const item of items){
     item.unfinishedDependencies=item.dependencies.filter(id=>!complete.has(id));
-    item.canApprove=!!item.workId && !['outreach','gmail','directory'].includes(item.source) && !!item.snapshot && item.fresh && item.preparation==='ready' && item.nativeState==='draft' && !item.unfinishedDependencies.length && item.decision?.action!=='approve' && !['changes','decline'].includes(item.decision?.action);
+    item.canApprove=!!item.workId && !item.handoff && !['outreach','gmail','directory'].includes(item.source) && !!item.snapshot && item.fresh && item.preparation==='ready' && item.nativeState==='draft' && !item.unfinishedDependencies.length && item.decision?.action!=='approve' && !['changes','decline'].includes(item.decision?.action);
     item.boardLane=boardLane(item);
   }
   const rank=item=>item.impact==='customer'?0:item.impact==='commitment'?1:item.impact==='prospect'?2:3;
@@ -188,7 +192,7 @@ export async function workRecords(db, base, now=new Date()) {
   // Topological order within the backlog; dependencies remain before their dependents.
   const ordered=[],seen=new Set(),visiting=new Set();const byId=new Map(items.map(i=>[i.id,i]));
   const visit=item=>{if(seen.has(item.id)||visiting.has(item.id))return;visiting.add(item.id);for(const id of item.dependencies)if(byId.has(id))visit(byId.get(id));visiting.delete(item.id);seen.add(item.id);ordered.push(item);};items.forEach(visit);
-  return {...base,items:ordered,sources:freshness,coordination:runs.results.map(r=>({...r,document:parse(r.document)}))};
+  return {...base,items:ordered,sources:freshness,workflow,coordination:runs.results.map(r=>({...r,document:parse(r.document)}))};
 }
 function completedWork(item) {
   return ['sent','published','closed','handled'].includes(item.state) ||
@@ -199,6 +203,7 @@ export function boardLane(item) {
   if(item.staleSource)return 'blocked';
   if(['sending','uncertain'].includes(item.deliveryState)||item.feedback?.action==='changes'||(item.source==='outreach'&&item.issues?.length&&item.feedback?.action!=='decline'))return 'blocked';
   if(completedWork(item)||item.decision?.action==='decline')return 'completed';
+  if(item.handoff?.status==='blocked')return 'blocked';
   if(item.unfinishedDependencies?.length||item.preparation==='blocked'||item.blocker||item.state==='waiting'||['sending','uncertain'].includes(item.deliveryState))return 'blocked';
   if(item.source==='gmail'||item.source==='directory')return item.state==='pending'?'ready':'blocked';
   if(item.feedback?.action==='decline')return 'completed';

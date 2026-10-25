@@ -34,7 +34,7 @@ test('approval binds full copy, destination and media; later content needs a new
  item=(await c.board()).items[0];assert.equal(item.state,'approved');assert.equal(item.nativeState,'draft');
  const next=snapshot({sourceRevision:'native-v2',destination:'Another company account',media:[{url:'https://example.com/image.png',digest:'sha256-123',alt:'Actual artwork'}]});
  assert.equal((await c.call('reconcile',{id:'one',expectedVersion:item.version,sourceRevision:next.sourceRevision,checkedAt:next.checkedAt,nativeState:'draft',snapshot:next})).status,200);
- const changed=(await c.board()).items[0];assert.notEqual(changed.snapshotRevision,item.snapshotRevision);assert.equal(changed.decision,null);assert.equal(changed.canApprove,true);
+ const changed=(await c.board()).items[0];assert.notEqual(changed.snapshotRevision,item.snapshotRevision);assert.equal(changed.decision,null);assert.equal(changed.canApprove,false);assert.ok(changed.handoff,'Complete the previous decision follow-up before asking for a new decision');
  assert.equal(c.sql.prepare('SELECT count(*) n FROM work_decisions').get().n,1);
  assert.equal((await c.call('feedback',{id:'one',expectedVersion:item.version,revision:item.snapshotRevision,requestId:'decision-old',action:'approve',note:''})).status,409);
 });
