@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#11241f">
   <title>Everything in motion · JobHackAI</title>
-  <link rel="stylesheet" href="style.css?v=2026-10-24-decisions">
-  <script src="app.js?v=2026-10-24-decisions" defer></script>
+  <link rel="stylesheet" href="style.css?v=2026-10-25-workflow">
+  <script src="app.js?v=2026-10-25-workflow" defer></script>
 </head>
 <body>
   <header class="topbar">
@@ -19,6 +19,7 @@
       <p id="checked" class="checked" aria-live="polite">Checking dashboard records…</p>
     </div>
     <div id="error" class="error" role="alert" hidden></div>
+    <section class="panel workflow-panel" aria-label="Workflow progress"><div class="panel-title"><h2>Is work moving?</h2><span id="workflow-summary" role="status">Checking execution receipts…</span></div><div id="workflow-alerts" role="status"></div><div id="workflow-runs" class="workflow-runs"></div><p class="evidence">Page refresh, source checks and finished preparation have separate receipts. Missed runs and overdue owner feedback stay visible here.</p></section>
     <section class="focus" aria-label="Priority"><strong>Your next decisions</strong><span id="focus-text">Checking who is waiting on us…</span><ol id="next-decisions"></ol></section>
     <div id="campaign-error" class="error" role="alert" hidden></div>
     <p id="campaign-checked" class="checked" aria-live="polite">Checking action board…</p>
@@ -30,6 +31,7 @@
     <p id="filter-status" class="checked" role="status"></p>
     <section id="board" class="board" aria-label="Work board"></section>
     <section class="panel"><h2>Department coordination</h2><div id="coordination-status"></div></section>
+    <section class="panel" aria-label="Campaign measurement"><div class="panel-title"><h2>Campaign measurement</h2><span id="analytics-status">Checking report…</span></div><div id="analytics-report"></div></section>
     <dialog id="review-dialog" aria-labelledby="review-title"><header class="review-header"><h2 id="review-title"></h2><button type="button" id="review-close" aria-label="Close review">Close</button></header><div id="review-content"></div><p id="review-error" role="alert"></p><label id="review-note-label" for="review-note">Feedback<textarea id="review-note" maxlength="4000" rows="3" placeholder="Changes needed or a decision note"></textarea></label><div id="review-actions"></div><p class="evidence">Approval records your decision. Sending, scheduling and publishing require their separate release step.</p></dialog>
     <details class="panel prepare-email"><summary>Add a prepared email for review</summary>
       <p>Prospect emails use plain text with visible URLs. A formatted version requires a specific reason and Sebastian’s separate format decision.</p>
@@ -67,7 +69,7 @@
     </section>
     <section class="bottom">
       <div class="panel"><div class="panel-title"><h2>Business costs this month</h2><span id="month-label">—</span></div><p>Enter the total you have recorded for this month, including payment fees, ads, software and other business costs. Mark complete only when every cost is included.</p><form id="cost-form"><label for="costs">Recorded costs (USD)</label><div class="cost-row"><span>$</span><input id="costs" name="costs" type="number" min="0" max="1000000" step="0.01" inputmode="decimal" placeholder="0.00" required><button type="submit">Save</button></div><label class="check"><input id="complete" type="checkbox"> I have included all business costs for this month</label></form><p id="cost-status" class="status" aria-live="polite">No costs recorded yet.</p></div>
-      <div class="panel"><h2>Source status</h2><ul id="source-health"></ul><dl><div><dt>Cloudflare payment and user records</dt><dd id="d1-status">Checking…</dd></div><div><dt>Action board records</dt><dd id="campaign-status">Checking…</dd></div><div><dt>Priority order</dt><dd>Customer-impacting failures and commitments first, then software growth toward 250 users and verified revenue. Approved Local work remains visible. Shared dependencies are represented once.</dd></div><div><dt>Native inbox and platform status</dt><dd>Each card shows when its source was checked. Gmail checks labelled conversations and recorded sent threads about every five minutes once connected. Refresh displays the latest successful scan. New draft and post records must be added separately. Chat updates do not sync automatically. Sending and scheduling are recorded after verification.</dd></div><div><dt>Website visits and signups</dt><dd>GA4 feed not connected to this dashboard yet. <a href="https://analytics.google.com/analytics/web/?authuser=1#/analysis/a366252518p523348532/edit/vuAzUp7vTsiY9cmdOg5t1g" target="_blank" rel="noreferrer">Open Analytics ↗</a></dd></div></dl></div>
+      <div class="panel"><h2>Source status</h2><ul id="source-health"></ul><dl><div><dt>Cloudflare payment and user records</dt><dd id="d1-status">Checking…</dd></div><div><dt>Action board records</dt><dd id="campaign-status">Checking…</dd></div><div><dt>Priority order</dt><dd>Customer-impacting failures and commitments first, then software growth toward 250 users and verified revenue. Approved Local work remains visible. Shared dependencies are represented once.</dd></div><div><dt>Native inbox and platform status</dt><dd>Each card shows when its source was checked. Gmail checks labelled conversations and recorded sent threads about every five minutes once connected. Refresh displays the latest successful scan. The preparation owner imports verified drafts and posts during scheduled runs. Execution receipts above show whether that work happened. Sending and scheduling are recorded after verification.</dd></div><div><dt>Website visits and signups</dt><dd>The campaign measurement panel shows the latest imported rolling report and its coverage gaps. <a href="https://analytics.google.com/analytics/web/?authuser=1#/a366252518p523348532/reports/intelligenthome" target="_blank" rel="noreferrer">Open Analytics ↗</a></dd></div></dl></div>
     </section>
     <footer><p>Income is an estimate based on the production D1 payment ledger and costs you enter. It is not an accounting or tax statement. <span id="basis"></span></p></footer>
   </main>

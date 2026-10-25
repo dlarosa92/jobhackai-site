@@ -71,6 +71,15 @@ test('incomplete summaries cannot expose an approval button and empty decisions 
  assert.match(nodes.get('focus-text').textContent,/1 items in progress/);
  assert.doesNotMatch(nodes.get('focus-text').textContent,/caught up/i);
 });
+test('healthy Gmail cannot hide a stalled preparation run or a partial Analytics report',()=>{
+ const {render,nodes}=ui();const state=data([]);
+ state.workflow={alerts:[{detail:'Content preparation: stalled. No completed receipt.'}],workflows:[{label:'Content preparation',status:'stalled',lastSuccessAt:null,lastRun:null}]};
+ state.analytics={status:'stale',detail:'Source observation only.',report:{startDate:'2026-09-27',endDate:'2026-10-24',checkedAt:'2026-10-25T14:00:00Z',sourceUrl:'https://analytics.google.com/analytics/web/',events:[{name:'partner_kit_action',count:6,users:1}],coverage:{internalTrafficExcluded:false,attributionVerified:false,purchasesReconciled:false,campaignBreakdownComplete:false,kitActionBreakdownComplete:false},notes:'One reported user is not six customers.'}};
+ render(state);
+ assert.match(text(nodes.get('gmail-sync')),/current/);assert.match(text(nodes.get('workflow-alerts')),/stalled/);
+ assert.match(text(nodes.get('workflow-summary')),/needs? attention/);
+ assert.match(text(nodes.get('analytics-report')),/Not observed.*Unverified/);assert.match(text(nodes.get('analytics-report')),/kit action breakdown/);assert.match(text(nodes.get('analytics-status')),/stale/);
+});
 test('prospect review shows the format and holds copy approval behind a separate format decision',()=>{
  const {render,nodes}=ui();nodes.get('review-dialog');
  const outreach=item('Coach email','Email','hold',{source:'outreach',outreachId:'coach',deliveryState:'review',revision:'a'.repeat(64),message:{recipient:'coach@example.com',subject:'Practice',text:'Complete email',html:'<p>Complete email</p>'},formatRequest:{reason:'The recipient requested a formatted comparison.'},formatApproved:false,issues:['HTML needs owner format approval.']});

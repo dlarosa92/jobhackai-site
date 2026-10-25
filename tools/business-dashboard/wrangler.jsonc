@@ -5,6 +5,7 @@
   "compatibility_date": "2026-10-16",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": false,
+  "triggers": { "crons": ["*/15 * * * *"] },
   "routes": [{ "pattern": "dashboard.jobhackai.io", "custom_domain": true }],
   "d1_databases": [
     { "binding": "PRODUCTION_DB", "database_name": "jobhackai-prod-db", "database_id": "f9b709fd-56c3-4a0b-8141-4542327c9d4d" },

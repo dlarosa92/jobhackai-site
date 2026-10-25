@@ -1,6 +1,6 @@
 # JobHackAI operating guide
 
-Version: 2026-10-24. This guide supersedes older board organization, workload caps and mandatory external-app draft-review instructions. It does not revoke recorded individual approvals or grant external execution.
+Version: 2026-10-25. This guide supersedes older board organization, workload caps, mandatory external-app draft-review instructions and chat-only claims of completed scheduled work. It does not revoke recorded individual approvals or grant external execution.
 
 ## Mission and ownership
 
@@ -44,16 +44,27 @@ Use validated campaign tags on clickable promotional links: lowercase platform-s
 
 ## Coordination and cadence
 
-- Hourly reconciliation inspects changes, records source freshness/failures and advances already authorized preparation. The existing research workflow alone requests work from Marblism.
+- Hourly preparation owns employee requests, requested revisions, independent checks and complete review packets. The existing research workflow alone requests work from Marblism. Finish eligible existing work before new generic draft volume. A weekend email hold applies to those messages only; assess independent Marketing, Sales and Product work.
+- Hourly reconciliation inspects changes, records source freshness/failures and imports completed native work. It does not duplicate preparation's employee requests. Its first run of each Eastern day imports the production GA4 rolling 28-day report through yesterday, with explicit campaign, kit-action, staff-exclusion, attribution and purchase-reconciliation coverage. Partial coverage is labeled; unavailable access retains the last report and records a blocker. Never reuse fixed historical exploration dates as the current operating window.
 - Daily coordination records three department assessments, resolves shared dependencies, sets the common priority order and prepares complete owner decisions. Reuse the existing daily decisions schedule.
 - Weekly planning and retrospective run within the first daily review of the Eastern calendar week. Record what worked, failed, source evidence and resulting backlog changes. Also record a lesson when a material result arrives.
 
 Use a stable cadence/period key to prevent duplicate reviews. Quiet when unchanged; notify only a meaningful new decision, material failure or material result. Do not repeat approval requests for valid exact approvals. Preserve the bounded Local tests and mandatory experiment reviews until native completion or unresolved work is verified. Expired schedules with outstanding work transfer that work to the shared backlog before retirement.
 
+### Execution receipts and decision handoffs
+
+Every scheduled pass reads the live guide, board and `/api/workflow`, then starts its `preparation`, `reconciliation` or `coordination` run through `/api/workflow/start`. The server chooses the period and records the initial versions. Resume an existing running receipt; a completed receipt makes that period idempotent. A failed or expired period remains visible until the next scheduled run. Do not claim current checks from old chat context.
+
+Owner decisions atomically create durable follow-ups assigned to the item's department. Preparation claims each follow-up with its version and active run ID, resolves the note and saves independently verified full copy, links, media and timing. A comment on approval is a requirement to assess and resolve, never automatic release permission. Preserve the decision history. Changed substantive content requires a new exact decision. Close the handoff only after its verified packet is saved, or block it with a concrete reason and a future checkpoint. Never move a deadline forward merely to hide overdue work.
+
+Finish each run through `/api/workflow/finish` with source evidence and its actual outcome. `advanced` requires a changed saved work artifact or a completed decision handoff plus fresh checks. `checked` requires fresh source/coordination evidence and cannot close an untouched eligible preparation backlog. `blocked` needs a named obstacle and a checkpoint within seven days; it remains an attention state. `failed` never counts as a completed check. A chat message, prompt update, page refresh, or unchanged status repeated from memory is not an execution receipt.
+
+The dashboard's independent 15-minute server check records missed hourly runs after 90 minutes, expired one-hour run claims, missed daily coordination after 26 hours, and overdue decision follow-ups (initial checkpoint: two hours). These appear in “Is work moving?” even if the Mac or agent is unavailable. Reconciliation surfaces new or materially changed alerts to Sebastian; repeated unchanged alerts remain on the board. This monitor never sends mail, requests employee work, approves, publishes or alters production data.
+
 ## Remote execution and rollout
 
 The dashboard is private. Verified Access service identities have explicit read, prepare, reconcile, contribute or coordinate capabilities. Owner browser sessions may last one month. Machine credentials are stored per executor in its secret facility; never in prompts, source control, logs or review packets.
 
-The cloud run must receive this versioned guide through GET /api/operating-guide and existing authorization references; it cannot depend on a Mac path or chat memory. Desktop hourly/daily schedules still require the Mac until cloud account eligibility, connected tools and an actual scheduled Mac-offline run are verified. Browser-only sources record requiresMac and their last successful check. Continue cloud-accessible checks while those sources are unavailable.
+Sebastian selected the existing Mac-based preparation, reconciliation and daily coordination schedules. Keep that path; cloud agent migration is deferred. The hosted dashboard API is available to the installed scoped local machine client. Do not confuse deferred cloud-agent access with unavailable local dashboard access. Browser-only sources record requiresMac and their last successful check. Continue independent available checks when a source fails.
 
-No cloud cutover is complete merely because an endpoint is reachable. Retain the local schedule until the cloud schedule demonstrates equivalent context, permissions, source coverage, idempotence and quiet notification behavior. Then disable duplicate schedules. Maintain a rollback deployment and use additive migrations only in dashboard D1.
+The server deadline monitor is independent of the Mac; it monitors receipts and does not replace the local execution schedules. No cloud agent cutover, duplicate employee-request schedule or expanded permissions is part of this workflow. Keep private finite release authorizations in their existing records and schedule context. Maintain a rollback deployment and use additive migrations only in dashboard D1.
