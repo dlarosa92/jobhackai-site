@@ -61,7 +61,7 @@ export async function onRequest(context) {
         {updateActivity:body.action==='open'});
       if (!user?.id) return fail('Account unavailable',503);
       if (body.action==='close') {
-        const result=await closeManagedInterview(env,{uid,sessionId:body.sessionId});
+        const result=await closeManagedInterview(env,{uid,sessionId:body.sessionId,flushTranscript:body.flushTranscript===true});
         const reserved=await getDb(env).prepare('SELECT id FROM voice_sessions WHERE id=? AND user_id=?')
           .bind(body.sessionId,user.id).first();
         return ok({sessionId:body.sessionId,connectionClosed:result.closed,closureNeedsReview:!!result.needsReview,sessionReserved:!!reserved},result.closed?200:202);

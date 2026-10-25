@@ -1862,10 +1862,11 @@
     var durationSeconds = state.startedAtMs ? Math.round((Date.now() - state.startedAtMs) / 1000) : 0;
     stopMicrophone();
     stopRemotePlayback();
-    if (state.managedTransport && wasConnecting) {
-      // Send End before the transcript flush: a pending start may not reserve
-      // credit while the browser is waiting for its final transcript.
-      state.closeRequest = requestManagedClose();
+    if (state.managedTransport) {
+      // Record End on the server before transcript/provider delays can move
+      // it past the credit cutoff. A live call gets a bounded transcript
+      // flush window before the server hangs up; a pending start closes now.
+      state.closeRequest = requestManagedClose(!wasConnecting);
     }
 
     show('vi-done-view');
@@ -1904,11 +1905,11 @@
     await saveCompletion();
   }
 
-  function requestManagedClose() {
+  function requestManagedClose(flushTranscript) {
     var controller = new AbortController();
     var timeout = setTimeout(function () { controller.abort(); }, 15000);
     return api('/api/voice/connection', {
-      method: 'POST', body: JSON.stringify({ action: 'close', sessionId: state.sessionId }), signal: controller.signal
+      method: 'POST', body: JSON.stringify({ action: 'close', sessionId: state.sessionId, flushTranscript: flushTranscript === true }), signal: controller.signal
     }).catch(function () { return null; }).finally(function () { clearTimeout(timeout); });
   }
 

@@ -130,7 +130,7 @@ export async function openManagedInterview(env,{uid,sessionId,sdp,role,seniority
  * a late provider response even if completion overtakes the initial request.
  * A creating/uncertain provider attempt remains pending, never guessed closed.
  * Persisting the transcript is the completion route's separate responsibility. */
-export async function closeManagedInterview(env,{uid,sessionId}) {
+export async function closeManagedInterview(env,{uid,sessionId,flushTranscript=false}) {
   validateOwner(uid,sessionId);
   const db=getDb(env);
   if (!db) throw Error('voice_connection_storage_unavailable');
@@ -146,7 +146,14 @@ export async function closeManagedInterview(env,{uid,sessionId}) {
   if (!saved) throw Error('voice_connection_not_found');
   const active=await db.prepare(`SELECT id FROM voice_provider_calls
     WHERE session_id=? AND auth_id=? AND state='active' LIMIT 1`).bind(sessionId,uid).first();
-  if (active) await closeManagedVoiceCall(env,{uid,attemptId:active.id}).catch(()=>{});
+  if (active) {
+    // End is already durable and prevents reconnect/reservation. Keep the
+    // existing channel alive for the browser's bounded final transcript
+    // flush, then hang up even if the browser never sends completion. Never
+    // accept a client-selected duration or extend the recorded end time.
+    if (flushTranscript === true) await new Promise(resolve=>setTimeout(resolve,1500));
+    await closeManagedVoiceCall(env,{uid,attemptId:active.id}).catch(()=>{});
+  }
   const pending=await db.prepare(`SELECT COUNT(*) AS count,MAX(state='uncertain') AS needs_review FROM voice_provider_calls
     WHERE session_id=? AND auth_id=? AND state<>'closed'`).bind(sessionId,uid).first();
   // In-flight creation/closure can settle on a later request. Uncertain and

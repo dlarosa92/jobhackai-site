@@ -79,6 +79,7 @@ test('End while microphone permission is pending records closure and never attac
   await f.h.ready();f.h.el('vi-role').value='Engineer';const starting=f.h.click('vi-start-btn');await f.h.settle();
   await f.h.endInterview();permission.resolve(stream);await starting;
   assert.equal(stream.track.enabled,false);assert.equal(f.opens().length,0);assert.equal(f.closes().length,1);
+  assert.equal(f.closes()[0].body.flushTranscript,false);
   assert.equal(f.h.peerConnection(),null);assert.match(f.h.el('vi-done-status').textContent,/No interview credit was used/);
   assert.equal(f.h.requests.filter(r=>r.method==='GET' && r.url.includes('/api/voice/session/')).length,0);
 });
@@ -139,14 +140,16 @@ test('spoken End persists the interview answer and excludes the control utteranc
   assert.equal(f.h.peerConnection().connectionState,'closed');
 });
 
-test('an active call waits for its pending transcript before server hangup and keeps its peer until that receipt',async t=>{
+test('an active call records End before transcript flush and keeps its peer until hangup receipt',async t=>{
   const closed=deferred();
   const f=fixture(t,{routes:{'/api/voice/connection':(url,init)=>{
     const body=JSON.parse(init.body);return body.action==='close'?closed.promise:f.answer(body);
   }}});
   await live(f);f.h.event({type:'conversation.item.created',item:{id:'late'}});
   f.h.event({type:'input_audio_buffer.committed',item_id:'late'});
-  await f.h.click('vi-end-btn');const ending=f.h.click('vi-end-confirm-btn');await f.h.settle();assert.equal(f.closes().length,0);
+  await f.h.click('vi-end-btn');const ending=f.h.click('vi-end-confirm-btn');await f.h.settle();assert.equal(f.closes().length,1);
+  assert.equal(f.closes()[0].body.flushTranscript,true);
+  assert.equal(f.h.completeBodies().length,0);
   f.h.event({type:'conversation.item.input_audio_transcription.completed',item_id:'late',transcript:'The team sustained a reduction in support tickets.'});
   await f.h.settle();assert.equal(f.closes().length,1);assert.notEqual(f.h.peerConnection().connectionState,'closed');
   assert.ok(f.h.peerConnection().tracks.every(track=>!track.enabled));

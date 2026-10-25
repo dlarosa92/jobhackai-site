@@ -355,6 +355,53 @@ test('managed completion closes the provider, persists the first transcript and 
   assert.equal((await f.sessions())[0].transcript_json,original.transcript_json);assert.equal(f.calls.length,2);
 });
 
+for (const mode of ['free','pack']) {
+  test(mode+' credit uses first server End, even when completion crosses the grace cutoff',async t=>{
+    const f=fixture(t);
+    f.db.exec(readFileSync(new URL('../../../db/migrations/033_voice_early_end_grace.sql',import.meta.url),'utf8'));
+    if(mode==='pack') f.db.exec("UPDATE users SET free_session_used=1,voice_sessions_remaining=2 WHERE id=1");
+    await f.open();
+    // End reached the server at 145s; transcript/hangup/save finished at 155s.
+    f.db.exec("UPDATE voice_sessions SET started_at=datetime('now','-155 seconds'); UPDATE voice_interview_controls SET closed_at=datetime('now','-10 seconds')");
+    const end=(await f.controls()).closed_at;
+    const run=completion(f,{durationSeconds:155});
+    const response=await run.execute();await run.flush();
+    assert.equal((await response.json()).creditRestored,true);
+    assert.equal((await f.sessions())[0].ended_at,end);
+    assert.equal(mode==='free'?(await f.user()).free_session_used:(await f.user()).voice_sessions_remaining,mode==='free'?0:2);
+    const retry=completion(f,{durationSeconds:999});
+    assert.equal((await (await retry.execute()).json()).creditRestored,true);await retry.flush();
+    assert.equal((await f.sessions())[0].ended_at,end,'save retry preserves the first server timestamp');
+    assert.equal(mode==='free'?(await f.user()).free_session_used:(await f.user()).voice_sessions_remaining,mode==='free'?0:2);
+  });
+}
+
+test('a late server End cannot obtain grace with a short client duration',async t=>{
+  const f=fixture(t);
+  f.db.exec(readFileSync(new URL('../../../db/migrations/033_voice_early_end_grace.sql',import.meta.url),'utf8'));
+  await f.open();
+  f.db.exec("UPDATE voice_sessions SET started_at=datetime('now','-170 seconds'); UPDATE voice_interview_controls SET closed_at=datetime('now','-10 seconds')");
+  const run=completion(f,{durationSeconds:1});const response=await run.execute();await run.flush();
+  assert.equal((await response.json()).creditRestored,false);
+  assert.equal((await f.user()).free_session_used,1);
+});
+
+test('close records End immediately and hangs up after a bounded transcript window without completion',async t=>{
+  const f=fixture(t);await f.open();
+  let hangups=0;
+  f.setHandler(async()=>{hangups++;assert.ok((await f.controls()).closed_at);return new Response(null,{status:200});});
+  const run=requestContext(f,{action:'close',sessionId:FIRST,flushTranscript:true});
+  const ending=route(run.context);
+  // Yield through auth/SQL to the flush timer. No completion request follows.
+  await new Promise(resolve=>setTimeout(resolve,10));
+  const recorded=(await f.controls()).closed_at;
+  assert.ok(recorded);assert.equal(hangups,0);
+  await assert.rejects(f.open(),/ended/);
+  const response=await ending;await run.flush();
+  assert.equal(response.status,200);assert.equal(hangups,1);
+  assert.equal((await f.controls()).closed_at,recorded);
+});
+
 test('completion overtaking setup reports pending, then cancelled without consuming credit',async t=>{
   const f=fixture(t),entered=deferred(),release=deferred();
   f.setHandler(async({url})=>{if(url.endsWith('/hangup'))return new Response(null,{status:200});entered.resolve();await release.promise;return new Response(SDP,{status:201,headers:{Location:'/v1/realtime/calls/rtc_overtaken'}});});
