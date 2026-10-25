@@ -596,6 +596,8 @@
     state.liveOrder = newTranscriptOrder();
     state.captionDrafts = Object.create(null);
     state.userCaptionItemId = null;
+    if ($('vi-recent')) $('vi-recent').open = false;
+    if ($('vi-answer-tip')) $('vi-answer-tip').open = false;
     var answer = $('vi-your-answer');
     if (answer) answer.textContent = 'Your words will appear here after you speak.';
     setInputStatus('Listening when you speak');
@@ -1134,7 +1136,7 @@
   function handleUserCommitted(itemId) {
     var action = lifecycle().noteUserCommitted(itemId || null, state.lastAssistantResponseId);
     if (action === 'begin_interview') {
-      setStatus('Live. The interviewer can hear you.', 'vi-live');
+      setStatus('Live interview', 'vi-live');
       track('voice_interview_begin', {});
       state.interviewStartedAtMs = Date.now();
       tickTimer();
@@ -1357,7 +1359,10 @@
       if (!current()) return false;
       state.micStream = stream;
       state.micMuted = false;
-      if ($('vi-mute-btn')) $('vi-mute-btn').textContent = 'Mute';
+      if ($('vi-mute-btn')) {
+        $('vi-mute-btn').textContent = 'Mute mic';
+        $('vi-mute-btn').setAttribute('aria-pressed', 'false');
+      }
       setInputStatus('Listening when you speak');
 
       pc = new RTCPeerConnection();
@@ -1901,7 +1906,10 @@
       t.enabled = !t.enabled;
       enabled = t.enabled;
     });
-    if (btn && enabled !== null) btn.textContent = enabled ? 'Mute' : 'Unmute';
+    if (btn && enabled !== null) {
+      btn.textContent = enabled ? 'Mute mic' : 'Unmute mic';
+      btn.setAttribute('aria-pressed', String(!enabled));
+    }
     state.micMuted = enabled === false;
     setInputStatus('Listening when you speak');
   }
@@ -1915,8 +1923,16 @@
     if (!panel || !lifecycle().is(PHASES.ACTIVE_INTERVIEW)) return endInterview('user_ended');
     if (state.endConfirmOpen) return;
     state.endConfirmOpen = true;
-    panel.style.display = '';
     track('end_confirm_shown', {});
+    if (typeof panel.showModal !== 'function') {
+      // Older browsers retain an explicit confirmation and never end merely
+      // because the dialog API is unavailable.
+      if (typeof window.confirm === 'function' && window.confirm('Finish this interview and save your conversation?')) {
+        endInterview('user_ended');
+      } else cancelEnd();
+      return;
+    }
+    panel.showModal();
     var keep = $('vi-end-keep');
     if (keep && typeof keep.focus === 'function') keep.focus();
   }
@@ -1924,7 +1940,7 @@
   function hideEndConfirm() {
     state.endConfirmOpen = false;
     var panel = $('vi-end-confirm');
-    if (panel) panel.style.display = 'none';
+    if (panel && panel.open && typeof panel.close === 'function') panel.close();
   }
 
   function cancelEnd() {
@@ -2211,13 +2227,6 @@
 
   // ---------- free report ----------
 
-  // Plain-language bands for the free practice score, highest first.
-  var SCORE_BANDS = [
-    { min: 75, label: 'Interview ready', tone: 'ready' },
-    { min: 50, label: 'Getting there', tone: 'progress' },
-    { min: 0, label: 'Needs specifics', tone: 'progress' }
-  ];
-
   // The inline plan picker. Prices mirror pricing.html, which owns checkout.
   var PLAN_OPTIONS = [
     { id: 'weekly', name: 'Weekly', price: '$17', per: '/week', note: 'Cancel anytime' },
@@ -2229,13 +2238,6 @@
 
   var CHECK_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20,6 9,17 4,12"/></svg>';
   var LOCK_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>';
-
-  function scoreBand(score) {
-    for (var i = 0; i < SCORE_BANDS.length; i++) {
-      if (score >= SCORE_BANDS[i].min) return SCORE_BANDS[i];
-    }
-    return SCORE_BANDS[SCORE_BANDS.length - 1];
-  }
 
   function planOption(id) {
     for (var i = 0; i < PLAN_OPTIONS.length; i++) if (PLAN_OPTIONS[i].id === id) return PLAN_OPTIONS[i];
@@ -2287,7 +2289,7 @@
     return html;
   }
 
-  // Order: result, score, the one fix, what went well, what is locked, plans.
+  // Lead with useful coaching; scores and the paid detail remain secondary.
   function renderFreeReport(data, sc, wrap) {
     track('paywall_view', { surface: 'voice_scorecard' });
     var html = '<div class="vi-result-head"><div class="vi-result-kicker">' + CHECK_SVG + '<span>Interview complete</span></div>' +
@@ -2296,18 +2298,8 @@
     if (meta) html += '<p class="vi-result-meta">' + escapeHtml(meta) + '</p>';
     html += '</div>';
 
-    var score = sc.overall != null && isFinite(Number(sc.overall)) ? Math.round(Number(sc.overall)) : null;
-    if (sc.tooShort) {
-      html += '<p class="vi-sc-block">Not enough candidate speech to score this session.</p>';
-    } else if (score != null) {
-      var band = scoreBand(score);
-      html += '<div class="vi-result-score vi-result-score--' + band.tone + '"><div class="vi-sc-score">' + score + '</div>' +
-        '<div><div class="vi-result-band">' + band.label + '</div>' +
-        '<div class="vi-sc-overall-label">Practice score for this session</div></div></div>';
-    }
-
     if (sc.topImprovement) {
-      html += '<div class="vi-fix-card"><h3>Your number one fix</h3><p>' + escapeHtml(sc.topImprovement) + '</p>';
+      html += '<section class="vi-feedback-section"><h3 class="vi-feedback-eyebrow">Your next step</h3><p class="vi-feedback-priority">' + escapeHtml(sc.topImprovement) + '</p>';
       if (!sc.tooShort) {
         html += '<div class="vi-fix-actions">';
         if (data.retry && data.retry.eligible) {
@@ -2316,13 +2308,14 @@
         html += '<a class="vi-btn-secondary vi-btn-locked" href="' + pricingHref(DEFAULT_PLAN) + '" data-cta="voice-strong-answer-locked">' +
           LOCK_SVG + '<span>Hear a strong answer</span></a></div>';
       }
-      html += '</div>';
+      html += '</section>';
     }
 
     if (sc.tooShort) {
       html += '<p class="vi-sc-block">There is no full report for this session. Run a full interview to get your scores, moment by moment feedback, and transcript.</p>';
     } else {
-      if (sc.topStrength) html += '<div class="vi-good-card"><h3>What went well</h3><p>' + escapeHtml(sc.topStrength) + '</p></div>';
+      if (sc.topStrength) html += '<section class="vi-feedback-section"><h3 class="vi-feedback-eyebrow">What worked</h3><p class="vi-feedback-strength">' + escapeHtml(sc.topStrength) + '</p></section>';
+      html += practiceDetailsHtml(data, sc);
       html += lockedDetailsHtml(sc.teaserQuote);
     }
 
@@ -2389,6 +2382,71 @@
     });
   }
 
+  function practiceDetailsHtml(data, sc) {
+    var score = sc.overall != null && isFinite(Number(sc.overall)) ? Math.round(Number(sc.overall)) : null;
+    if (score === null && !(data.fullAccess && (sc.dimensions || sc.saoBalance))) return '';
+    var html = '<details class="vi-feedback-details"><summary>Practice score details</summary>' +
+      '<p class="vi-sc-block">These estimates reflect the answers captured in this session. Use the feedback and examples to guide your next practice.</p>';
+    if (score !== null) {
+      html += '<div class="vi-sc-overall"><div class="vi-sc-score">' + score + '</div><div class="vi-sc-overall-label">Practice sample · out of 100</div></div>';
+      var previous = previousOverall(data, sc);
+      if (previous != null) {
+        var delta = score - previous;
+        html += '<p class="vi-sc-delta' + (delta < 0 ? ' vi-sc-delta--down' : '') + '">' +
+          (delta >= 0 ? '▲ +' : '▼ −') + Math.abs(delta) + ' vs your last session for this role</p>';
+      }
+    }
+    if (data.fullAccess && sc.dimensions) {
+      html += '<div class="vi-sc-dims">' + dimensionRow('Communication', sc.dimensions.communication) +
+        dimensionRow('Answer structure', sc.dimensions.structure) + dimensionRow('Content depth', sc.dimensions.contentDepth) +
+        dimensionRow('Role fit', sc.dimensions.roleFit) + '</div>';
+    }
+    if (data.fullAccess && sc.saoBalance) {
+      html += '<h3>Answer content</h3><p>Approximate content breakdown. There is no ideal percentage for every answer.</p><div class="vi-sao-bal">' +
+        saoBalanceRow('Situation', sc.saoBalance.situation) + saoBalanceRow('Action', sc.saoBalance.action) +
+        saoBalanceRow('Outcome', sc.saoBalance.outcome) + '</div>';
+    }
+    return html + '</details>';
+  }
+
+  function renderFullFeedback(data, sc, wrap) {
+    var html = '<h2 class="vi-sc-title">Your practice feedback</h2>' + savedLine(data);
+    var priority = sc.topImprovement || (sc.saoCoaching && sc.saoCoaching[0]);
+    if (priority) html += '<section class="vi-feedback-section"><h3 class="vi-feedback-eyebrow">Your next step</h3>' +
+      '<p class="vi-feedback-priority">' + escapeHtml(priority) + '</p></section>';
+    if (sc.topStrength) html += '<section class="vi-feedback-section"><h3 class="vi-feedback-eyebrow">What worked</h3>' +
+      '<p class="vi-feedback-strength">' + escapeHtml(sc.topStrength) + '</p></section>';
+    html += '<details class="vi-feedback-details"><summary>Evidence and limits of this feedback</summary>';
+    html += '<p>' + escapeHtml(sc.assessmentScope || 'This feedback is based on the answers captured in this practice session.') + '</p>';
+    if (sc.competencies && sc.competencies.length) {
+      sc.competencies.forEach(function (c) {
+        var label = { demonstrated: 'Demonstrated in this sample', needs_practice: 'Needs practice', not_assessed: 'Not assessed' }[c.status] || 'Not assessed';
+        html += '<h4>' + escapeHtml(c.name) + ' · ' + label + '</h4>';
+        if (c.quote) html += '<p class="vi-sc-quote">' + escapeHtml(c.quote) + '</p>';
+        html += '<p>' + escapeHtml(c.feedback) + '</p>';
+      });
+    } else if (sc.moments && sc.moments.length) {
+      html += '<h3>Moments from your interview</h3>';
+      sc.moments.forEach(function (m) {
+        html += '<div class="vi-sc-moment"><p class="vi-sc-quote">“' + escapeHtml(m.quote) + '”</p><p>' + escapeHtml(m.comment) + '</p></div>';
+      });
+    } else if (sc.summary) {
+      html += '<p>' + escapeHtml(sc.summary) + '</p>';
+    }
+    html += '</details>' + practiceDetailsHtml(data, sc);
+    if (data.transcript && data.transcript.length) {
+      html += '<details class="vi-feedback-details vi-sc-transcript"><summary>Full transcript</summary>';
+      data.transcript.forEach(function (t) {
+        html += '<p><strong>' + (t.speaker === 'assistant' ? 'Interviewer' : 'You') + ':</strong> ' + escapeHtml(t.text) + '</p>';
+      });
+      html += '</details>';
+    }
+    html += '<div class="vi-sc-actions"><a class="vi-btn-primary" href="voice-interview.html">Start another interview</a>' +
+      '<a class="vi-sc-actions-link" href="dashboard.html">Back to Dashboard</a></div>';
+    wrap.innerHTML = html;
+    wrap.style.display = '';
+  }
+
   function renderScorecard(data) {
     trackReportView(data);
     // A safety-ended session never renders as a scorecard, even if one was
@@ -2429,82 +2487,9 @@
       wrap.style.display = '';
       return;
     }
-    if (data.fullAccess && !sc.tooShort) {
-      if (sc.assessmentScope) html += '<p class="vi-sc-block">' + escapeHtml(sc.assessmentScope) + '</p>';
-      html += '<div class="vi-sc-overall"><div class="vi-sc-score">' + escapeHtml(sc.overall) + '</div><div class="vi-sc-overall-label">' + (sc.methodologyVersion === 2 ? 'Practice sample' : 'Overall') + '</div></div>';
-      // Session-over-session delta; downward trends are muted, not error-red —
-      // practice is never punished (same rule as the history progress strip).
-      var prevOverall = previousOverall(data, sc);
-      if (prevOverall != null && sc.overall != null && isFinite(Number(sc.overall))) {
-        var scDelta = Math.round(Number(sc.overall)) - prevOverall;
-        html += '<p class="vi-sc-delta' + (scDelta < 0 ? ' vi-sc-delta--down' : '') + '">' +
-          (scDelta >= 0 ? '▲ +' : '▼ −') + Math.abs(scDelta) + ' vs your last session for this role</p>';
-      }
-      if (sc.dimensions) {
-        html += '<div class="vi-sc-dims">';
-        html += dimensionRow('Communication', sc.dimensions.communication);
-        html += dimensionRow('Answer structure', sc.dimensions.structure);
-        html += dimensionRow('Content depth', sc.dimensions.contentDepth);
-        html += dimensionRow('Role fit', sc.dimensions.roleFit);
-        html += '</div>';
-      }
-      // Additive scorecard fields: old sessions have no saoBalance, so the
-      // whole balance block hides gracefully when it is absent.
-      if (sc.saoBalance) {
-        html += '<div class="vi-sc-block"><h3>Answer content</h3><p>Approximate content breakdown. There is no ideal percentage for every answer.</p>';
-        html += '<div class="vi-sao-bal">';
-        html += saoBalanceRow('Situation', sc.saoBalance.situation);
-        html += saoBalanceRow('Action', sc.saoBalance.action);
-        html += saoBalanceRow('Outcome', sc.saoBalance.outcome);
-        html += '</div></div>';
-        if (sc.saoCoaching && sc.saoCoaching.length) {
-          html += '<div class="vi-sc-block vi-sc-improve"><h3>Next time, focus on</h3><ul class="vi-sc-coach">';
-          sc.saoCoaching.forEach(function (tip) {
-            html += '<li>' + escapeHtml(tip) + '</li>';
-          });
-          html += '</ul></div>';
-        }
-      }
-    }
-
-    if (!data.expired) {
-      html += '<div class="vi-sc-block vi-sc-strength"><h3>Top strength</h3><p>' + escapeHtml(sc.topStrength) + '</p></div>';
-      html += '<div class="vi-sc-block vi-sc-improve"><h3>Improve this first</h3><p>' + escapeHtml(sc.topImprovement) + '</p></div>';
-    }
-
-    if (data.fullAccess) {
-      if (sc.competencies && sc.competencies.length) {
-        html += '<div class="vi-sc-block"><h3>Feedback for your role</h3>';
-        sc.competencies.forEach(function (c) {
-          var label = { demonstrated: 'Demonstrated in this sample', needs_practice: 'Needs practice', not_assessed: 'Not assessed' }[c.status] || 'Not assessed';
-          html += '<h4>' + escapeHtml(c.name) + ' · ' + label + '</h4>';
-          if (c.quote) html += '<p class="vi-sc-quote">' + escapeHtml(c.quote) + '</p>';
-          html += '<p>' + escapeHtml(c.feedback) + '</p>';
-        });
-        html += '</div>';
-      }
-      if (sc.moments && sc.moments.length) {
-        html += '<div class="vi-sc-block"><h3>Moments from your interview</h3>';
-        sc.moments.forEach(function (m) {
-          html += '<div class="vi-sc-moment"><p class="vi-sc-quote">"' + escapeHtml(m.quote) + '"</p><p>' + escapeHtml(m.comment) + '</p></div>';
-        });
-        html += '</div>';
-      }
-      if (sc.summary) {
-        html += '<div class="vi-sc-block"><h3>Summary</h3><p>' + escapeHtml(sc.summary) + '</p></div>';
-      }
-      if (data.transcript && data.transcript.length) {
-        html += '<details class="vi-sc-transcript"><summary>Full transcript</summary>';
-        data.transcript.forEach(function (t) {
-          html += '<p><strong>' + (t.speaker === 'assistant' ? 'Interviewer' : 'You') + ':</strong> ' + escapeHtml(t.text) + '</p>';
-        });
-        html += '</details>';
-      }
-      html += '<div class="vi-sc-actions">' +
-        '<a class="vi-btn-primary" href="voice-interview.html">Run another interview</a>' +
-        '<a class="vi-btn-secondary" href="mock-interview.html">Practice typed questions</a>' +
-        '<a class="vi-sc-actions-link" href="dashboard.html">Back to Dashboard</a>' +
-        '</div>';
+    if (data.fullAccess && !data.expired) {
+      renderFullFeedback(data, sc, wrap);
+      return;
     } else {
       // Expired (past the 90-day retention window): locked for every plan, so
       // an active plan is pointed at a new interview rather than an upgrade.
@@ -3019,6 +3004,10 @@
     if (startBtn) startBtn.addEventListener('click', startInterview);
     if (endBtn) endBtn.addEventListener('click', requestEnd);
     if ($('vi-end-keep')) $('vi-end-keep').addEventListener('click', cancelEnd);
+    if ($('vi-end-confirm')) $('vi-end-confirm').addEventListener('cancel', function (event) {
+      event.preventDefault();
+      cancelEnd();
+    });
     if ($('vi-end-confirm-btn')) $('vi-end-confirm-btn').addEventListener('click', function () {
       hideEndConfirm();
       return endInterview('user_ended');

@@ -106,11 +106,11 @@ test('a normal scored session from history still renders its normal report', asy
   try {
     const card = h.el('vi-scorecard');
     assert.notEqual(card.style.display, 'none');
-    assert.ok(card.innerHTML.includes('Your interview report'));
+    assert.ok(card.innerHTML.includes('Your practice feedback'));
     assert.ok(card.innerHTML.includes('>72<'), 'the overall score renders');
     assert.ok(card.innerHTML.includes('Communication'));
     assert.ok(card.innerHTML.includes('Answer structure'));
-    assert.ok(card.innerHTML.includes('Top strength'));
+    assert.ok(card.innerHTML.includes('What worked'));
     assert.ok(card.innerHTML.includes('Moments from your interview'));
     assert.ok(card.innerHTML.includes('Full transcript'));
     assert.ok(!card.innerHTML.includes('ended early for safety'));
@@ -855,11 +855,11 @@ test('End asks first during the interview, and Keep going keeps the session', as
   const h = await liveInterviewWithOneAnswer();
   try {
     await h.click('vi-end-btn');
-    assert.equal(h.el('vi-end-confirm').style.display, '');
+    assert.equal(h.el('vi-end-confirm').open, true);
     assert.equal(h.completeBodies().length, 0, 'nothing ends on the first press');
     assert.equal(h.el('vi-live-view').style.display, '');
     await h.click('vi-end-keep');
-    assert.equal(h.el('vi-end-confirm').style.display, 'none');
+    assert.equal(h.el('vi-end-confirm').open, false);
     assert.equal(h.completeBodies().length, 0);
     await h.click('vi-end-btn');
     await h.click('vi-end-confirm-btn');
@@ -871,6 +871,36 @@ test('End asks first during the interview, and Keep going keeps the session', as
   } finally { h.dispose(); }
 });
 
+test('Escape cancels the Finish dialog without ending or losing the transcript', async () => {
+  const h = await liveInterviewWithOneAnswer();
+  try {
+    await h.click('vi-end-btn');
+    let prevented = false;
+    for (const listener of h.el('vi-end-confirm')._listeners.cancel || []) {
+      listener({ preventDefault() { prevented = true; } });
+    }
+    assert.equal(prevented, true);
+    assert.equal(h.el('vi-end-confirm').open, false);
+    assert.equal(h.completeBodies().length, 0);
+    await h.click('vi-end-btn');
+    assert.equal(h.el('vi-end-confirm').open, true);
+    await h.click('vi-end-confirm-btn');
+    assert.equal(h.completeBodies().length, 1);
+    assert.ok(h.completeBodies()[0].transcript.some(t => t.speaker === 'user'));
+  } finally { h.dispose(); }
+});
+
+test('missing dialog and confirm APIs keep the interview running', async () => {
+  const h = await liveInterviewWithOneAnswer();
+  try {
+    h.el('vi-end-confirm').showModal = undefined;
+    await h.click('vi-end-btn');
+    assert.equal(h.completeBodies().length, 0);
+    assert.equal(h.el('vi-live-view').style.display, '');
+    assert.equal(h.analyticsEvents.filter(e => e.name === 'end_confirm_cancel').length, 1);
+  } finally { h.dispose(); }
+});
+
 test('End before the official interview ends at once without asking', async () => {
   const h = createVoiceClientHarness({ routes: LIVE_ROUTES });
   try {
@@ -879,7 +909,7 @@ test('End before the official interview ends at once without asking', async () =
     await h.click('vi-start-btn');
     await h.openDataChannel();
     await h.click('vi-end-btn');
-    assert.equal(h.el('vi-end-confirm').style.display, 'none');
+    assert.equal(h.el('vi-end-confirm').open, false);
     assert.equal(h.completeBodies().length, 1);
   } finally { h.dispose(); }
 });
@@ -893,7 +923,7 @@ test('a spoken end request is not held behind the confirmation', async () => {
     h.event({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'u3', transcript: 'Please end this interview.' });
     await h.settle();
     assert.equal(h.completeBodies().length, 1);
-    assert.equal(h.el('vi-end-confirm').style.display, 'none', 'the confirmation closes with the session');
+    assert.equal(h.el('vi-end-confirm').open, false, 'the confirmation closes with the session');
   } finally { h.dispose(); }
 });
 
@@ -1022,16 +1052,18 @@ const freeReport = (overrides = {}) => scoredSessionPayload({
   fullAccess: false, transcript: null, questionCount: 3, scorecard: FREE_SCORED, ...overrides
 });
 
-test('the free report leads with the result, the score and the one fix', async () => {
+test('the free report leads with feedback and keeps scores in optional detail', async () => {
   const h = await openPastSession(freeReport());
   try {
     const html = h.el('vi-scorecard').innerHTML;
     assert.ok(html.includes('Interview complete'));
     assert.ok(html.includes('<h2 class="vi-result-role">Product Manager</h2>'));
     assert.ok(html.includes('Senior · 14 min · 3 questions'));
-    assert.ok(html.includes('<div class="vi-result-score vi-result-score--progress"><div class="vi-sc-score">58</div>'));
-    assert.ok(html.includes('Getting there'));
-    const order = ['Interview complete', 'vi-sc-score', 'Your number one fix', 'What went well', 'In the full report', 'Keep practicing until this answer is automatic'];
+    assert.ok(html.includes('<div class="vi-sc-score">58</div>'));
+    assert.ok(html.includes('<details class="vi-feedback-details"><summary>Practice score details</summary>'));
+    assert.ok(!html.includes('Getting there'));
+    assert.ok(!html.includes('Interview ready'));
+    const order = ['Interview complete', 'Your next step', 'What worked', 'vi-sc-score', 'In the full report', 'Keep practicing until this answer is automatic'];
     const at = order.map(marker => html.indexOf(marker));
     assert.ok(at.every(i => i >= 0), JSON.stringify(at));
     assert.deepEqual(at, [...at].sort((a, b) => a - b), 'sections appear in order');
@@ -1060,12 +1092,6 @@ test('a teaser quote without closing punctuation still reads as a sentence', asy
   } finally { h.dispose(); }
 });
 
-test('only the top band shows the score in the success color', async () => {
-  const ready = await openPastSession(freeReport({ scorecard: { ...FREE_SCORED, overall: 82 } }));
-  try { assert.ok(ready.el('vi-scorecard').innerHTML.includes('vi-result-score--ready')); }
-  finally { ready.dispose(); }
-});
-
 test('no teaser line when the server sends no grounded quote', async () => {
   const h = await openPastSession(freeReport({ scorecard: { ...FREE_SCORED, teaserQuote: undefined } }));
   try {
@@ -1073,11 +1099,14 @@ test('no teaser line when the server sends no grounded quote', async () => {
   } finally { h.dispose(); }
 });
 
-for (const [score, band] of [[49, 'Needs specifics'], [50, 'Getting there'], [74, 'Getting there'], [75, 'Interview ready']]) {
-  test(`a free score of ${score} reads "${band}"`, async () => {
+for (const score of [49, 50, 74, 75]) {
+  test(`a free score of ${score} stays sample-scoped and never claims readiness`, async () => {
     const h = await openPastSession(freeReport({ scorecard: { ...FREE_SCORED, overall: score } }));
     try {
-      assert.ok(h.el('vi-scorecard').innerHTML.includes('<div class="vi-result-band">' + band + '</div>'));
+      const html = h.el('vi-scorecard').innerHTML;
+      assert.ok(html.includes('<div class="vi-sc-score">' + score + '</div>'));
+      assert.ok(html.includes('Practice sample'));
+      assert.ok(!html.includes('Interview ready'));
     } finally { h.dispose(); }
   });
 }
@@ -1087,7 +1116,7 @@ test('without a server score the free report shows no number', async () => {
   try {
     const html = h.el('vi-scorecard').innerHTML;
     assert.ok(!html.includes('vi-result-score'));
-    assert.ok(html.includes('Your number one fix'));
+    assert.ok(html.includes('Your next step'));
   } finally { h.dispose(); }
 });
 

@@ -48,12 +48,12 @@ const ELEMENT_IDS = [
   'vi-start-btn', 'vi-end-btn', 'vi-mute-btn', 'vi-reconnect-btn',
   'vi-remote-audio', 'vi-question', 'vi-speaking-label', 'vi-time-note',
   'vi-your-answer', 'vi-input-status',
-  'vi-recent', 'vi-recent-turns', 'vi-end-confirm', 'vi-end-keep',
+  'vi-recent', 'vi-recent-turns', 'vi-answer-tip', 'vi-end-confirm', 'vi-end-keep',
   'vi-end-confirm-btn', 'vi-grace-note', 'vi-plan-continue', 'vi-plan-note'
 ];
 
 // Elements voice-interview.html ships hidden with an inline display:none.
-const HIDDEN_IDS = ['vi-entitlement-retry', 'vi-time-note', 'vi-recent', 'vi-end-confirm', 'vi-grace-note'];
+const HIDDEN_IDS = ['vi-entitlement-retry', 'vi-time-note', 'vi-recent', 'vi-grace-note'];
 
 // The browser's textContent -> innerHTML escaping, which escapeHtml() in the
 // client leans on (it round-trips a detached div).
@@ -73,6 +73,9 @@ function makeElement(id) {
     style: {},
     dataset: {},
     hidden: false,
+    open: false,
+    showModal() { this.open = true; },
+    close() { this.open = false; },
     disabled: false,
     value: '',
     className: '',
