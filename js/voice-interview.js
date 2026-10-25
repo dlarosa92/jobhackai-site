@@ -2409,13 +2409,15 @@
         if (c.quote) html += '<p class="vi-sc-quote">' + escapeHtml(c.quote) + '</p>';
         html += '<p>' + escapeHtml(c.feedback) + '</p>';
       });
-    } else if (sc.moments && sc.moments.length) {
+    }
+    if (sc.moments && sc.moments.length) {
       html += '<h3>Moments from your interview</h3>';
       sc.moments.forEach(function (m) {
         html += '<div class="vi-sc-moment"><p class="vi-sc-quote">“' + escapeHtml(m.quote) + '”</p><p>' + escapeHtml(m.comment) + '</p></div>';
       });
-    } else if (sc.summary) {
-      html += '<p>' + escapeHtml(sc.summary) + '</p>';
+    }
+    if (sc.summary) {
+      html += '<h3>Summary</h3><p>' + escapeHtml(sc.summary) + '</p>';
     }
     html += '</details>' + practiceDetailsHtml(data, sc);
     if (data.transcript && data.transcript.length) {
