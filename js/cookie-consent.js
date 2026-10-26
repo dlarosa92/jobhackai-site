@@ -343,6 +343,22 @@
     return result.source && result.medium && result.campaign ? result : null;
   }
 
+  // A shared campaign can be newer than this origin's cached rejection.
+  // Inspect only its timestamps while auth restores; this never grants consent.
+  function hasCampaignAfterCachedRejection(consent) {
+    const rejectedAt = Date.parse(consent?.updatedAt || '');
+    if (!Number.isFinite(rejectedAt) || rejectedAt > Date.now()) return false;
+    try {
+      const matches = document.cookie.split(';').map(c => c.trim()).filter(c => c.startsWith(CAMPAIGN_COOKIE + '='));
+      if (new Set(matches).size !== 1) return false;
+      const value = JSON.parse(decodeURIComponent(matches[0].slice(CAMPAIGN_COOKIE.length + 1)));
+      const touches = [value.first, value.last].filter(Boolean).map(campaignTouch);
+      // Never restore an older first touch across a withdrawal, or guess when
+      // the cached decision/campaign has no valid ordering information.
+      return touches.length > 0 && touches.every(touch => touch && touch.at > rejectedAt);
+    } catch (_) { return false; }
+  }
+
   function readCampaign() {
     if (!hasAnalyticsConsent()) return null;
     try {
@@ -1070,10 +1086,12 @@
       controlsInitialized = true;
     }
     if (!consentIdentityReady()) {
-      // Authentication is unresolved, not a withdrawal. Keep an existing
-      // consented visit private until the authoritative decision arrives.
-      // An explicit local rejection must still erase it immediately.
-      preventGALoading({ preserveCampaign: getConsent()?.analytics !== false && getPendingConsent()?.analytics !== false });
+      // A newer consented handoff may follow this origin's cached rejection.
+      // Preserve only demonstrably newer context while the server reconciles;
+      // no collection is allowed here. Current/ambiguous rejection still wins.
+      const cached = getConsent();
+      preventGALoading({ preserveCampaign: getPendingConsent()?.analytics !== false &&
+        (cached?.analytics !== false || hasCampaignAfterCachedRejection(cached)) });
       createBanner();
       return;
     }

@@ -478,6 +478,55 @@ test('marketing-to-app navigation preserves first and last touch despite interna
   gaIdentifiers(app);const context=await app.ctx.JHA.cookieConsent.getCheckoutAnalyticsContext();
   assert.equal(context.firstTouch.source,'linkedin');assert.equal(context.lastTouch.source,'linkedin');
 });
+for (const [name, runtime] of [['shared', source], ['directory', directoryConsentSource]]) {
+  for (const serverDecision of [true, false]) {
+    test(`${name}: reconcile a cached app rejection before erasing a newer consented campaign (server=${serverDecision})`, async()=>{
+      const marketing=harness({host:'jobhackai.io',search:tagged});await marketing.init();
+      const original=marketing.cookies.get('jha_campaign_prod');
+      const store=new Map([['jha_cookie_consent_v1',JSON.stringify({version:1,analytics:false,updatedAt:new Date(Date.now()-86400000).toISOString()})]]);
+      const app=harness({runtime,cookies:marketing.cookies,store,consent:null,accountAuthPage:true,pendingServer:true});
+      app.ctx.document.referrer='https://jobhackai.io/features';
+      await app.init();
+      assert.equal(app.cookies.get('jha_campaign_prod'),original,'an unresolved identity is not a new withdrawal');
+      assert.equal(app.insertedScripts.length,0,'do not collect while the authoritative decision is pending');
+      const ready=app.authReady(null);app.finishServer(serverDecision);await ready;
+      app.ctx.JHA.trackEventSafe('cta_click',{cta_label:'fixture'});
+      if(serverDecision){
+        assert.equal(app.events('cta_click').at(-1)[2].jha_first_campaign,'voice_beta_2026_09');
+      }else{
+        assert.equal(app.cookies.has('jha_campaign_prod'),false);
+        assert.equal(app.events('cta_click').length,0);
+        assert.equal(app.insertedScripts.length,0);
+      }
+    });
+  }
+  test(`${name}: a pending explicit rejection still erases campaign context before authentication`,async()=>{
+    const marketing=harness({host:'jobhackai.io',search:tagged});await marketing.init();
+    const store=new Map([['jha_cookie_consent_pending_v1',JSON.stringify({version:1,analytics:false})]]);
+    const app=harness({runtime,cookies:marketing.cookies,store,consent:false,accountAuthPage:true,pendingServer:true});
+    await app.init();
+    assert.equal(app.cookies.has('jha_campaign_prod'),false);
+    assert.equal(app.insertedScripts.length,0);
+  });
+  test(`${name}: campaign ordering cannot resurrect tracking across a withdrawal`,async()=>{
+    for (const scenario of ['missing-date','invalid-date','future-date','newer-rejection','old-first-touch']) {
+      const marketing=harness({host:'jobhackai.io',search:tagged});await marketing.init();
+      const campaign=campaignValue(marketing);
+      const at=campaign.last.at;
+      const dates={'missing-date':undefined,'invalid-date':'invalid','future-date':new Date(Date.now()+86400000).toISOString(),
+        'newer-rejection':new Date(at).toISOString(),'old-first-touch':new Date(at-1000).toISOString()};
+      if(scenario==='old-first-touch'){
+        campaign.first.at=at-2000;
+        marketing.cookies.set('jha_campaign_prod',encodeURIComponent(JSON.stringify(campaign)));
+      }
+      const store=new Map([['jha_cookie_consent_v1',JSON.stringify({version:1,analytics:false,updatedAt:dates[scenario]})]]);
+      const app=harness({runtime,cookies:marketing.cookies,store,consent:null,accountAuthPage:true,pendingServer:true});
+      await app.init();
+      assert.equal(app.cookies.has('jha_campaign_prod'),false,scenario);
+      assert.equal(app.insertedScripts.length,0,scenario);
+    }
+  });
+}
 test('consented signup and completion events retain campaign context across the app handoff', async()=>{
   const marketing=harness({host:'jobhackai.io',search:tagged});await marketing.init();
   const app=harness({cookies:marketing.cookies});
