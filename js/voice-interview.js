@@ -93,6 +93,65 @@
     analyticsReportSessionId: null
   };
 
+  // Semantic VAD still detects turns and interrupts playback. The app requests
+  // replies explicitly so it can apply a turn budget before audio is generated.
+  var turnControl = { plan: null, ready: false, setupTimer: null, pending: null,
+    busy: false, speaking: false, serial: 0, seen: Object.create(null), start: null,
+    responseId: '', requestId: '', finished: Object.create(null), responseTimer: null };
+
+  function resetTurnConnection() {
+    clearTimeout(turnControl.setupTimer);
+    clearTimeout(turnControl.responseTimer);
+    turnControl.responseTimer = null;
+    turnControl.responseId = '';
+    turnControl.requestId = '';
+    turnControl.setupTimer = null;
+    turnControl.ready = false;
+    turnControl.pending = null;
+    turnControl.busy = false;
+    turnControl.speaking = false;
+    turnControl.start = null;
+  }
+
+  function turnControlFailed() {
+    if (state.ending) return;
+    resetTurnConnection();
+    setStatus('Connection interrupted. Saving and closing this attempt.', 'vi-error');
+    endInterview('connection_lost');
+  }
+
+  function drainTurn() {
+    if (!turnControl.ready || !turnControl.pending || turnControl.busy || turnControl.speaking || state.audioPlaying ||
+        state.ending || state.conductEnd || lifecycle().is(PHASES.CLOSING)) return;
+    var pending = turnControl.pending;
+    turnControl.pending = null;
+    var plan = pending.greeting ? null : turnControl.plan.next({ opening: pending.opening, wrapUp: state.wrapUpNoted });
+    var id = 'jha_turn_' + (++turnControl.serial);
+    turnControl.requestId = id;
+    if (plan) {
+      lifecycle().excludeItem(id);
+      if (!sendRealtime({ type: 'conversation.item.create', event_id: id + '_context', item: {
+        id: id, type: 'message', role: 'system', content: [{ type: 'input_text', text: plan.instruction }]
+      } })) { turnControlFailed(); return; }
+    }
+    turnControl.busy = true;
+    turnControl.responseId = '';
+    turnControl.responseTimer = setTimeout(turnControlFailed, 45000);
+    if (!sendRealtime({ type: 'response.create', event_id: id + '_response', response: { metadata: {
+      jobhackai_purpose: pending.greeting ? 'audio_check' : plan.kind,
+      jobhackai_turn: id,
+      ...(plan ? { jobhackai_topic: String(plan.topic) } : {})
+    } } })) turnControlFailed();
+  }
+
+  function queueTurn(itemId, opening) {
+    if (!itemId || turnControl.seen[itemId]) return;
+    turnControl.seen[itemId] = true;
+    turnControl.speaking = false;
+    turnControl.pending = { opening: opening };
+    drainTurn();
+  }
+
   function $(id) { return document.getElementById(id); }
 
   function show(viewId) {
@@ -582,6 +641,10 @@
 
   // Fresh live view for a new session.
   function resetLiveView() {
+    resetTurnConnection();
+    turnControl.plan = window.createVoiceTurnPlan ? window.createVoiceTurnPlan() : null;
+    turnControl.seen = Object.create(null);
+    turnControl.finished = Object.create(null);
     state.micMuted = false;
     state.liveOrder = newTranscriptOrder();
     state.captionDrafts = Object.create(null);
@@ -1131,13 +1194,25 @@
       state.interviewStartedAtMs = Date.now();
       tickTimer();
       beginTurnWait();
+      queueTurn(itemId, true);
       return;
     }
-    if (action === 'committed') beginTurnWait();
+    if (action === 'committed') { beginTurnWait(); queueTurn(itemId, false); }
   }
 
   function handleRealtimeEvent(evt) {
     var type = evt.type || '';
+    if (type === 'session.updated' && !turnControl.ready && turnControl.start) {
+      var detection = evt.session && evt.session.audio && evt.session.audio.input && evt.session.audio.input.turn_detection;
+      if (!detection || detection.type !== 'semantic_vad' || detection.create_response !== false || detection.interrupt_response !== true) return;
+      clearTimeout(turnControl.setupTimer);
+      turnControl.setupTimer = null;
+      turnControl.ready = true;
+      var start = turnControl.start;
+      turnControl.start = null;
+      start();
+      return;
+    }
     // Include audio checks and control utterances: they consume tokens too.
     if (state.usage && type === 'response.done') state.usage.add('response', evt.response && evt.response.id, evt.response && evt.response.usage);
     if (state.usage && type === 'conversation.item.input_audio_transcription.completed') state.usage.add('transcription', evt.item_id, evt.usage);
@@ -1191,6 +1266,7 @@
       return;
     }
     if (type === 'input_audio_buffer.speech_started') {
+      turnControl.speaking = true;
       // The candidate is talking again; they are not waiting on a reply.
       clearTurnWait();
       if (!state.ending) {
@@ -1200,6 +1276,7 @@
       return;
     }
     if (type === 'input_audio_buffer.speech_stopped') {
+      turnControl.speaking = false;
       if (!state.ending) setInputStatus('Transcribing your answer…');
       return;
     }
@@ -1237,6 +1314,7 @@
         }
       }
       recordTurn('assistant', evt.transcript, evt.item_id);
+      if (opening === 'demoted') turnControl.plan = window.createVoiceTurnPlan();
       // During the audio check (initial or re-entered via demotion) the
       // greeting arms by CONTENT: only the spoken hearing question makes the
       // next commit readable as its answer. A racing VAD auto-response that
@@ -1277,10 +1355,35 @@
           response.metadata && response.metadata.jobhackai_purpose === 'audio_check');
       }
       if (state.conductEnd) state.conductEnd.noteResponseDone();
+      // A duplicated or late done from the interrupted previous response must
+      // not release a newer request and start a second concurrent response.
+      var requestId = response.metadata && response.metadata.jobhackai_turn;
+      if ((!requestId || requestId === turnControl.requestId) &&
+          (!response.id || !turnControl.finished[response.id]) &&
+          (!turnControl.responseId || !response.id || turnControl.responseId === response.id)) {
+        if (response.id) turnControl.finished[response.id] = true;
+        clearTimeout(turnControl.responseTimer);
+        turnControl.responseTimer = null;
+        turnControl.busy = false;
+        turnControl.responseId = '';
+        turnControl.requestId = '';
+        if (response.status === 'failed') turnControlFailed();
+        else drainTurn();
+      }
       return;
     }
 
     if (type === 'response.created') {
+      // An automatic response racing the configuration acknowledgement must
+      // never speak outside the application-owned turn budget.
+      if (!turnControl.ready) {
+        if (evt.response && evt.response.id) turnControl.finished[evt.response.id] = true;
+        sendRealtime({ type: 'response.cancel' });
+        return;
+      }
+      if (evt.response && turnControl.finished[evt.response.id]) return;
+      turnControl.busy = true;
+      turnControl.responseId = evt.response && evt.response.id || '';
       if (evt.response && evt.response.id) state.lastAssistantResponseId = evt.response.id;
       // No new interviewer turns once the wrap-up is announced. Responses
       // are serial, so anything created during CLOSING is a new turn racing
@@ -1316,9 +1419,13 @@
       state.audioResponseId = '';
       setSpeaking(false);
       if (state.conductEnd) state.conductEnd.noteAudioStopped();
+      drainTurn();
       return;
     }
     if (type === 'error') {
+      var failedEvent = evt.error && evt.error.event_id;
+      if (turnControl.setupTimer || (turnControl.busy && failedEvent &&
+          (failedEvent === turnControl.requestId + '_context' || failedEvent === turnControl.requestId + '_response'))) turnControlFailed();
       console.error('[VOICE] Realtime error event:', evt);
     }
   }
@@ -1375,35 +1482,43 @@
         try { handleRealtimeEvent(JSON.parse(e.data)); } catch (_) {}
       };
       dc.onopen = function () {
-        // Realtime is ready. Before the official interview there is an audio
-        // check: the interviewer speaks first, and with semantic VAD the model
-        // only ever replies to candidate speech, so her opening line has to be
-        // requested explicitly. The wording lives in the session instructions;
-        // the app owns only the state.
         if (state.pc !== pc || state.ending || state.conductEnd) return;
-        var lc = lifecycle();
-        var windowOpen = typeof lc.isAwaitingOpening === 'function' && lc.isAwaitingOpening();
-        if (lc.is(PHASES.CONNECTING)) {
-          lc.to(PHASES.AUDIO_CHECK);
-        } else if (lc.is(PHASES.AUDIO_CHECK)) {
-          lc.noteReconnect();   // a drop during the check: the fresh session re-greets
-        } else if (lc.is(PHASES.ACTIVE_INTERVIEW) && windowOpen) {
-          // A drop with the settling window open: the resume was minted
-          // without interviewStarted, so the model's first turn is either the
-          // re-check (the window demotes on it) or, with a transcript tail,
-          // the resumed conversation (the window confirms). Either way the
-          // interviewer speaks first.
-          lc.noteReconnect();
-        } else {
-          // Reconnect mid-interview: the conversation resumes as before. A
-          // fresh realtime session has not seen the wrap-up notice yet.
-          if (state.wrapUpNoted) sendWrapUpInstruction();
-          return;
-        }
-        if (!lc.is(PHASES.ACTIVE_INTERVIEW)) {
-          setStatus('Connected. Quick audio check...', 'vi-connecting');
-        }
-        sendRealtime({ type: 'response.create', response: { metadata: { jobhackai_purpose: 'audio_check' } } });
+        resetTurnConnection();
+        turnControl.start = function () {
+          // Realtime is ready. Before the official interview there is an audio
+          // check: the interviewer speaks first. Automatic replies are disabled,
+          // so the app requests the greeting and subsequent candidate turns.
+          // The greeting wording lives in the session instructions.
+          if (state.pc !== pc || state.ending || state.conductEnd) return;
+          var lc = lifecycle();
+          var windowOpen = typeof lc.isAwaitingOpening === 'function' && lc.isAwaitingOpening();
+          if (lc.is(PHASES.CONNECTING)) {
+            lc.to(PHASES.AUDIO_CHECK);
+          } else if (lc.is(PHASES.AUDIO_CHECK)) {
+            lc.noteReconnect();   // a drop during the check: the fresh session re-greets
+          } else if (lc.is(PHASES.ACTIVE_INTERVIEW) && windowOpen) {
+            // A drop with the settling window open: the resume was minted
+            // without interviewStarted, so the model's first turn is either the
+            // re-check (the window demotes on it) or, with a transcript tail,
+            // the resumed conversation (the window confirms). Either way the
+            // interviewer speaks first.
+            lc.noteReconnect();
+          } else {
+            // Reconnect mid-interview: the conversation resumes as before. A
+            // fresh realtime session has not seen the wrap-up notice yet.
+            if (state.wrapUpNoted) sendWrapUpInstruction();
+            return;
+          }
+          if (!lc.is(PHASES.ACTIVE_INTERVIEW)) {
+            setStatus('Connected. Quick audio check...', 'vi-connecting');
+          }
+          turnControl.pending = { greeting: true };
+          drainTurn();
+        };
+        turnControl.setupTimer = setTimeout(turnControlFailed, 8000);
+        if (!sendRealtime({ type: 'session.update', session: { type: 'realtime', audio: { input: {
+          turn_detection: { type: 'semantic_vad', create_response: false, interrupt_response: true }
+        } } } })) turnControlFailed();
       };
 
       pc.onconnectionstatechange = function () {
@@ -1527,6 +1642,7 @@
   }
 
   function teardownConnection() {
+    resetTurnConnection();
     releaseRetiringConnection(state.retiringConnection);
     cancelConnectionAttempt();
     stopRemotePlayback();
@@ -1632,6 +1748,9 @@
     var seniority = ($('vi-seniority') && $('vi-seniority').value || '').trim();
     var jd = ($('vi-jd') && $('vi-jd').value || '').trim();
     if (!role) { alert('Pick the role you are interviewing for.'); return; }
+    if (typeof window.createVoiceTurnPlan !== 'function') {
+      alert('The interview controls did not load. Refresh this page before starting.'); return;
+    }
     if (state.managedTransport) return startManagedInterview(role, seniority, jd);
 
     var startBtn = $('vi-start-btn');
@@ -2244,9 +2363,10 @@
   }
 
   // Dimension names only. Free and expired reports never show numbers here.
-  function lockedDetailsHtml(teaserQuote) {
+  function lockedDetailsHtml(teaserQuote, feedbackOnly) {
     var html = '<div class="vi-locked-details"><h3>In the full report</h3><ul class="vi-locked-dims">';
-    DIMENSION_NAMES.forEach(function (name) { html += '<li>' + LOCK_SVG + '<span>' + name + '</span></li>'; });
+    var details = feedbackOnly ? ['Evidence from your answers', 'Practice suggestions', 'Full transcript'] : DIMENSION_NAMES;
+    details.forEach(function (name) { html += '<li>' + LOCK_SVG + '<span>' + name + '</span></li>'; });
     html += '</ul>';
     if (teaserQuote) {
       // Close the sentence inside the quote unless the quote already ends one.
@@ -2281,6 +2401,7 @@
     var meta = reportMeta(data);
     if (meta) html += '<p class="vi-result-meta">' + escapeHtml(meta) + '</p>';
     html += '</div>';
+    if (sc.feedbackOnly) html += limitedFeedbackHtml();
 
     if (sc.topImprovement) {
       html += '<section class="vi-feedback-section"><h3 class="vi-feedback-eyebrow">Your next step</h3><p class="vi-feedback-priority">' + escapeHtml(sc.topImprovement) + '</p>';
@@ -2300,7 +2421,7 @@
     } else {
       if (sc.topStrength) html += '<section class="vi-feedback-section"><h3 class="vi-feedback-eyebrow">What worked</h3><p class="vi-feedback-strength">' + escapeHtml(sc.topStrength) + '</p></section>';
       html += practiceDetailsHtml(data, sc);
-      html += lockedDetailsHtml(sc.teaserQuote);
+      html += lockedDetailsHtml(sc.teaserQuote, sc.feedbackOnly);
     }
 
     html += planPickerHtml();
@@ -2367,6 +2488,7 @@
   }
 
   function practiceDetailsHtml(data, sc) {
+    if (sc.feedbackOnly) return '';
     var score = sc.overall != null && isFinite(Number(sc.overall)) ? Math.round(Number(sc.overall)) : null;
     if (score === null && !(data.fullAccess && (sc.dimensions || sc.saoBalance))) return '';
     var html = '<details class="vi-feedback-details"><summary>Practice score details</summary>' +
@@ -2393,8 +2515,13 @@
     return html + '</details>';
   }
 
+  function limitedFeedbackHtml() {
+    return '<p class="vi-sc-block">Feedback only for this sample. We need more substantive answers before giving a practice score. Your feedback below is based on what was captured.</p>';
+  }
+
   function renderFullFeedback(data, sc, wrap) {
     var html = '<h2 class="vi-sc-title">Your practice feedback</h2>' + savedLine(data);
+    if (sc.feedbackOnly) html += limitedFeedbackHtml();
     var priority = sc.topImprovement || (sc.saoCoaching && sc.saoCoaching[0]);
     if (priority) html += '<section class="vi-feedback-section"><h3 class="vi-feedback-eyebrow">Your next step</h3>' +
       '<p class="vi-feedback-priority">' + escapeHtml(priority) + '</p></section>';

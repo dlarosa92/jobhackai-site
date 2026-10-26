@@ -116,18 +116,39 @@ const card = { assessmentScope: 'Product Manager practice sample', overall: 70,
   competencies: [{ name: 'Prioritization', status: 'demonstrated', quote: 'I prioritized an onboarding fix', feedback: 'You chose a concrete action.' },
     { name: 'Leadership', status: 'needs_practice', quote: 'invented evidence', feedback: 'Unsupported.' }] };
 
-test('voice scoring retains strict schema, token cap, grounding and distinct fallback', async t => {
-  const calls = mockFetch(t, (body, n) => n === 1 ? Response.json({}, { status: 500 }) : reply(JSON.stringify(card), body.model));
-  const result = await scoreVoiceTranscript({ role: 'Product Manager', transcript }, env);
-  assert.deepEqual(calls.map(c => c.model), ['gpt-6-luna', 'gpt-6-sol']);
-  for (const body of calls) {
-    assertModern(body, body.model, 2400, 0.1);
-    assert.deepEqual(body.response_format.json_schema, SCORECARD_SCHEMA);
-  }
-  assert.equal(result.scorecard.moments.length, 1);
-  assert.equal(result.scorecard.competencies[1].status, 'not_assessed');
-  assert.equal(result.scorecard.methodologyVersion, 2);
-});
+// Distinct synthetic answer blocks exercise the request contract for a sample
+// above the word/answer threshold; they do not test model assessment quality.
+const substantialTranscript = ['first', 'second', 'third'].flatMap(prefix => [
+  { speaker: 'assistant', text: `Describe your ${prefix} example.` },
+  { speaker: 'user', text: `${answer} ${Array.from({ length: 100 }, (_, i) => `${prefix}${i}`).join(' ')}` }
+]);
+const groundedCard = { ...card, competencies: [...card.competencies,
+  { name: 'Testing', status: 'demonstrated', quote: 'tested it with five customers', feedback: 'You tested the change.' },
+  { name: 'Communication', status: 'demonstrated', quote: 'I shared the results with the product team.', feedback: 'You shared the results.' }
+] };
+for (const limited of [true, false]) {
+  test(`voice ${limited ? 'limited feedback' : 'scoring'} retains strict schema, token cap, grounding and distinct fallback`, async t => {
+    const calls = mockFetch(t, (body, n) => n === 1 ? Response.json({}, { status: 500 }) : reply(JSON.stringify(groundedCard), body.model));
+    const expectedSchema = structuredClone(SCORECARD_SCHEMA);
+    if (limited) {
+      expectedSchema.name = 'voice_interview_feedback';
+      for (const key of ['overall', 'dimensions', 'saoBalance']) {
+        expectedSchema.schema.properties[key] = { type: 'null', description: 'No numerical assessment for this limited sample.' };
+      }
+    }
+    const result = await scoreVoiceTranscript({ role: 'Product Manager', transcript: limited ? transcript : substantialTranscript }, env);
+    assert.deepEqual(calls.map(c => c.model), ['gpt-6-luna', 'gpt-6-sol']);
+    for (const body of calls) {
+      assertModern(body, body.model, 2400, 0.1);
+      assert.deepEqual(body.response_format, { type: 'json_schema', json_schema: expectedSchema });
+    }
+    assert.equal(result.scorecard.moments.length, 1);
+    assert.equal(result.scorecard.competencies[1].status, 'not_assessed');
+    assert.equal(result.scorecard.methodologyVersion, 2);
+    assert.equal(result.scorecard.scoreEligibility.eligible, !limited);
+    assert.equal(result.scorecard.overall, limited ? null : 70);
+  });
+}
 
 test('voice scoring honors the configured quality tier', async t => {
   const calls = mockFetch(t, body => reply(JSON.stringify(card), body.model));

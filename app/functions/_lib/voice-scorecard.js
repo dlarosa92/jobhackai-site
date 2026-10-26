@@ -134,9 +134,40 @@ export function transcriptToText(transcript) {
     .join('\n');
 }
 
-// Below this many characters of candidate-only formatted text, sessions get the
+// Below this many characters of candidate speech, sessions get the
 // fixed "too short" scorecard instead of a model call.
 export const MIN_SCOREABLE_CHARS = 200;
+
+// A feedback threshold is not a grading threshold. Merge transcription chunks
+// belonging to the same answer and ignore repeated answers; neither splitting
+// speech into items nor waiting out the clock can manufacture grading evidence.
+export const MIN_GRADED_WORDS = 300;
+export const MIN_SUBSTANTIVE_ANSWERS = 3;
+export const MIN_ANSWER_WORDS = 40;
+export function scoreEvidence(transcript) {
+  const answers = [];
+  let current = [];
+  const flush = () => { if (current.length) answers.push(quoteWords(current.join(' '))); current = []; };
+  for (const turn of interviewEvidenceTranscript(transcript)) {
+    if (turn?.speaker === 'assistant') flush();
+    else if (turn?.speaker === 'user' && String(turn.text || '').trim()) current.push(String(turn.text).trim());
+  }
+  flush();
+  const counts = [...new Set(answers)].filter(Boolean).map(answer => answer.split(/\s+/).length);
+  const candidateWords = counts.reduce((sum, count) => sum + count, 0);
+  const substantiveAnswers = counts.filter(count => count >= MIN_ANSWER_WORDS).length;
+  return { candidateWords, substantiveAnswers,
+    eligible: candidateWords >= MIN_GRADED_WORDS && substantiveAnswers >= MIN_SUBSTANTIVE_ANSWERS };
+}
+
+// Ask for qualitative feedback only when the deterministic evidence gate fails.
+// Also strip numerical fields after generation, even if a provider/cache returns
+// them despite the schema. Existing saved reports are not silently regraded.
+const FEEDBACK_SCHEMA = JSON.parse(JSON.stringify(SCORECARD_SCHEMA));
+FEEDBACK_SCHEMA.name = 'voice_interview_feedback';
+for (const key of ['overall', 'dimensions', 'saoBalance']) {
+  FEEDBACK_SCHEMA.schema.properties[key] = { type: 'null', description: 'No numerical assessment for this limited sample.' };
+}
 
 function tooShortScorecard() {
   // Too short to score meaningfully (mic failure, instant hangup)
@@ -170,10 +201,11 @@ function tooShortScorecard() {
 export async function scoreVoiceTranscript({ role, seniority, transcript, jd = null, priorFocus = null }, env) {
   transcript = interviewEvidenceTranscript(transcript);
   const text = transcriptToText(transcript);
-  const candidateText = transcriptToText((Array.isArray(transcript) ? transcript : []).filter(t => t?.speaker === 'user'));
+  const candidateText = transcript.filter(t => t?.speaker === 'user').map(t => String(t.text || '').trim()).join(' ');
   if (candidateText.length < MIN_SCOREABLE_CHARS) {
     return { scorecard: tooShortScorecard(), usage: null, model: null };
   }
+  const evidence = scoreEvidence(transcript);
 
   const promptParts = [
     "You are the candidate's interview coach at JobHackAI. Give warm, direct, evidence-based feedback on this practice sample.",
@@ -194,8 +226,10 @@ export async function scoreVoiceTranscript({ role, seniority, transcript, jd = n
     'State the assessment scope and important untested areas, especially for short interviews. A job-description match reflects this practice evidence, not qualification verification or a hiring prediction.',
     'Give exactly two concise saoCoaching practice steps under 120 characters each. Make topImprovement one achievable priority. Suggested practice must not invent accomplishments, metrics or experience for the candidate.',
     'Write directly to the candidate using you, plain language and short sentences. Explain uncertainty without hiding useful criticism. End the summary with a specific next practice focus, not a sales pitch.',
+    'Keep numerical grades and content percentages only in their structured numeric fields, never in feedback prose. Evidence eligibility may withhold those numeric fields after generation.',
     'FINAL AUDIT: For every needs_practice item, verify the quote establishes an actual problem under the evidence decision rules. Change missing or unasked evidence to not_assessed, and sound limited evidence to demonstrated. Remove any criticism elsewhere that depends on those rejected gaps. Check scores, topImprovement, summary and moments agree with the final statuses. Do not diagnose job readiness from one answer.'
   ];
+  if (!evidence.eligible) promptParts.push('LIMITED SAMPLE: Give useful qualitative feedback, with grounded strengths and one next practice step. Do not assign or mention any numerical score, grade, rating, percentage, or readiness band. overall, dimensions and saoBalance must be null. Explain that more substantive answers are needed for a practice score; choosing to finish is not a performance defect.');
   if (jd) {
     promptParts.push('A job description excerpt is provided: score roleFit against it specifically, and cite the most relevant match or gap in a moment or the summary.');
   }
@@ -218,7 +252,7 @@ export async function scoreVoiceTranscript({ role, seniority, transcript, jd = n
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userParts.join('\n\n') }
     ],
-    responseFormat: SCORECARD_SCHEMA,
+    responseFormat: evidence.eligible ? SCORECARD_SCHEMA : FEEDBACK_SCHEMA,
     maxTokens: 2400,
     // Low temperature: the same performance should get the same score.
     temperature: 0.1,
@@ -236,6 +270,15 @@ export async function scoreVoiceTranscript({ role, seniority, transcript, jd = n
   scorecard.methodologyVersion = 2;
   scorecard.moments = groundedMoments(scorecard.moments, transcript);
   scorecard.competencies = groundedCompetencies(scorecard.competencies, transcript);
+  // Even a long transcript needs grounded assessments before numbers may show.
+  const assessed = scorecard.competencies.filter(c => c.status !== 'not_assessed');
+  scorecard.scoreEligibility = { ...evidence, version: 1, eligible: evidence.eligible && assessed.length >= 3 };
+  if (!scorecard.scoreEligibility.eligible) {
+    scorecard.feedbackOnly = true;
+    scorecard.overall = null;
+    scorecard.dimensions = null;
+    scorecard.saoBalance = null;
+  }
   return { scorecard, usage: result.usage || null, model: result.model || null, fromCache: result.fromCache === true };
 }
 
@@ -340,8 +383,9 @@ export function partialScorecard(scorecard, { transcript = null } = {}) {
     partial.tooShort = true;
     return partial;
   }
+  if (scorecard.feedbackOnly) partial.feedbackOnly = true;
   const overall = Number(scorecard.overall);
-  if (FREE_REPORT_SHOWS_SCORE && scorecard.overall != null && Number.isFinite(overall)) {
+  if (!scorecard.feedbackOnly && FREE_REPORT_SHOWS_SCORE && scorecard.overall != null && Number.isFinite(overall)) {
     partial.overall = Math.round(overall);
     partial.methodologyVersion = scorecard.methodologyVersion || 1;
   }

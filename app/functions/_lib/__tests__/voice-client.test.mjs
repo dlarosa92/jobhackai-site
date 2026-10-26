@@ -418,14 +418,13 @@ test('a session that ends live for safety shows the same visible, scoreless stat
 test('the client adds no fixed silence cutoff and no artificial turn delay', async () => {
   const h = await liveInterviewWithOneAnswer();
   try {
-    // Everything the client sends on the data channel across a whole session:
-    // the audio-check response.create and nothing that reconfigures turn
-    // detection or paces the conversation.
-    const types = h.sends.map((s) => s.type);
-    assert.deepEqual(types, ['response.create'], 'the client only ever requests the opening turn');
+    const update = h.sends.find(s => s.type === 'session.update');
+    assert.deepEqual(update.session.audio.input.turn_detection,
+      { type: 'semantic_vad', create_response: false, interrupt_response: true });
+    assert.equal(h.sends.filter(s => s.type === 'response.create').length, 3, 'audio check, opening, and reply to committed answer');
     for (const sent of h.sends) {
       assert.ok(!JSON.stringify(sent).includes('silence_duration_ms'));
-      assert.ok(!JSON.stringify(sent).includes('turn_detection'));
+      assert.ok(!JSON.stringify(sent).includes('eagerness'), 'semantic endpointing retains its existing default');
     }
   } finally { h.dispose(); }
 });

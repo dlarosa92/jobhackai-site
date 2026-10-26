@@ -319,7 +319,7 @@ test('two minutes before the server deadline the interviewer is told to wrap up,
   assert.equal(f.h.el('vi-time-note').style.display,'none','no notice during the audio check');
   await beginInterview(f.h);
   assert.equal(f.h.el('vi-time-note').style.display,'');
-  const notices=()=>f.h.sends.filter(s=>s.type==='conversation.item.create' && s.item?.role==='system');
+  const notices=()=>f.h.sends.filter(s=>s.type==='conversation.item.create' && s.item?.role==='system' && /two minutes remain/i.test(s.item.content[0].text));
   assert.equal(notices().length,1);
   assert.match(notices()[0].item.content[0].text,/two minutes remain/i);
   assert.equal(f.h.analyticsEvents.filter(e=>e.name==='voice_wrap_up_notice').length,1);
