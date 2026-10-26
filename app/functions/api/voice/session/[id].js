@@ -136,6 +136,11 @@ export async function onRequest(context) {
     // Existing reports also need speaker grounding; keep the stored evidence
     // intact and filter quotations only in the response.
     if (fullAccess && scorecard) {
+      if (scorecard.feedbackOnly) {
+        scorecard.overall = null;
+        scorecard.dimensions = null;
+        scorecard.saoBalance = null;
+      }
       scorecard.moments = groundedMoments(scorecard.moments, transcript);
       if (Array.isArray(scorecard.competencies)) {
         scorecard.competencies = groundedCompetencies(scorecard.competencies, transcript);

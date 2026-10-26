@@ -119,7 +119,7 @@ export async function listVoiceSessions(env, userRowId, ent, nowMs = Date.now())
       // A locked (expired) row must not leak its score through the API even
       // while the cleaner has yet to strip the stored scorecard.
       methodologyVersion: !expired && fullAccess && scorecard ? (scorecard.methodologyVersion || 1) : null,
-      overall: !expired && fullAccess && scorecard ? (scorecard.overall ?? null) : null,
+      overall: !expired && fullAccess && scorecard && !scorecard.feedbackOnly ? (scorecard.overall ?? null) : null,
       // Continuity for the setup view ("Last time we said: ..."); same
       // gating as overall, and the fixed too-short line is not a real focus.
       topImprovement: !expired && fullAccess && scorecard && !scorecard.tooShort

@@ -116,6 +116,17 @@ test('the free report shows the server score and nothing else of the full report
   assert.ok(!('tooShort' in body.scorecard));
 });
 
+test('feedback-only stored reports cannot leak numeric fields through paid or free report access', async () => {
+  for (const ent of [FREE_USED, PACK]) {
+    const { body } = await getReport(sessionRow({ scorecard_json: JSON.stringify({ ...SCORED, feedbackOnly: true }) }), ent);
+    assert.equal(body.scorecard.feedbackOnly, true);
+    assert.equal(body.scorecard.overall, null);
+    assert.equal(body.scorecard.dimensions, null);
+    assert.ok(body.scorecard.saoBalance == null);
+    assert.equal(body.scorecard.topImprovement, SCORED.topImprovement);
+  }
+});
+
 test('the free teaser quotes only a grounded moment, never feedback', async () => {
   const { body } = await getReport(sessionRow(), FREE_USED);
   assert.equal(body.scorecard.teaserQuote, 'I challenged it.', 'the invented quote is skipped');

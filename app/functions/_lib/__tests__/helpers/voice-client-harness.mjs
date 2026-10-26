@@ -32,6 +32,7 @@ import {
   isConductWarningLine
 } from '../../../../../js/voice-conduct.js';
 import { createVoiceUsage } from '../../../../../js/voice-usage.js';
+import { createVoiceTurnPlan } from '../../../../../js/voice-turn-plan.js';
 import { createTranscriptOrder } from '../../../../../js/voice-transcript-order.js';
 
 const CLIENT_SRC = new URL('../../../../../js/voice-interview.js', import.meta.url);
@@ -230,6 +231,7 @@ export function createVoiceClientHarness(options = {}) {
     isConductWarningLine,
     createTranscriptOrder,
     createVoiceUsage,
+    createVoiceTurnPlan,
     addEventListener: (type, fn) => { (windowListeners[type] ||= []).push(fn); },
     removeEventListener: () => {}
   };
@@ -302,6 +304,11 @@ export function createVoiceClientHarness(options = {}) {
       }
       if (dataChannel.readyState !== 'open') throw new Error('the data channel is not open; connectRealtime failed');
       await dataChannel.onopen();
+      // The real server acknowledges the effective configuration. Tests for
+      // missing/rejected acknowledgements opt out explicitly.
+      if (options.autoTurnConfig !== false) this.event({ type: 'session.updated', session: { audio: { input: {
+        turn_detection: { type: 'semantic_vad', create_response: false, interrupt_response: true }
+      } } } });
       await settle(2);
     },
     /** Deliver one realtime event over the data channel. */
