@@ -15,6 +15,7 @@ on:
       - 'app/functions/pricing.js'
       - 'app/functions/_lib/**'
       - 'app/functions/_middleware.js'
+      - 'app/public/_headers'
       - 'shared/firebase-deletion-client.js'
       - 'workers/voice-followup-email/**'
       - 'workers/voice-deadlines/**'
@@ -33,6 +34,7 @@ on:
       - 'app/functions/pricing.js'
       - 'app/functions/_lib/**'
       - 'app/functions/_middleware.js'
+      - 'app/public/_headers'
       - 'shared/firebase-deletion-client.js'
       - 'workers/voice-followup-email/**'
       - 'workers/voice-deadlines/**'
@@ -82,6 +84,9 @@ jobs:
 
       - name: KV diagnostics environment and storage access boundaries
         run: node --conditions=workerd --test app/functions/_lib/__tests__/kv-test.test.mjs
+
+      - name: Runtime security headers and parity with static policy
+        run: node app/functions/_lib/__tests__/middleware-headers.test.mjs
 
       - name: Subscription period rule tests
         run: node app/functions/_lib/__tests__/subscription-period.test.mjs
