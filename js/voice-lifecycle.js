@@ -225,6 +225,10 @@ export function isExplicitEndRequest(text) {
   if (typeof text !== 'string') return false;
   var lower = text.toLowerCase().replace(/[‘’]/g, "'");
   if (lower.length < 8 || lower.length > END_REQUEST_MAX_CHARS) return false;
+  // Recorded QA: "I gotta go. Bye-bye." is an immediate departure plus a
+  // farewell. Require the whole utterance; a quoted story, bare goodbye,
+  // future departure or "I'm all done" answer must not end a paid session.
+  if (/^(?:(?:ok|okay|alright|all right|sorry)[, ]+)?i (?:gotta|have to|need to) (?:go|leave)(?: now)?[,.!\s]+(?:bye(?:[- ]bye)?|goodbye)[.!]?$/i.test(lower.trim())) return true;
   // Live QA: "I'd like to end this now." refers to the current session
   // without naming it. Accept only this complete, immediate request form;
   // a quoted story, hypothetical, or continuation must remain an answer.
