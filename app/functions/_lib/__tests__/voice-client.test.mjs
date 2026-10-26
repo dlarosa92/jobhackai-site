@@ -353,7 +353,7 @@ for (const withoutModules of [[], ['isExplicitEndRequest']]) {
 // --------------------------------------------------- live safety end view
 
 for (const withoutModules of [[], ['isExplicitEndRequest']]) {
-  for (const request of ["I'd like to end this now.", 'I would like to end this now.']) {
+  for (const request of ["I'd like to end this now.", 'I would like to end this now.', 'I gotta go. Bye-bye.', 'I have to go, goodbye.']) {
     test(`QA spoken stop completes once and excludes the control (${request}, ${withoutModules.length ? 'fallback' : 'module'})`, async () => {
       const h = await liveInterviewWithOneAnswer({ withoutModules });
       try {

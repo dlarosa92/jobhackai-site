@@ -48,7 +48,7 @@ test('transcription fragments, duplicate answers, interviewer words and session 
   assert.equal(scoreEvidence([question('Describe it?'), ...Array.from({ length: 6 }, (_, i) => user(words(50, 'chunk' + i)))]).substantiveAnswers, 1);
   assert.deepEqual(scoreEvidence(Array.from({ length: 3 }, () => [question('More?'), user(words(150, 'same'))]).flat()),
     { candidateWords: 150, substantiveAnswers: 1, eligible: false });
-  assert.deepEqual(scoreEvidence([question(words(500, 'interviewer')), user('Can you hear me?'), user("I'd like to end this now.")]),
+  assert.deepEqual(scoreEvidence([question(words(500, 'interviewer')), user('Can you hear me?'), user("I'd like to end this now."), user('I gotta go. Bye-bye.')]),
     { candidateWords: 0, substantiveAnswers: 0, eligible: false });
 });
 
