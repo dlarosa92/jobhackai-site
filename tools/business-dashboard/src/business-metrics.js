@@ -29,7 +29,7 @@ export async function businessMetrics(db, now = new Date()) {
   const read = (sql) => db.prepare(sql).bind(since).all().then(result => result.results);
   const results = await Promise.allSettled([
     read("SELECT (charge_created_at / 3600) * 3600 AS ts, SUM(amount_captured) AS value FROM stripe_collected_payments WHERE environment='prod' AND livemode=1 AND currency='usd' AND charge_created_at>=CAST(? AS INTEGER) GROUP BY ts"),
-    read("SELECT (r.refund_created_at / 3600) * 3600 AS ts, -SUM(r.amount) AS value FROM stripe_payment_refunds r JOIN stripe_collected_payments p ON p.charge_id=r.charge_id WHERE r.status='succeeded' AND r.currency='usd' AND p.environment='prod' AND p.livemode=1 AND r.refund_created_at>=CAST(? AS INTEGER) GROUP BY ts"),
+    read("SELECT (r.refund_created_at / 3600) * 3600 AS ts, -SUM(r.amount) AS value FROM stripe_payment_refunds r JOIN stripe_collected_payments p ON p.charge_id=r.charge_id WHERE r.status='succeeded' AND r.currency='usd' AND p.environment='prod' AND p.livemode=1 AND p.currency='usd' AND r.refund_created_at>=CAST(? AS INTEGER) GROUP BY ts"),
     read("SELECT strftime('%Y-%m-%dT%H:00:00Z',created_at) AS ts, COUNT(*) AS value FROM users WHERE unixepoch(created_at)>=CAST(? AS INTEGER) GROUP BY ts"),
     read("SELECT ts, SUM(value) AS value FROM (SELECT strftime('%Y-%m-%dT%H:00:00Z',created_at) AS ts, COUNT(*) AS value FROM mock_interview_sessions WHERE unixepoch(created_at)>=CAST(?1 AS INTEGER) GROUP BY ts UNION ALL SELECT strftime('%Y-%m-%dT%H:00:00Z',ended_at) AS ts, COUNT(*) AS value FROM voice_sessions WHERE status='completed' AND ended_at IS NOT NULL AND unixepoch(ended_at)>=CAST(?1 AS INTEGER) GROUP BY ts) GROUP BY ts"),
   ]);
