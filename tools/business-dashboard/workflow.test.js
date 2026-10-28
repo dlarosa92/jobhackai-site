@@ -209,6 +209,21 @@ test('a later concurrent item write cannot contaminate the first mutation receip
   const result=await c.work('prepare',{runId:run.id,id:'racing',source:'operations',sourceId:'racing',expectedVersion:1,document:initial});
   assert.equal(result.status,200);assert.equal(result.body.version,3,'Shared read observes the racing writer');
   const receipt=c.sql.prepare('SELECT version,result FROM workflow_run_writes WHERE run_id=?').get(run.id);
-  assert.equal(receipt.version,2);assert.deepEqual(JSON.parse(receipt.result),{advanced:false,checked:false});
+  assert.equal(receipt.version,2);assert.deepEqual(JSON.parse(receipt.result),{advanced:false,checked:false,progressBasis:'deliverable-v1'});
   assert.equal((await c.flow('finish',{id:run.id,outcome:'advanced',summary:'Must not borrow the later write',evidence:proof})).status,400);
+});
+
+test('wording and evidence-only edits cannot claim progress or reset work age',async()=>{
+ const c=fixture();const item=await prepare(c);const run=(await c.flow('start',{workflow:'reconciliation'})).body;
+ await c.work('prepare',{runId:run.id,id:item.id,source:item.source,sourceId:item.sourceId,expectedVersion:item.version,document:{...doc,nextAction:'Reworded instruction after another check'}});
+ let current=(await c.board()).items[0];
+ assert.equal(current.lastMovedAt,null);
+ const original=snap(c.now),changed={...original,evidence:[{id:'another-proof',url:proof[0].url,fact:'Checked the same full draft again.'}],checkedAt:new Date(c.now.getTime()+1).toISOString()};
+ assert.equal((await c.work('reconcile',{runId:run.id,id:current.id,expectedVersion:current.version,sourceRevision:changed.sourceRevision,checkedAt:changed.checkedAt,nativeState:'draft',snapshot:changed})).status,200);
+ current=(await c.board()).items[0];assert.equal(current.lastMovedAt,null);
+ assert.equal((await c.flow('finish',{id:run.id,outcome:'advanced',summary:'Only wording changed',evidence:proof})).status,400);
+ const revised={...changed,text:'A genuinely changed complete draft.',checkedAt:new Date(c.now.getTime()+2).toISOString()};
+ assert.equal((await c.work('reconcile',{runId:run.id,id:current.id,expectedVersion:current.version,sourceRevision:revised.sourceRevision,checkedAt:revised.checkedAt,nativeState:'draft',snapshot:revised})).status,200);
+ current=(await c.board()).items[0];assert.ok(current.lastMovedAt);assert.ok((await c.board()).progress.trackedSince);
+ const finished=await c.flow('finish',{id:run.id,outcome:'advanced',summary:'Revised draft saved',evidence:proof});assert.equal(finished.status,200);assert.deepEqual(finished.body.advancedItems,['post']);
 });

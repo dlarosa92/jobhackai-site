@@ -7,6 +7,7 @@ import { workApi, workRecords, cacheNativeSources } from './work-items.js';
 import { workflowApi, checkWorkflowDeadlines } from './workflow.js';
 import { analyticsApi, analyticsReport } from './analytics.js';
 import { directoryRecords, duplicateDirectoryRecord, applyResolutions, resolveNotification } from './notifications.js';
+import { businessMetrics } from './business-metrics.js';
 
 const OWNER = 'sebastian.larosa@jobhackai.io';
 const ACCESS_AUD = '884df74e9be8546b0051980538c8e00a75efd2b1d2da5a04a4e4fbe78f3a4a40';
@@ -52,11 +53,12 @@ async function accessTokenIsOwner(token, keys = ACCESS_KEYS) {
 
 async function overview(env, now = new Date()) {
   const month = monthKey(now);
-  const [users, charges, refunds, costs] = await Promise.all([
+  const [users, charges, refunds, costs, business] = await Promise.all([
     env.PRODUCTION_DB.prepare('SELECT COUNT(*) AS count, MAX(updated_at) AS latest_update FROM users').first(),
     env.PRODUCTION_DB.prepare("SELECT amount_captured AS cents, charge_created_at AS ts FROM stripe_collected_payments WHERE environment = 'prod' AND livemode = 1 AND currency = 'usd' AND charge_created_at >= ?").bind(Math.floor(now.getTime() / 1000) - 40 * 86400).all(),
     env.PRODUCTION_DB.prepare("SELECT r.amount AS cents, r.refund_created_at AS ts FROM stripe_payment_refunds r JOIN stripe_collected_payments p ON p.charge_id = r.charge_id WHERE r.status = 'succeeded' AND r.currency = 'usd' AND p.environment = 'prod' AND p.livemode = 1 AND r.refund_created_at >= ?").bind(Math.floor(now.getTime() / 1000) - 40 * 86400).all(),
     env.DASHBOARD_DB.prepare('SELECT amount_cents, complete, updated_at FROM monthly_costs WHERE month = ?').bind(month).first(),
+    businessMetrics(env.PRODUCTION_DB, now),
   ]);
   const capturedCents = charges.results.filter(row => sameMonth(row.ts, month)).reduce((sum, row) => sum + row.cents, 0);
   const refundedCents = refunds.results.filter(row => sameMonth(row.ts, month)).reduce((sum, row) => sum + row.cents, 0);
@@ -64,6 +66,7 @@ async function overview(env, now = new Date()) {
   const costsComplete = costs?.complete === 1;
   return {
     asOf: now.toISOString(),
+    business,
     month,
     userGoal: 250,
     d1UserRecords: users?.count ?? null,
