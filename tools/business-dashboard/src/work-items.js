@@ -57,6 +57,11 @@ function snapshotInput(input) {
 }
 // Checked time is evidence of freshness, not a new content revision.
 async function snapshotRevision(snapshot) { const {checkedAt,verifiedBy,...content}=snapshot; return digest(content); }
+// A new check, note, source revision or priority is not a changed deliverable.
+export function deliverableContent(snapshot) {
+  if(!snapshot)return null;
+  return JSON.stringify(Object.fromEntries(['text','html','destination','subject','timing','media','links'].map(key=>[key,snapshot[key]??null])));
+}
 async function get(db,id) { return db.prepare('SELECT * FROM work_items WHERE id=?').bind(id).first(); }
 async function updateItem(db,input,now) {
   const id=key(input.id), version=expected(input.expectedVersion), source=input.source;
@@ -135,13 +140,14 @@ export async function workRecords(db, base, now=new Date()) {
     const cached=await db.prepare("SELECT * FROM source_cache WHERE source='directory'").first();
     if(cached)base={...base,items:[...base.items,...parse(cached.payload).map(i=>({...i,staleSource:true}))],directorySource:{...base.directorySource,lastSuccessfulCheckAt:cached.checked_at}};
   }
-  const [rows,snapshots,decisions,health,contributions,runs]=await Promise.all([
+  const [rows,snapshots,decisions,health,contributions,runs,movement]=await Promise.all([
     db.prepare('SELECT * FROM work_items ORDER BY priority,id').all(),
     db.prepare('SELECT s.* FROM work_snapshots s JOIN work_items w ON w.id=s.item_id AND w.snapshot_revision=s.revision').all(),
     db.prepare('SELECT d.* FROM work_decisions d JOIN work_items w ON w.id=d.item_id AND w.snapshot_revision=d.revision ORDER BY d.created_at,d.id').all(),
     db.prepare('SELECT * FROM source_health ORDER BY source').all(),
     db.prepare('SELECT * FROM work_contributions ORDER BY item_id,department').all(),
     db.prepare('SELECT * FROM coordination_runs ORDER BY created_at DESC LIMIT 8').all(),
+    db.prepare("SELECT reference, MIN(recorded_at) AS tracked_since, MAX(CASE WHEN json_extract(result,'$.advanced')=1 THEN recorded_at END) AS moved_at FROM workflow_run_writes WHERE kind='item' AND json_extract(result,'$.progressBasis')='deliverable-v1' GROUP BY reference").all(),
   ]);
   const freshness=health.results.map(row=>({...row,status:row.status==='current'&&now.getTime()-Date.parse(row.last_success_at)>row.max_age_minutes*60000?'stale':row.status}));
   const itemMap=new Map(base.items.map(item=>[`${item.source||'campaign'}:${item.source==='outreach'?item.outreachId:item.source==='gmail'?item.id.replace(/^gmail-/,''):item.id}`,item]));
@@ -157,6 +163,7 @@ export async function workRecords(db, base, now=new Date()) {
     const item={...linked,...doc,impact:linked?.impact||doc.impact,id:row.id,workId:row.id,source:row.source,sourceId:row.source_id,version:row.version,
       priority:row.priority,snapshot,snapshotRevision:row.snapshot_revision,decision,nativeState,
       checkedAt:row.checked_at,updatedAt:row.updated_at,sourceHealth,fresh,
+      lastMovedAt:movement.results.find(m=>m.reference===row.id)?.moved_at||null,
       detail:linked?.detail||snapshot?.text||doc.reason,
       reviewUrl:linked?.reviewUrl||doc.sourceRefs[0]?.url,
       contributions:contributions.results.filter(c=>c.item_id===row.id).map(c=>({...c,document:parse(c.document)})),
@@ -192,7 +199,7 @@ export async function workRecords(db, base, now=new Date()) {
   // Topological order within the backlog; dependencies remain before their dependents.
   const ordered=[],seen=new Set(),visiting=new Set();const byId=new Map(items.map(i=>[i.id,i]));
   const visit=item=>{if(seen.has(item.id)||visiting.has(item.id))return;visiting.add(item.id);for(const id of item.dependencies)if(byId.has(id))visit(byId.get(id));visiting.delete(item.id);seen.add(item.id);ordered.push(item);};items.forEach(visit);
-  return {...base,items:ordered,sources:freshness,workflow,coordination:runs.results.map(r=>({...r,document:parse(r.document)}))};
+  return {...base,items:ordered,sources:freshness,workflow,progress:{trackedSince:movement.results.map(m=>m.tracked_since).sort()[0]||null},coordination:runs.results.map(r=>({...r,document:parse(r.document)}))};
 }
 function completedWork(item) {
   return ['sent','published','closed','handled'].includes(item.state) ||
@@ -230,15 +237,18 @@ export async function workApi(request,env,identity,loadBoard) {
     if(path==='/api/work-items/prepare'||path==='/api/work-items/reconcile'){
       const old=run?await get(db,input.id):null;
       if(run&&(old?.version||0)!==expected(input.expectedVersion))fail('Item changed before the attributed write.',409);
-      const saved=path.endsWith('/prepare')?await updateItem(db,input,now):await reconcile(db,input,now);
+      const preparing=path.endsWith('/prepare');
+      const oldSnapshot=run&&!preparing&&old?.snapshot_revision?await db.prepare('SELECT payload FROM work_snapshots WHERE item_id=? AND revision=?').bind(old.id,old.snapshot_revision).first():null;
+      const saved=preparing?await updateItem(db,input,now):await reconcile(db,input,now);
       if(run&&saved.version!==input.expectedVersion){
         // The trailing read may already contain another writer's newer version. Attribute only
         // the fields and version committed by this request's successful compare-and-swap.
-        const preparing=path.endsWith('/prepare');
-        const revision=preparing?null:input.snapshot?await snapshotRevision(snapshotInput(input.snapshot)):old.source_revision===input.sourceRevision?old.snapshot_revision:null;
+        const draftChanged=!preparing&&!!input.snapshot&&deliverableContent(parse(oldSnapshot?.payload))!==deliverableContent(snapshotInput(input.snapshot));
+        const moved=!preparing&&old.native_state!==input.nativeState&&['scheduled','published','sent','closed'].includes(input.nativeState);
         await recordRunWrite(db,run,'item',input.id,input.expectedVersion+1,{
-          advanced:preparing?!old||old.document!==JSON.stringify(documentInput(input.document)):old.snapshot_revision!==revision||old.native_state!==input.nativeState,
+          advanced:draftChanged||moved,
           checked:!preparing&&date(input.checkedAt)>=run.started_at&&date(input.checkedAt)!==old.checked_at,
+          progressBasis:'deliverable-v1',
         },now);
       }
       return reply(saved);

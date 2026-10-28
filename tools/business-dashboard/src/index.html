@@ -1,39 +1,34 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#11241f">
-  <title>Everything in motion · JobHackAI</title>
-  <link rel="stylesheet" href="style.css?v=2026-10-25-workflow">
-  <script src="app.js?v=2026-10-25-workflow" defer></script>
+  <meta name="theme-color" content="#091722">
+  <title>Team work board · JobHackAI</title>
+  <link rel="stylesheet" href="/style.css?v=2026-10-27-team-board">
+  <script src="/app.js?v=2026-10-27-team-board" defer></script>
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">JobHack<span>AI</span><small>Everything in motion</small></div>
-    <div class="toolbar"><span class="private">Private business view</span><button id="refresh" type="button">Refresh dashboard</button></div>
-  </header>
-  <main>
-    <div class="intro">
-      <div><h1>Everything in motion</h1><p>Your decisions, activity and results in one place.</p></div>
-      <p id="checked" class="checked" aria-live="polite">Checking dashboard records…</p>
-    </div>
+  <a class="skip-link" href="#main">Skip to dashboard</a>
+  <aside class="sidebar" aria-label="Main navigation">
+    <a class="brand" href="#main">JobHack<span>AI</span><small>BUSINESS DASHBOARD</small></a>
+    <nav><a class="active" href="#work"><span aria-hidden="true">▦</span> Team work board</a><a href="#backlog"><span aria-hidden="true">☷</span> Backlog</a><a href="#learnings"><span aria-hidden="true">◇</span> Learnings</a><a href="#data-health"><span aria-hidden="true">◉</span> Data & settings</a></nav>
+    <div class="sidebar-foot"><span class="dot blue"></span> Your private business view</div>
+  </aside>
+  <main id="main">
+    <header class="page-header"><div><a class="mobile-brand" href="#main">JobHackAI</a><p class="eyebrow desktop-only">YOUR BUSINESS, AT A GLANCE</p><h1>Team work board</h1><p class="subtitle">What matters. What’s moving. What needs you.</p></div><div class="header-actions"><button id="theme-toggle" class="icon-button" type="button" aria-label="Switch to light mode" data-help="Switch between light and dark. Your choice stays on this device.">☀</button><button id="refresh" class="icon-button" type="button" aria-label="Refresh saved data" data-help="Read the latest saved records. This does not start a Codex task or check every platform.">↻</button></div></header>
     <div id="error" class="error" role="alert" hidden></div>
-    <section class="panel workflow-panel" aria-label="Workflow progress"><div class="panel-title"><h2>Is work moving?</h2><span id="workflow-summary" role="status">Checking execution receipts…</span></div><div id="workflow-alerts" role="status"></div><div id="workflow-runs" class="workflow-runs"></div><p class="evidence">Page refresh, source checks and finished preparation have separate receipts. Missed runs and overdue owner feedback stay visible here.</p></section>
-    <section class="focus" aria-label="Priority"><strong>Your next decisions</strong><span id="focus-text">Checking who is waiting on us…</span><ol id="next-decisions"></ol></section>
     <div id="campaign-error" class="error" role="alert" hidden></div>
-    <p id="campaign-checked" class="checked" aria-live="polite">Checking action board…</p>
-    <p id="gmail-sync" class="sync-status" role="status">Checking Gmail sync status…</p>
-    <p id="directory-sync" class="sync-status" role="status">Checking saved directory requests…</p>
-    <p class="board-help">Read drafts and make decisions here. Approval and release remain separate. Every item has one accountable department.</p>
-    <nav id="department-filters" class="channel-filters departments" aria-label="Filter by department"></nav>
-    <nav id="channel-filters" class="channel-filters" aria-label="Filter by email or platform"></nav>
-    <p id="filter-status" class="checked" role="status"></p>
-    <section id="board" class="board" aria-label="Work board"></section>
-    <section class="panel"><h2>Department coordination</h2><div id="coordination-status"></div></section>
-    <section class="panel" aria-label="Campaign measurement"><div class="panel-title"><h2>Campaign measurement</h2><span id="analytics-status">Checking report…</span></div><div id="analytics-report"></div></section>
-    <dialog id="review-dialog" aria-labelledby="review-title"><header class="review-header"><h2 id="review-title"></h2><button type="button" id="review-close" aria-label="Close review">Close</button></header><div id="review-content"></div><p id="review-error" role="alert"></p><label id="review-note-label" for="review-note">Feedback<textarea id="review-note" maxlength="4000" rows="3" placeholder="Changes needed or a decision note"></textarea></label><div id="review-actions"></div><p class="evidence">Approval records your decision. Sending, scheduling and publishing require their separate release step.</p></dialog>
-    <details class="panel prepare-email"><summary>Add a prepared email for review</summary>
+    <section aria-label="Business numbers" class="numbers">
+      <div class="control-row"><label class="period-label"><span class="sr-only">Compare period</span><select id="period" aria-label="Choose comparison period" data-help="Compare complete Eastern days, ending yesterday, with the same number of days before them."><option value="7">Last 7 days</option><option value="28">Last 28 days</option></select></label><div class="goal"><span>Account goal <strong>250</strong></span><span id="goal-status">Checking count…</span><div class="track" aria-hidden="true"><span id="goal-fill"></span></div></div><details class="definitions"><summary>What counts?</summary><div id="metric-definitions"></div><p id="period-dates"></p></details></div>
+      <div id="kpi-grid" class="kpi-grid" aria-live="polite"><div class="metric skeleton">Loading business numbers…</div></div>
+      <details class="data-line" id="freshness"><summary><span id="data-summary">Checking data…</span><span id="checked">—</span></summary><div id="data-brief"></div><a href="#data-health">See all data sources ↓</a></details>
+    </section>
+    <section class="attention" aria-label="Your next action"><div class="attention-heading"><span class="dot red"></span><h2>Needs you</h2><span id="decision-count" class="count">—</span><span id="focus-text"></span></div><div id="next-decisions"></div></section>
+    <section id="work" tabindex="-1" aria-label="Team work"><div class="section-heading"><h2>The work</h2><span id="work-summary" class="muted"></span><button type="button" class="help" data-help="Red needs your review. Blue is being prepared. Amber is waiting. Green has a recorded result. Open any card for proof and the next step." aria-label="How the work board works">?</button></div><div class="filter-row"><nav id="department-filters" class="filter-buttons" aria-label="Filter by owner"></nav><details class="more-filters"><summary>More filters</summary><div class="filter-controls"><label>Business<select id="product-filter"><option value="all">Core + Local</option><option value="core">Core software</option><option value="local">Local</option></select></label><label>Platform<select id="channel-filter"><option value="All">All platforms</option></select></label></div></details></div><p id="filter-status" class="sr-only" role="status"></p><div id="board" class="board"></div></section>
+    <div class="two-up middle-panels"><section id="backlog" class="panel"><div class="section-heading"><h2>Up next</h2><span id="movement-summary" class="muted"></span><button type="button" class="help" data-help="The saved priority order, with needed tasks first. A source check alone never counts as progress." aria-label="How priorities and progress work">?</button></div><div id="next-work"></div><details id="full-backlog"><summary>See full backlog <span id="backlog-count"></span></summary><div id="backlog-list"></div></details></section><details class="panel trends-panel" id="trends" open><summary>Trends <span id="trends-period" class="muted">Last 7 days</span></summary><div id="trends-table"></div><details><summary>How to read these numbers</summary><p>Compare the same number of complete days. A dash means we do not have a trusted comparison. Raw counts still include test use. Open “What counts?” for each measure.</p></details></details></div>
+    <div class="two-up learning-panels"><section class="panel" id="learnings"><div class="section-heading"><h2>What we learned</h2><button type="button" class="help" data-help="Short summaries of the three owners’ saved reviews. Open one to see its date, original notes and sources." aria-label="Where learnings come from">?</button></div><div id="owner-learnings"></div></section><section class="panel"><div class="section-heading"><h2>Do not repeat</h2><button type="button" class="help" data-help="On means the dashboard has a check in place. Needs fix means a gap remains. These are safeguards, not claims that every platform is healthy." aria-label="What these safeguards mean">?</button></div><div id="safeguards"></div></section></div>
+    <details class="panel settings" id="data-health"><summary>Data & settings <span id="source-count" class="muted"></span></summary><p class="muted" id="campaign-checked"></p><div id="source-health" class="source-grid"></div><details><summary>What runs during the day?</summary><div class="data-flow"><div><strong>1 · Platforms</strong><p>Stripe records payments. The app saves accounts and interviews. Gmail checks tracked mail. Codex reads GA4, Marblism and work sources.</p></div><span aria-hidden="true">→</span><div><strong>2 · Saved records</strong><p>Each update keeps its source and check time. A failed check does not replace good records with zeros.</p></div><span aria-hidden="true">→</span><div><strong>3 · This board</strong><p>Reloads saved records every minute while open. Codex prepares and reviews work on its own schedule.</p></div></div><p>The local Codex jobs need the Mac and its connections. Cloudflare’s 15-minute check only flags late work; it does not do the work.</p><div id="workflow-runs"></div><div id="workflow-alerts"></div></details><details><summary>Website visits and campaign results</summary><p id="analytics-status"></p><div id="analytics-report"></div></details><details><summary>Monthly cash and costs</summary><p id="month-label"></p><p id="monthly-money"></p><p>Enter payment fees, ads, software and other costs. This does not change a bank or Stripe account.</p><form id="cost-form"><label for="costs">Recorded costs (USD)</label><div class="cost-row"><span>$</span><input id="costs" name="costs" type="number" min="0" max="1000000" step="0.01" inputmode="decimal" required><button type="submit">Save costs</button></div><label class="check"><input id="complete" type="checkbox"> All this month’s costs are included</label></form><p id="cost-status" role="status">No costs recorded yet.</p><p id="available"></p><p id="basis" class="muted"></p></details>    <details class="panel prepare-email"><summary>Add an email draft</summary>
       <p>Prospect emails use plain text with visible URLs. A formatted version requires a specific reason and Sebastian’s separate format decision.</p>
       <p>Save the complete researched message. It stays on hold until independent routing and Gmail checks are current.</p>
       <form id="outreach-form" class="email-form">
@@ -59,19 +54,14 @@
         <label>Current service or workflow that makes this relevant<textarea name="fitFact" rows="3" required maxlength="2000"></textarea></label>
         <label>Published Local profile URL, for a provider<input type="url" name="profileUrl"></label>
         <label class="check"><input type="checkbox" required>I checked this source now, confirmed the active business/role and exact email, and resolved any conflicting evidence.</label>
-        <button type="submit">Save for independent checks</button><p id="outreach-status" role="status"></p>
+        <button type="submit">Save draft for checks</button><p id="outreach-status" role="status"></p>
       </form>
     </details>
-    <section class="overview" aria-label="Business overview">
-      <div class="metric goal"><span class="eyebrow">Software growth goal</span><div class="metric-value">250 users</div><p>Build useful software and verify revenue. Account records are separate from paying customers.</p><div class="goal-line"><span id="available">Not calculated</span><span id="progress">Goal progress unavailable</span></div><div class="track"><div id="goal-fill"></div></div></div>
-      <div class="metric"><span class="eyebrow">Collected less refunds · this month</span><div class="metric-value" id="collected">—</div><p>Production D1 payment ledger, before business costs.</p></div>
-      <div class="metric"><span class="eyebrow">User records</span><div class="metric-value" id="users">—</div><p>Production D1 accounts. This is separate from paying customers.</p></div>
-    </section>
-    <section class="bottom">
-      <div class="panel"><div class="panel-title"><h2>Business costs this month</h2><span id="month-label">—</span></div><p>Enter the total you have recorded for this month, including payment fees, ads, software and other business costs. Mark complete only when every cost is included.</p><form id="cost-form"><label for="costs">Recorded costs (USD)</label><div class="cost-row"><span>$</span><input id="costs" name="costs" type="number" min="0" max="1000000" step="0.01" inputmode="decimal" placeholder="0.00" required><button type="submit">Save</button></div><label class="check"><input id="complete" type="checkbox"> I have included all business costs for this month</label></form><p id="cost-status" class="status" aria-live="polite">No costs recorded yet.</p></div>
-      <div class="panel"><h2>Source status</h2><ul id="source-health"></ul><dl><div><dt>Cloudflare payment and user records</dt><dd id="d1-status">Checking…</dd></div><div><dt>Action board records</dt><dd id="campaign-status">Checking…</dd></div><div><dt>Priority order</dt><dd>Customer-impacting failures and commitments first, then software growth toward 250 users and verified revenue. Approved Local work remains visible. Shared dependencies are represented once.</dd></div><div><dt>Native inbox and platform status</dt><dd>Each card shows when its source was checked. Gmail checks labelled conversations and recorded sent threads about every five minutes once connected. Refresh displays the latest successful scan. The preparation owner imports verified drafts and posts during scheduled runs. Execution receipts above show whether that work happened. Sending and scheduling are recorded after verification.</dd></div><div><dt>Website visits and signups</dt><dd>The campaign measurement panel shows the latest imported rolling report and its coverage gaps. <a href="https://analytics.google.com/analytics/web/?authuser=1#/a366252518p523348532/reports/intelligenthome" target="_blank" rel="noreferrer">Open Analytics ↗</a></dd></div></dl></div>
-    </section>
-    <footer><p>Income is an estimate based on the production D1 payment ledger and costs you enter. It is not an accounting or tax statement. <span id="basis"></span></p></footer>
+</details>
+    <footer>JobHackAI <span>Built around your goal: 250 users.</span></footer>
   </main>
+  <dialog id="review-dialog" aria-labelledby="review-title"><header class="review-header"><div><p class="eyebrow">WORK DETAILS</p><h2 id="review-title"></h2></div><button type="button" id="review-close" class="icon-button" aria-label="Close review">×</button></header><div id="review-content"></div><p id="review-error" role="alert"></p><label id="review-note-label" for="review-note">Your note<textarea id="review-note" maxlength="4000" rows="3" placeholder="What should change?"></textarea></label><div id="review-actions"></div><p id="review-effect" class="muted"></p></dialog>
+  <div id="help-tooltip" class="tooltip" role="tooltip" hidden></div>
+  <div id="toast" class="toast" role="status" hidden></div>
 </body>
 </html>
