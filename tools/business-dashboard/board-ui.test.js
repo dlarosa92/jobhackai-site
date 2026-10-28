@@ -80,6 +80,22 @@ test('healthy Gmail cannot hide a stalled preparation run or a partial Analytics
  assert.match(text(nodes.get('data-brief')),/need attention/);
  assert.match(text(nodes.get('analytics-report')),/Not observed.*Unverified/);assert.match(text(nodes.get('analytics-report')),/kit action breakdown/);assert.match(text(nodes.get('analytics-status')),/stale/);
 });
+test('directory outages remain visible with an empty queue, cached history, and recovery',()=>{
+ const {render,nodes}=ui();const state=data([]);state.directorySource={status:'unavailable'};
+ render(state);
+ assert.match(text(nodes.get('data-summary')),/Directory check failed/);
+ assert.match(text(nodes.get('data-brief')),/New requests could be missing.*No successful check is saved/s);
+ assert.match(text(nodes.get('source-health')),/Directory requests.*Check failed.*No check time saved/s);
+ state.directorySource.lastSuccessfulCheckAt='2026-10-25T14:00:00Z';render(state);
+ assert.match(text(nodes.get('data-brief')),/Last successful check: Oct 25, 2026/);
+ assert.match(text(nodes.get('source-health')),/Directory requests.*Check failed.*Checked Oct 25, 2026/s);
+ state.directorySource={status:'current',checkedAt:'2026-10-28T04:00:00Z',truncated:true};render(state);
+ assert.doesNotMatch(text(nodes.get('data-summary')),/Directory check failed/);
+ assert.match(text(nodes.get('data-summary')),/newest 200/);
+ state.directorySource.truncated=false;render(state);
+ assert.match(text(nodes.get('source-health')),/Directory requests.*Current.*Checked Oct 28, 2026|Directory requests.*Current.*Checked Oct 27, 2026/s);
+ assert.doesNotMatch(text(nodes.get('data-brief')),/requests could be missing|newest 200/);
+});
 test('prospect review shows the format and holds copy approval behind a separate format decision',()=>{
  const {render,nodes}=ui();nodes.get('review-dialog');
  const outreach=item('Coach email','Email','hold',{source:'outreach',outreachId:'coach',deliveryState:'review',revision:'a'.repeat(64),message:{recipient:'coach@example.com',subject:'Practice',text:'Complete email',html:'<p>Complete email</p>'},formatRequest:{reason:'The recipient requested a formatted comparison.'},formatApproved:false,issues:['HTML needs owner format approval.']});
