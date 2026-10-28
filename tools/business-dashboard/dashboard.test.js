@@ -82,7 +82,7 @@ test('the owner can load the page and read a source-labelled overview', async ()
   const ctx = { access: { aud: '884df74e9be8546b0051980538c8e00a75efd2b1d2da5a04a4e4fbe78f3a4a40', getIdentity: async () => ({ email: 'sebastian.larosa@jobhackai.io' }) } };
   const page = await worker.fetch(new Request('https://dashboard.jobhackai.io/'), database(), ctx);
   assert.equal(page.status, 200);
-  assert.match(await page.text(), /Software growth goal/);
+  assert.match(await page.text(), /Account goal/);
   const api = await worker.fetch(new Request('https://dashboard.jobhackai.io/api/overview'), database(), ctx);
   assert.equal(api.status, 200);
   const payload = await api.json();
@@ -94,8 +94,8 @@ test('the owner can load the page and read a source-labelled overview', async ()
 test('the phone reload gets the new campaign script rather than a cached old script', async () => {
   const ctx = { access: { aud: audience, getIdentity: async () => ({ email: 'sebastian.larosa@jobhackai.io' }) } };
   const page = await worker.fetch(new Request('https://dashboard.jobhackai.io/'), database(), ctx);
-  assert.match(await page.text(), /app\.js\?v=2026-10-25-workflow/);
-  const script = await worker.fetch(new Request('https://dashboard.jobhackai.io/app.js?v=2026-10-25-workflow'), database(), ctx);
+  assert.match(await page.text(), /app\.js\?v=2026-10-27-team-board/);
+  const script = await worker.fetch(new Request('https://dashboard.jobhackai.io/app.js?v=2026-10-27-team-board'), database(), ctx);
   assert.equal(script.headers.get('Cache-Control'), 'no-store');
   assert.match(await script.text(), /api\/work-items/);
 });
