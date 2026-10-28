@@ -14,6 +14,11 @@ function element(tag,text,className){const node=document.createElement(tag);if(t
 function button(text,fn,className,helpText){const node=element('button',text,className);node.type='button';node.addEventListener('click',fn);const hint=helpText||({'Request changes':'Saves your note for the owner. It does not send or publish anything.','Decline draft':'Declines this saved draft. It does not delete the original source.','Show fewer':'Collapses extra cards. All work stays saved.'}[text]);if(hint)node.setAttribute('data-help',hint);return node;}
 function help(text,label){const node=button('?',()=>{},'help',text);node.setAttribute('aria-label',label||'Explain this');return node;}
 function detail(label,content){const node=element('details');const summary=element('summary',label);summary.setAttribute('data-help','Open or close these details. This does not start any work.');node.append(summary);if(content)node.append(typeof content==='string'?element('p',content):content);return node;}
+function retainDisclosures(root){
+  const key=node=>{const parts=[];for(let current=node;current&&current!==root;current=current.parentElement){const named=current.getAttribute?.('data-disclosure-key');if(named)parts.unshift(named);else if(current.tagName==='DETAILS')parts.unshift(current.querySelector('summary')?.textContent||'');}return parts.join(' / ');};
+  const previous=new Map(Array.from(root.querySelectorAll?.('details')||[],node=>[key(node),node.open]));
+  return ()=>{for(const node of root.querySelectorAll?.('details')||[]){const id=key(node);if(previous.has(id))node.open=previous.get(id);}};
+}
 function safeLink(href,label){try{if(new URL(href).protocol!=='https:')return null;}catch{return null;}const node=element('a',label);node.href=href;node.target='_blank';node.rel='noreferrer noopener';return node;}
 function department(item){return item.department||(['gmail','outreach','directory'].includes(item.source)||/Stan|Email|Outreach/i.test(item.channel)?'sales':'marketing');}
 function channelName(item){if(item.source==='directory')return 'Directory';if(item.department==='product')return 'Product';if(item.source==='gmail'||item.source==='outreach'||/\b(email|gmail|outreach)\b/i.test(item.channel))return 'Email';return ['LinkedIn','Pinterest','Facebook','Instagram','Nextdoor','Blog','X'].find(c=>new RegExp(`\\b${c}\\b`,'i').test(item.channel))||'Other';}
@@ -179,18 +184,19 @@ function plainLesson(dept,assessment){
   return text?(text.split(/(?<=[.!?])\s/)[0].slice(0,100)+(text.length>100?'…':'')):'No owner learning saved yet.';
 }
 function renderLearnings(data){
-  const node=$('owner-learnings');node.replaceChildren();
+  const node=$('owner-learnings'),restore=retainDisclosures(node);node.replaceChildren();
   for(const [dept,label] of Object.entries(departmentNames)){
     const run=(data.coordination||[]).find(r=>r.document?.assessments?.some(a=>a.department===dept));const assessment=run?.document?.assessments?.find(a=>a.department===dept);
-    const row=element('details',undefined,'learning'),summary=element('summary');summary.append(element('strong',label),element('span',plainLesson(dept,assessment),'lesson-text'));row.append(summary);
+    const row=element('details',undefined,'learning'),summary=element('summary');row.setAttribute('data-disclosure-key',dept);summary.append(element('strong',label),element('span',plainLesson(dept,assessment),'lesson-text'));row.append(summary);
     if(run){row.append(element('p',`Saved review · ${time(run.created_at)}`,'source-note'),element('p',assessment.summary));const priority=data.items.find(i=>department(i)===dept&&displayLane(i)!=='done');if(priority){const trigger=button(`First task: ${cardTitle(priority)}`,()=>openReview(priority,trigger));row.append(trigger);}const more=detail('Original review and evidence');for(const [key,title] of [['worked','What worked'],['failed','What did not'],['adjustments','What changes next']])if(run.document[key])more.append(element('strong',title),element('p',run.document[key]));for(const url of run.document.evidence||[]){const link=safeLink(url,'Open saved source ↗');if(link)more.append(element('p',undefined),link);}row.append(more);}
     else row.append(element('p','The next saved owner review will appear here.'));
     node.append(row);
   }
+  restore();
 }
 function renderSafeguards(){
   const rules=[['Do not resend sent emails','On','The email send gate checks saved sends and Gmail before one send attempt. An unknown result stays on hold. Historical conflicts still need review.'],['Keep tests out of growth','Needs fix','The current account and interview counts still include staff and tests. The goal stays unverified until that list is checked.'],['Approval does not mean sent','On','Approving a draft saves the decision and a follow-up for its owner. Only a recorded send or published result can show it as done.'],['Checks are not progress','On','Only changed draft content or a verified work milestone counts as a move. Reworded tasks and new check times do not. Older move history is not assumed.']];
-  const node=$('safeguards');node.replaceChildren();for(const [title,status,explanation] of rules){const row=element('details',undefined,'learning safeguard'),summary=element('summary');summary.append(element('span','◇','shield'),element('span',title),element('span',status,`pill ${status==='On'?'green':'amber'}`));row.append(summary,element('p',explanation));node.append(row);}
+  const node=$('safeguards'),restore=retainDisclosures(node);node.replaceChildren();for(const [title,status,explanation] of rules){const row=element('details',undefined,'learning safeguard'),summary=element('summary');summary.append(element('span','◇','shield'),element('span',title),element('span',status,`pill ${status==='On'?'green':'amber'}`));row.append(summary,element('p',explanation));node.append(row);}restore();
 }
 function renderHealth(){
   const data=boardData,sources=[];
@@ -199,26 +205,26 @@ function renderHealth(){
   sources.push({name:'GA4',status:data?.analytics?.status==='current'?'Report read · gaps remain':data?.analytics?.status||'Not loaded',date:data?.analytics?.report?.checkedAt,how:'Codex imports one 28-day report each Eastern day.',detail:'Refreshing this page reads that saved report. It does not run a new Analytics query. Staff exclusions, attribution and purchases are checked separately.'});
   const gmail=data?.gmailSync;sources.push({name:'Gmail',status:gmail?.status==='current'?'Current':gmail?.status||'Not loaded',date:gmail?.lastSuccessfulSyncAt,how:'Google checks tracked mail about every 5 minutes.',detail:'Only tracked conversations and send records are included. A page refresh does not start a Gmail scan.'});
   for(const [key,label,how] of [['marblism','Marblism','Codex reads and saves drafts during its scheduled work.'],['github','Product work','Codex checks saved product tasks and GitHub.']]){const s=data?.sources?.find(x=>x.source===key);sources.push({name:label,status:s?.status==='current'?'Current':s?.status||'Not loaded',date:s?.checked_at,how,detail:s?.detail||'No source check is saved yet.'});}
-  const node=$('source-health');node.replaceChildren();for(const source of sources){const card=element('article',undefined,'source-card'),head=element('header');head.append(element('strong',source.name),element('span',source.status,source.status==='Current'?'green':'amber'));card.append(head,element('p',source.date?`Checked ${time(source.date)}`:'No check time saved.'),element('p',source.how),detail('What this means',source.detail));node.append(card);}
+  const node=$('source-health'),restore=retainDisclosures(node);node.replaceChildren();for(const source of sources){const card=element('article',undefined,'source-card'),head=element('header');card.setAttribute('data-disclosure-key',source.name);head.append(element('strong',source.name),element('span',source.status,source.status==='Current'?'green':'amber'));card.append(head,element('p',source.date?`Checked ${time(source.date)}`:'No check time saved.'),element('p',source.how),detail('What this means',source.detail));node.append(card);}restore();
   const allGood=data&&!numbersFailed&&!boardFailed;$('data-summary').textContent=numbersFailed||boardFailed?'Refresh failed · saved data shown':data?.workflow?.alerts?.length?`${data.workflow.alerts.length} work checks need attention`:'Some data needs a check';
   $('checked').textContent=allGood?`Board read ${relative(data.asOf)}`:data?`Last board read ${relative(data.asOf)}`:'Loading…';
   $('source-count').textContent='Source times and scheduled work';const brief=$('data-brief');brief.replaceChildren(element('p','The page reloads saved records every minute while open. Each platform has its own check time.'),element('p','Account and interview counts include tests. Current paying customers are not verified. Money comes from the saved Stripe ledger.','caution'));
   if(data?.workflow?.alerts?.length)brief.append(element('p',`${data.workflow.alerts.length} work checks or follow-ups need attention. See Data & settings.`, 'caution'));
 }
 function renderWorkflow(workflow,analytics){
-  const runs=$('workflow-runs'),alerts=$('workflow-alerts');runs.replaceChildren();alerts.replaceChildren();
+  const runs=$('workflow-runs'),alerts=$('workflow-alerts'),restoreRuns=retainDisclosures(runs),restoreAlerts=retainDisclosures(alerts);runs.replaceChildren();alerts.replaceChildren();
   const labels={preparation:['Prepare work','Hourly · Codex on the Mac'],reconciliation:['Check sources','Hourly · Codex on the Mac'],coordination:['Owner priorities','Daily · Codex on the Mac']};
   for(const run of workflow?.workflows||[]){const name=labels[run.id]||[run.label,'Codex scheduled work'];const row=element('details',undefined,'workflow-run'),summary=element('summary');summary.append(element('strong',name[0]),element('span',run.status==='current'?'Check completed':run.status,run.status==='current'?'green':'amber'));row.append(summary,element('p',name[1]),element('p',run.lastSuccessAt?`Last completed check: ${time(run.lastSuccessAt)}`:'No completed check saved.'));
     if(run.lastRun?.result?.summary)row.append(detail('Saved run notes',run.lastRun.result.summary));if(run.lastRun?.result?.nextCheckAt)row.append(element('p',`Next check: ${time(run.lastRun.result.nextCheckAt)}`));runs.append(row);}
   if(!workflow)runs.append(element('p','Scheduled work records have not loaded.','caution'));
-  for(const alert of workflow?.alerts||[])alerts.append(detail('Work needs attention',alert.detail));
-  const content=$('analytics-report'),report=analytics?.report;content.replaceChildren();$('analytics-status').textContent=report?`${report.startDate} to ${report.endDate} · ${analytics.status}`:'No saved GA4 report.';
+  for(const alert of workflow?.alerts||[]){const row=detail('Work needs attention',alert.detail);row.setAttribute('data-disclosure-key',alert.id||alert.detail);alerts.append(row);}restoreRuns();restoreAlerts();
+  const content=$('analytics-report'),report=analytics?.report,restoreReport=retainDisclosures(content);content.replaceChildren();$('analytics-status').textContent=report?`${report.startDate} to ${report.endDate} · ${analytics.status}`:'No saved GA4 report.';
   if(!report)return;
   content.append(element('p',`Source read ${time(report.checkedAt)}. These are reported events, not a customer count.`,'muted'));
   const table=element('table'),head=element('tr');['Event','Times','Reported users'].forEach(t=>head.append(element('th',t)));table.append(head);
   for(const name of ['session_start','sign_up','voice_session_start','voice_session_complete','begin_checkout','purchase','refund','partner_kit_action','directory_contact_click']){const e=report.events?.find(e=>e.name===name),row=element('tr');row.append(element('td',name.replaceAll('_',' ')),element('td',e?e.count:'Not observed'),element('td',e?e.users:'Unverified'));table.append(row);}content.append(table);
   const gaps=Object.entries(report.coverage||{}).filter(([,v])=>!v).map(([key])=>({internalTrafficExcluded:'staff and test removal',attributionVerified:'signup and payment source',purchasesReconciled:'payment checks',campaignBreakdownComplete:'campaign breakdown',kitActionBreakdownComplete:'kit action breakdown'}[key]||key));if(gaps.length)content.append(element('p',`Still needs checking: ${gaps.join('; ')}.`,'caution'));
-  content.append(detail('Original report notes',report.notes));const link=safeLink(report.sourceUrl,'Open Analytics ↗');if(link)content.append(link);
+  content.append(detail('Original report notes',report.notes));const link=safeLink(report.sourceUrl,'Open Analytics ↗');if(link)content.append(link);restoreReport();
 }
 function reviewKey(item){return JSON.stringify([item.version,item.snapshotRevision,item.revision,item.notificationRevision,item.deliveryState,item.approved,item.state,item.fresh,item.issues]);}
 function plainEmailText(value){const named={amp:'&',apos:"'",quot:'"',lt:'<',gt:'>',nbsp:' '};return value.replace(/&(#x[0-9a-f]+|#\d+|amp|apos|quot|lt|gt|nbsp);/gi,(entity,code)=>{if(code[0]!=='#')return named[code.toLowerCase()];const n=code[1].toLowerCase()==='x'?parseInt(code.slice(2),16):Number(code.slice(1));return n>0&&n<=0x10ffff&&!(n>=0xd800&&n<=0xdfff)?String.fromCodePoint(n):entity;});}
