@@ -34,6 +34,7 @@ for(let round=1;round<=3;round++){
   current=await item(release);
   await call('/api/work-items/reconcile',{id:release,expectedVersion:current.version,nativeState:'draft',sourceRevision:'old-pr',checkedAt:new Date().toISOString()},409);
   current=await item(release);assert.equal(current.receipts.at(-1).stage,step);assert.equal(current.detail,`Synthetic verified ${step}`);
+  if(step!=='production_verified')await call('/api/work-items/reconcile',{id:release,expectedVersion:current.version,candidate:event.candidate,nativeState:'closed',sourceRevision:'merged-pr',checkedAt:new Date().toISOString()},409);
   assert.equal(current.boardLane==='completed',step==='production_verified');
  }
  const post=`${prefix}-post-${round}`;
