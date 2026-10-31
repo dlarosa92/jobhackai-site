@@ -55,3 +55,21 @@ GET `/api/analytics` returns the latest saved aggregate observation and `current
 `{property:"523348532", windowDays:28, startDate:"YYYY-MM-DD", endDate:"YYYY-MM-DD", checkedAt, sourceUrl, events:[{name,count,users}], campaigns:[{source,medium,campaign,content,sessions,contactIntentSessions}], kitActions:[{asset,action,count}], coverage:{internalTrafficExcluded,attributionVerified,purchasesReconciled,campaignBreakdownComplete,kitActionBreakdownComplete}, notes}`
 
 Dates must cover the current 28 days ending yesterday in America/New_York; sourceUrl must be the native production Analytics report and checkedAt within two hours. Supply every coverage flag explicitly as a boolean, use only observed aggregate rows and no personal data. Missing events are unverified, not fabricated zeros. Empty campaign/action arrays mean no imported breakdown, never zero activity. Preserve previous reports on access failure and record analytics source health as unavailable/incomplete. Updating a report does not satisfy measurement acceptance or prove collected purchases.
+
+## Immediate completion and protected release evidence
+
+`GET /api/work-items/changes` returns `{revision}`. It is authenticated, uncached and inexpensive. Database triggers increment the revision in the same transaction as board changes, including native Gmail/outreach writes. The visible page checks every two seconds and fetches work only after a change; action responses also refresh immediately. Numbers load independently. This measures time after the dashboard receives a verified result, not time before an external platform reports it.
+
+`POST /api/work-items/receipt` requires owner access or the existing `reconcile` capability. It records evidence, never performs or authorizes the external action:
+
+```json
+{"id":"canonical-item","expectedVersion":4,"eventId":"provider-unique-event-id","candidate":"immutable-accepted-content-id","stage":"dev_deployed","evidenceUrl":"https://github.com/owner/repo/actions/runs/123","summary":"Exact deployment verified; acceptance remains pending.","occurredAt":"2026-10-31T12:00:00.000Z"}
+```
+
+Deployment stages must arrive in order for the same accepted candidate: `dev_deployed`, `dev_verified`, `qa_deployed`, `qa_verified`, `production_deployed`, `production_verified`. Verified means the stage's required acceptance checks passed, not merely that deployment succeeded. GitHub work items use these stages. Other supported sources use `published` or `sent` only after native confirmation. Gmail, outreach and directory continue using their existing authoritative feeds.
+
+Receipts are append-only. Retrying the same event and payload is safe; reusing an event ID with different facts returns 409. Different work/candidates need a new work item. Completed records remain in Done and history. Preparation cannot erase their result. Once a receipt exists, reconciliation must supply the same `candidate`, preventing an unrelated historical PR check from refreshing the release. Preparation also retains previously saved source references.
+
+The chat or integration carrying out an authorized action must write the result and read back the item before reporting success. A failed receipt must be retried without repeating the publication/send/deployment. Hourly reconciliation recovers missing observations; it is not the normal notification path. Existing external publication authorization is unchanged.
+
+Apply migration `007-dashboard-integrity.sql` (receipt/revision tables) before deploying. Deploy both dashboard and Gmail-ingestion Workers with trigger-inclusive write-count checks, preserving their private bindings. Only then apply `008-dashboard-change-triggers.sql`. This order keeps old Workers from mistaking trigger side effects for write conflicts. The migration is repeatable and leaves existing decisions, sends and suppressions intact. Use isolated development and QA databases for synthetic acceptance tests. Do not create fake production publications to test the board.
