@@ -1,3 +1,4 @@
+import {d1Run} from './test-support/d1-result.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
@@ -12,7 +13,7 @@ const owner={role:'owner',id:'owner'},machine={role:'machine',id:'executor.acces
 const proof=[{url:'https://example.com/saved-draft',fact:'Complete saved draft independently read back.'}];
 function fixture(){
   const sql=new DatabaseSync(':memory:');sql.exec(readFileSync(new URL('./schema.sql',import.meta.url),'utf8'));
-  const db={prepare(query){return {args:[],bind(...args){this.args=args;return this;},async first(){return sql.prepare(query).get(...this.args)||null;},async all(){return {results:sql.prepare(query).all(...this.args)};},async run(){return {meta:{changes:sql.prepare(query).run(...this.args).changes}};},query};},async batch(statements){sql.exec('BEGIN');try{const values=statements.map(s=>({meta:{changes:sql.prepare(s.query).run(...s.args).changes}}));sql.exec('COMMIT');return values;}catch(error){sql.exec('ROLLBACK');throw error;}}};
+  const db={prepare(query){return {args:[],bind(...args){this.args=args;return this;},async first(){return sql.prepare(query).get(...this.args)||null;},async all(){return {results:sql.prepare(query).all(...this.args)};},async run(){return d1Run(sql,query,this.args);},query};},async batch(statements){sql.exec('BEGIN');try{const values=statements.map(s=>d1Run(sql,s.query,s.args));sql.exec('COMMIT');return values;}catch(error){sql.exec('ROLLBACK');throw error;}}};
   const env={DASHBOARD_DB:db},now=new Date();
   const request=(path,input)=>new Request(`https://dashboard.jobhackai.io${path}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)});
   const flow=async(path,input,identity=machine,time=now)=>{const response=await workflowApi(request(`/api/workflow/${path}`,input),env,identity,time,board);return {status:response.status,body:await response.json()};};
@@ -202,7 +203,7 @@ test('a later concurrent item write cannot contaminate the first mutation receip
   const original=c.db.prepare.bind(c.db);let reads=0;
   c.db.prepare=query=>{const statement=original(query);if(query==='SELECT * FROM work_items WHERE id=?'){
     const first=statement.first.bind(statement);statement.first=async()=>{
-      if(++reads===2)c.sql.prepare('UPDATE work_items SET document=?,checked_at=?,version=version+1 WHERE id=?').run(JSON.stringify({...initial,title:'Another run changed this'}),new Date(c.now.getTime()+1000).toISOString(),'racing');
+      if(++reads===3)c.sql.prepare('UPDATE work_items SET document=?,checked_at=?,version=version+1 WHERE id=?').run(JSON.stringify({...initial,title:'Another run changed this'}),new Date(c.now.getTime()+1000).toISOString(),'racing');
       return first();
     };
   }return statement;};
@@ -226,4 +227,29 @@ test('wording and evidence-only edits cannot claim progress or reset work age',a
  assert.equal((await c.work('reconcile',{runId:run.id,id:current.id,expectedVersion:current.version,sourceRevision:revised.sourceRevision,checkedAt:revised.checkedAt,nativeState:'draft',snapshot:revised})).status,200);
  current=(await c.board()).items[0];assert.ok(current.lastMovedAt);assert.ok((await c.board()).progress.trackedSince);
  const finished=await c.flow('finish',{id:run.id,outcome:'advanced',summary:'Revised draft saved',evidence:proof});assert.equal(finished.status,200);assert.deepEqual(finished.body.advancedItems,['post']);
+});
+
+for(let round=1;round<=3;round++)test(`receipt attribution survives a lost response without borrowing another run, round ${round}`,async()=>{
+ const c=fixture();const item=await prepare(c);
+ const run=(await c.flow('start',{workflow:'reconciliation'})).body;
+ const other=(await c.flow('start',{workflow:'preparation'})).body;
+ const event={id:item.id,eventId:`published-lost-response-${round}`,expectedVersion:item.version,candidate:'approved-post',stage:'published',evidenceUrl:proof[0].url,summary:'Native publication verified',occurredAt:new Date().toISOString(),runId:run.id};
+ const batch=c.db.batch.bind(c.db);let interrupted=false;
+ c.db.batch=async statements=>{const result=await batch(statements);if(!interrupted){interrupted=true;throw Error('Response lost after commit');}return result;};
+ await assert.rejects(c.work('receipt',event),/Response lost after commit/);
+ assert.equal(c.sql.prepare('SELECT count(*) n FROM work_receipts').get().n,1);
+ assert.equal(c.sql.prepare('SELECT count(*) n FROM workflow_run_writes WHERE run_id=?').get(run.id).n,1,'Attribution committed with receipt before response');
+ const retry=await c.work('receipt',event);assert.equal(retry.status,200);assert.equal(retry.body.replayed,true);
+ assert.equal((await c.work('receipt',{...event,runId:other.id})).status,200);
+ assert.equal(c.sql.prepare('SELECT count(*) n FROM workflow_run_writes WHERE run_id=?').get(other.id).n,0,'A different run cannot borrow the original result');
+ assert.equal((await c.flow('finish',{id:other.id,outcome:'advanced',summary:'Borrowed result',evidence:proof})).status,400);
+ assert.equal((await c.flow('finish',{id:run.id,outcome:'advanced',summary:'Verified publication with recovered response',evidence:proof})).status,200);
+});
+
+test('receipt and originating workflow attribution roll back together on attribution failure',async()=>{
+ const c=fixture(),item=await prepare(c),run=(await c.flow('start',{workflow:'reconciliation'})).body;
+ c.sql.exec("CREATE TRIGGER fail_attribution BEFORE INSERT ON workflow_run_writes BEGIN SELECT RAISE(ABORT,'injected write failure'); END;");
+ await assert.rejects(c.work('receipt',{id:item.id,eventId:'atomic-failure',expectedVersion:item.version,candidate:'approved-post',stage:'published',evidenceUrl:proof[0].url,summary:'Native publication verified',occurredAt:new Date().toISOString(),runId:run.id}),/injected write failure/);
+ assert.equal(c.sql.prepare('SELECT count(*) n FROM work_receipts').get().n,0);
+ const after=(await c.board()).items[0];assert.equal(after.version,item.version);assert.equal(after.nativeState,'draft');
 });

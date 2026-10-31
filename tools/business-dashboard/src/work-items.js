@@ -1,5 +1,6 @@
 import { digest, OWNER } from './outreach-policy.js';
 import { workflowStatus, verifyRunWrite, recordRunWrite } from './workflow.js';
+import { saveReceipt, applyReceipts } from './work-receipts.js';
 
 export const departments = ['marketing', 'sales', 'product'];
 const idPattern = /^[a-z0-9][a-z0-9_-]{0,127}$/;
@@ -67,6 +68,13 @@ async function updateItem(db,input,now) {
   const id=key(input.id), version=expected(input.expectedVersion), source=input.source;
   if(!sources.includes(source))fail('Unknown source.');
   const sourceId=text(input.sourceId,200), doc=documentInput(input.document);
+  const previous=await get(db,id);
+  if(previous){
+    // Preparing new notes must not erase the release/source evidence already saved.
+    const refs=new Map(parse(previous.document).sourceRefs.map(ref=>[ref.url,ref]));
+    for(const ref of doc.sourceRefs)refs.set(ref.url,ref);
+    doc.sourceRefs=[...refs.values()];
+  }
   if(!doc.sourceRefs.length)fail('At least one stable source reference is required.');
   if(['campaign','gmail','outreach','directory'].includes(source)){
     const tables={campaign:['campaign_items','id'],gmail:['gmail_threads','thread_id'],outreach:['outreach_messages','id']};
@@ -80,7 +88,7 @@ async function updateItem(db,input,now) {
   let result;
   if(!version)result=await db.prepare(`INSERT INTO work_items(id,source,source_id,document,updated_at) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING`).bind(id,source,sourceId,JSON.stringify(doc),now).run();
   else result=await db.prepare(`UPDATE work_items SET document=?,version=version+1,updated_at=? WHERE id=? AND version=? AND source=? AND source_id=?`).bind(JSON.stringify(doc),now,id,version,source,sourceId).run();
-  if(result.meta?.changes!==1)fail('The item changed or this source is already represented. Reload before editing.',409);
+  if(!(result.meta?.changes>0))fail('The item changed or this source is already represented. Reload before editing.',409);
   return get(db,id);
 }
 async function reconcile(db,input,now) {
@@ -90,6 +98,10 @@ async function reconcile(db,input,now) {
   if(['gmail','outreach','directory'].includes(row.source))fail('Reconcile this source through its existing native feed.');
   if(!nativeStates.includes(input.nativeState))fail('Invalid native status.');
   const checkedAt=date(input.checkedAt), sourceRevision=text(input.sourceRevision,300);
+  const receipt=await db.prepare('SELECT * FROM work_receipts WHERE item_id=? ORDER BY rowid DESC LIMIT 1').bind(id).first();
+  if(receipt && input.candidate!==receipt.candidate)fail('This check does not identify the active candidate. Historical source checks cannot refresh the current release.',409);
+  if(receipt){const state=receipt.stage==='production_verified'?'closed':['published','sent'].includes(receipt.stage)?receipt.stage:'draft';if(input.nativeState!==state)fail('Execution state belongs to verified receipts. A source check cannot complete or reopen this release.',409);}
+  if(['published','sent','closed'].includes(row.native_state)&&input.nativeState!==row.native_state)fail('Completed execution cannot be reopened by reconciliation. Create a new work item for new work.',409);
   if(row.checked_at && checkedAt<row.checked_at)fail('Older evidence cannot replace newer evidence.',409);
   const snapshot=input.snapshot?snapshotInput(input.snapshot):null;
   if(snapshot && (snapshot.sourceRevision!==sourceRevision || snapshot.checkedAt!==checkedAt))fail('Snapshot and source revisions/times must match.');
@@ -102,7 +114,7 @@ async function reconcile(db,input,now) {
   if(snapshot)statements.push(db.prepare(`INSERT INTO work_snapshots(item_id,revision,payload,created_at)
     SELECT id,?,?,? FROM work_items WHERE id=? AND version=? AND snapshot_revision=? AND mutation_id=? ON CONFLICT DO NOTHING`)
     .bind(revision,JSON.stringify(snapshot),now,id,version+1,revision,mutation));
-  const results=await db.batch(statements);if(results[0].meta?.changes!==1)fail('Item changed.',409);
+  const results=await db.batch(statements);if(!(results[0].meta?.changes>0))fail('Item changed.',409);
   return get(db,id);
 }
 async function decision(db,input,now,loadBoard) {
@@ -112,6 +124,7 @@ async function decision(db,input,now,loadBoard) {
   const row=await get(db,id);
   if(!row || row.version!==expected(input.expectedVersion) || !row.snapshot_revision || row.snapshot_revision!==input.revision)fail('The reviewed revision changed.',409);
   if(['outreach','gmail','directory'].includes(row.source))fail('Use the original source review operation.');
+  if(await db.prepare('SELECT event_id FROM work_receipts WHERE item_id=? LIMIT 1').bind(id).first())fail('Execution has started. Draft decisions remain history and cannot alter the release.',409);
   if(!['approve','changes','decline'].includes(input.action))fail('Invalid decision.');
   if(input.action==='approve') {
     // Native feeds own execution and handled status; the projection also checks freshness and dependencies.
@@ -124,7 +137,7 @@ async function decision(db,input,now,loadBoard) {
     db.prepare(`INSERT INTO work_decisions(id,item_id,revision,action,note,actor,created_at)
       SELECT ?,id,?,?,?,?,? FROM work_items WHERE id=? AND version=? AND snapshot_revision=? AND mutation_id=?`).bind(requestId,input.revision,input.action,note,OWNER,now,row.id,row.version+1,input.revision,mutation),
   ]);
-  if(result[0].meta?.changes!==1)fail('Item changed.',409);return {saved:true};
+  if(!(result[0].meta?.changes>0))fail('Item changed.',409);return {saved:true};
 }
 export async function cacheNativeSources(db,base) {
   if(base.directorySource?.status!=='current')return {saved:false,status:'unavailable'};
@@ -132,7 +145,7 @@ export async function cacheNativeSources(db,base) {
   const result=await db.prepare(`INSERT INTO source_cache(source,payload,checked_at) VALUES('directory',?,?)
     ON CONFLICT(source) DO UPDATE SET payload=excluded.payload,checked_at=excluded.checked_at WHERE excluded.checked_at>=source_cache.checked_at`)
     .bind(JSON.stringify(items),base.directorySource.checkedAt).run();
-  return {saved:result.meta.changes===1};
+  return {saved:result.meta.changes>0};
 }
 export async function workRecords(db, base, now=new Date()) {
   const workflow=await workflowStatus(db,now);
@@ -140,7 +153,7 @@ export async function workRecords(db, base, now=new Date()) {
     const cached=await db.prepare("SELECT * FROM source_cache WHERE source='directory'").first();
     if(cached)base={...base,items:[...base.items,...parse(cached.payload).map(i=>({...i,staleSource:true}))],directorySource:{...base.directorySource,lastSuccessfulCheckAt:cached.checked_at}};
   }
-  const [rows,snapshots,decisions,health,contributions,runs,movement]=await Promise.all([
+  const [rows,snapshots,decisions,health,contributions,runs,movement,receipts]=await Promise.all([
     db.prepare('SELECT * FROM work_items ORDER BY priority,id').all(),
     db.prepare('SELECT s.* FROM work_snapshots s JOIN work_items w ON w.id=s.item_id AND w.snapshot_revision=s.revision').all(),
     db.prepare('SELECT d.* FROM work_decisions d JOIN work_items w ON w.id=d.item_id AND w.snapshot_revision=d.revision ORDER BY d.created_at,d.id').all(),
@@ -148,6 +161,7 @@ export async function workRecords(db, base, now=new Date()) {
     db.prepare('SELECT * FROM work_contributions ORDER BY item_id,department').all(),
     db.prepare('SELECT * FROM coordination_runs ORDER BY created_at DESC LIMIT 8').all(),
     db.prepare("SELECT reference, MIN(recorded_at) AS tracked_since, MAX(CASE WHEN json_extract(result,'$.advanced')=1 THEN recorded_at END) AS moved_at FROM workflow_run_writes WHERE kind='item' AND json_extract(result,'$.progressBasis')='deliverable-v1' GROUP BY reference").all(),
+    db.prepare('SELECT * FROM work_receipts ORDER BY rowid').all(),
   ]);
   const freshness=health.results.map(row=>({...row,status:row.status==='current'&&now.getTime()-Date.parse(row.last_success_at)>row.max_age_minutes*60000?'stale':row.status}));
   const itemMap=new Map(base.items.map(item=>[`${item.source||'campaign'}:${item.source==='outreach'?item.outreachId:item.source==='gmail'?item.id.replace(/^gmail-/,''):item.id}`,item]));
@@ -173,7 +187,7 @@ export async function workRecords(db, base, now=new Date()) {
     item.handoff=workflow.handoffs.find(h=>h.item_id===row.id)||null;
     if(item.handoff&&!['sent','published','closed','scheduled'].includes(nativeState))item.nextAction=item.handoff.nextAction;
     if(decision?.action==='approve' && nativeState==='draft')item.state='approved';
-    return item;
+    return applyReceipts(item,receipts.results.filter(r=>r.item_id===row.id));
   });
   const items=[...work,...itemMap.values()].map(item=>({...item,
     department:item.department||(['gmail','outreach','directory'].includes(item.source)||/Stan|Email|Outreach/i.test(item.channel)?'sales':'marketing'),
@@ -191,7 +205,7 @@ export async function workRecords(db, base, now=new Date()) {
   }}
   for(const item of items){
     item.unfinishedDependencies=item.dependencies.filter(id=>!complete.has(id));
-    item.canApprove=!!item.workId && !item.handoff && !['outreach','gmail','directory'].includes(item.source) && !!item.snapshot && item.fresh && item.preparation==='ready' && item.nativeState==='draft' && !item.unfinishedDependencies.length && item.decision?.action!=='approve' && !['changes','decline'].includes(item.decision?.action);
+    item.canApprove=!item.receipts?.length && !!item.workId && !item.handoff && !['outreach','gmail','directory'].includes(item.source) && !!item.snapshot && item.fresh && item.preparation==='ready' && item.nativeState==='draft' && !item.unfinishedDependencies.length && item.decision?.action!=='approve' && !['changes','decline'].includes(item.decision?.action);
     item.boardLane=boardLane(item);
   }
   const rank=item=>item.impact==='customer'?0:item.impact==='commitment'?1:item.impact==='prospect'?2:3;
@@ -224,6 +238,7 @@ export async function workApi(request,env,identity,loadBoard) {
   const db=env.DASHBOARD_DB,path=new URL(request.url).pathname,now=stamp();
   try {
     if(request.method==='GET'){
+      if(path==='/api/work-items/changes')return reply(await db.prepare('SELECT revision FROM board_revision WHERE id=1').first());
       const board=await loadBoard();
       if(path==='/api/work-items')return reply(board);
       const id=decodeURIComponent(path.slice('/api/work-items/'.length));const item=board.items.find(i=>i.id===id);
@@ -234,6 +249,10 @@ export async function workApi(request,env,identity,loadBoard) {
     if(request.method!=='POST')return reply({error:'Method not allowed'},405);
     const input=await body(request);
     const run=await verifyRunWrite(db,input,identity,now);
+    if(path==='/api/work-items/receipt'){
+      const result=await saveReceipt(db,input,now,run);
+      return reply(result);
+    }
     if(path==='/api/work-items/prepare'||path==='/api/work-items/reconcile'){
       const old=run?await get(db,input.id):null;
       if(run&&(old?.version||0)!==expected(input.expectedVersion))fail('Item changed before the attributed write.',409);
