@@ -141,11 +141,57 @@ test('an older network response cannot replace a newer board; a failed read keep
  const first=uiState.run('refresh()'),second=uiState.run('refresh()');
  const numbers={asOf:'2026-10-27T12:00:00Z',month:'2026-10',netCollectedCents:0,d1UserRecords:38,userGoal:250,costCents:null,costsComplete:false,estimatedAvailableCents:null};
  const response=payload=>({ok:true,json:async()=>payload});
- requests[2](response(numbers));requests[3](response(data([item('Newest work','Product','hold')])));await second;
- requests[0](response(numbers));requests[1](response(data([item('Old work','Product','hold')])));await first;
+ requests[3](response(numbers));requests[2](response(data([item('Newest work','Product','hold')])));await second;
+ requests[1](response(numbers));requests[0](response(data([item('Old work','Product','hold')])));await first;
  assert.match(text(uiState.nodes.get('board')),/Newest work/);assert.doesNotMatch(text(uiState.nodes.get('board')),/Old work/);
  const failed=uiState.run('refresh()');requests[4]({ok:false});requests[5]({ok:false});await failed;
  assert.match(text(uiState.nodes.get('board')),/Newest work/);assert.equal(uiState.nodes.get('campaign-error').hidden,false);
  uiState.run("selectedDepartment='product';renderCampaigns(boardData)");assert.equal(uiState.nodes.get('campaign-error').hidden,false);
  assert.match(text(uiState.nodes.get('data-summary')),/Refresh failed/);
+});
+
+for(let round=1;round<=3;round++)test(`live update replay ${round}: publication appears without reload and unchanged polls stay cheap`,async()=>{
+ let revision=1,reads=0,fail=false;
+ let current=data([item('Live post','Facebook','approved',{boardLane:'in_progress'})]);
+ const view=ui({AbortController,setTimeout,clearTimeout,fetch:async path=>{
+  if(fail)throw Error('offline');
+  if(path==='/api/work-items/changes')return {ok:true,json:async()=>({revision})};
+  assert.equal(path,'/api/work-items');reads++;return {ok:true,json:async()=>current};
+ }});
+ await view.run('pollBoardChanges()');assert.match(text(lane(view.nodes,'Needs you')),/Live post/);
+ current=data([item('Live post','Facebook','published',{boardLane:'completed'})]);revision++;
+ await view.run('pollBoardChanges()');assert.match(text(lane(view.nodes,'Done')),/Live post/);
+ assert.doesNotMatch(text(lane(view.nodes,'Needs you')),/Live post/);
+ await view.run('pollBoardChanges()');assert.equal(reads,2,'No full board read when nothing changed');
+ fail=true;await view.run('pollBoardChanges()');assert.equal(view.nodes.get('campaign-error').hidden,false);
+ fail=false;await view.run('pollBoardChanges()');assert.equal(view.nodes.get('campaign-error').hidden,true);
+ assert.match(text(lane(view.nodes,'Done')),/Live post/);
+});
+test('slow metrics never delay a saved board change',async()=>{
+ let releaseMetrics;const view=ui({AbortController,setTimeout,clearTimeout,fetch:async path=>path==='/api/overview'?new Promise(resolve=>{releaseMetrics=resolve;}):({ok:true,json:async()=>data([item('Already published','Facebook','published',{boardLane:'completed'})])})});
+ const pending=view.run('refresh()');await new Promise(resolve=>setImmediate(resolve));
+ assert.match(text(lane(view.nodes,'Done')),/Already published/);
+ releaseMetrics({ok:false});await pending;
+});
+test('a pending action or hidden tab does not start a competing poll',async()=>{
+ let requests=0;const view=ui({fetch:()=>{requests++;throw Error('unexpected');}});
+ view.run('actionPending=true');await view.run('pollBoardChanges()');assert.equal(requests,0);
+ view.run('actionPending=false;document.hidden=true');await view.run('pollBoardChanges()');assert.equal(requests,0);
+});
+
+test('release receipts override old draft approval labels and remove draft actions',()=>{
+ const view=ui();const release=item('Release candidate','Product','hold',{workId:'release',department:'product',nativeState:'draft',boardLane:'in_progress',decision:{action:'approve'},snapshot:{text:'Old approved draft',media:[],links:[],evidence:[]},receipts:[{stage:'dev_deployed',summary:'Deployed candidate',evidence_url:'https://example.com/deployment'}],nextAction:'Complete development acceptance.'});
+ view.render(data([release]));assert.match(text(lane(view.nodes,'Working')),/Release candidate/);assert.doesNotMatch(text(lane(view.nodes,'Needs you')),/Release candidate/);
+ walk(lane(view.nodes,'Working')).find(x=>x.className==='card-title').listeners.click();
+ assert.match(text(view.nodes.get('review-content')),/Complete development acceptance/);
+ assert.doesNotMatch(text(view.nodes.get('review-actions')),/Approve|Decline|Request changes/);
+});
+test('open details reflect completion without another click and changed copy cannot be silently approved',async()=>{
+ let current=data([item('Visible draft','Facebook','hold',{version:1,workId:'visible',snapshotRevision:'v1',canApprove:true,boardLane:'ready',snapshot:{text:'Exact copy',links:[],media:[],evidence:[]}})]);
+ const view=ui({AbortController,setTimeout,clearTimeout,fetch:async()=>({ok:true,json:async()=>current})});
+ view.render(current);walk(lane(view.nodes,'Needs you')).find(x=>x.className==='card-title').listeners.click();
+ current=data([{...current.items[0],version:2,snapshotRevision:'v2'}]);await view.run('refreshBoard()');
+ assert.match(view.nodes.get('review-error').textContent,/Close and reopen/);assert.ok(view.nodes.get('review-actions').children.every(x=>x.disabled));
+ current=data([{...current.items[0],version:3,state:'published',nativeState:'published',boardLane:'completed',canApprove:false,receipts:[{stage:'published',summary:'Verified live post',evidence_url:'https://example.com/post'}],nextAction:'Publication verified.'}]);
+ await view.run('refreshBoard()');assert.match(text(view.nodes.get('review-content')),/Verified live post/);assert.equal(view.nodes.get('review-actions').children.length,0);
 });

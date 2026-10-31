@@ -34,7 +34,7 @@ export async function registerMessage(db, input, now = Date.now()) {
       WHERE outreach_messages.state='review'`).bind(packet.id, packet.businessKey, packet.message.recipient, revision, JSON.stringify(packet), iso(now)),
     await event(db, packet.id, revision, 'prepared', { sourceUrl: packet.evidence.sourceUrl }, now),
   ]);
-  if (results[1].meta.changes !== 1) throw new Error('Message was queued during editing. Refresh before continuing.');
+  if (!(results[1].meta.changes>0)) throw new Error('Message was queued during editing. Refresh before continuing.');
   return { id: packet.id, revision };
 }
 
@@ -116,7 +116,7 @@ async function approve(db, input, now) {
   if (issues.length) return json({ error: issues.join(' ') }, 409);
   const result = await db.prepare(`UPDATE outreach_messages SET approved_revision=revision,approved_at=?,updated_at=? WHERE id=? AND revision=? AND state='review'`)
     .bind(iso(now), iso(now), record.id, input.revision).run();
-  if (result.meta.changes !== 1) return json({ error: 'Message changed during review.' }, 409);
+  if (!(result.meta.changes>0)) return json({ error: 'Message changed during review.' }, 409);
   await db.batch([await event(db, record.id, record.revision, 'owner_approved', { owner: OWNER }, now)]);
   return json({ ok: true });
 }
@@ -127,7 +127,7 @@ async function approveFormat(db, input, now) {
   const result=await db.prepare(`INSERT INTO outreach_events(event_id,message_id,revision,kind,evidence,recorded_at)
     SELECT ?,id,revision,'owner_format_approved',?,? FROM outreach_messages WHERE id=? AND revision=? AND state='review' AND packet=? ON CONFLICT(event_id) DO NOTHING`)
     .bind(formatEventId(record),JSON.stringify({owner:OWNER,reason:packet.formatRequest.reason}),iso(now),record.id,record.revision,record.packet).run();
-  if(result.meta.changes!==1){
+  if(!(result.meta.changes>0)){
     const current=await row(db,record.id);
     if(!current || current.revision!==record.revision || current.state!=='review' || formatIssues(parse(current.packet),await formatApproval(db,current)).length) return json({error:'The email changed during format review.'},409);
   }
@@ -148,7 +148,7 @@ async function queue(env, input, now) {
     AND NOT EXISTS(SELECT 1 FROM outreach_messages other WHERE other.id<>outreach_messages.id AND (other.business_key=outreach_messages.business_key OR other.recipient=outreach_messages.recipient) AND other.state IN ('queued','sending','sent','uncertain')
       AND NOT (?='followup' AND other.state='sent' AND other.sent_thread_id=? AND other.sent_message_id=? AND json_extract(other.packet,'$.phase')='intro'))`)
     .bind(iso(now),record.id,input.revision,input.revision,packet.phase,packet.message.threadId,originalId).run();
-  return json({ ok: result.meta.changes === 1 }, result.meta.changes === 1 ? 200 : 409);
+  return json({ ok: result.meta.changes>0 }, result.meta.changes>0 ? 200 : 409);
 }
 
 export async function ownerOutreach(request, env, now = Date.now()) {
@@ -183,7 +183,7 @@ export async function ownerOutreach(request, env, now = Date.now()) {
     if (path === '/api/outreach/send') return queue(env,input,now);
     if (path === '/api/outreach/cancel') {
       const result=await env.DASHBOARD_DB.prepare("UPDATE outreach_messages SET state='review',approved_revision=NULL,approved_at=NULL,updated_at=? WHERE id=? AND revision=? AND state='queued' AND attempt_id IS NULL").bind(iso(now),input.id,input.revision).run();
-      if(result.meta.changes!==1)return json({error:'This email is already reserved or changed. Reconcile Gmail; cancellation cannot undo an attempt.'},409);
+      if(!(result.meta.changes>0))return json({error:'This email is already reserved or changed. Reconcile Gmail; cancellation cannot undo an attempt.'},409);
       await env.DASHBOARD_DB.batch([await event(env.DASHBOARD_DB,input.id,input.revision,'owner_cancelled',{},now)]);
       return json({ok:true});
     }
@@ -227,7 +227,7 @@ export async function relayOutreach(env, input, now = Date.now(), fetcher = fetc
       AND NOT EXISTS(SELECT 1 FROM outreach_messages other WHERE other.id<>outreach_messages.id AND (other.business_key=outreach_messages.business_key OR other.recipient=outreach_messages.recipient) AND other.state IN ('queued','sending','sent','uncertain')
         AND NOT (?='followup' AND other.state='sent' AND other.sent_thread_id=? AND other.sent_message_id=? AND json_extract(other.packet,'$.phase')='intro'))`)
       .bind(attemptId,JSON.stringify(routing),routing.checkedAt,iso(now),record.id,record.revision,record.revision,packet.phase,packet.message.threadId,originalId).run();
-    if(reserved.meta.changes!==1)return json({error:'Already claimed, blocked or changed'},409);
+    if(!(reserved.meta.changes>0))return json({error:'Already claimed, blocked or changed'},409);
     return json({attemptId,expiresAt:iso(now+30000),packet,
       ...(packet.message.html ? {formatApproval:{id:record.id,revision:record.revision}} : {})});
   }
