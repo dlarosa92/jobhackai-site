@@ -33,6 +33,76 @@ async function decision(c,action='approve',note='Short links only please'){
   const item=await prepare(c);const input={id:item.id,expectedVersion:item.version,revision:item.snapshotRevision,requestId:'owner-decision',action,note};
   assert.equal((await c.work('feedback',input)).status,200);return input;
 }
+test('half-hour reconciliation creates distinct runs, retries once and preserves other cadences across three boundaries',async()=>{
+  for(const base of ['2026-10-31T10:00:00.000Z','2026-10-31T23:00:00.000Z','2026-11-01T05:00:00.000Z']){
+    const c=fixture(),at=minutes=>new Date(Date.parse(base)+minutes*60000);
+    const first=(await c.flow('start',{workflow:'reconciliation'},machine,at(1))).body;
+    assert.equal(first.period,base.slice(0,16));
+    assert.equal((await c.flow('start',{workflow:'reconciliation'},machine,at(29))).body.id,first.id);
+    // Mark a legitimate checked result in the fixture, preserving its receipt for retry checks.
+    c.sql.prepare("UPDATE workflow_runs SET status='checked',finished_at=?,result='{}' WHERE id=?").run(at(29).toISOString(),first.id);
+    const second=(await c.flow('start',{workflow:'reconciliation'},machine,at(30))).body;
+    assert.notEqual(second.id,first.id);assert.equal(second.period,at(30).toISOString().slice(0,16));
+    assert.equal((await c.flow('start',{workflow:'reconciliation'},machine,at(59))).body.id,second.id);
+    c.sql.prepare("UPDATE workflow_runs SET status='checked',finished_at=?,result='{}' WHERE id=?").run(at(59).toISOString(),second.id);
+    const third=(await c.flow('start',{workflow:'reconciliation'},machine,at(60))).body;
+    assert.notEqual(third.id,second.id);assert.equal(third.period,at(60).toISOString().slice(0,16));
+    for(const workflow of ['preparation','coordination']){
+      const before=(await c.flow('start',{workflow},machine,at(1))).body;
+      assert.equal((await c.flow('start',{workflow},machine,at(30))).body.id,before.id);
+    }
+    assert.equal(c.sql.prepare("SELECT count(*) n FROM workflow_runs WHERE workflow='reconciliation'").get().n,3);
+  }
+});
+test('half-hour reconciliation refuses overlapping leases and recovers after completion or expiry',async()=>{
+  for(const ending of ['checked','failed','expired']){
+    const c=fixture(),time=new Date('2026-10-31T10:01:00.000Z');
+    const first=(await c.flow('start',{workflow:'reconciliation'},machine,time)).body;
+    const next=new Date('2026-10-31T10:30:00.000Z');
+    assert.equal((await c.flow('start',{workflow:'reconciliation'},machine,next)).status,409);
+    if(ending!=='expired')c.sql.prepare('UPDATE workflow_runs SET status=? WHERE id=?').run(ending,first.id);
+    else next.setTime(Date.parse('2026-10-31T11:01:00.000Z'));
+    const started=await c.flow('start',{workflow:'reconciliation'},machine,next);
+    assert.equal(started.status,200);assert.notEqual(started.body.id,first.id);
+    assert.equal(c.sql.prepare("SELECT count(*) n FROM workflow_runs WHERE status='running' AND lease_until>?").get(next.toISOString()).n,1);
+  }
+});
+test('half-hour reconciliation preserves legacy hourly receipts in their actual slots and rejects ownership changes',async()=>{
+  for(const minute of ['01','31']){
+    const c=fixture(),start=new Date(`2026-10-31T10:${minute}:00.000Z`);
+    const first=(await c.flow('start',{workflow:'reconciliation'},machine,start)).body;
+    c.sql.prepare("UPDATE workflow_runs SET period='2026-10-31T10',status='checked' WHERE id=?").run(first.id);
+    const retry=await c.flow('start',{workflow:'reconciliation'},machine,start);
+    assert.equal(retry.body.id,first.id);assert.equal(retry.body.reused,true);
+    assert.equal((await c.flow('start',{workflow:'reconciliation'},{...machine,id:'different.access'},start)).status,409);
+    const next=await c.flow('start',{workflow:'reconciliation'},machine,new Date(start.getTime()+30*60000));
+    assert.equal(next.status,200);assert.notEqual(next.body.id,first.id);
+    assert.equal(c.sql.prepare('SELECT period FROM workflow_runs WHERE id=?').get(first.id).period,'2026-10-31T10');
+  }
+});
+test('half-hour reconciliation checks overlapping starts atomically after the baseline read',async()=>{
+  const c=fixture(),time=new Date('2026-10-31T10:01:00.000Z');
+  const first=(await c.flow('start',{workflow:'reconciliation'},machine,time)).body;
+  // Both starts complete their asynchronous reads before either inserts.
+  const timeAfterExpiry=new Date('2026-10-31T11:01:00.000Z');
+  const results=await Promise.all([timeAfterExpiry,new Date('2026-10-31T11:30:00.000Z')].map(t=>c.flow('start',{workflow:'reconciliation'},machine,t)));
+  assert.deepEqual(results.map(r=>r.status).sort(),[200,409]);
+  assert.equal(c.sql.prepare("SELECT count(*) n FROM workflow_runs WHERE id<>? AND status='running'").get(first.id).n,1);
+});
+test('half-hour reconciliation deadline migration is repeatable, retains history and alerts after 45 minutes',async()=>{
+  const c=fixture(),time=new Date('2026-10-31T10:00:00.000Z');
+  const run=(await c.flow('start',{workflow:'reconciliation'},machine,time)).body;
+  c.sql.prepare("UPDATE workflow_runs SET status='checked',finished_at=?,result='{}' WHERE id=?").run(time.toISOString(),run.id);
+  c.sql.exec("UPDATE workflow_policies SET max_age_minutes=90 WHERE id='reconciliation'");
+  const before=c.sql.prepare('SELECT * FROM workflow_runs').all();
+  const migration=readFileSync(new URL('./migrations/009-half-hour-reconciliation.sql',import.meta.url),'utf8');
+  c.sql.exec(migration);c.sql.exec(migration);
+  assert.deepEqual(c.sql.prepare('SELECT * FROM workflow_runs').all(),before);
+  assert.equal(c.sql.prepare("SELECT max_age_minutes FROM workflow_policies WHERE id='preparation'").get().max_age_minutes,90);
+  assert.equal(c.sql.prepare("SELECT max_age_minutes FROM workflow_policies WHERE id='coordination'").get().max_age_minutes,1560);
+  assert.equal((await workflowStatus(c.db,new Date(time.getTime()+45*60000))).workflows.find(w=>w.id==='reconciliation').status,'current');
+  assert.equal((await workflowStatus(c.db,new Date(time.getTime()+45*60000+1))).workflows.find(w=>w.id==='reconciliation').status,'missing');
+});
 test('an exact owner decision creates one durable follow-up and replaces stale review instructions',async()=>{
   const c=fixture(),input=await decision(c);assert.equal((await c.work('feedback',input)).status,200);
   const item=(await c.board()).items[0];assert.equal(item.state,'approved');assert.match(item.nextAction,/Short links only/);assert.doesNotMatch(item.nextAction,/Review the exact copy/);
