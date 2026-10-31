@@ -250,7 +250,12 @@ const IS_DEV_OR_QA_HOST = APP_BASE_URL === 'https://dev.jobhackai.io' || APP_BAS
 const VISITOR_HOME_HREF = IS_DEV_OR_QA_HOST ? 'index.html' : 'https://jobhackai.io/';
 const VISITOR_BLOG_HREF = IS_DEV_OR_QA_HOST ? 'index.html#blog' : 'https://jobhackai.io/blog';
 const VISITOR_FEATURES_HREF = IS_DEV_OR_QA_HOST ? 'features.html' : 'https://jobhackai.io/features';
-const VISITOR_DIRECTORY_HREF = IS_DEV_OR_QA_HOST ? '/directory/' : 'https://jobhackai.io/directory/';
+// The app does not host directory pages; keep dev and QA links on their marketing deployment.
+const VISITOR_DIRECTORY_HREF = APP_BASE_URL === 'https://dev.jobhackai.io'
+  ? 'https://dev0.jobhackai-app-marketing-seo.pages.dev/directory/'
+  : APP_BASE_URL === 'https://qa.jobhackai.io'
+    ? 'https://develop.jobhackai-app-marketing-seo.pages.dev/directory/'
+    : 'https://jobhackai.io/directory/';
 const VISITOR_PRICING_HREF = `${APP_BASE_URL}/pricing`;
 const VISITOR_LOGO_HREF = IS_DEV_OR_QA_HOST ? '/' : 'https://jobhackai.io/';
 
