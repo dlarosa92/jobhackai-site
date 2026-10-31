@@ -25,7 +25,7 @@ Canonical source references for existing records: campaign/campaign_items.id, gm
 
 Outreach retains `/api/outreach/prepare`, `/approve`, `/send`, `/cancel`; only prepare is available to machines with that capability. Owner-only `/api/outreach/feedback` accepts id, exact revision, action changes/decline and note. Feedback withdraws current approval and holds that revision; a different prepared revision requires a new decision. The signed relay, source/routing checks, suppression and one-attempt protocol remain authoritative.
 
-Metadata-only reconciliation retains the saved review packet and its decision when the source revision is unchanged. A different source revision without a complete replacement snapshot removes it from current review while retaining historical packets and decisions.
+Metadata-only reconciliation retains the saved review packet and its decision when the source revision is unchanged. A different source revision without a complete replacement snapshot removes it from current review while retaining historical packets and decisions. If the item has execution receipts, also send `candidate` equal to the latest receipt's exact candidate; `sourceRevision` is not a substitute for this field. Use `nativeState: "draft"` until a release reaches `production_verified`, then `"closed"`; publication/send receipts use `"published"`/`"sent"`. A merged development PR alone cannot close the release.
 
 Operations, GitHub and analytics tasks with complete preparation satisfy dependencies only after their prerequisite chain and explicit blockers are resolved. Content preparation alone never means publication or sending.
 
