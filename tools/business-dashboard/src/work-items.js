@@ -88,7 +88,7 @@ async function updateItem(db,input,now) {
   let result;
   if(!version)result=await db.prepare(`INSERT INTO work_items(id,source,source_id,document,updated_at) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING`).bind(id,source,sourceId,JSON.stringify(doc),now).run();
   else result=await db.prepare(`UPDATE work_items SET document=?,version=version+1,updated_at=? WHERE id=? AND version=? AND source=? AND source_id=?`).bind(JSON.stringify(doc),now,id,version,source,sourceId).run();
-  if(result.meta?.changes!==1)fail('The item changed or this source is already represented. Reload before editing.',409);
+  if(!(result.meta?.changes>0))fail('The item changed or this source is already represented. Reload before editing.',409);
   return get(db,id);
 }
 async function reconcile(db,input,now) {
@@ -113,7 +113,7 @@ async function reconcile(db,input,now) {
   if(snapshot)statements.push(db.prepare(`INSERT INTO work_snapshots(item_id,revision,payload,created_at)
     SELECT id,?,?,? FROM work_items WHERE id=? AND version=? AND snapshot_revision=? AND mutation_id=? ON CONFLICT DO NOTHING`)
     .bind(revision,JSON.stringify(snapshot),now,id,version+1,revision,mutation));
-  const results=await db.batch(statements);if(results[0].meta?.changes!==1)fail('Item changed.',409);
+  const results=await db.batch(statements);if(!(results[0].meta?.changes>0))fail('Item changed.',409);
   return get(db,id);
 }
 async function decision(db,input,now,loadBoard) {
@@ -136,7 +136,7 @@ async function decision(db,input,now,loadBoard) {
     db.prepare(`INSERT INTO work_decisions(id,item_id,revision,action,note,actor,created_at)
       SELECT ?,id,?,?,?,?,? FROM work_items WHERE id=? AND version=? AND snapshot_revision=? AND mutation_id=?`).bind(requestId,input.revision,input.action,note,OWNER,now,row.id,row.version+1,input.revision,mutation),
   ]);
-  if(result[0].meta?.changes!==1)fail('Item changed.',409);return {saved:true};
+  if(!(result[0].meta?.changes>0))fail('Item changed.',409);return {saved:true};
 }
 export async function cacheNativeSources(db,base) {
   if(base.directorySource?.status!=='current')return {saved:false,status:'unavailable'};
@@ -144,7 +144,7 @@ export async function cacheNativeSources(db,base) {
   const result=await db.prepare(`INSERT INTO source_cache(source,payload,checked_at) VALUES('directory',?,?)
     ON CONFLICT(source) DO UPDATE SET payload=excluded.payload,checked_at=excluded.checked_at WHERE excluded.checked_at>=source_cache.checked_at`)
     .bind(JSON.stringify(items),base.directorySource.checkedAt).run();
-  return {saved:result.meta.changes===1};
+  return {saved:result.meta.changes>0};
 }
 export async function workRecords(db, base, now=new Date()) {
   const workflow=await workflowStatus(db,now);

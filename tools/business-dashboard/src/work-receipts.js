@@ -25,7 +25,7 @@ export async function saveReceipt(db,input,now) {
     db.prepare(`INSERT INTO work_receipts(event_id,item_id,candidate,stage,evidence_url,summary,occurred_at,recorded_at)
       SELECT ?,id,?,?,?,?,?,? FROM work_items WHERE id=? AND version=? AND mutation_id=?`).bind(eventId,candidate,stage,evidenceUrl,summary,event.occurred_at,now,id,expectedVersion+1,eventId),
   ]);
-  if(result[0].meta.changes!==1)reject('Item changed.',409);
+  if(!(result[0].meta.changes>0))reject('Item changed.',409);
   return {saved:true,receipt:event};
 }
 export function applyReceipts(item,receipts) {

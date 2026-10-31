@@ -1,3 +1,4 @@
+import {d1Run} from './test-support/d1-result.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
@@ -17,7 +18,7 @@ function database(schema) {
   const db = { prepare(query) { return { args: [], bind(...args) { this.args=args; return this; },
     async first() { return sql.prepare(query).get(...this.args) ?? null; },
     async all() { return { results:sql.prepare(query).all(...this.args) }; },
-    async run() { return { meta:{changes:sql.prepare(query).run(...this.args).changes} }; },
+    async run() { return d1Run(sql,query,this.args); },
   }; }, async batch(statements) { sql.exec('BEGIN'); try { const result=[]; for(const s of statements)result.push(await s.run()); sql.exec('COMMIT'); return result; } catch(error) { sql.exec('ROLLBACK');throw error; } } };
   return {sql,db};
 }

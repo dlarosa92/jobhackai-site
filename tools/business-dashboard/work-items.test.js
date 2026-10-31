@@ -1,3 +1,4 @@
+import {d1Run} from './test-support/d1-result.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
@@ -9,7 +10,7 @@ import { accessIdentity, allowed, ACCESS_AUD, ACCESS_ISSUER } from './src/access
 const owner={role:'owner'};
 function fixture(){
  const sql=new DatabaseSync(':memory:');sql.exec(readFileSync(new URL('./schema.sql',import.meta.url),'utf8'));
- const db={prepare(query){return {args:[],bind(...args){this.args=args;return this;},async first(){return sql.prepare(query).get(...this.args)||null;},async all(){return {results:sql.prepare(query).all(...this.args)};},async run(){return {meta:{changes:sql.prepare(query).run(...this.args).changes}};},query};},async batch(statements){sql.exec('BEGIN');try{const r=statements.map(s=>({meta:{changes:sql.prepare(s.query).run(...s.args).changes}}));sql.exec('COMMIT');return r;}catch(e){sql.exec('ROLLBACK');throw e;}}};
+ const db={prepare(query){return {args:[],bind(...args){this.args=args;return this;},async first(){return sql.prepare(query).get(...this.args)||null;},async all(){return {results:sql.prepare(query).all(...this.args)};},async run(){return d1Run(sql,query,this.args);},query};},async batch(statements){sql.exec('BEGIN');try{const r=statements.map(s=>d1Run(sql,s.query,s.args));sql.exec('COMMIT');return r;}catch(e){sql.exec('ROLLBACK');throw e;}}};
  const env={DASHBOARD_DB:db};const board=()=>workRecords(db,{items:[],asOf:new Date().toISOString()});
  const call=async(action,input,identity=owner,loadBoard=board)=>{const response=await workApi(new Request(`https://dashboard.jobhackai.io/api/work-items/${action}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)}),env,identity,loadBoard);return {status:response.status,body:await response.json()};};
  return {sql,db,env,board,call};
