@@ -196,7 +196,7 @@ CREATE TABLE IF NOT EXISTS workflow_policies (
 );
 INSERT OR IGNORE INTO workflow_policies VALUES
   ('preparation','Content and approval preparation',90,strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-  ('reconciliation','Source reconciliation',90,strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  ('reconciliation','Source reconciliation',45,strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   ('coordination','Daily department coordination',1560,strftime('%Y-%m-%dT%H:%M:%fZ','now'));
 CREATE TABLE IF NOT EXISTS workflow_runs (
   id TEXT PRIMARY KEY,
