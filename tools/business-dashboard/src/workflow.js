@@ -40,17 +40,26 @@ async function baseline(db) {
   return {items:items.results,sources:sources.results,handoffs:handoffs.results,coordination:runs.results.map(r=>r.id)};
 }
 function periodFor(workflow,now) {
+  if(workflow==='reconciliation')return `${now.slice(0,14)}${Number(now.slice(14,16))<30?'00':'30'}`;
   return workflow==='coordination'?new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now)):now.slice(0,13);
 }
 async function start(db,input,identity,now) {
   if(!canRun(identity,input.workflow))fail('Workflow capability required.',403);
   const workflow=input.workflow,period=periodFor(workflow,now);
-  const old=await db.prepare('SELECT id,actor,status,lease_until FROM workflow_runs WHERE workflow=? AND period=?').bind(workflow,period).first();
+  let old=await db.prepare('SELECT id,actor,status,lease_until FROM workflow_runs WHERE workflow=? AND period=?').bind(workflow,period).first();
+  // Preserve an hourly receipt created before the cadence change in its actual half-hour slot.
+  if(!old&&workflow==='reconciliation')old=await db.prepare(`SELECT id,actor,status,lease_until FROM workflow_runs
+    WHERE workflow=? AND period=? AND started_at>=? AND started_at<?`)
+    .bind(workflow,now.slice(0,13),`${period}:00.000Z`,new Date(Date.parse(`${period}:00.000Z`)+30*60000).toISOString()).first();
   if(old){if(old.actor!==actor(identity))fail('This period is owned by another executor.',409);return {...old,reused:true};}
   const id=crypto.randomUUID(),lease=new Date(Date.parse(now)+60*60000).toISOString(),before=await baseline(db);
-  const result=await db.prepare('INSERT INTO workflow_runs(id,workflow,period,actor,started_at,lease_until,baseline) VALUES(?,?,?,?,?,?,?) ON CONFLICT DO NOTHING')
-    .bind(id,workflow,period,actor(identity),now,lease,JSON.stringify(before)).run();
-  if(!result.meta?.changes)fail('Another run started. Reload workflow status.',409);
+  // Check and insert atomically: a slow previous check must not overlap the next slot.
+  const result=await db.prepare(`INSERT INTO workflow_runs(id,workflow,period,actor,started_at,lease_until,baseline)
+    SELECT ?,?,?,?,?,?,? WHERE ?<>'reconciliation' OR NOT EXISTS(
+      SELECT 1 FROM workflow_runs WHERE workflow='reconciliation' AND status='running' AND lease_until>?
+    ) ON CONFLICT DO NOTHING`)
+    .bind(id,workflow,period,actor(identity),now,lease,JSON.stringify(before),workflow,now).run();
+  if(!result.meta?.changes)fail('Another run already owns this period or reconciliation is still running. Read workflow status and wait for the next scheduled check.',409);
   return {id,workflow,period,status:'running',startedAt:now,leaseUntil:lease};
 }
 async function activeRun(db,id,identity,now) {
