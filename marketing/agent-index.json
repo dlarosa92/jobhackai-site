@@ -8,7 +8,7 @@
       "path": "/index.md",
       "title": "JobHackAI | Practice Your Next Interview Out Loud",
       "description": "Practice a live voice mock interview for your target role. Your first interview is free with a feedback preview. Continue with $17/week, $34/month, or five interviews for $39.",
-      "source_sha256": "2a519dfecb2fc53c62e00675056430580cbb97e5ed32e4e1a83f7a571d57cd73",
+      "source_sha256": "098739633dcf00ea247704213ce9f8fc8d99dbb3fbdbab1ccfaba5dfda36f14e",
       "markdown_sha256": "51a301a91804b3782ca502193379be131292847c8df9ac7a12bc4911821ececc",
       "bytes": 5551
     },
@@ -18,7 +18,7 @@
       "path": "/blog.md",
       "title": "JobHackAI Blog | Job Search Tips, Resume & LinkedIn Guides",
       "description": "Actionable job search tips, resume optimization guides, LinkedIn strategies, and interview prep from the JobHackAI team. Published weekly.",
-      "source_sha256": "4e085fd5c8dc2c1884bf7d6f82b2fe7ca247ec6d385ad229a3da019f87c8a8a0",
+      "source_sha256": "030e3525792c29e5103dfa16df9fca6ef371e619bc4ac4fd02fb75a3b1343214",
       "markdown_sha256": "faccf36a080bf7fd6198b5fc40b9075de78ed702aaa17643c62a67495e2841cb",
       "bytes": 4487
     },
@@ -28,7 +28,7 @@
       "path": "/blog/68-5-days-response-gap-job-search-burnout.md",
       "title": "68.5 Days of Nothing: The Psychological Toll of the 2026 Response Gap | JobHackAI Blog",
       "description": "Long hiring timelines can drain job seekers before interviews even begin. Learn how to protect momentum, improve ATS alignment, and prepare while you wait.",
-      "source_sha256": "19b4a2c9a8a2c3ba400087d1b8910e6c0e2a4ce7e36ffa4acd5d2c5962e211ed",
+      "source_sha256": "7f6a4d032c7d0396d126946148dc1d922099def1b4b67a990964c4306e7b70c1",
       "markdown_sha256": "5cc3b7d98267e0dcbc909c2d045d2b5031f9c7d38dfaebbb68c3600b88f11d72",
       "bytes": 8240
     },
@@ -38,7 +38,7 @@
       "path": "/blog/7-day-interview-prep-routine.md",
       "title": "The 7-Day Interview Prep Routine That Builds Real Confidence | JobHackAI Blog",
       "description": "Stop cramming the night before. This structured 7-day interview prep routine builds the deep fluency that lets you answer any question naturally — not robotically — and walk in with genuine confidence.",
-      "source_sha256": "3d98b5980e09aa875fad4fa22062b5fd7d9a309154a9a6aa9b6335f7d0f477eb",
+      "source_sha256": "366ddaff1a80652b37acd8e63708e79f4d0a6559c54aed171a3f2a1d33dc9367",
       "markdown_sha256": "36726596791079a40d92dadc759f14b668b115623a2011fd856b97f6b31fa08d",
       "bytes": 8673
     },
@@ -48,7 +48,7 @@
       "path": "/blog/ats-optimization-playbook.md",
       "title": "The ATS Optimization Playbook: Get Your Resume Past the Bots | JobHackAI Blog",
       "description": "Most resumes are rejected by ATS before a human reads them. This step-by-step playbook shows you exactly how to optimize your resume for ATS filters without losing your voice.",
-      "source_sha256": "6c45b325d225d568fe0ae80b34684f074c9badf13c11afa81836406b92b2f95e",
+      "source_sha256": "b4efc0077ed86b029fc5093507ed09802ab26a0980e0022e195cb2eb1266df32",
       "markdown_sha256": "cb8ac0a145f76ecc34fdaf27c0549271b9fb1551e6652a2c437fb3992dda0b8f",
       "bytes": 7405
     },
@@ -58,7 +58,7 @@
       "path": "/blog/behavioral-interview-anxiety.md",
       "title": "Behavioral Interview Anxiety: Why 85% of Job Seekers Feel Unprepared (And the Fix) | JobHackAI Blog",
       "description": "85% of job seekers feel unprepared for behavioral interviews. Learn the SAO framework and text-based practice method that closes the Experience Gap and beats anxiety.",
-      "source_sha256": "390908e29e859425c1d8a94f27372e148f729a970fecd8a5a762514eace87f31",
+      "source_sha256": "11174281120ddef2ceae16876fe4f6c5b05cd469c280eb819e445b3821d2fb73",
       "markdown_sha256": "2d8e47efec97efba4fe987cd599114a652bdd4a4c820f1876413e2a4d8c35a37",
       "bytes": 11012
     },
@@ -68,7 +68,7 @@
       "path": "/blog/below-1-0-leverage-gap-resume.md",
       "title": "Below 1.0: How the New Leverage Gap Is Rewriting the Rules of Your Resume | JobHackAI Blog",
       "description": "The job market has tilted back toward employers. Learn why generic resumes get filtered out faster and how ATS-friendly resume optimization helps candidates adapt.",
-      "source_sha256": "fbfa882c33cbf1b07d46bb13d9b51538c34c22d91f84459fbe28f2f535af0bd2",
+      "source_sha256": "70aec2864cfb162a2718d713fe5bd4278520efcf90f54e36b6c9d1a6de1dbdc6",
       "markdown_sha256": "c7652cfdc9f1167eea9bb6abfd55904af12ff05d1762caca38066716911135d9",
       "bytes": 9346
     },
@@ -88,7 +88,7 @@
       "path": "/blog/credibility-deficit-age-of-autocomplete.md",
       "title": "The Credibility Deficit: How We Lost Our Voice in the Age of Autocomplete | JobHackAI Blog",
       "description": "When AI writes everyone's resume, the polished version of you becomes a liability in the interview. Learn how to stand out by being unmistakably human.",
-      "source_sha256": "169dee31918145fd35cc4ec2a149226392db1aab42a019ed8ff1681eb1984267",
+      "source_sha256": "dc86382517211b34c75c23bd327e9baf5df39302c10f1b8d2b972898adb507cd",
       "markdown_sha256": "6d5dc1afdab15baade003c856e0b6026d562a7b9ad464c2d803bc9607fa60881",
       "bytes": 11657
     },
@@ -98,7 +98,7 @@
       "path": "/blog/linkedin-profile-optimization.md",
       "title": "LinkedIn Profile Optimization: Turn Your Profile Into a Recruiter Magnet | JobHackAI Blog",
       "description": "A weak LinkedIn headline costs you interviews every week. Learn how to optimize your LinkedIn profile so recruiters find you, message you, and move you to the top of their shortlists.",
-      "source_sha256": "11effe4599f49fefef822958c8b6e981a36420f5cc956ad2d5aa18410cd1cd8b",
+      "source_sha256": "63c039dc7ee66de0f435105373098e2d087ddbc233effe987f284b5a663849a3",
       "markdown_sha256": "1ef4f6424c311bad4fe1aaf53d0a20c6e6c4c5302b737f6b9b277aafad3ebe87",
       "bytes": 7314
     },
@@ -108,7 +108,7 @@
       "path": "/blog/mock-interview-online.md",
       "title": "Mock Interview Online: How to Run a Useful Practice Session | JobHackAI Blog",
       "description": "Choose a relevant question, practice a specific example, and review one change at a time. A practical guide to typed and spoken interview preparation.",
-      "source_sha256": "992390ddae7ecd6a9f90238ac7d252f5ea7e332909b3590d9cbfc04653f863ae",
+      "source_sha256": "6c69d706096cfe7eb7dc3968aeffe7d51d019e837d6ba8133f95c3a4657381a1",
       "markdown_sha256": "e94d3ce69538c9913a201c1e38aef41fb56cfea1c97454c09fc7defc31928170",
       "bytes": 6452
     },
@@ -118,7 +118,7 @@
       "path": "/blog/the-2-percent-rule.md",
       "title": "The 2% Rule: 98% of Job Applications Are Ghosted in 2026. | JobHackAI Blog",
       "description": "Only 2% of generic job applications get a response. Learn why tailored resumes, AI-optimized cover letters, and LinkedIn branding get you into the 5% interview club.",
-      "source_sha256": "ad7766511e4dd3364505ffdfb6276a6ccc1a56f77c139578592bd76b6993aa13",
+      "source_sha256": "60fafd26567dadca77aca1e92fc60a51d11827106eaeba41b7f82789218116ce",
       "markdown_sha256": "1db41302766904eb2502066f73ec25cabf865a99ca2b690564de518551500595",
       "bytes": 10945
     },
@@ -128,7 +128,7 @@
       "path": "/features.md",
       "title": "JobHackAI Features | Smarter Resume + LinkedIn Feedback",
       "description": "Explore JobHackAI features: ATS scoring, resume feedback, LinkedIn optimization, and interview prep tools built for modern job seekers.",
-      "source_sha256": "3c86c417f5749ccb7c555c1a2c53a0a63f246029d9b72011c4857ee523867743",
+      "source_sha256": "45e26b68c5c21515d85c1fb15037b46bdd9d877d4be6e24279df39f18d1e223f",
       "markdown_sha256": "20abd5b9b3ac43d2dc23f0554c22d83a4b8574be29e87bc235e327dd52e69e74",
       "bytes": 2419
     },
@@ -138,7 +138,7 @@
       "path": "/interview-questions/index.md",
       "title": "Interview Questions by Role (2026): Real Questions and Sample Answers | JobHackAI",
       "description": "Free role specific interview question guides: what interviewers really ask, why they ask it, and worked sample answers. Then practice answering out loud with a voice mock interview.",
-      "source_sha256": "ba125b59207079399a706ef63020bfb97a2bfd8187d24ffad47fac7f90b7151f",
+      "source_sha256": "757703ae7d296a6ee373b8ac9cbe659ae923b1009e2e7854e853999c403a4d89",
       "markdown_sha256": "e020d621157f35360bfede23e6eb704b6a3de208d32045a1e29f0cb76b7f3f6e",
       "bytes": 2516
     },
@@ -148,7 +148,7 @@
       "path": "/interview-questions/customer-success-manager.md",
       "title": "Customer Success Manager Interview Questions (2026): 12 Real Questions and Sample Answers | JobHackAI",
       "description": "12 customer success manager interview questions for 2026: churn saves, renewals, expansion, and angry customers, with two worked sample answers. Practice out loud with a free AI voice mock interview.",
-      "source_sha256": "fd7403b9f8bdd198b80ca3129fae41c9eeb8f07e49e252aadde04d291120c972",
+      "source_sha256": "642224811a11c5b1c3e007b6729cf168ee28229c320c49c79b45b995a55c3b4b",
       "markdown_sha256": "42b477ee06d7d6893554b8e0bc87f20bcffe8c82a81c1f094a20e44dfa972430",
       "bytes": 13701
     },
@@ -158,7 +158,7 @@
       "path": "/interview-questions/data-analyst.md",
       "title": "Data Analyst Interview Questions (2026): 12 Real Questions and Sample Answers | JobHackAI",
       "description": "12 data analyst interview questions for 2026 covering SQL, metrics judgment, stakeholder pushback, and messy data, plus two worked sample answers. Rehearse them out loud with a free AI voice mock interview.",
-      "source_sha256": "ff27e95d9c7775ef9ccc2076c15c32960e6433376a97eca8d4c2e786b7ddcc42",
+      "source_sha256": "5e81496d6490703cf436d37f8179ac8752c4617e7c49366c761e81540f3cf8f7",
       "markdown_sha256": "7535d01c0c187d4dc47430369932fc024ff5d5e9618f4760a8970f9bfccc9ec2",
       "bytes": 13479
     },
@@ -168,7 +168,7 @@
       "path": "/interview-questions/financial-analyst.md",
       "title": "Financial Analyst Interview Questions (2026): 12 Real Questions and Sample Answers | JobHackAI",
       "description": "12 financial analyst interview questions for 2026: modeling, variance analysis, forecasting misses, and business partnering, with two worked sample answers. Rehearse out loud with a free AI voice mock interview.",
-      "source_sha256": "f57615822897e89d45a6d499cb67758f37a5524c8311a78f62d795c6a9032ce9",
+      "source_sha256": "81aabbed866ab56616b43be74995f2cf81ff0e1bdc53d6d56e9e3f7390e98a42",
       "markdown_sha256": "a65a1145fbd4566d049c1c24cede1ce0a754eb867da6f12faa1cc7bbc41af463",
       "bytes": 14303
     },
@@ -178,7 +178,7 @@
       "path": "/interview-questions/marketing-manager.md",
       "title": "Marketing Manager Interview Questions (2026): 12 Real Questions and Sample Answers | JobHackAI",
       "description": "12 marketing manager interview questions for 2026: campaign performance, budget defense, attribution, and brand vs growth, with two worked sample answers. Practice out loud with a free AI voice mock interview.",
-      "source_sha256": "b7b3b705c1b917f486e8669cdec5293af6519042fc90f3b8c1601a8610d6e14c",
+      "source_sha256": "03a49e655403290b49d96ce8c69bf238c72e7239be7f600a3b8f95c943408406",
       "markdown_sha256": "64347831b7d817e192e6eb76ed280137126cd4e496f0328a296fa63dea3da9dc",
       "bytes": 13952
     },
@@ -188,7 +188,7 @@
       "path": "/interview-questions/product-manager.md",
       "title": "Product Manager Interview Questions (2026): 12 Real Questions and Sample Answers | JobHackAI",
       "description": "12 product manager interview questions for 2026: prioritization, metrics, stakeholder conflict, and product sense, with two worked sample answers. Practice them out loud with a free AI voice mock interview.",
-      "source_sha256": "5255bca390003b6bd3fd1c04d302c6a164145dbbddc5c4eb23c224bfcbff1127",
+      "source_sha256": "7c870863c44f9e23584c0eab93c6dd5652f01d93bbc376ae5b2fcca9a209eb2c",
       "markdown_sha256": "007b34d990e10fb220f4d3ba22c29f002cecf282505e5df9bb1dd81d800e53ae",
       "bytes": 13764
     },
@@ -198,7 +198,7 @@
       "path": "/interview-questions/project-manager.md",
       "title": "Project Manager Interview Questions (2026): 12 Real Questions and Sample Answers | JobHackAI",
       "description": "12 project manager interview questions for 2026: slipped timelines, scope creep, stakeholder conflict, and risk, with two worked sample answers. Rehearse out loud with a free AI voice mock interview.",
-      "source_sha256": "a336044bd286ad866311d7979141a5618a99edf04763549c5ece332009e34f92",
+      "source_sha256": "810ebe5d7f1a2cf1c1b03b2daaca7ea99e3391c4ddb41b56fef8950c7c3da139",
       "markdown_sha256": "4dcd3ad73af6a84dbd9668975561b5c3b75b678f53fd6a9df5404c622a34a438",
       "bytes": 13472
     },
@@ -208,7 +208,7 @@
       "path": "/interview-questions/registered-nurse.md",
       "title": "Registered Nurse Interview Questions (2026): 12 Real Questions and Sample Answers | JobHackAI",
       "description": "12 registered nurse interview questions for 2026: patient safety, prioritization, escalation, and difficult families, with two worked sample answers. Practice answering out loud with a free AI voice mock interview.",
-      "source_sha256": "863a4cde7980aa9dd59d429660f7c67f207f3c7fbcedbeb2dfd03199d4e23da3",
+      "source_sha256": "9361c99c5be7b251b5540322419eccf163f231ee3104f9cd8f32105a91f5664b",
       "markdown_sha256": "43d0cc85501e339a3ac54326c0c8f7b598941749e14461734f25f6fb9e460dd0",
       "bytes": 13544
     },
@@ -218,7 +218,7 @@
       "path": "/interview-questions/sales-development-representative.md",
       "title": "Sales Development Representative Interview Questions (2026): 12 Real Questions and Sample Answers | JobHackAI",
       "description": "12 SDR interview questions for 2026: cold calling, rejection, quota misses, and live pitch roleplays, with two worked sample answers. Drill them out loud with a free AI voice mock interview.",
-      "source_sha256": "121577a07373a130aeead299c648b0162a57990387adf6fa477ab1788d3dd2ce",
+      "source_sha256": "fb40843301e25123d20b4cacfe1080863952681d344a5bdae74d74e7604e9453",
       "markdown_sha256": "1ba368e434c41dcbf76da63125c9106221f682b021f80a66f70973cc0e29892c",
       "bytes": 13426
     },
@@ -228,7 +228,7 @@
       "path": "/interview-questions/software-engineer.md",
       "title": "Software Engineer Interview Questions (2026): 12 Real Questions and Sample Answers | JobHackAI",
       "description": "12 software engineer interview questions for 2026, with what interviewers are really probing for and two worked sample answers. Practice answering out loud with a free AI voice mock interview.",
-      "source_sha256": "b31ebcf4cd4ea03e2e9a29df3711a52921f2f79fc890db8872f62b23aa5754d7",
+      "source_sha256": "87dd5093a61a9ac930e0d5923a85f27eda6e7a60071f7bc4eae96a9db7b1c991",
       "markdown_sha256": "bce7a4385878d232e701638c7266008c44523b847eee5f1007b673a0d0c694e4",
       "bytes": 13380
     },
@@ -238,7 +238,7 @@
       "path": "/interview-questions/ux-designer.md",
       "title": "UX Designer Interview Questions (2026): 12 Real Questions and Sample Answers | JobHackAI",
       "description": "12 UX designer interview questions for 2026: portfolio walkthroughs, design critique, research tradeoffs, and AI tools, with two worked sample answers. Practice presenting out loud with a free AI voice mock interview.",
-      "source_sha256": "c6f5865542f4cbae4e0b43389ea00e0e2fe3945dfc388956e2af25a1497f9737",
+      "source_sha256": "222da020742628abbd7fec0df6687bd5c809909c717e27a62963c35e11111a42",
       "markdown_sha256": "b0fbca70966e5955f61116ad37ce4ce1da5b5cfef75feb446699f84614386725",
       "bytes": 14562
     }
