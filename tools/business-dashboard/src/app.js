@@ -22,7 +22,7 @@ function retainDisclosures(root){
 function safeLink(href,label){try{if(new URL(href).protocol!=='https:')return null;}catch{return null;}const node=element('a',label);node.href=href;node.target='_blank';node.rel='noreferrer noopener';return node;}
 function department(item){return item.department||(['gmail','outreach','directory'].includes(item.source)||/Stan|Email|Outreach/i.test(item.channel)?'sales':'marketing');}
 function channelName(item){if(item.source==='directory')return 'Directory';if(item.department==='product')return 'Product';if(item.source==='gmail'||item.source==='outreach'||/\b(email|gmail|outreach)\b/i.test(item.channel))return 'Email';return ['LinkedIn','Pinterest','Facebook','Instagram','Nextdoor','Blog','X'].find(c=>new RegExp(`\\b${c}\\b`,'i').test(item.channel))||'Other';}
-function approved(item){return item.state==='approved'||item.approved===true||item.decision?.action==='approve';}
+function approved(item){return !item.receipts?.length&&(item.state==='approved'||item.approved===true||item.decision?.action==='approve');}
 function displayLane(item){
   if(item.staleSource)return 'waiting';
   if(item.boardLane==='completed'||['sent','published','closed','handled'].includes(item.state)||['sent','published','closed'].includes(item.nativeState))return 'done';
@@ -33,7 +33,9 @@ function displayLane(item){
   if((item.sourceHealth&&item.sourceHealth.status!=='current')||item.boardLane==='blocked'||item.preparation==='blocked'||item.blocker||item.state==='waiting'||item.unfinishedDependencies?.length||item.issues?.length)return 'waiting';
   return 'working';
 }
+function receiptLabel(stage){return ({dev_deployed:'Development deployed',dev_verified:'Development accepted',qa_deployed:'QA deployed',qa_verified:'QA accepted',production_deployed:'Production deployed',production_verified:'Production verified',published:'Published',sent:'Sent'})[stage]||stage;}
 function stateLabel(item){
+  if(item.receipts?.length)return receiptLabel(item.receipts.at(-1).stage);
   if(item.staleSource)return 'Source check failed';
   if(item.deliveryState==='uncertain')return 'Send result unknown';
   if(item.deliveryState==='sending')return 'Sending · not confirmed';
@@ -69,6 +71,7 @@ function cardTitle(item){
   return (item.title||'Untitled work').replace(/^PR #\d+:\s*/,'').replace(/\s*[—–]\s*(copy approved.*|awaiting release.*)$/i,'').replace(/\s*\(Product priority \d+\)$/,'');
 }
 function nextStep(item){
+  if(item.receipts?.length)return item.nextAction;
   const lane=displayLane(item),channel=channelName(item);
   if(item.staleSource||item.deliveryState==='uncertain')return 'Check the source first';
   if(item.deliveryState==='queued')return 'Review the send queue';
@@ -244,6 +247,7 @@ function openReview(item,trigger,refreshing=false){
   const connected=release&&item.source==='outreach';
   next.append(element('p',release?(connected?'The email below is approved. “Queue approved email” asks the sender to check it again and make one send attempt.':`${departmentNames[department(item)]} needs your separate go-ahead for the next step. This board has no send or publish connection for this item. Open the original source or give the owner that instruction in chat.`):item.canApprove?'Approve draft saves this exact version and a follow-up for its owner. It does not send, publish, or start a new chat.':displayLane(item)==='done'?'A result is saved. Open the evidence below to see what was completed.':`${departmentNames[department(item)]} owns this next step. Open the work plan below for the exact task and any missing checks.`));content.append(next);
   const plan=detail('Work plan and next step');if(item.nextAction)plan.append(element('p',item.nextAction));if(item.blocker)plan.append(element('p',`Holding this up: ${item.blocker}`,'caution'));if(item.completionCriteria)plan.append(element('p',`Done when: ${item.completionCriteria}`));if(item.expectedValue)plan.append(element('p',`Why it matters: ${item.expectedValue}`));if(item.dependencies?.length)plan.append(element('p',`Needs first: ${item.dependencies.map(id=>boardData.items.find(i=>i.id===id)?.title||id).join(', ')}`));if(item.handoff)plan.append(element('p',`Owner follow-up: ${item.handoff.status}. Due ${time(item.handoff.due_at)}. ${item.handoff.next_check_at?`Next check ${time(item.handoff.next_check_at)}.`:''}`,item.handoff.overdue?'caution':''));content.append(plan);
+  if(item.receipts?.length){const results=detail('Verified progress');results.open=true;for(const receipt of item.receipts){results.append(element('p',`${receiptLabel(receipt.stage)}: ${receipt.summary}`));const link=safeLink(receipt.evidence_url,'Open verified result ↗');if(link)results.append(link);}content.append(results);}
   const snapshot=item.snapshot,message=item.message,copy=message||snapshot;
   const draft=detail(copy?(release?'View approved draft':'Read the full draft'):item.source==='gmail'?'Read the saved message':'Saved details');
   if(copy){draft.append(element('p',`To: ${copy.recipient||copy.destination}${copy.subject?` · Subject: ${copy.subject}`:''}`));if(snapshot)draft.append(element('p',`Proposed timing: ${snapshot.timing}`));if(message)draft.append(element('p',message.html?`Format exception: ${item.formatRequest?.reason||'No reason saved.'}${item.formatApproved?' · Format approved.':' · Needs a format decision.'}`:'Format: Plain text with visible URLs.'));draft.append(element('pre',copy.text,'email-copy'));
@@ -252,7 +256,7 @@ function openReview(item,trigger,refreshing=false){
     for(const href of snapshot?.links||[]){const link=safeLink(href,href);if(link)draft.append(element('p',undefined),link);}
   }else{draft.append(element('pre',item.source==='gmail'?plainEmailText(item.detail||''):item.detail||'No full draft is saved.','email-copy'));if(!['gmail','directory'].includes(item.source))draft.append(element('p','A complete draft, destination and media have not been verified here. The owner needs to finish preparation before approval.','caution'));}
   content.append(draft);
-  const evidence=detail('Source, checks and decision history');evidence.append(element('p',`Source checked: ${time(item.checkedAt)}. Last real move: ${time(item.lastMovedAt)}.`));if(item.title!==cardTitle(item))evidence.append(element('p',`Original title: ${item.title}`));if(item.evidence||item.reason)evidence.append(element('p',item.evidence||item.reason));
+  const evidence=detail('Source, checks and decision history');evidence.append(element('p',`Source checked: ${time(item.checkedAt)}. Last real move: ${time(item.lastMovedAt)}.`));if(item.priorDecision)evidence.append(element('p',`Earlier draft decision: ${item.priorDecision.action}. Retained as history.`));if(item.title!==cardTitle(item))evidence.append(element('p',`Original title: ${item.title}`));if(item.evidence||item.reason)evidence.append(element('p',item.evidence||item.reason));
   for(const record of snapshot?.evidence||[]){evidence.append(element('p',record.fact));const link=safeLink(record.url,'Open evidence ↗');if(link)evidence.append(link);}for(const contribution of item.contributions||[])evidence.append(element('p',`${departmentNames[contribution.department]}: ${contribution.document.recommendation}`));if(item.sourceEvidence)evidence.append(element('p',item.sourceEvidence.fitFact));for(const issue of item.issues||[])evidence.append(element('p',issue,'caution'));if(item.decision)evidence.append(element('p',`Your decision: ${item.decision.action} · ${time(item.decision.created_at)}${item.decision.note?` · ${item.decision.note}`:''}`));content.append(evidence);
   const sourceLink=safeLink(item.reviewUrl,'Open original source ↗');if(sourceLink)content.append(sourceLink);
   const actions=$('review-actions');actions.replaceChildren();
@@ -262,7 +266,7 @@ function openReview(item,trigger,refreshing=false){
     if(item.deliveryState==='review'&&!item.issues?.length){const action=item.approved?'send':'approve';const control=button(item.approved?'Queue approved email':'Approve draft',()=>outreachAction(item,action,control),'approve',item.approved?'Queues this exact email. The sender checks it again before one attempt. Queued does not mean sent.':'Saves this exact draft approval. It does not send.');control.disabled=item.approved&&(!boardData.outreachSendingEnabled||!item.senderAvailable);actions.append(control);if(control.disabled)content.append(element('p','Sending is not available right now. The email stays unsent.','caution'));}
     if(item.deliveryState==='queued'){const control=button('Cancel queued email',()=>outreachAction(item,'cancel',control),null,'Cancels only if a send attempt has not started.');actions.append(control);}
     if(item.deliveryState==='review')for(const [action,label] of [['changes','Request changes'],['decline','Decline draft']]){const control=button(label,()=>outreachFeedback(item,action,control));actions.append(control);}
-  }else if(item.workId&&item.snapshot&&!['gmail','directory'].includes(item.source)){
+  }else if(item.workId&&item.snapshot&&!item.receipts?.length&&!['gmail','directory'].includes(item.source)){
     if(item.canApprove){const control=button('Approve draft',()=>workFeedback(item,'approve',control),'approve','Saves this version and a follow-up for the owner. No sending or publishing.');actions.append(control);}
     if(!['sent','published','closed'].includes(item.nativeState))for(const [action,label] of [['changes','Request changes'],['decline','Decline draft']]){const control=button(label,()=>workFeedback(item,action,control));actions.append(control);}
   }
@@ -274,16 +278,16 @@ async function workFeedback(item,action,control){
   if(action==='approve'&&!confirm('Approve this exact draft? This saves your decision and a follow-up for its owner. It does not send or publish.'))return;
   const note=$('review-note').value;if(action==='changes'&&!note.trim()){showBoardError('Describe the changes needed.');return;}
   control.disabled=true;actionPending=true;notificationChange++;
-  try{const response=await fetch('/api/work-items/feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:item.id,expectedVersion:item.version,revision:item.snapshotRevision,action,note,requestId:crypto.randomUUID()})});const result=await response.json();if(!response.ok)throw new Error(result.error);await refresh(); refreshOpenReview();}catch(error){showBoardError(error.message);}finally{control.disabled=false;actionPending=false;}
+  try{const response=await fetch('/api/work-items/feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:item.id,expectedVersion:item.version,revision:item.snapshotRevision,action,note,requestId:crypto.randomUUID()})});const result=await response.json();if(!response.ok)throw new Error(result.error);await refreshBoard(); refreshOpenReview();}catch(error){showBoardError(error.message);}finally{control.disabled=false;actionPending=false;}
 }
 function showBoardError(message){$('campaign-error').textContent=message;$('campaign-error').hidden=false;$('review-error').textContent=message;}
 async function outreachFeedback(item,action,control){
   const note=$('review-note').value;if(action==='changes'&&!note.trim()){showBoardError('Describe the changes needed.');return;}control.disabled=true;actionPending=true;
-  try{const response=await fetch('/api/outreach/feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:item.outreachId,revision:item.revision,action,note})});const result=await response.json();if(!response.ok)throw new Error(result.error);notificationChange++;await refresh(); refreshOpenReview();}catch(error){showBoardError(error.message);}finally{control.disabled=false;actionPending=false;}
+  try{const response=await fetch('/api/outreach/feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:item.outreachId,revision:item.revision,action,note})});const result=await response.json();if(!response.ok)throw new Error(result.error);notificationChange++;await refreshBoard(); refreshOpenReview();}catch(error){showBoardError(error.message);}finally{control.disabled=false;actionPending=false;}
 }
 async function resolveNotification(item,action,control){
   control.disabled=true;actionPending=true;notificationChange++;
-  try{const response=await fetch(`/api/notifications/${action}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:item.id,revision:item.notificationRevision})});const result=await response.json();if(!response.ok)throw new Error(result.error);notificationChange++;await refresh(); refreshOpenReview();}catch(error){showBoardError(error.message);}finally{control.disabled=false;actionPending=false;}
+  try{const response=await fetch(`/api/notifications/${action}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:item.id,revision:item.notificationRevision})});const result=await response.json();if(!response.ok)throw new Error(result.error);notificationChange++;await refreshBoard(); refreshOpenReview();}catch(error){showBoardError(error.message);}finally{control.disabled=false;actionPending=false;}
 }
 
 async function outreachAction(item,action,button) {
@@ -293,7 +297,7 @@ async function outreachAction(item,action,button) {
   try {
     const response=await fetch(`/api/outreach/${action}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:item.outreachId,revision:item.revision})});
     const result=await response.json();if(!response.ok)throw new Error(result.error||'The email remains held.');
-    await refresh(); refreshOpenReview();
+    await refreshBoard(); refreshOpenReview();
   }catch(error){showBoardError(error.message);}finally{button.disabled=false;actionPending=false;}
 }
 
@@ -303,7 +307,7 @@ $('outreach-form').addEventListener('submit',async event=>{
     const packet={id:values.get('id'),lane:values.get('lane'),phase:values.get('phase'),message:{recipient:values.get('recipient'),subject:values.get('subject'),text:values.get('text'),html:values.get('html'),threadId:values.get('threadId'),inReplyTo:values.get('inReplyTo'),references:values.get('references')},...(values.get('html')?{formatRequest:{reason:values.get('formatReason')}}:{}),evidence:{sourceUrl:values.get('sourceUrl'),profileUrl:values.get('profileUrl'),publishedEmail:values.get('publishedEmail'),mailtoEmail:values.get('mailtoEmail'),fit:'current',fitFact:values.get('fitFact'),checkedBy:'sebastian.larosa@jobhackai.io',checkedAt:new Date().toISOString()}};
     const response=await fetch('/api/outreach/prepare',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(packet)});
     const result=await response.json();if(!response.ok)throw new Error(result.error||'Could not save the prepared email.');
-    $('outreach-status').textContent='Saved for source, routing and Gmail checks. This does not approve or send the email.';await refresh(); refreshOpenReview();
+    $('outreach-status').textContent='Saved for source, routing and Gmail checks. This does not approve or send the email.';await refreshBoard(); refreshOpenReview();
   }catch(error){$('outreach-status').textContent=error.message;}finally{button.disabled=false;actionPending=false;}
 });
 
@@ -315,12 +319,47 @@ function refreshOpenReview(){
 let toastTimer;
 function showToast(message){$('toast').textContent=message;$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>{$('toast').hidden=true;},6500);}
 async function getJSON(path){const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);try{const response=await fetch(path,{cache:'no-store',signal:controller.signal});if(!response.ok)throw new Error('Read failed');return await response.json();}finally{clearTimeout(timeout);}}
+let boardRequestSequence=0,lastBoardRevision=null,changePollPending=false;
+async function refreshBoard(){
+  const sequence=++boardRequestSequence,version=notificationChange;
+  try {
+    const data=await getJSON('/api/work-items');
+    if(sequence!==boardRequestSequence||version!==notificationChange)return false;
+    boardFailed=false;$('campaign-error').hidden=true;renderCampaigns(data);renderHealth();
+    if(openItemId&&!actionPending&&$('review-dialog').open){
+      const current=data.items.find(item=>item.id===openItemId);
+      if(current&&current.version!==reviewedItem?.version){
+        if(!current.receipts?.length&&current.snapshotRevision!==reviewedItem?.snapshotRevision){
+          $('review-error').textContent='This draft changed while you were reading. Close and reopen it to review the new version.';
+          for(const control of $('review-actions').children)control.disabled=true;
+        }else {openReview(current,lastReviewTrigger,true);$('review-error').textContent='';}
+      }
+    }
+    return true;
+  } catch {
+    if(sequence!==boardRequestSequence||version!==notificationChange)return false;
+    boardFailed=true;$('campaign-error').textContent='Work could not refresh. Saved cards may be old. Check again before making a decision.';$('campaign-error').hidden=false;renderHealth();return false;
+  }
+}
+async function pollBoardChanges(){
+  if(document.hidden||actionPending||changePollPending)return;
+  changePollPending=true;
+  try {
+    const {revision}=await getJSON('/api/work-items/changes');
+    if(actionPending)return;
+    if((boardFailed||revision!==lastBoardRevision) && await refreshBoard())lastBoardRevision=revision;
+  } catch {
+    boardFailed=true;renderHealth();$('campaign-error').textContent='Live updates are disconnected. Saved cards may be old. Retrying automatically.';$('campaign-error').hidden=false;
+  } finally {changePollPending=false;}
+}
 async function refresh(){
-  const sequence=++refreshSequence,version=notificationChange;$('refresh').disabled=true;$('refresh').setAttribute('aria-label','Refreshing saved data');
-  const [numbers,campaigns]=await Promise.allSettled([getJSON('/api/overview'),getJSON('/api/work-items')]);
+  const sequence=++refreshSequence;$('refresh').disabled=true;$('refresh').setAttribute('aria-label','Refreshing saved data');
+  // Work renders independently of slower revenue and analytics queries.
+  await Promise.all([refreshBoard(),(async()=>{
+    try{const numbers=await getJSON('/api/overview');if(sequence===refreshSequence)render(numbers);}
+    catch{if(sequence===refreshSequence){numbersFailed=true;$('error').textContent='Numbers could not refresh. Any saved numbers below may be old.';$('error').hidden=false;renderMetrics();}}
+  })()]);
   if(sequence!==refreshSequence)return;
-  if(numbers.status==='fulfilled')render(numbers.value);else{numbersFailed=true;$('error').textContent='Numbers could not refresh. Any saved numbers below may be old.';$('error').hidden=false;renderMetrics();}
-  if(version===notificationChange&&campaigns.status==='fulfilled'){boardFailed=false;$('campaign-error').hidden=true;renderCampaigns(campaigns.value);}else if(version===notificationChange){boardFailed=true;$('campaign-error').textContent='Work could not refresh. Saved cards may be old. Check again before making a decision.';$('campaign-error').hidden=false;}
   renderHealth();$('refresh').disabled=false;$('refresh').setAttribute('aria-label','Refresh saved data');
 }
 // Startup is kept separate so the view and action rules can be tested without a live service.
@@ -353,5 +392,6 @@ const mobileQuery=matchMedia('(max-width: 600px)');
 if(mobileQuery.matches)$('trends').open=false;
 mobileQuery.addEventListener('change',()=>{if(boardData)renderCampaigns(boardData);hideHelp();});
 refresh();
+setInterval(pollBoardChanges,2000);
 setInterval(()=>{if(!document.hidden&&!actionPending)refresh();},60000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!actionPending)refresh();});
