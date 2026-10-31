@@ -68,6 +68,7 @@ const header = (depth) => `  <header class="site-header" id="top">
           <a href="${SITE}/">Home</a>
           <a href="${SITE}/blog">Blog</a>
           <a href="${SITE}/features">Features</a>
+          <a href="/directory/">Local directory</a>
         </nav>
       </div>
       <button class="mobile-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
@@ -84,30 +85,15 @@ const header = (depth) => `  <header class="site-header" id="top">
     <a href="${SITE}/">Home</a>
     <a href="${SITE}/blog">Blog</a>
     <a href="${SITE}/features">Features</a>
+    <a href="/directory/">Local directory</a>
   </nav>
   <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
   <script src="${depth}js/mobile-menu.js?v=20250115-1"></script>`;
 
-const footer = () => `  <footer class="site-footer">
-    <div class="footer-container">
-      <div class="footer-brand">
-        <svg class="footer-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect x="3" y="7" width="18" height="13" rx="2" stroke="#1F2937" stroke-width="2"/>
-          <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2" stroke="#1F2937" stroke-width="2"/>
-        </svg>
-        <span class="footer-name">JOBHACKAI<sup>&trade;</sup></span>
-      </div>
-      <div class="footer-legal">
-        <p>© 2026 JobHackAI. All rights reserved.</p>
-      </div>
-      <div class="footer-links">
-        <a href="${APP}/help.html">Help</a>
-        <a href="${APP}/privacy.html">Privacy</a>
-        <a href="${APP}/terms.html">Terms</a>
-        <a href="${APP}/cookies.html">Cookies</a>
-      </div>
-    </div>
-  </footer>`;
+// Reuse the canonical footer so generated role pages receive future updates.
+const footer = () => readFileSync(join(MARKETING, 'components/footer.html'), 'utf8')
+  .match(/<footer\b[\s\S]*?<\/footer>/)[0]
+  .split('\n').map(line => '  ' + line).join('\n');
 
 const pageStyles = `
   <style>
