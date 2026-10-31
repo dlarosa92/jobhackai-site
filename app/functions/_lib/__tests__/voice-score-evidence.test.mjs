@@ -125,6 +125,22 @@ for (const invalidSource of ['competency', 'moment']) {
     assert.equal(scorecard.competencies.filter(c => c.status !== 'not_assessed').length, 3);
     assert.doesNotMatch(JSON.stringify(scorecard), /ignored the safety procedure/);
     assert.doesNotMatch(JSON.stringify(partialScorecard(scorecard)), /ignored the safety procedure/);
+    assert.equal(partialScorecard(scorecard).evidenceLimited, true);
+    for (const fullAccess of [true, false]) {
+      const h = createVoiceClientHarness({ search: '?session=rejected', routes: {
+        '/api/plan/me': () => PLAN_PAYLOAD, '/api/voice/sessions': () => ({ sessions: [] }),
+        '/api/voice/session/': () => ({ sessionId: 'rejected', status: 'completed', fullAccess, scorecardReady: true,
+          scorecard: fullAccess ? scorecard : partialScorecard(scorecard) })
+      } });
+      try {
+        await h.ready();
+        const html = h.el('vi-scorecard').innerHTML;
+        assert.match(html, /could not verify all of the supporting evidence/);
+        assert.match(html, /report limitation, not a judgment of your ability/);
+        assert.doesNotMatch(html, /need more substantive answers|verified excerpts below|ignored the safety procedure/);
+        assert.doesNotMatch(html, /Practice score details|vi-sc-score|vi-sc-dims/);
+      } finally { h.dispose(); }
+    }
   });
 }
 

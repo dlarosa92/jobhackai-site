@@ -31,7 +31,13 @@ startup/caption/UI/report fixes (#1064-1067), topic/score-evidence controls
 (#1080) and spoken-goodbye handling (#1082). Comparison with current `develop`
 shows the voice promotion is missing, including migrations 033/034 in source.
 The older production PR also lacks the latest topic/score-evidence/goodbye work.
-The respectful-disclosure correction remains local and undeployed.
+The respectful-disclosure and report-grounding corrections are in
+[development PR 1089](https://github.com/dlarosa92/jobhackai-site/pull/1089),
+targeting `dev0`. They have not been deployed to development, QA or production.
+The review correction also distinguishes unverifiable report evidence from an
+insufficient answer sample in both free and full reports. Free reports retain
+that reason without promising excerpts they cannot display. The 54 targeted
+report, evidence, coaching and model regression checks passed locally.
 
 The failed `candidate-ui` run stopped installing Playwright 1.56.1 on Ubuntu
 26.04 before browser assertions ran. Current `main` already pins Ubuntu 24.04

@@ -282,9 +282,9 @@ export async function scoreVoiceTranscript({ role, seniority, transcript, jd = n
     scorecard.evidenceLimited = true;
     scorecard.assessmentScope = 'Some supporting excerpts could not be verified against the captured answers. This report contains limited feedback and no numerical assessment.';
     scorecard.topStrength = '';
-    scorecard.topImprovement = 'Review the verified excerpts below and practice one example that explains your own actions and the result.';
+    scorecard.topImprovement = 'For your next practice, choose one example and explain your own actions and the result.';
     scorecard.saoCoaching = [];
-    scorecard.summary = 'A complete assessment could not be verified from this report. Use the verified excerpts as a practice reference; this is not a judgment of your ability.';
+    scorecard.summary = 'We could not verify all of the supporting evidence for this report, so no practice score is shown. This is a report limitation, not a judgment of your ability.';
   }
   // Even a long transcript needs grounded assessments before numbers may show.
   const assessed = scorecard.competencies.filter(c => c.status !== 'not_assessed');
@@ -400,6 +400,7 @@ export function partialScorecard(scorecard, { transcript = null } = {}) {
     return partial;
   }
   if (scorecard.feedbackOnly) partial.feedbackOnly = true;
+  if (scorecard.evidenceLimited) partial.evidenceLimited = true;
   const overall = Number(scorecard.overall);
   if (!scorecard.feedbackOnly && FREE_REPORT_SHOWS_SCORE && scorecard.overall != null && Number.isFinite(overall)) {
     partial.overall = Math.round(overall);
