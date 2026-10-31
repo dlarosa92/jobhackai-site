@@ -22,6 +22,20 @@ function fixture(){
   return {sql,db,env,flow,work,board,now,request};
 }
 const requiredSources=['marblism','campaign','gmail','directory','github'];
+test('later audit failures invalidate a completed run without rewriting its history, across three sources',async()=>{
+  for(const source of ['marblism','campaign','github']){
+    const c=fixture(),run=(await c.flow('start',{workflow:'reconciliation'})).body;
+    await checkSources(c,run);
+    const finished=await c.flow('finish',{id:run.id,outcome:'checked',summary:'All sources checked',evidence:proof});assert.equal(finished.status,200);
+    const original=c.sql.prepare('SELECT * FROM workflow_runs WHERE id=?').get(run.id);
+    const old=c.sql.prepare('SELECT * FROM source_health WHERE source=?').get(source),auditAt=new Date(Date.parse(old.checked_at)+1000).toISOString();
+    assert.equal((await c.work('source-health',{source,expectedVersion:old.version,status:'incomplete',checkedAt:auditAt,evidenceUrl:proof[0].url,detail:'Independent audit found unverified source claims',maxAgeMinutes:45})).status,200);
+    const state=await workflowStatus(c.db,new Date(auditAt)),flow=state.workflows.find(x=>x.id==='reconciliation');
+    assert.equal(flow.status,'incomplete');assert.deepEqual(flow.disputedSources,[source]);assert.match(state.alerts.find(a=>a.id==='workflow-reconciliation').detail,/Later source checks invalidate/);
+    assert.deepEqual(c.sql.prepare('SELECT * FROM workflow_runs WHERE id=?').get(run.id),original);
+    assert.equal(c.sql.prepare('SELECT last_success_at FROM source_health WHERE source=?').get(source).last_success_at,old.last_success_at);
+  }
+});
 async function checkSources(c,run,sources=requiredSources,status='current') {
   for(const source of sources){
     const old=c.sql.prepare('SELECT version,checked_at FROM source_health WHERE source=?').get(source);
@@ -227,6 +241,17 @@ test('workflow machine endpoints preserve all owner-only release and permission 
   assert.equal(promises.length,1);
 });
 const report=(now)=>({property:'523348532',windowDays:28,startDate:'2026-09-27',endDate:'2026-10-24',checkedAt:now.toISOString(),sourceUrl:'https://analytics.google.com/analytics/web/#/a366252518p523348532/reports',events:[{name:'partner_kit_action',count:6,users:1}],campaigns:[],kitActions:[],coverage:{internalTrafficExcluded:false,attributionVerified:false,purchasesReconciled:false,campaignBreakdownComplete:false,kitActionBreakdownComplete:false},notes:'Observed production events; staff exclusion and campaign attribution remain unverified.'});
+test('a later analytics audit marks saved figures unverified without deleting the report',async()=>{
+  const c=fixture(),now=new Date('2026-10-25T12:00:00.000Z'),payload=report(now);
+  c.sql.prepare('INSERT INTO analytics_reports(id,checked_at,payload) VALUES(?,?,?)').run('saved',now.toISOString(),JSON.stringify(payload));
+  assert.equal((await analyticsReport(c.db,now)).status,'current');
+  await c.work('source-health',{source:'analytics',expectedVersion:0,status:'incomplete',checkedAt:'2026-10-25T12:01:00.000Z',evidenceUrl:payload.sourceUrl,detail:'The Events table was not read',maxAgeMinutes:1440});
+  const checked=await analyticsReport(c.db,new Date('2026-10-25T12:02:00.000Z'));
+  assert.equal(checked.status,'incomplete');assert.deepEqual(checked.report,payload);assert.match(checked.detail,/not currently verified/);
+  const updated={...payload,checkedAt:'2026-10-25T12:03:00.000Z'};
+  c.sql.prepare('INSERT INTO analytics_reports(id,checked_at,payload) VALUES(?,?,?)').run('reread',updated.checkedAt,JSON.stringify(updated));
+  assert.equal((await analyticsReport(c.db,new Date('2026-10-25T12:04:00.000Z'))).status,'current');
+});
 test('analytics rejects frozen dates, preserves unknown coverage, and ages independently of page refresh',async()=>{
   const c=fixture(),now=new Date('2026-10-25T14:00:00Z');
   assert.equal(previousDay(new Date('2026-11-01T03:30:00Z')),'2026-10-30');
