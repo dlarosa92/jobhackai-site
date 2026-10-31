@@ -300,7 +300,8 @@ export async function workApi(request,env,identity,loadBoard) {
       const args=[input.status,checkedAt,success,url(input.evidenceUrl),text(input.detail),input.maxAgeMinutes,input.requiresMac===true?1:0];
       const result=old?await db.prepare('UPDATE source_health SET status=?,checked_at=?,last_success_at=?,evidence_url=?,detail=?,max_age_minutes=?,requires_mac=?,version=version+1 WHERE source=? AND version=?').bind(...args,input.source,version).run():await db.prepare('INSERT INTO source_health(status,checked_at,last_success_at,evidence_url,detail,max_age_minutes,requires_mac,source,version) VALUES(?,?,?,?,?,?,?,?,1) ON CONFLICT DO NOTHING').bind(...args,input.source).run();
       if(!result.meta?.changes)fail('Source status changed.',409);
-      await recordRunWrite(db,run,'source',input.source,version+1,{checked:!!run&&checkedAt>=run.started_at&&checkedAt!==old?.checked_at},now);
+      const attempted=!!run&&checkedAt>=run.started_at&&checkedAt!==old?.checked_at;
+      await recordRunWrite(db,run,'source',input.source,version+1,{attempted,checked:attempted&&input.status==='current',status:input.status,checkedAt,evidenceUrl:input.evidenceUrl},now);
       return reply({saved:true});
     }
     if(path==='/api/work-items/coordination'){
