@@ -213,6 +213,7 @@ for(let round=1;round<=3;round++)test(`release replay ${round}: enforce dev, QA,
   assert.equal((await c.call('reconcile',{id:'one',expectedVersion:item.version,sourceRevision:'historical-pr-1032',nativeState:'draft',checkedAt:new Date().toISOString()})).status,409);
   assert.equal((await c.call('prepare',{id:'one',source:'github',sourceId:'one',expectedVersion:item.version,document:doc({preparation:'ready',reason:'PR1032 is still a draft',sourceRefs:[{id:'old',url:'https://github.com/example/repo/pull/1032'}]})})).status,200);
   item=(await c.board()).items[0];assert.equal(item.receipts.at(-1).stage,stage);assert.equal(item.detail,`Verified ${stage}`);assert.equal(item.canApprove,false);
+  if(stage!=='production_verified')assert.equal((await c.call('reconcile',{id:item.id,expectedVersion:item.version,candidate:item.candidate,nativeState:'closed',sourceRevision:'merged-pr',checkedAt:new Date().toISOString()})).status,409,'A merged PR cannot close the release or block its next receipt');
   assert.equal(item.boardLane==='completed',stage==='production_verified');
  }
  assert.equal(item.sourceRefs.length,2);assert.equal(item.receipts.length,6);
