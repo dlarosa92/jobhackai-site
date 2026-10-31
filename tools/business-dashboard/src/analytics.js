@@ -30,6 +30,8 @@ export async function analyticsReport(db,now=new Date()) {
   const row=await db.prepare('SELECT * FROM analytics_reports ORDER BY checked_at DESC,id DESC LIMIT 1').first();
   if(!row)return {status:'not_connected',report:null,detail:'No verified aggregate report has been imported. Native GA collection is separate.'};
   const report=JSON.parse(row.payload),stale=report.endDate!==previousDay(now)||now.getTime()-Date.parse(row.checked_at)>30*3600000;
+  const health=await db.prepare("SELECT status,checked_at,detail FROM source_health WHERE source='analytics'").first();
+  if(health&&health.status!=='current'&&health.checked_at>=row.checked_at)return {status:'incomplete',report,detail:`Saved figures are not currently verified. ${health.detail}`};
   return {status:stale?'stale':'current',report,detail:'Last verified GA4 report. Collection, attribution and purchase reconciliation are separate checks.'};
 }
 export async function analyticsApi(request,env,now=new Date()) {
