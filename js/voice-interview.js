@@ -2403,7 +2403,7 @@
     var meta = reportMeta(data);
     if (meta) html += '<p class="vi-result-meta">' + escapeHtml(meta) + '</p>';
     html += '</div>';
-    if (sc.feedbackOnly) html += limitedFeedbackHtml();
+    if (sc.feedbackOnly) html += limitedFeedbackHtml(sc);
 
     if (sc.topImprovement) {
       html += '<section class="vi-feedback-section"><h3 class="vi-feedback-eyebrow">Your next step</h3><p class="vi-feedback-priority">' + escapeHtml(sc.topImprovement) + '</p>';
@@ -2517,13 +2517,14 @@
     return html + '</details>';
   }
 
-  function limitedFeedbackHtml() {
+  function limitedFeedbackHtml(sc) {
+    if (sc.evidenceLimited) return '<p class="vi-sc-block">We could not verify all of the supporting evidence for this report, so no practice score is shown. This is a report limitation, not a judgment of your ability.</p>';
     return '<p class="vi-sc-block">Feedback only for this sample. We need more substantive answers before giving a practice score. Your feedback below is based on what was captured.</p>';
   }
 
   function renderFullFeedback(data, sc, wrap) {
     var html = '<h2 class="vi-sc-title">Your practice feedback</h2>' + savedLine(data);
-    if (sc.feedbackOnly) html += limitedFeedbackHtml();
+    if (sc.feedbackOnly) html += limitedFeedbackHtml(sc);
     var priority = sc.topImprovement || (sc.saoCoaching && sc.saoCoaching[0]);
     if (priority) html += '<section class="vi-feedback-section"><h3 class="vi-feedback-eyebrow">Your next step</h3>' +
       '<p class="vi-feedback-priority">' + escapeHtml(priority) + '</p></section>';

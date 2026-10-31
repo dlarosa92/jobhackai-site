@@ -268,11 +268,27 @@ export async function scoreVoiceTranscript({ role, seniority, transcript, jd = n
     : result.content;
 
   scorecard.methodologyVersion = 2;
+  const proposedMoments = Array.isArray(scorecard.moments) ? scorecard.moments : [];
+  const proposedCompetencies = Array.isArray(scorecard.competencies) ? scorecard.competencies : [];
   scorecard.moments = groundedMoments(scorecard.moments, transcript);
   scorecard.competencies = groundedCompetencies(scorecard.competencies, transcript);
+  const rejectedEvidence = scorecard.moments.length !== proposedMoments.length ||
+    proposedCompetencies.slice(0, 5).some((c, i) =>
+      c.status !== 'not_assessed' && scorecard.competencies[i].status === 'not_assessed');
+  if (rejectedEvidence) {
+    // Global narrative and numbers have no per-claim evidence links. Once an
+    // asserted quote fails verification we cannot safely retain dependent
+    // praise or criticism, even when other competency quotes are valid.
+    scorecard.evidenceLimited = true;
+    scorecard.assessmentScope = 'Some supporting excerpts could not be verified against the captured answers. This report contains limited feedback and no numerical assessment.';
+    scorecard.topStrength = '';
+    scorecard.topImprovement = 'For your next practice, choose one example and explain your own actions and the result.';
+    scorecard.saoCoaching = [];
+    scorecard.summary = 'We could not verify all of the supporting evidence for this report, so no practice score is shown. This is a report limitation, not a judgment of your ability.';
+  }
   // Even a long transcript needs grounded assessments before numbers may show.
   const assessed = scorecard.competencies.filter(c => c.status !== 'not_assessed');
-  scorecard.scoreEligibility = { ...evidence, version: 1, eligible: evidence.eligible && assessed.length >= 3 };
+  scorecard.scoreEligibility = { ...evidence, version: 1, eligible: !rejectedEvidence && evidence.eligible && assessed.length >= 3 };
   if (!scorecard.scoreEligibility.eligible) {
     scorecard.feedbackOnly = true;
     scorecard.overall = null;
@@ -384,6 +400,7 @@ export function partialScorecard(scorecard, { transcript = null } = {}) {
     return partial;
   }
   if (scorecard.feedbackOnly) partial.feedbackOnly = true;
+  if (scorecard.evidenceLimited) partial.evidenceLimited = true;
   const overall = Number(scorecard.overall);
   if (!scorecard.feedbackOnly && FREE_REPORT_SHOWS_SCORE && scorecard.overall != null && Number.isFinite(overall)) {
     partial.overall = Math.round(overall);
