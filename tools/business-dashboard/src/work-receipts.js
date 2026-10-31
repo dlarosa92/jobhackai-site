@@ -2,7 +2,7 @@
 const stages = ['dev_deployed','dev_verified','qa_deployed','qa_verified','production_deployed','production_verified'];
 const terminal = ['production_verified','published','sent'];
 const reject = (message,status=400) => { throw Object.assign(new Error(message),{status}); };
-export async function saveReceipt(db,input,now) {
+export async function saveReceipt(db,input,now,run=null) {
   const {eventId,id,candidate,stage,evidenceUrl,summary,occurredAt,expectedVersion}=input;
   if(!/^[a-z0-9][a-z0-9_-]{0,127}$/.test(eventId||'') || typeof candidate!=='string' || !candidate.trim() || candidate.length>300 || ![...stages,'published','sent'].includes(stage))reject('Invalid receipt identity or stage.');
   if(typeof summary!=='string'||!summary.trim()||summary.length>4000)reject('A verified result summary is required.');
@@ -21,13 +21,20 @@ export async function saveReceipt(db,input,now) {
   const predecessor=stages[stages.indexOf(stage)-1];
   if(predecessor&&!receipts.some(r=>r.stage===predecessor&&r.occurred_at<=event.occurred_at))reject('Verify this candidate in development, then QA, then production. Stages cannot be skipped.',409);
   const result=await db.batch([
-    db.prepare('UPDATE work_items SET version=version+1,updated_at=?,mutation_id=?,native_state=? WHERE id=? AND version=?').bind(now,eventId,terminal.includes(stage)?(stage==='production_verified'?'closed':stage):row.native_state,id,expectedVersion),
+    db.prepare(`UPDATE work_items SET version=version+1,updated_at=?,mutation_id=?,native_state=? WHERE id=? AND version=?
+      AND (? IS NULL OR EXISTS(SELECT 1 FROM workflow_runs WHERE id=? AND status='running' AND lease_until>?))`)
+      .bind(now,eventId,terminal.includes(stage)?(stage==='production_verified'?'closed':stage):row.native_state,id,expectedVersion,run?.id||null,run?.id||null,now),
     db.prepare(`INSERT INTO work_receipts(event_id,item_id,candidate,stage,evidence_url,summary,occurred_at,recorded_at)
       SELECT ?,id,?,?,?,?,?,? FROM work_items WHERE id=? AND version=? AND mutation_id=?`).bind(eventId,candidate,stage,evidenceUrl,summary,event.occurred_at,now,id,expectedVersion+1,eventId),
     db.prepare(`UPDATE work_handoffs SET status='superseded',version=version+1,lease_until=NULL,next_check_at=NULL,result=?,updated_at=?
       WHERE item_id=? AND status IN ('pending','claimed','blocked')
       AND EXISTS(SELECT 1 FROM work_items WHERE id=? AND version=? AND mutation_id=?)`)
       .bind(`Superseded by verified execution receipt ${eventId}: ${summary}`,now,id,id,expectedVersion+1,eventId),
+    // Commit attribution with the result. A lost response can be replayed without
+    // leaving a committed receipt unowned or letting another run borrow it.
+    ...(run?[db.prepare(`INSERT INTO workflow_run_writes(run_id,kind,reference,version,result,recorded_at)
+      SELECT ?,'item',id,version,?,? FROM work_items WHERE id=? AND version=? AND mutation_id=?`)
+      .bind(run.id,JSON.stringify({advanced:true,checked:true,progressBasis:'deliverable-v1'}),now,id,expectedVersion+1,eventId)]:[]),
   ]);
   if(!(result[0].meta.changes>0))reject('Item changed.',409);
   return {saved:true,receipt:event};
