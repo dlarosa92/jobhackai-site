@@ -275,16 +275,16 @@ async function workFeedback(item,action,control){
   if(action==='approve'&&!confirm('Approve this exact draft? This saves your decision and a follow-up for its owner. It does not send or publish.'))return;
   const note=$('review-note').value;if(action==='changes'&&!note.trim()){showBoardError('Describe the changes needed.');return;}
   control.disabled=true;actionPending=true;notificationChange++;
-  try{const response=await fetch('/api/work-items/feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:item.id,expectedVersion:item.version,revision:item.snapshotRevision,action,note,requestId:crypto.randomUUID()})});const result=await response.json();if(!response.ok)throw new Error(result.error);await refresh(); refreshOpenReview();}catch(error){showBoardError(error.message);}finally{control.disabled=false;actionPending=false;}
+  try{const response=await fetch('/api/work-items/feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:item.id,expectedVersion:item.version,revision:item.snapshotRevision,action,note,requestId:crypto.randomUUID()})});const result=await response.json();if(!response.ok)throw new Error(result.error);await refreshBoard(); refreshOpenReview();}catch(error){showBoardError(error.message);}finally{control.disabled=false;actionPending=false;}
 }
 function showBoardError(message){$('campaign-error').textContent=message;$('campaign-error').hidden=false;$('review-error').textContent=message;}
 async function outreachFeedback(item,action,control){
   const note=$('review-note').value;if(action==='changes'&&!note.trim()){showBoardError('Describe the changes needed.');return;}control.disabled=true;actionPending=true;
-  try{const response=await fetch('/api/outreach/feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:item.outreachId,revision:item.revision,action,note})});const result=await response.json();if(!response.ok)throw new Error(result.error);notificationChange++;await refresh(); refreshOpenReview();}catch(error){showBoardError(error.message);}finally{control.disabled=false;actionPending=false;}
+  try{const response=await fetch('/api/outreach/feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:item.outreachId,revision:item.revision,action,note})});const result=await response.json();if(!response.ok)throw new Error(result.error);notificationChange++;await refreshBoard(); refreshOpenReview();}catch(error){showBoardError(error.message);}finally{control.disabled=false;actionPending=false;}
 }
 async function resolveNotification(item,action,control){
   control.disabled=true;actionPending=true;notificationChange++;
-  try{const response=await fetch(`/api/notifications/${action}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:item.id,revision:item.notificationRevision})});const result=await response.json();if(!response.ok)throw new Error(result.error);notificationChange++;await refresh(); refreshOpenReview();}catch(error){showBoardError(error.message);}finally{control.disabled=false;actionPending=false;}
+  try{const response=await fetch(`/api/notifications/${action}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:item.id,revision:item.notificationRevision})});const result=await response.json();if(!response.ok)throw new Error(result.error);notificationChange++;await refreshBoard(); refreshOpenReview();}catch(error){showBoardError(error.message);}finally{control.disabled=false;actionPending=false;}
 }
 
 async function outreachAction(item,action,button) {
@@ -294,7 +294,7 @@ async function outreachAction(item,action,button) {
   try {
     const response=await fetch(`/api/outreach/${action}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:item.outreachId,revision:item.revision})});
     const result=await response.json();if(!response.ok)throw new Error(result.error||'The email remains held.');
-    await refresh(); refreshOpenReview();
+    await refreshBoard(); refreshOpenReview();
   }catch(error){showBoardError(error.message);}finally{button.disabled=false;actionPending=false;}
 }
 
@@ -304,7 +304,7 @@ $('outreach-form').addEventListener('submit',async event=>{
     const packet={id:values.get('id'),lane:values.get('lane'),phase:values.get('phase'),message:{recipient:values.get('recipient'),subject:values.get('subject'),text:values.get('text'),html:values.get('html'),threadId:values.get('threadId'),inReplyTo:values.get('inReplyTo'),references:values.get('references')},...(values.get('html')?{formatRequest:{reason:values.get('formatReason')}}:{}),evidence:{sourceUrl:values.get('sourceUrl'),profileUrl:values.get('profileUrl'),publishedEmail:values.get('publishedEmail'),mailtoEmail:values.get('mailtoEmail'),fit:'current',fitFact:values.get('fitFact'),checkedBy:'sebastian.larosa@jobhackai.io',checkedAt:new Date().toISOString()}};
     const response=await fetch('/api/outreach/prepare',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(packet)});
     const result=await response.json();if(!response.ok)throw new Error(result.error||'Could not save the prepared email.');
-    $('outreach-status').textContent='Saved for source, routing and Gmail checks. This does not approve or send the email.';await refresh(); refreshOpenReview();
+    $('outreach-status').textContent='Saved for source, routing and Gmail checks. This does not approve or send the email.';await refreshBoard(); refreshOpenReview();
   }catch(error){$('outreach-status').textContent=error.message;}finally{button.disabled=false;actionPending=false;}
 });
 
