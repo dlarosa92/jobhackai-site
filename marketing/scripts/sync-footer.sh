@@ -39,17 +39,17 @@ if footer_start is None or footer_end is None:
 footer_lines = [('  ' + line.rstrip('\n')) for line in lines[footer_start:footer_end+1]]
 footer_content = '\n'.join(footer_lines)
 
-# Files to update
+# Keep newer blog pages in sync instead of maintaining a fixed article list.
 files = {
     'index.html': 'components/footer.html',
     'features.html': 'components/footer.html',
     'blog.html': 'components/footer.html',
-    'blog/post-template.html': '../components/footer.html',
-    'blog/ats-optimization-playbook.html': '../components/footer.html',
-    'blog/linkedin-profile-optimization.html': '../components/footer.html',
-    'blog/7-day-interview-prep-routine.html': '../components/footer.html',
-    'blog/mock-interview-online.html': '../components/footer.html',
 }
+for current_dir, _, filenames in os.walk(os.path.join(marketing_dir, 'blog')):
+    for filename in sorted(filenames):
+        if filename.endswith('.html'):
+            path = os.path.join(current_dir, filename)
+            files[os.path.relpath(path, marketing_dir)] = os.path.relpath(footer_file, current_dir)
 
 for filename, rel_path in files.items():
     filepath = os.path.join(marketing_dir, filename)
@@ -58,10 +58,7 @@ for filename, rel_path in files.items():
         continue
     
     # Determine sync script path
-    if 'blog/' in filename:
-        sync_script = '../scripts/sync-footer.sh'
-    else:
-        sync_script = 'scripts/sync-footer.sh'
+    sync_script = os.path.relpath(os.path.join(marketing_dir, 'scripts/sync-footer.sh'), os.path.dirname(filepath))
     
     # Read file
     with open(filepath, 'r') as f:
