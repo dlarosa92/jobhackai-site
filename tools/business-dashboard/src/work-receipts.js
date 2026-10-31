@@ -13,6 +13,7 @@ export async function saveReceipt(db,input,now) {
   if(prior){if(Object.entries(event).every(([k,v])=>prior[k]===v))return {saved:true,replayed:true,receipt:prior};reject('Receipt ID already used.',409);}
   const row=await db.prepare('SELECT * FROM work_items WHERE id=?').bind(id).first();
   if(!row||!Number.isSafeInteger(expectedVersion)||row.version!==expectedVersion)reject('Item changed. Reload before recording the result.',409);
+  if(['sent','published','closed'].includes(row.native_state)&&!terminal.includes(stage))reject('Completed execution cannot be reopened as development work.',409);
   if(['gmail','outreach','directory'].includes(row.source))reject('Use the existing native execution feed for this source.');
   if(stages.includes(stage)!==(row.source==='github'))reject('Deployment receipts require a GitHub work item; publication and send receipts require a non-GitHub source.');
   const receipts=(await db.prepare('SELECT * FROM work_receipts WHERE item_id=?').bind(id).all()).results;
@@ -31,6 +32,9 @@ export function applyReceipts(item,receipts) {
   item.receipts=receipts;
   if(!receipts.length)return item;
   const latest=receipts.at(-1);
+  item.priorDecision=item.decision;
+  item.decision=null;
+  item.handoff=null;
   item.candidate=latest.candidate;
   item.detail=latest.summary;
   item.reviewUrl=latest.evidence_url;

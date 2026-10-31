@@ -218,3 +218,20 @@ for(let round=1;round<=3;round++)test(`release replay ${round}: enforce dev, QA,
  assert.equal((await c.call('receipt',receipt('one','dev_verified',{eventId:'other-candidate',candidate:'different',expectedVersion:item.version}))).status,409);
  c.sql.close();
 });
+
+test('execution receipts supersede approval actions without deleting the decision history',async()=>{
+ const c=fixture();let i=await ready(c);
+ await c.call('feedback',{id:i.id,expectedVersion:i.version,revision:i.snapshotRevision,requestId:'approved-before-dev',action:'approve',note:''});
+ i=(await c.board()).items[0];await c.call('receipt',receipt(i.id,'dev_deployed',{expectedVersion:i.version}));
+ i=(await c.board()).items[0];assert.equal(i.decision,null);assert.equal(i.priorDecision.action,'approve');assert.equal(i.handoff,null);assert.equal(i.boardLane,'in_progress');
+ assert.equal((await c.call('feedback',{id:i.id,expectedVersion:i.version,revision:i.snapshotRevision,requestId:'decline-after-dev',action:'decline',note:''})).status,409);
+ assert.equal((await c.board()).items[0].boardLane,'in_progress');assert.equal(c.sql.prepare('SELECT count(*) n FROM work_decisions').get().n,1);
+ assert.throws(()=>c.sql.prepare('DELETE FROM work_receipts').run(),/immutable/);
+ assert.throws(()=>c.sql.prepare("UPDATE work_receipts SET summary='wrong'").run(),/immutable/);
+});
+test('suppression and sender availability each change the transactional board revision',()=>{
+ const c=fixture(),revision=()=>c.sql.prepare('SELECT revision FROM board_revision').get().revision;
+ let before=revision();c.sql.prepare("INSERT INTO outreach_blocks VALUES('test@example.com','bounce','receipt','2026-10-31')").run();assert.ok(revision()>before);
+ before=revision();c.sql.prepare("INSERT INTO outreach_relay_state VALUES(1,'2026-10-31',0)").run();assert.ok(revision()>before);
+ before=revision();c.sql.prepare('UPDATE outreach_relay_state SET can_send=1').run();assert.ok(revision()>before);
+});

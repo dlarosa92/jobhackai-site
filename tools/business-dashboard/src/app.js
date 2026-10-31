@@ -22,7 +22,7 @@ function retainDisclosures(root){
 function safeLink(href,label){try{if(new URL(href).protocol!=='https:')return null;}catch{return null;}const node=element('a',label);node.href=href;node.target='_blank';node.rel='noreferrer noopener';return node;}
 function department(item){return item.department||(['gmail','outreach','directory'].includes(item.source)||/Stan|Email|Outreach/i.test(item.channel)?'sales':'marketing');}
 function channelName(item){if(item.source==='directory')return 'Directory';if(item.department==='product')return 'Product';if(item.source==='gmail'||item.source==='outreach'||/\b(email|gmail|outreach)\b/i.test(item.channel))return 'Email';return ['LinkedIn','Pinterest','Facebook','Instagram','Nextdoor','Blog','X'].find(c=>new RegExp(`\\b${c}\\b`,'i').test(item.channel))||'Other';}
-function approved(item){return item.state==='approved'||item.approved===true||item.decision?.action==='approve';}
+function approved(item){return !item.receipts?.length&&(item.state==='approved'||item.approved===true||item.decision?.action==='approve');}
 function displayLane(item){
   if(item.staleSource)return 'waiting';
   if(item.boardLane==='completed'||['sent','published','closed','handled'].includes(item.state)||['sent','published','closed'].includes(item.nativeState))return 'done';
@@ -33,7 +33,9 @@ function displayLane(item){
   if((item.sourceHealth&&item.sourceHealth.status!=='current')||item.boardLane==='blocked'||item.preparation==='blocked'||item.blocker||item.state==='waiting'||item.unfinishedDependencies?.length||item.issues?.length)return 'waiting';
   return 'working';
 }
+function receiptLabel(stage){return ({dev_deployed:'Development deployed',dev_verified:'Development accepted',qa_deployed:'QA deployed',qa_verified:'QA accepted',production_deployed:'Production deployed',production_verified:'Production verified',published:'Published',sent:'Sent'})[stage]||stage;}
 function stateLabel(item){
+  if(item.receipts?.length)return receiptLabel(item.receipts.at(-1).stage);
   if(item.staleSource)return 'Source check failed';
   if(item.deliveryState==='uncertain')return 'Send result unknown';
   if(item.deliveryState==='sending')return 'Sending · not confirmed';
@@ -69,6 +71,7 @@ function cardTitle(item){
   return (item.title||'Untitled work').replace(/^PR #\d+:\s*/,'').replace(/\s*[—–]\s*(copy approved.*|awaiting release.*)$/i,'').replace(/\s*\(Product priority \d+\)$/,'');
 }
 function nextStep(item){
+  if(item.receipts?.length)return item.nextAction;
   const lane=displayLane(item),channel=channelName(item);
   if(item.staleSource||item.deliveryState==='uncertain')return 'Check the source first';
   if(item.deliveryState==='queued')return 'Review the send queue';
@@ -244,7 +247,7 @@ function openReview(item,trigger,refreshing=false){
   const connected=release&&item.source==='outreach';
   next.append(element('p',release?(connected?'The email below is approved. “Queue approved email” asks the sender to check it again and make one send attempt.':`${departmentNames[department(item)]} needs your separate go-ahead for the next step. This board has no send or publish connection for this item. Open the original source or give the owner that instruction in chat.`):item.canApprove?'Approve draft saves this exact version and a follow-up for its owner. It does not send, publish, or start a new chat.':displayLane(item)==='done'?'A result is saved. Open the evidence below to see what was completed.':`${departmentNames[department(item)]} owns this next step. Open the work plan below for the exact task and any missing checks.`));content.append(next);
   const plan=detail('Work plan and next step');if(item.nextAction)plan.append(element('p',item.nextAction));if(item.blocker)plan.append(element('p',`Holding this up: ${item.blocker}`,'caution'));if(item.completionCriteria)plan.append(element('p',`Done when: ${item.completionCriteria}`));if(item.expectedValue)plan.append(element('p',`Why it matters: ${item.expectedValue}`));if(item.dependencies?.length)plan.append(element('p',`Needs first: ${item.dependencies.map(id=>boardData.items.find(i=>i.id===id)?.title||id).join(', ')}`));if(item.handoff)plan.append(element('p',`Owner follow-up: ${item.handoff.status}. Due ${time(item.handoff.due_at)}. ${item.handoff.next_check_at?`Next check ${time(item.handoff.next_check_at)}.`:''}`,item.handoff.overdue?'caution':''));content.append(plan);
-  if(item.receipts?.length){const results=detail('Verified progress');results.open=true;for(const receipt of item.receipts){results.append(element('p',`${receipt.stage.replaceAll('_',' ')}: ${receipt.summary}`));const link=safeLink(receipt.evidence_url,'Open verified result ↗');if(link)results.append(link);}content.append(results);}
+  if(item.receipts?.length){const results=detail('Verified progress');results.open=true;for(const receipt of item.receipts){results.append(element('p',`${receiptLabel(receipt.stage)}: ${receipt.summary}`));const link=safeLink(receipt.evidence_url,'Open verified result ↗');if(link)results.append(link);}content.append(results);}
   const snapshot=item.snapshot,message=item.message,copy=message||snapshot;
   const draft=detail(copy?(release?'View approved draft':'Read the full draft'):item.source==='gmail'?'Read the saved message':'Saved details');
   if(copy){draft.append(element('p',`To: ${copy.recipient||copy.destination}${copy.subject?` · Subject: ${copy.subject}`:''}`));if(snapshot)draft.append(element('p',`Proposed timing: ${snapshot.timing}`));if(message)draft.append(element('p',message.html?`Format exception: ${item.formatRequest?.reason||'No reason saved.'}${item.formatApproved?' · Format approved.':' · Needs a format decision.'}`:'Format: Plain text with visible URLs.'));draft.append(element('pre',copy.text,'email-copy'));
@@ -253,7 +256,7 @@ function openReview(item,trigger,refreshing=false){
     for(const href of snapshot?.links||[]){const link=safeLink(href,href);if(link)draft.append(element('p',undefined),link);}
   }else{draft.append(element('pre',item.source==='gmail'?plainEmailText(item.detail||''):item.detail||'No full draft is saved.','email-copy'));if(!['gmail','directory'].includes(item.source))draft.append(element('p','A complete draft, destination and media have not been verified here. The owner needs to finish preparation before approval.','caution'));}
   content.append(draft);
-  const evidence=detail('Source, checks and decision history');evidence.append(element('p',`Source checked: ${time(item.checkedAt)}. Last real move: ${time(item.lastMovedAt)}.`));if(item.title!==cardTitle(item))evidence.append(element('p',`Original title: ${item.title}`));if(item.evidence||item.reason)evidence.append(element('p',item.evidence||item.reason));
+  const evidence=detail('Source, checks and decision history');evidence.append(element('p',`Source checked: ${time(item.checkedAt)}. Last real move: ${time(item.lastMovedAt)}.`));if(item.priorDecision)evidence.append(element('p',`Earlier draft decision: ${item.priorDecision.action}. Retained as history.`));if(item.title!==cardTitle(item))evidence.append(element('p',`Original title: ${item.title}`));if(item.evidence||item.reason)evidence.append(element('p',item.evidence||item.reason));
   for(const record of snapshot?.evidence||[]){evidence.append(element('p',record.fact));const link=safeLink(record.url,'Open evidence ↗');if(link)evidence.append(link);}for(const contribution of item.contributions||[])evidence.append(element('p',`${departmentNames[contribution.department]}: ${contribution.document.recommendation}`));if(item.sourceEvidence)evidence.append(element('p',item.sourceEvidence.fitFact));for(const issue of item.issues||[])evidence.append(element('p',issue,'caution'));if(item.decision)evidence.append(element('p',`Your decision: ${item.decision.action} · ${time(item.decision.created_at)}${item.decision.note?` · ${item.decision.note}`:''}`));content.append(evidence);
   const sourceLink=safeLink(item.reviewUrl,'Open original source ↗');if(sourceLink)content.append(sourceLink);
   const actions=$('review-actions');actions.replaceChildren();
@@ -263,7 +266,7 @@ function openReview(item,trigger,refreshing=false){
     if(item.deliveryState==='review'&&!item.issues?.length){const action=item.approved?'send':'approve';const control=button(item.approved?'Queue approved email':'Approve draft',()=>outreachAction(item,action,control),'approve',item.approved?'Queues this exact email. The sender checks it again before one attempt. Queued does not mean sent.':'Saves this exact draft approval. It does not send.');control.disabled=item.approved&&(!boardData.outreachSendingEnabled||!item.senderAvailable);actions.append(control);if(control.disabled)content.append(element('p','Sending is not available right now. The email stays unsent.','caution'));}
     if(item.deliveryState==='queued'){const control=button('Cancel queued email',()=>outreachAction(item,'cancel',control),null,'Cancels only if a send attempt has not started.');actions.append(control);}
     if(item.deliveryState==='review')for(const [action,label] of [['changes','Request changes'],['decline','Decline draft']]){const control=button(label,()=>outreachFeedback(item,action,control));actions.append(control);}
-  }else if(item.workId&&item.snapshot&&!['gmail','directory'].includes(item.source)){
+  }else if(item.workId&&item.snapshot&&!item.receipts?.length&&!['gmail','directory'].includes(item.source)){
     if(item.canApprove){const control=button('Approve draft',()=>workFeedback(item,'approve',control),'approve','Saves this version and a follow-up for the owner. No sending or publishing.');actions.append(control);}
     if(!['sent','published','closed'].includes(item.nativeState))for(const [action,label] of [['changes','Request changes'],['decline','Decline draft']]){const control=button(label,()=>workFeedback(item,action,control));actions.append(control);}
   }

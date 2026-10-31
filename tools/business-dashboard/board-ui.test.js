@@ -178,3 +178,11 @@ test('a pending action or hidden tab does not start a competing poll',async()=>{
  view.run('actionPending=true');await view.run('pollBoardChanges()');assert.equal(requests,0);
  view.run('actionPending=false;document.hidden=true');await view.run('pollBoardChanges()');assert.equal(requests,0);
 });
+
+test('release receipts override old draft approval labels and remove draft actions',()=>{
+ const view=ui();const release=item('Release candidate','Product','hold',{workId:'release',department:'product',nativeState:'draft',boardLane:'in_progress',decision:{action:'approve'},snapshot:{text:'Old approved draft',media:[],links:[],evidence:[]},receipts:[{stage:'dev_deployed',summary:'Deployed candidate',evidence_url:'https://example.com/deployment'}],nextAction:'Complete development acceptance.'});
+ view.render(data([release]));assert.match(text(lane(view.nodes,'Working')),/Release candidate/);assert.doesNotMatch(text(lane(view.nodes,'Needs you')),/Release candidate/);
+ walk(lane(view.nodes,'Working')).find(x=>x.className==='card-title').listeners.click();
+ assert.match(text(view.nodes.get('review-content')),/Complete development acceptance/);
+ assert.doesNotMatch(text(view.nodes.get('review-actions')),/Approve|Decline|Request changes/);
+});

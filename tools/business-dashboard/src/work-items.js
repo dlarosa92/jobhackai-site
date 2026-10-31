@@ -123,6 +123,7 @@ async function decision(db,input,now,loadBoard) {
   const row=await get(db,id);
   if(!row || row.version!==expected(input.expectedVersion) || !row.snapshot_revision || row.snapshot_revision!==input.revision)fail('The reviewed revision changed.',409);
   if(['outreach','gmail','directory'].includes(row.source))fail('Use the original source review operation.');
+  if(await db.prepare('SELECT event_id FROM work_receipts WHERE item_id=? LIMIT 1').bind(id).first())fail('Execution has started. Draft decisions remain history and cannot alter the release.',409);
   if(!['approve','changes','decline'].includes(input.action))fail('Invalid decision.');
   if(input.action==='approve') {
     // Native feeds own execution and handled status; the projection also checks freshness and dependencies.

@@ -368,3 +368,15 @@ CREATE TRIGGER IF NOT EXISTS receipts_no_update BEFORE UPDATE ON work_receipts
 BEGIN SELECT RAISE(ABORT,'Execution receipts are immutable'); END;
 CREATE TRIGGER IF NOT EXISTS receipts_no_delete BEFORE DELETE ON work_receipts
 BEGIN SELECT RAISE(ABORT,'Execution receipts are immutable'); END;
+CREATE TRIGGER IF NOT EXISTS board_changed_outreach_blocks_insert AFTER INSERT ON outreach_blocks
+BEGIN UPDATE board_revision SET revision=revision+1 WHERE id=1; END;
+CREATE TRIGGER IF NOT EXISTS board_changed_outreach_blocks_update AFTER UPDATE ON outreach_blocks
+BEGIN UPDATE board_revision SET revision=revision+1 WHERE id=1; END;
+CREATE TRIGGER IF NOT EXISTS board_changed_outreach_blocks_delete AFTER DELETE ON outreach_blocks
+BEGIN UPDATE board_revision SET revision=revision+1 WHERE id=1; END;
+CREATE TRIGGER IF NOT EXISTS board_changed_outreach_relay_state_insert AFTER INSERT ON outreach_relay_state
+BEGIN UPDATE board_revision SET revision=revision+1 WHERE id=1; END;
+CREATE TRIGGER IF NOT EXISTS board_changed_outreach_relay_state_update AFTER UPDATE ON outreach_relay_state
+BEGIN UPDATE board_revision SET revision=revision+1 WHERE id=1; END;
+CREATE TRIGGER IF NOT EXISTS board_changed_outreach_relay_state_delete AFTER DELETE ON outreach_relay_state
+BEGIN UPDATE board_revision SET revision=revision+1 WHERE id=1; END;
