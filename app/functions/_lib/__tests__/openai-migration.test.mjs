@@ -145,8 +145,12 @@ for (const limited of [true, false]) {
     assert.equal(result.scorecard.moments.length, 1);
     assert.equal(result.scorecard.competencies[1].status, 'not_assessed');
     assert.equal(result.scorecard.methodologyVersion, 2);
-    assert.equal(result.scorecard.scoreEligibility.eligible, !limited);
-    assert.equal(result.scorecard.overall, limited ? null : 70);
+    // This fixture includes an invented assessment and an interviewer quote.
+    // A long transcript cannot make their dependent global score trustworthy.
+    assert.equal(result.scorecard.evidenceLimited, true);
+    assert.equal(result.scorecard.scoreEligibility.eligible, false);
+    assert.equal(result.scorecard.overall, null);
+    assert.equal(result.scorecard.feedbackOnly, true);
   });
 }
 
