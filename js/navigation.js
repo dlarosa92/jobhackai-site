@@ -254,7 +254,7 @@ const VISITOR_FEATURES_HREF = IS_DEV_OR_QA_HOST ? 'features.html' : 'https://job
 const VISITOR_DIRECTORY_HREF = APP_BASE_URL === 'https://dev.jobhackai.io'
   ? 'https://dev0.jobhackai-app-marketing-seo.pages.dev/directory/'
   : APP_BASE_URL === 'https://qa.jobhackai.io'
-    ? 'https://develop.jobhackai-app-marketing-seo.pages.dev/directory/'
+    ? 'https://qa-marketing.jobhackai.io/directory/'
     : 'https://jobhackai.io/directory/';
 const VISITOR_PRICING_HREF = `${APP_BASE_URL}/pricing`;
 const VISITOR_LOGO_HREF = IS_DEV_OR_QA_HOST ? '/' : 'https://jobhackai.io/';
