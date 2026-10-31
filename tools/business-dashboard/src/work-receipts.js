@@ -21,9 +21,13 @@ export async function saveReceipt(db,input,now) {
   const predecessor=stages[stages.indexOf(stage)-1];
   if(predecessor&&!receipts.some(r=>r.stage===predecessor&&r.occurred_at<=event.occurred_at))reject('Verify this candidate in development, then QA, then production. Stages cannot be skipped.',409);
   const result=await db.batch([
-    db.prepare('UPDATE work_items SET version=version+1,updated_at=?,mutation_id=? WHERE id=? AND version=?').bind(now,eventId,id,expectedVersion),
+    db.prepare('UPDATE work_items SET version=version+1,updated_at=?,mutation_id=?,native_state=? WHERE id=? AND version=?').bind(now,eventId,terminal.includes(stage)?(stage==='production_verified'?'closed':stage):row.native_state,id,expectedVersion),
     db.prepare(`INSERT INTO work_receipts(event_id,item_id,candidate,stage,evidence_url,summary,occurred_at,recorded_at)
       SELECT ?,id,?,?,?,?,?,? FROM work_items WHERE id=? AND version=? AND mutation_id=?`).bind(eventId,candidate,stage,evidenceUrl,summary,event.occurred_at,now,id,expectedVersion+1,eventId),
+    db.prepare(`UPDATE work_handoffs SET status='superseded',version=version+1,lease_until=NULL,next_check_at=NULL,result=?,updated_at=?
+      WHERE item_id=? AND status IN ('pending','claimed','blocked')
+      AND EXISTS(SELECT 1 FROM work_items WHERE id=? AND version=? AND mutation_id=?)`)
+      .bind(`Superseded by verified execution receipt ${eventId}: ${summary}`,now,id,id,expectedVersion+1,eventId),
   ]);
   if(!(result[0].meta.changes>0))reject('Item changed.',409);
   return {saved:true,receipt:event};

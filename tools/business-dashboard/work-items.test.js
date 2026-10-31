@@ -236,3 +236,19 @@ test('suppression and sender availability each change the transactional board re
  before=revision();c.sql.prepare("INSERT INTO outreach_relay_state VALUES(1,'2026-10-31',0)").run();assert.ok(revision()>before);
  before=revision();c.sql.prepare('UPDATE outreach_relay_state SET can_send=1').run();assert.ok(revision()>before);
 });
+
+for(let round=1;round<=3;round++)test(`persisted completion clears obsolete handoffs, replay ${round}`,async()=>{
+ const c=fixture();let i=await ready(c);
+ await c.call('feedback',{id:i.id,expectedVersion:i.version,revision:i.snapshotRevision,requestId:'old-approval',action:'approve',note:''});
+ assert.equal(c.sql.prepare("SELECT status FROM work_handoffs").get().status,'pending');
+ c.sql.prepare("UPDATE work_items SET source='meta' WHERE id=?").run(i.id);
+ i=(await c.board()).items[0];const event=receipt(i.id,'published',{expectedVersion:i.version});
+ assert.equal((await c.call('receipt',event)).status,200);
+ assert.equal(c.sql.prepare("SELECT native_state FROM work_items").get().native_state,'published');
+ assert.equal(c.sql.prepare("SELECT status FROM work_handoffs").get().status,'superseded');
+ assert.equal(c.sql.prepare("SELECT count(*) n FROM work_handoffs WHERE status IN ('pending','claimed','blocked')").get().n,0);
+ i=(await c.board()).items[0];
+ assert.equal((await c.call('reconcile',{id:i.id,expectedVersion:i.version,candidate:event.candidate,nativeState:'draft',checkedAt:new Date().toISOString(),sourceRevision:'old'})).status,409);
+ const version=i.version;assert.equal((await c.call('receipt',event)).status,200);
+ assert.equal((await c.board()).items[0].version,version);
+});
