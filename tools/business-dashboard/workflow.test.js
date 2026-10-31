@@ -202,7 +202,7 @@ test('a later concurrent item write cannot contaminate the first mutation receip
   const original=c.db.prepare.bind(c.db);let reads=0;
   c.db.prepare=query=>{const statement=original(query);if(query==='SELECT * FROM work_items WHERE id=?'){
     const first=statement.first.bind(statement);statement.first=async()=>{
-      if(++reads===2)c.sql.prepare('UPDATE work_items SET document=?,checked_at=?,version=version+1 WHERE id=?').run(JSON.stringify({...initial,title:'Another run changed this'}),new Date(c.now.getTime()+1000).toISOString(),'racing');
+      if(++reads===3)c.sql.prepare('UPDATE work_items SET document=?,checked_at=?,version=version+1 WHERE id=?').run(JSON.stringify({...initial,title:'Another run changed this'}),new Date(c.now.getTime()+1000).toISOString(),'racing');
       return first();
     };
   }return statement;};

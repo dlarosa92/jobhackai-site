@@ -244,6 +244,7 @@ function openReview(item,trigger,refreshing=false){
   const connected=release&&item.source==='outreach';
   next.append(element('p',release?(connected?'The email below is approved. “Queue approved email” asks the sender to check it again and make one send attempt.':`${departmentNames[department(item)]} needs your separate go-ahead for the next step. This board has no send or publish connection for this item. Open the original source or give the owner that instruction in chat.`):item.canApprove?'Approve draft saves this exact version and a follow-up for its owner. It does not send, publish, or start a new chat.':displayLane(item)==='done'?'A result is saved. Open the evidence below to see what was completed.':`${departmentNames[department(item)]} owns this next step. Open the work plan below for the exact task and any missing checks.`));content.append(next);
   const plan=detail('Work plan and next step');if(item.nextAction)plan.append(element('p',item.nextAction));if(item.blocker)plan.append(element('p',`Holding this up: ${item.blocker}`,'caution'));if(item.completionCriteria)plan.append(element('p',`Done when: ${item.completionCriteria}`));if(item.expectedValue)plan.append(element('p',`Why it matters: ${item.expectedValue}`));if(item.dependencies?.length)plan.append(element('p',`Needs first: ${item.dependencies.map(id=>boardData.items.find(i=>i.id===id)?.title||id).join(', ')}`));if(item.handoff)plan.append(element('p',`Owner follow-up: ${item.handoff.status}. Due ${time(item.handoff.due_at)}. ${item.handoff.next_check_at?`Next check ${time(item.handoff.next_check_at)}.`:''}`,item.handoff.overdue?'caution':''));content.append(plan);
+  if(item.receipts?.length){const results=detail('Verified progress');results.open=true;for(const receipt of item.receipts){results.append(element('p',`${receipt.stage.replaceAll('_',' ')}: ${receipt.summary}`));const link=safeLink(receipt.evidence_url,'Open verified result ↗');if(link)results.append(link);}content.append(results);}
   const snapshot=item.snapshot,message=item.message,copy=message||snapshot;
   const draft=detail(copy?(release?'View approved draft':'Read the full draft'):item.source==='gmail'?'Read the saved message':'Saved details');
   if(copy){draft.append(element('p',`To: ${copy.recipient||copy.destination}${copy.subject?` · Subject: ${copy.subject}`:''}`));if(snapshot)draft.append(element('p',`Proposed timing: ${snapshot.timing}`));if(message)draft.append(element('p',message.html?`Format exception: ${item.formatRequest?.reason||'No reason saved.'}${item.formatApproved?' · Format approved.':' · Needs a format decision.'}`:'Format: Plain text with visible URLs.'));draft.append(element('pre',copy.text,'email-copy'));
@@ -315,12 +316,37 @@ function refreshOpenReview(){
 let toastTimer;
 function showToast(message){$('toast').textContent=message;$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>{$('toast').hidden=true;},6500);}
 async function getJSON(path){const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);try{const response=await fetch(path,{cache:'no-store',signal:controller.signal});if(!response.ok)throw new Error('Read failed');return await response.json();}finally{clearTimeout(timeout);}}
+let boardRequestSequence=0,lastBoardRevision=null,changePollPending=false;
+async function refreshBoard(){
+  const sequence=++boardRequestSequence,version=notificationChange;
+  try {
+    const data=await getJSON('/api/work-items');
+    if(sequence!==boardRequestSequence||version!==notificationChange)return false;
+    boardFailed=false;$('campaign-error').hidden=true;renderCampaigns(data);renderHealth();return true;
+  } catch {
+    if(sequence!==boardRequestSequence||version!==notificationChange)return false;
+    boardFailed=true;$('campaign-error').textContent='Work could not refresh. Saved cards may be old. Check again before making a decision.';$('campaign-error').hidden=false;renderHealth();return false;
+  }
+}
+async function pollBoardChanges(){
+  if(document.hidden||actionPending||changePollPending)return;
+  changePollPending=true;
+  try {
+    const {revision}=await getJSON('/api/work-items/changes');
+    if(actionPending)return;
+    if((boardFailed||revision!==lastBoardRevision) && await refreshBoard())lastBoardRevision=revision;
+  } catch {
+    boardFailed=true;renderHealth();$('campaign-error').textContent='Live updates are disconnected. Saved cards may be old. Retrying automatically.';$('campaign-error').hidden=false;
+  } finally {changePollPending=false;}
+}
 async function refresh(){
-  const sequence=++refreshSequence,version=notificationChange;$('refresh').disabled=true;$('refresh').setAttribute('aria-label','Refreshing saved data');
-  const [numbers,campaigns]=await Promise.allSettled([getJSON('/api/overview'),getJSON('/api/work-items')]);
+  const sequence=++refreshSequence;$('refresh').disabled=true;$('refresh').setAttribute('aria-label','Refreshing saved data');
+  // Work renders independently of slower revenue and analytics queries.
+  await Promise.all([refreshBoard(),(async()=>{
+    try{const numbers=await getJSON('/api/overview');if(sequence===refreshSequence)render(numbers);}
+    catch{if(sequence===refreshSequence){numbersFailed=true;$('error').textContent='Numbers could not refresh. Any saved numbers below may be old.';$('error').hidden=false;renderMetrics();}}
+  })()]);
   if(sequence!==refreshSequence)return;
-  if(numbers.status==='fulfilled')render(numbers.value);else{numbersFailed=true;$('error').textContent='Numbers could not refresh. Any saved numbers below may be old.';$('error').hidden=false;renderMetrics();}
-  if(version===notificationChange&&campaigns.status==='fulfilled'){boardFailed=false;$('campaign-error').hidden=true;renderCampaigns(campaigns.value);}else if(version===notificationChange){boardFailed=true;$('campaign-error').textContent='Work could not refresh. Saved cards may be old. Check again before making a decision.';$('campaign-error').hidden=false;}
   renderHealth();$('refresh').disabled=false;$('refresh').setAttribute('aria-label','Refresh saved data');
 }
 // Startup is kept separate so the view and action rules can be tested without a live service.
@@ -353,5 +379,6 @@ const mobileQuery=matchMedia('(max-width: 600px)');
 if(mobileQuery.matches)$('trends').open=false;
 mobileQuery.addEventListener('change',()=>{if(boardData)renderCampaigns(boardData);hideHelp();});
 refresh();
+setInterval(pollBoardChanges,2000);
 setInterval(()=>{if(!document.hidden&&!actionPending)refresh();},60000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!actionPending)refresh();});

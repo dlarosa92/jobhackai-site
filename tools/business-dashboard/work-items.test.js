@@ -132,14 +132,14 @@ test('approval uses authoritative handled dependencies and rejects already-publi
  const published=(await publishedBoard()).items.find(i=>i.id==='published-work');
  assert.equal((await c.call('feedback',{id:published.id,expectedVersion:published.version,revision:published.snapshotRevision,requestId:'stale-publication-approval',action:'approve',note:''},owner,publishedBoard)).status,409);
 });
-test('metadata-only reconciliation preserves same-revision packet and approval but invalidates changed source content',async()=>{
+test('metadata-only checks preserve approval and cannot reopen a published item',async()=>{
  const c=fixture();let item=await ready(c);
  await c.call('feedback',{id:item.id,expectedVersion:item.version,revision:item.snapshotRevision,requestId:'metadata-approval',action:'approve',note:''});
  item=(await c.board()).items[0];const revision=item.snapshotRevision;
  assert.equal((await c.call('reconcile',{id:item.id,expectedVersion:item.version,sourceRevision:'native-v1',checkedAt:new Date().toISOString(),nativeState:'published'})).status,200);
  item=(await c.board()).items[0];assert.equal(item.snapshotRevision,revision);assert.ok(item.snapshot);assert.equal(item.decision.action,'approve');assert.equal(item.boardLane,'completed');
- assert.equal((await c.call('reconcile',{id:item.id,expectedVersion:item.version,sourceRevision:'native-v2',checkedAt:new Date().toISOString(),nativeState:'draft'})).status,200);
- item=(await c.board()).items[0];assert.equal(item.snapshot,null);assert.equal(item.decision,null);assert.equal(item.canApprove,false);
+ assert.equal((await c.call('reconcile',{id:item.id,expectedVersion:item.version,sourceRevision:'native-v2',checkedAt:new Date().toISOString(),nativeState:'draft'})).status,409);
+ item=(await c.board()).items[0];assert.ok(item.snapshot);assert.equal(item.decision.action,'approve');assert.equal(item.boardLane,'completed');
  assert.equal(c.sql.prepare('SELECT count(*) n FROM work_snapshots').get().n,1);assert.equal(c.sql.prepare('SELECT count(*) n FROM work_decisions').get().n,1);
 });
 test('completed internal preparation satisfies dependencies without fabricating publication',async()=>{
@@ -176,4 +176,45 @@ test('unavailable, incomplete and stale internal source health holds dependent a
  }
  await c.call('source-health',{source:'operations',expectedVersion:version,status:'current',checkedAt:new Date().toISOString(),evidenceUrl:'https://example.com/operations',detail:'Recovered native check',maxAgeMinutes:5});
  assert.equal((await c.board()).items.find(i=>i.id==='dependent').canApprove,true);
+});
+
+const receipt=(id,stage,extra={})=>({id,eventId:`${id}-${stage}`,expectedVersion:1,candidate:'accepted-content-sha',stage,evidenceUrl:'https://github.com/example/repo/actions/runs/123',summary:`Verified ${stage}`,occurredAt:new Date().toISOString(),...extra});
+for(let round=1;round<=3;round++)test(`regression replay ${round}: approval, execution, stale preparation, old reconciliation, reload`,async()=>{
+ const c=fixture();
+ const id=`social-${round}`;
+ await c.call('prepare',{id,expectedVersion:0,source:'meta',sourceId:id,document:doc({department:'marketing'})});
+ const snap=snapshot();await c.call('reconcile',{id,expectedVersion:1,sourceRevision:snap.sourceRevision,checkedAt:snap.checkedAt,nativeState:'draft',snapshot:snap});
+ await c.call('source-health',{source:'meta',expectedVersion:0,status:'current',checkedAt:snap.checkedAt,evidenceUrl:'https://example.com/native',detail:'Read current draft',maxAgeMinutes:120});
+ let item=(await c.board()).items[0];
+ assert.equal((await c.call('feedback',{id,expectedVersion:item.version,revision:item.snapshotRevision,requestId:`approval-${round}`,action:'approve',note:''})).status,200);
+ item=(await c.board()).items[0];assert.equal(item.canApprove,false);assert.equal(item.state,'approved');assert.notEqual(item.boardLane,'completed');
+ const before=c.sql.prepare('SELECT revision FROM board_revision').get().revision;
+ const event=receipt(id,'published',{expectedVersion:item.version});
+ assert.equal((await c.call('receipt',event)).status,200);
+ assert.ok(c.sql.prepare('SELECT revision FROM board_revision').get().revision>before);
+ item=(await c.board()).items[0];assert.equal(item.boardLane,'completed');assert.equal(item.state,'published');
+ assert.equal((await c.call('receipt',event)).status,200,'Retries are idempotent');
+ assert.equal((await c.call('receipt',{...event,summary:'Different claim'})).status,409);
+ assert.equal((await c.call('prepare',{id,source:'meta',sourceId:id,expectedVersion:item.version,document:doc({preparation:'ready',reason:'Old unfinished summary'})})).status,200);
+ item=(await c.board()).items[0];assert.equal(item.boardLane,'completed');assert.equal(item.detail,'Verified published');
+ assert.equal((await c.call('reconcile',{id,expectedVersion:item.version,sourceRevision:'old-draft',checkedAt:new Date().toISOString(),nativeState:'draft'})).status,409);
+ assert.equal((await c.board()).items[0].boardLane,'completed');
+ assert.equal(c.sql.prepare('SELECT count(*) n FROM work_receipts').get().n,1);
+ c.sql.close();
+});
+for(let round=1;round<=3;round++)test(`release replay ${round}: enforce dev, QA, production and reject historical PR freshness`,async()=>{
+ const c=fixture();let item=await ready(c);
+ assert.equal((await c.call('receipt',receipt('one','production_verified',{expectedVersion:item.version}))).status,409);
+ for(const stage of ['dev_deployed','dev_verified','qa_deployed','qa_verified','production_deployed','production_verified']){
+  item=(await c.board()).items[0];
+  assert.equal((await c.call('receipt',receipt('one',stage,{expectedVersion:item.version}))).status,200);
+  item=(await c.board()).items[0];
+  assert.equal((await c.call('reconcile',{id:'one',expectedVersion:item.version,sourceRevision:'historical-pr-1032',nativeState:'draft',checkedAt:new Date().toISOString()})).status,409);
+  assert.equal((await c.call('prepare',{id:'one',source:'github',sourceId:'one',expectedVersion:item.version,document:doc({preparation:'ready',reason:'PR1032 is still a draft',sourceRefs:[{id:'old',url:'https://github.com/example/repo/pull/1032'}]})})).status,200);
+  item=(await c.board()).items[0];assert.equal(item.receipts.at(-1).stage,stage);assert.equal(item.detail,`Verified ${stage}`);assert.equal(item.canApprove,false);
+  assert.equal(item.boardLane==='completed',stage==='production_verified');
+ }
+ assert.equal(item.sourceRefs.length,2);assert.equal(item.receipts.length,6);
+ assert.equal((await c.call('receipt',receipt('one','dev_verified',{eventId:'other-candidate',candidate:'different',expectedVersion:item.version}))).status,409);
+ c.sql.close();
 });

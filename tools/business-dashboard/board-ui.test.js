@@ -141,11 +141,40 @@ test('an older network response cannot replace a newer board; a failed read keep
  const first=uiState.run('refresh()'),second=uiState.run('refresh()');
  const numbers={asOf:'2026-10-27T12:00:00Z',month:'2026-10',netCollectedCents:0,d1UserRecords:38,userGoal:250,costCents:null,costsComplete:false,estimatedAvailableCents:null};
  const response=payload=>({ok:true,json:async()=>payload});
- requests[2](response(numbers));requests[3](response(data([item('Newest work','Product','hold')])));await second;
- requests[0](response(numbers));requests[1](response(data([item('Old work','Product','hold')])));await first;
+ requests[3](response(numbers));requests[2](response(data([item('Newest work','Product','hold')])));await second;
+ requests[1](response(numbers));requests[0](response(data([item('Old work','Product','hold')])));await first;
  assert.match(text(uiState.nodes.get('board')),/Newest work/);assert.doesNotMatch(text(uiState.nodes.get('board')),/Old work/);
  const failed=uiState.run('refresh()');requests[4]({ok:false});requests[5]({ok:false});await failed;
  assert.match(text(uiState.nodes.get('board')),/Newest work/);assert.equal(uiState.nodes.get('campaign-error').hidden,false);
  uiState.run("selectedDepartment='product';renderCampaigns(boardData)");assert.equal(uiState.nodes.get('campaign-error').hidden,false);
  assert.match(text(uiState.nodes.get('data-summary')),/Refresh failed/);
+});
+
+for(let round=1;round<=3;round++)test(`live update replay ${round}: publication appears without reload and unchanged polls stay cheap`,async()=>{
+ let revision=1,reads=0,fail=false;
+ let current=data([item('Live post','Facebook','approved',{boardLane:'in_progress'})]);
+ const view=ui({AbortController,setTimeout,clearTimeout,fetch:async path=>{
+  if(fail)throw Error('offline');
+  if(path==='/api/work-items/changes')return {ok:true,json:async()=>({revision})};
+  assert.equal(path,'/api/work-items');reads++;return {ok:true,json:async()=>current};
+ }});
+ await view.run('pollBoardChanges()');assert.match(text(lane(view.nodes,'Needs you')),/Live post/);
+ current=data([item('Live post','Facebook','published',{boardLane:'completed'})]);revision++;
+ await view.run('pollBoardChanges()');assert.match(text(lane(view.nodes,'Done')),/Live post/);
+ assert.doesNotMatch(text(lane(view.nodes,'Needs you')),/Live post/);
+ await view.run('pollBoardChanges()');assert.equal(reads,2,'No full board read when nothing changed');
+ fail=true;await view.run('pollBoardChanges()');assert.equal(view.nodes.get('campaign-error').hidden,false);
+ fail=false;await view.run('pollBoardChanges()');assert.equal(view.nodes.get('campaign-error').hidden,true);
+ assert.match(text(lane(view.nodes,'Done')),/Live post/);
+});
+test('slow metrics never delay a saved board change',async()=>{
+ let releaseMetrics;const view=ui({AbortController,setTimeout,clearTimeout,fetch:async path=>path==='/api/overview'?new Promise(resolve=>{releaseMetrics=resolve;}):({ok:true,json:async()=>data([item('Already published','Facebook','published',{boardLane:'completed'})])})});
+ const pending=view.run('refresh()');await new Promise(resolve=>setImmediate(resolve));
+ assert.match(text(lane(view.nodes,'Done')),/Already published/);
+ releaseMetrics({ok:false});await pending;
+});
+test('a pending action or hidden tab does not start a competing poll',async()=>{
+ let requests=0;const view=ui({fetch:()=>{requests++;throw Error('unexpected');}});
+ view.run('actionPending=true');await view.run('pollBoardChanges()');assert.equal(requests,0);
+ view.run('actionPending=false;document.hidden=true');await view.run('pollBoardChanges()');assert.equal(requests,0);
 });
