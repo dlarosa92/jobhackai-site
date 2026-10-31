@@ -161,27 +161,30 @@ export function handoffNextAction(h) {
 }
 export async function workflowStatus(db,now=new Date()) {
   const stamp=now.toISOString();
-  const [specs,runs,handoffs,alerts]=await Promise.all([
+  const [specs,runs,handoffs,alerts,health]=await Promise.all([
     db.prepare('SELECT * FROM workflow_policies ORDER BY id').all(),
     db.prepare('SELECT * FROM workflow_runs WHERE id IN (SELECT id FROM (SELECT id,ROW_NUMBER() OVER(PARTITION BY workflow ORDER BY started_at DESC) AS n FROM workflow_runs) WHERE n<=8) ORDER BY started_at DESC').all(),
     db.prepare("SELECT h.*,w.document FROM work_handoffs h JOIN work_items w ON w.id=h.item_id WHERE h.status IN ('pending','claimed','blocked') AND w.native_state NOT IN ('sent','published','closed','scheduled') ORDER BY h.due_at").all(),
     db.prepare('SELECT * FROM workflow_alerts WHERE resolved_at IS NULL ORDER BY first_seen_at').all(),
+    db.prepare('SELECT source,status,checked_at FROM source_health').all(),
   ]);
   const workflows=specs.results.map(spec=>{
     const run=runs.results.find(r=>r.workflow===spec.id),result=parse(run?.result);
     const lastFinished=runs.results.find(r=>r.workflow===spec.id&&['advanced','checked'].includes(r.status)&&(spec.id!=='reconciliation'||completeReconciliation(parse(r.result))));
+    // Keep immutable run history, but a subsequent audit failure supersedes its health claim.
+    const disputedSources=spec.id==='reconciliation'&&run?health.results.filter(h=>reconciliationSources.includes(h.source)&&h.status!=='current'&&h.checked_at>=run.started_at).map(h=>h.source):[];
     let status='waiting';
     if(run?.status==='running')status=run.lease_until>stamp?'running':'stalled';
     else if(run?.status==='failed')status='failed';
     else if(run?.status==='blocked')status=result?.nextCheckAt>stamp?'blocked':'overdue';
-    else if(spec.id==='reconciliation'&&run&&!completeReconciliation(result))status='incomplete';
+    else if(spec.id==='reconciliation'&&run&&(!completeReconciliation(result)||disputedSources.length))status='incomplete';
     else if(now.getTime()-Date.parse(lastFinished?.finished_at||spec.created_at)>spec.max_age_minutes*60000)status='missing';
     else if(lastFinished)status='current';
-    return {...spec,status,requiredSources:spec.id==='reconciliation'?reconciliationSources:[],lastRun:run?{id:run.id,status:run.status,startedAt:run.started_at,finishedAt:run.finished_at,result}:null,lastSuccessAt:lastFinished?.finished_at||null};
+    return {...spec,status,disputedSources,requiredSources:spec.id==='reconciliation'?reconciliationSources:[],lastRun:run?{id:run.id,status:run.status,startedAt:run.started_at,finishedAt:run.finished_at,result}:null,lastSuccessAt:lastFinished?.finished_at||null};
   });
   const jobs=handoffs.results.map(h=>{const {document,...rest}=h;return {...rest,title:parse(document).title,nextAction:handoffNextAction(h),overdue:(h.status==='blocked'?h.next_check_at:h.due_at)<=stamp};});
   // Derive immediately on reads as well as persisting on cron; a late cron cannot make stale work green.
-  const active=[...workflows.filter(w=>['missing','stalled','failed','blocked','overdue','incomplete'].includes(w.status)).map(w=>({id:`workflow-${w.id}`,detail:`${w.label}: ${w.status}. ${w.status==='incomplete'?'The saved run did not verify all required sources.':w.lastRun?.result?.blocker||w.lastRun?.result?.summary||'No completed run receipt within the expected interval.'}`})),
+  const active=[...workflows.filter(w=>['missing','stalled','failed','blocked','overdue','incomplete'].includes(w.status)).map(w=>({id:`workflow-${w.id}`,detail:`${w.label}: ${w.status}. ${w.disputedSources.length?`Later source checks invalidate the saved success: ${w.disputedSources.join(', ')}.`:w.status==='incomplete'?'The saved run did not verify all required sources.':w.lastRun?.result?.blocker||w.lastRun?.result?.summary||'No completed run receipt within the expected interval.'}`})),
     ...jobs.filter(h=>h.overdue).map(h=>({id:`handoff-${h.decision_id}`,detail:`${h.title}: ${h.department} follow-up is overdue. ${h.nextAction}`}))];
   return {checkedAt:stamp,workflows,handoffs:jobs,alerts:active.map(a=>({...a,firstSeenAt:alerts.results.find(old=>old.id===a.id)?.first_seen_at||stamp}))};
 }
