@@ -1,5 +1,6 @@
 // Receipts and deadlines are separate from source freshness and external release authority.
 const policies = {preparation:'prepare', reconciliation:'reconcile', coordination:'coordinate'};
+const reconciliationSources = ['marblism','campaign','gmail','directory','github'];
 const openStates = ['pending','claimed','blocked'];
 const parse = value => value ? JSON.parse(value) : null;
 function fail(message, status=400) { throw Object.assign(new Error(message), {status}); }
@@ -78,21 +79,35 @@ export async function recordRunWrite(db,run,kind,reference,version,result,now) {
     .bind(kind,reference,version,JSON.stringify(result),now,run.id,now).run();
   if(!saved.meta?.changes)fail('The write completed but its run receipt changed. Reload workflow status.',409);
 }
+function sourceCoverage(writes) {
+  // Use the latest observation from this run. A later failed check supersedes an earlier success.
+  const observations = new Map(writes.filter(w=>w.kind==='source').map(w=>[w.reference,w.result]));
+  const verified = reconciliationSources.filter(source=>observations.get(source)?.checked===true&&observations.get(source)?.status==='current');
+  const missing = reconciliationSources.filter(source=>!observations.get(source)?.attempted);
+  const unsuccessful = reconciliationSources.filter(source=>!verified.includes(source)&&!missing.includes(source));
+  return {required:reconciliationSources,verified,missing,unsuccessful,complete:verified.length===reconciliationSources.length};
+}
+function completeReconciliation(result) {
+  return reconciliationSources.every(source=>result?.coverage?.verified?.includes(source));
+}
 async function finish(db,input,identity,now,loadBoard) {
   const run=await activeRun(db,input.id,identity,now);
   if(!['advanced','checked','blocked','failed'].includes(input.outcome))fail('Invalid run outcome.');
   const result={summary:text(input.summary),evidence:input.outcome==='failed'?[]:evidence(input.evidence)};
   if(input.outcome==='blocked'){result.blocker=text(input.blocker);result.nextCheckAt=future(input.nextCheckAt,now);}
-  const writes=(await db.prepare('SELECT kind,reference,result FROM workflow_run_writes WHERE run_id=?').bind(run.id).all()).results.map(w=>({...w,result:parse(w.result)}));
+  const writes=(await db.prepare('SELECT kind,reference,result FROM workflow_run_writes WHERE run_id=? ORDER BY recorded_at,version').bind(run.id).all()).results.map(w=>({...w,result:parse(w.result)}));
   const refs=(kind,predicate)=>[...new Set(writes.filter(w=>w.kind===kind&&predicate(w.result)).map(w=>w.reference))];
   result.advancedItems=refs('item',r=>r.advanced);
-  result.checkedSources=refs('source',r=>r.checked);
+  const latestSources = [...new Map(writes.filter(w=>w.kind==='source').map(w=>[w.reference,w])).values()];
+  result.checkedSources=latestSources.filter(w=>w.result.checked&&w.result.status==='current').map(w=>w.reference);
+  if(run.workflow==='reconciliation')result.coverage=sourceCoverage(writes);
   result.checkedItems=refs('item',r=>r.checked);
   result.coordination=refs('coordination',r=>r.cadence==='daily'&&r.period===run.period);
   result.completedHandoffs=(await db.prepare("SELECT decision_id FROM work_handoffs WHERE claimed_by=? AND status='completed' AND updated_at>=?").bind(run.id,run.started_at).all()).results.map(h=>h.decision_id);
   const handoffs=(await db.prepare("SELECT h.* FROM work_handoffs h JOIN work_items w ON w.id=h.item_id WHERE h.status IN ('pending','claimed','blocked') AND w.native_state NOT IN ('sent','published','closed','scheduled')").all()).results;
   if(input.outcome==='advanced'&&!result.advancedItems.length&&!result.completedHandoffs.length)fail('No saved work changed. A run cannot claim advancement without an artifact.');
   if(run.workflow!=='coordination'&&['advanced','checked'].includes(input.outcome)&&!result.checkedSources.length&&!result.checkedItems.length)fail('Record fresh source or item checks owned by this run before reporting success.');
+  if(run.workflow==='reconciliation'&&['advanced','checked'].includes(input.outcome)&&!result.coverage.complete)fail(`Reconciliation source coverage is incomplete. Missing: ${result.coverage.missing.join(', ')||'none'}. Unsuccessful: ${result.coverage.unsuccessful.join(', ')||'none'}. Record fresh source-health observations owned by this run or finish blocked/failed with the actual obstacle.`);
   if(run.workflow==='preparation'&&['checked','blocked'].includes(input.outcome)){
     if(!loadBoard)fail('Preparation completion requires the canonical dependency projection.',500);
     const runnable=preparationWork(await loadBoard());
@@ -154,18 +169,19 @@ export async function workflowStatus(db,now=new Date()) {
   ]);
   const workflows=specs.results.map(spec=>{
     const run=runs.results.find(r=>r.workflow===spec.id),result=parse(run?.result);
-    const lastFinished=runs.results.find(r=>r.workflow===spec.id&&['advanced','checked'].includes(r.status));
+    const lastFinished=runs.results.find(r=>r.workflow===spec.id&&['advanced','checked'].includes(r.status)&&(spec.id!=='reconciliation'||completeReconciliation(parse(r.result))));
     let status='waiting';
     if(run?.status==='running')status=run.lease_until>stamp?'running':'stalled';
     else if(run?.status==='failed')status='failed';
     else if(run?.status==='blocked')status=result?.nextCheckAt>stamp?'blocked':'overdue';
+    else if(spec.id==='reconciliation'&&run&&!completeReconciliation(result))status='incomplete';
     else if(now.getTime()-Date.parse(lastFinished?.finished_at||spec.created_at)>spec.max_age_minutes*60000)status='missing';
     else if(lastFinished)status='current';
-    return {...spec,status,lastRun:run?{id:run.id,status:run.status,startedAt:run.started_at,finishedAt:run.finished_at,result}:null,lastSuccessAt:lastFinished?.finished_at||null};
+    return {...spec,status,requiredSources:spec.id==='reconciliation'?reconciliationSources:[],lastRun:run?{id:run.id,status:run.status,startedAt:run.started_at,finishedAt:run.finished_at,result}:null,lastSuccessAt:lastFinished?.finished_at||null};
   });
   const jobs=handoffs.results.map(h=>{const {document,...rest}=h;return {...rest,title:parse(document).title,nextAction:handoffNextAction(h),overdue:(h.status==='blocked'?h.next_check_at:h.due_at)<=stamp};});
   // Derive immediately on reads as well as persisting on cron; a late cron cannot make stale work green.
-  const active=[...workflows.filter(w=>['missing','stalled','failed','blocked','overdue'].includes(w.status)).map(w=>({id:`workflow-${w.id}`,detail:`${w.label}: ${w.status}. ${w.lastRun?.result?.blocker||w.lastRun?.result?.summary||'No completed run receipt within the expected interval.'}`})),
+  const active=[...workflows.filter(w=>['missing','stalled','failed','blocked','overdue','incomplete'].includes(w.status)).map(w=>({id:`workflow-${w.id}`,detail:`${w.label}: ${w.status}. ${w.status==='incomplete'?'The saved run did not verify all required sources.':w.lastRun?.result?.blocker||w.lastRun?.result?.summary||'No completed run receipt within the expected interval.'}`})),
     ...jobs.filter(h=>h.overdue).map(h=>({id:`handoff-${h.decision_id}`,detail:`${h.title}: ${h.department} follow-up is overdue. ${h.nextAction}`}))];
   return {checkedAt:stamp,workflows,handoffs:jobs,alerts:active.map(a=>({...a,firstSeenAt:alerts.results.find(old=>old.id===a.id)?.first_seen_at||stamp}))};
 }
