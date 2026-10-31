@@ -228,3 +228,28 @@ test('wording and evidence-only edits cannot claim progress or reset work age',a
  current=(await c.board()).items[0];assert.ok(current.lastMovedAt);assert.ok((await c.board()).progress.trackedSince);
  const finished=await c.flow('finish',{id:run.id,outcome:'advanced',summary:'Revised draft saved',evidence:proof});assert.equal(finished.status,200);assert.deepEqual(finished.body.advancedItems,['post']);
 });
+
+for(let round=1;round<=3;round++)test(`receipt attribution survives a lost response without borrowing another run, round ${round}`,async()=>{
+ const c=fixture();const item=await prepare(c);
+ const run=(await c.flow('start',{workflow:'reconciliation'})).body;
+ const other=(await c.flow('start',{workflow:'preparation'})).body;
+ const event={id:item.id,eventId:`published-lost-response-${round}`,expectedVersion:item.version,candidate:'approved-post',stage:'published',evidenceUrl:proof[0].url,summary:'Native publication verified',occurredAt:new Date().toISOString(),runId:run.id};
+ const batch=c.db.batch.bind(c.db);let interrupted=false;
+ c.db.batch=async statements=>{const result=await batch(statements);if(!interrupted){interrupted=true;throw Error('Response lost after commit');}return result;};
+ await assert.rejects(c.work('receipt',event),/Response lost after commit/);
+ assert.equal(c.sql.prepare('SELECT count(*) n FROM work_receipts').get().n,1);
+ assert.equal(c.sql.prepare('SELECT count(*) n FROM workflow_run_writes WHERE run_id=?').get(run.id).n,1,'Attribution committed with receipt before response');
+ const retry=await c.work('receipt',event);assert.equal(retry.status,200);assert.equal(retry.body.replayed,true);
+ assert.equal((await c.work('receipt',{...event,runId:other.id})).status,200);
+ assert.equal(c.sql.prepare('SELECT count(*) n FROM workflow_run_writes WHERE run_id=?').get(other.id).n,0,'A different run cannot borrow the original result');
+ assert.equal((await c.flow('finish',{id:other.id,outcome:'advanced',summary:'Borrowed result',evidence:proof})).status,400);
+ assert.equal((await c.flow('finish',{id:run.id,outcome:'advanced',summary:'Verified publication with recovered response',evidence:proof})).status,200);
+});
+
+test('receipt and originating workflow attribution roll back together on attribution failure',async()=>{
+ const c=fixture(),item=await prepare(c),run=(await c.flow('start',{workflow:'reconciliation'})).body;
+ c.sql.exec("CREATE TRIGGER fail_attribution BEFORE INSERT ON workflow_run_writes BEGIN SELECT RAISE(ABORT,'injected write failure'); END;");
+ await assert.rejects(c.work('receipt',{id:item.id,eventId:'atomic-failure',expectedVersion:item.version,candidate:'approved-post',stage:'published',evidenceUrl:proof[0].url,summary:'Native publication verified',occurredAt:new Date().toISOString(),runId:run.id}),/injected write failure/);
+ assert.equal(c.sql.prepare('SELECT count(*) n FROM work_receipts').get().n,0);
+ const after=(await c.board()).items[0];assert.equal(after.version,item.version);assert.equal(after.nativeState,'draft');
+});

@@ -250,8 +250,7 @@ export async function workApi(request,env,identity,loadBoard) {
     const input=await body(request);
     const run=await verifyRunWrite(db,input,identity,now);
     if(path==='/api/work-items/receipt'){
-      const result=await saveReceipt(db,input,now);
-      if(run&&!result.replayed)await recordRunWrite(db,run,'item',input.id,input.expectedVersion+1,{advanced:true,checked:true,progressBasis:'deliverable-v1'},now);
+      const result=await saveReceipt(db,input,now,run);
       return reply(result);
     }
     if(path==='/api/work-items/prepare'||path==='/api/work-items/reconcile'){
