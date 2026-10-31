@@ -186,3 +186,12 @@ test('release receipts override old draft approval labels and remove draft actio
  assert.match(text(view.nodes.get('review-content')),/Complete development acceptance/);
  assert.doesNotMatch(text(view.nodes.get('review-actions')),/Approve|Decline|Request changes/);
 });
+test('open details reflect completion without another click and changed copy cannot be silently approved',async()=>{
+ let current=data([item('Visible draft','Facebook','hold',{version:1,workId:'visible',snapshotRevision:'v1',canApprove:true,boardLane:'ready',snapshot:{text:'Exact copy',links:[],media:[],evidence:[]}})]);
+ const view=ui({AbortController,setTimeout,clearTimeout,fetch:async()=>({ok:true,json:async()=>current})});
+ view.render(current);walk(lane(view.nodes,'Needs you')).find(x=>x.className==='card-title').listeners.click();
+ current=data([{...current.items[0],version:2,snapshotRevision:'v2'}]);await view.run('refreshBoard()');
+ assert.match(view.nodes.get('review-error').textContent,/Close and reopen/);assert.ok(view.nodes.get('review-actions').children.every(x=>x.disabled));
+ current=data([{...current.items[0],version:3,state:'published',nativeState:'published',boardLane:'completed',canApprove:false,receipts:[{stage:'published',summary:'Verified live post',evidence_url:'https://example.com/post'}],nextAction:'Publication verified.'}]);
+ await view.run('refreshBoard()');assert.match(text(view.nodes.get('review-content')),/Verified live post/);assert.equal(view.nodes.get('review-actions').children.length,0);
+});

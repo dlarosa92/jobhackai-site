@@ -325,7 +325,17 @@ async function refreshBoard(){
   try {
     const data=await getJSON('/api/work-items');
     if(sequence!==boardRequestSequence||version!==notificationChange)return false;
-    boardFailed=false;$('campaign-error').hidden=true;renderCampaigns(data);renderHealth();return true;
+    boardFailed=false;$('campaign-error').hidden=true;renderCampaigns(data);renderHealth();
+    if(openItemId&&!actionPending&&$('review-dialog').open){
+      const current=data.items.find(item=>item.id===openItemId);
+      if(current&&current.version!==reviewedItem?.version){
+        if(!current.receipts?.length&&current.snapshotRevision!==reviewedItem?.snapshotRevision){
+          $('review-error').textContent='This draft changed while you were reading. Close and reopen it to review the new version.';
+          for(const control of $('review-actions').children)control.disabled=true;
+        }else {openReview(current,lastReviewTrigger,true);$('review-error').textContent='';}
+      }
+    }
+    return true;
   } catch {
     if(sequence!==boardRequestSequence||version!==notificationChange)return false;
     boardFailed=true;$('campaign-error').textContent='Work could not refresh. Saved cards may be old. Check again before making a decision.';$('campaign-error').hidden=false;renderHealth();return false;
