@@ -241,6 +241,7 @@ const IS_DEV_OR_QA_HOST = APP_BASE_URL === 'https://dev.jobhackai.io' || APP_BAS
 const VISITOR_HOME_HREF = IS_DEV_OR_QA_HOST ? '/index.html' : 'https://jobhackai.io/';
 const VISITOR_BLOG_HREF = IS_DEV_OR_QA_HOST ? '/blog.html' : 'https://jobhackai.io/blog';
 const VISITOR_FEATURES_HREF = IS_DEV_OR_QA_HOST ? '/features.html' : 'https://jobhackai.io/features';
+const VISITOR_DIRECTORY_HREF = IS_DEV_OR_QA_HOST ? '/directory/' : 'https://jobhackai.io/directory/';
 const VISITOR_PRICING_HREF = `${APP_BASE_URL}/pricing`;
 const VISITOR_LOGO_HREF = IS_DEV_OR_QA_HOST ? '/' : 'https://jobhackai.io/';
 
@@ -1467,7 +1468,7 @@ const NAVIGATION_CONFIG = {
       { text: 'Blog', href: VISITOR_BLOG_HREF },
       { text: 'Features', href: VISITOR_FEATURES_HREF },
       { text: 'Pricing', href: `${APP_BASE_URL}/pricing` },
-      { text: 'Local directory', href: 'https://jobhackai.io/directory/' },
+      { text: 'Local directory', href: VISITOR_DIRECTORY_HREF },
       { text: 'Login', href: `${APP_BASE_URL}/login` }
     ],
     cta: { text: 'Start Free', href: `${APP_BASE_URL}/login?plan=free`, isCTA: true, planId: 'free' }
@@ -3069,7 +3070,7 @@ function renderMarketingNav(desktop, mobile) {
     <a href="${VISITOR_BLOG_HREF}">Blog</a>
     <a href="${VISITOR_FEATURES_HREF}">Features</a>
     <a href="${VISITOR_PRICING_HREF}">Pricing</a>
-    <a href="https://jobhackai.io/directory/">Local directory</a>
+    <a href="${VISITOR_DIRECTORY_HREF}">Local directory</a>
     <a class="btn-link" href="${APP_BASE_URL}/login">Login</a>
   `;
   if (mobile) mobile.innerHTML = desktop.innerHTML;
