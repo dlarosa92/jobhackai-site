@@ -292,6 +292,7 @@ export async function workApi(request,env,identity,loadBoard) {
       const result=await db.prepare('UPDATE work_items SET priority=?,version=version+1,updated_at=? WHERE id=? AND version=?').bind(input.priority,now,id,version).run();if(!result.meta?.changes)fail('Item changed.',409);return reply({saved:true});
     }
     if(path==='/api/work-items/source-health'){
+      if(run&&run.workflow!=='reconciliation')fail('Scheduled source health is owned by reconciliation. Save preparation or coordination evidence on the affected item instead.',409);
       if(!sources.includes(input.source))fail('Unknown source.');const version=expected(input.expectedVersion),checkedAt=date(input.checkedAt);
       if(!['current','unavailable','incomplete'].includes(input.status)||!Number.isSafeInteger(input.maxAgeMinutes)||input.maxAgeMinutes<5||input.maxAgeMinutes>10080)fail('Invalid health status.');
       const old=await db.prepare('SELECT * FROM source_health WHERE source=?').bind(input.source).first();
