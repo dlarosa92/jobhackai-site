@@ -30,7 +30,7 @@ export function allowed(identity,method,path) {
   const routes={
     '/api/workflow/handoff':'prepare','/api/analytics':'reconcile',
     '/api/work-items/prepare':'prepare','/api/outreach/prepare':'prepare',
-    '/api/work-items/capture-native':'reconcile','/api/work-items/reconcile':'reconcile','/api/work-items/source-health':'reconcile',
+    '/api/work-items/capture-native':'reconcile','/api/work-items/reconcile':'reconcile','/api/work-items/source-health':'reconcile','/api/work-items/receipt':'reconcile',
     '/api/work-items/contribute':'contribute','/api/work-items/rank':'coordinate','/api/work-items/coordination':'coordinate',
   };
   return !!routes[path]&&caps.includes(routes[path]);

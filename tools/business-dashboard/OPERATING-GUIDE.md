@@ -1,6 +1,6 @@
 # JobHackAI operating guide
 
-Version: 2026-10-25. This guide supersedes older board organization, workload caps, mandatory external-app draft-review instructions and chat-only claims of completed scheduled work. It does not revoke recorded individual approvals or grant external execution.
+Version: 2026-10-31. This guide supersedes older board organization, workload caps, mandatory external-app draft-review instructions and chat-only claims of completed scheduled work. It does not revoke recorded individual approvals or grant external execution.
 
 ## Mission and ownership
 
@@ -54,6 +54,20 @@ Use validated campaign tags on clickable promotional links: lowercase platform-s
 - Weekly planning and retrospective run within the first daily review of the Eastern calendar week. Record what worked, failed, source evidence and resulting backlog changes. Also record a lesson when a material result arrives.
 
 Use a stable cadence/period key to prevent duplicate reviews. Quiet when unchanged; notify only a meaningful new decision, material failure or material result. Do not repeat approval requests for valid exact approvals. Preserve the bounded Local tests and mandatory experiment reviews until native completion or unresolved work is verified. Expired schedules with outstanding work transfer that work to the shared backlog before retirement.
+
+### Immediate results and protected release progress
+
+The chat or integration that performs an authorized action must save its verified result immediately and read the item back before reporting completion. Do not wait for an hourly schedule. Approval, release, scheduled publication, actual publication, deployment and acceptance are different events. Record the event that actually happened, with its native evidence, and leave remaining steps open.
+
+For GitHub releases, use `POST /api/work-items/receipt` with the stable item ID, current `expectedVersion`, unique `eventId`, exact `candidate`, `stage`, `evidenceUrl`, `summary` and `occurredAt`. Record the same candidate in order: `dev_deployed`, `dev_verified`, `qa_deployed`, `qa_verified`, `production_deployed`, `production_verified`. Development is `dev0`, QA is `develop`, production is `main`. A deployed build is not accepted merely because deployment succeeded. Preserve the accepted artifact across promotions. The receipt records evidence and never authorizes a deployment. New release work needs a new item; never replace an existing candidate's receipt history.
+
+For verified native publication or delivery on other prepared work items, use the same endpoint with `published` or `sent`. Gmail, outreach and directory work retain their existing native result feeds; do not create replacement receipts for those feeds. Retry an uncertain receipt with its same event ID and exact payload. If the action succeeded but its dashboard write failed, retry the write and report the sync failure. Never repeat the external action to repair the dashboard.
+
+Verified receipts are immutable and control current progress, even when an older preparation run or approval exists. Preparation may update unfinished supporting work, but must preserve verified outcomes and source references. Reconciliation must name the receipt's exact candidate; checking an older PR cannot refresh the current release. Stable item IDs may contain historical PR numbers and do not identify the current release. Discover the latest candidate from native release evidence instead of hard-coding a PR in schedules.
+
+The visible board checks its revision about every two seconds and reloads changed work independently of business metrics. Owner actions refresh the board immediately. A disconnected browser reports that updates are unavailable. This does not make external services push events automatically: native events performed outside the connected executor still require their integration to report the result, with hourly reconciliation as recovery. Do not claim immediate native coverage for a service whose event integration has not been verified.
+
+When iterating, review the diff for obsolete instructions, competing writers and superseded behavior. Replace or remove those parts, preserve useful schedules and history, and replay the original failure three times. Completion requires evidence that old preparation, old source checks and stale approvals cannot reopen completed work.
 
 ### Execution receipts and decision handoffs
 

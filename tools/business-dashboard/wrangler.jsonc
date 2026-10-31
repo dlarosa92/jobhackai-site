@@ -11,5 +11,63 @@
     { "binding": "PRODUCTION_DB", "database_name": "jobhackai-prod-db", "database_id": "f9b709fd-56c3-4a0b-8141-4542327c9d4d" },
     { "binding": "DASHBOARD_DB", "database_name": "jobhackai-business-dashboard", "database_id": "efa0a420-6d83-450a-9133-572d174e2178" }
   ],
-  "observability": { "enabled": true, "head_sampling_rate": 1 }
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
+  "env": {
+    "dev": {
+      "name": "jobhackai-dashboard-dev",
+      "workers_dev": false,
+      "routes": [
+        {
+          "pattern": "dashboard-dev.jobhackai.io",
+          "custom_domain": true
+        }
+      ],
+      "triggers": {
+        "crons": []
+      },
+      "vars": {
+        "OUTREACH_SENDER_ENABLED": "false"
+      },
+      "d1_databases": [
+        {
+          "binding": "DASHBOARD_DB",
+          "database_name": "jobhackai-dashboard-dev",
+          "database_id": "a09eb630-8806-4017-b25d-534e7ef4d859"
+        },
+        {
+          "binding": "PRODUCTION_DB",
+          "database_name": "jobhackai-dashboard-dev",
+          "database_id": "a09eb630-8806-4017-b25d-534e7ef4d859"
+        }
+      ]
+    },
+    "qa": {
+      "name": "jobhackai-dashboard-qa",
+      "workers_dev": false,
+      "routes": [
+        {
+          "pattern": "dashboard-qa.jobhackai.io",
+          "custom_domain": true
+        }
+      ],
+      "triggers": {
+        "crons": []
+      },
+      "vars": {
+        "OUTREACH_SENDER_ENABLED": "false"
+      },
+      "d1_databases": [
+        {
+          "binding": "DASHBOARD_DB",
+          "database_name": "jobhackai-dashboard-qa",
+          "database_id": "f6f46fe9-1dc2-48ea-80a7-c1c1266dfc2a"
+        },
+        {
+          "binding": "PRODUCTION_DB",
+          "database_name": "jobhackai-dashboard-qa",
+          "database_id": "f6f46fe9-1dc2-48ea-80a7-c1c1266dfc2a"
+        }
+      ]
+    }
+  }
 }
