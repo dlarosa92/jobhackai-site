@@ -220,7 +220,7 @@ function renderHealth(){
 }
 function renderWorkflow(workflow,analytics){
   const runs=$('workflow-runs'),alerts=$('workflow-alerts'),restoreRuns=retainDisclosures(runs),restoreAlerts=retainDisclosures(alerts);runs.replaceChildren();alerts.replaceChildren();
-  const labels={preparation:['Prepare work','Hourly · Codex on the Mac'],reconciliation:['Check sources','Hourly · Codex on the Mac'],coordination:['Owner priorities','Daily · Codex on the Mac']};
+  const labels={preparation:['Prepare work','Hourly · Codex on the Mac'],reconciliation:['Check sources','Every 30 minutes · Codex on the Mac'],coordination:['Owner priorities','Daily · Codex on the Mac']};
   for(const run of workflow?.workflows||[]){const name=labels[run.id]||[run.label,'Codex scheduled work'];const row=element('details',undefined,'workflow-run'),summary=element('summary');summary.append(element('strong',name[0]),element('span',run.status==='current'?'Check completed':run.status,run.status==='current'?'green':'amber'));row.append(summary,element('p',name[1]),element('p',run.lastSuccessAt?`Last completed check: ${time(run.lastSuccessAt)}`:'No completed check saved.'));
     if(run.lastRun?.result?.summary)row.append(detail('Saved run notes',run.lastRun.result.summary));if(run.lastRun?.result?.nextCheckAt)row.append(element('p',`Next check: ${time(run.lastRun.result.nextCheckAt)}`));runs.append(row);}
   if(!workflow)runs.append(element('p','Scheduled work records have not loaded.','caution'));
