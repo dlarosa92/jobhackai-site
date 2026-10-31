@@ -1,12 +1,14 @@
-# Voice Mock Interview — Live QA Runbook
+# Voice Mock Interview: Live QA Runbook
 
 Live-session QA for the voice mock interview: the checks that automated tests
 **cannot** prove (model compliance, real Whisper transcription, real-device feel),
 with fixtures recorded up front so correct behavior is never misdiagnosed.
 
-Scope: the seven live tests introduced for the PR #849 release gate. Automated
-coverage (what CI already proves) is listed at the end — do not spend live time
-re-testing it.
+Scope: the seven baseline tests originated with PR #849. For the current
+release, also use [Voice release quality for the Brighton pilot](voice-partner-release-quality.md)
+and [topic progression and score eligibility](voice-turn-budget-evidence.md).
+Historical results below apply only to their recorded builds. Automated checks
+establish code contracts, not listening quality on a new release candidate.
 
 ---
 
@@ -24,14 +26,22 @@ Copy this block into the run notes and fill it in first:
 Run date:
 Tester:
 Build / branch / commit under test:
+Deployed app / worker / configuration revisions:
+Browser / device / viewport / access setup:
+Language under test:                English initially; additional languages need separate acceptance
+Capture agreement / reviewer access / retention:
+Recorder visible and Recording confirmed:
+Short mic + interviewer sample played successfully:
+Recording output path / final file verified:
 Expected account first name:        (what voiceFirstName() will resolve from the auth token)
 Expected role (as typed):
 Expected seniority (as selected):   e.g. Director+
 Expected spoken role phrasing:      "the <role> role at the <level>" (e.g. "at the director level or above")
 JD pasted:                          yes/no
 Prior history state:                none / N sessions (list roles + scores)
-Entitlement mode:                   free / sprint / subscription
+Entitlement mode:                   free / pack / subscription (record observed balance)
 Expected end reason this run:       completed / user_ended / ended_for_safety / connection_lost
+Evidence classification:           automated / artifact-verified / owner-observed / recorded-reviewed / failed / not run
 ```
 
 Evaluation rules that depend on fixtures:
@@ -49,12 +59,16 @@ Evaluation rules that depend on fixtures:
 ## 2. The seven live tests
 
 ### Test 1 — Voice pace
-Speed is `0.9` (`VOICE_OUTPUT_SPEED`) plus one prompt line ("calm, measured
-interview pace"). Judge over **several substantive questions**, not the greeting.
+Current source speed is `1.0` (`VOICE_OUTPUT_SPEED`) with the "calm, measured
+interview pace" instruction. Record the deployed value, then judge over
+**several substantive questions**, not the greeting. A speed constant is not
+proof of understandable pacing.
 - PASS: understandable throughout; no clipping, rushing, robotic drag, broken
   turn-taking, or long dead air before every reply; multi-fact follow-up
   questions stay comfortable.
-- Semantic VAD is automatic — pausing to think must not get the candidate cut off.
+- Semantic VAD detects turn boundaries; the current client requests responses
+  after confirming `create_response: false` and `interrupt_response: true`.
+  Normal thinking pauses must not repeatedly cut off the candidate.
 
 ### Test 2 — Candidate name consistency
 - Record every name spoken: sound check / mid-interview / closing.
@@ -107,13 +121,22 @@ to self-harm — this is a test fixture, phrase deliberately).
 One ordinary interview, natural close, then inspect everything persisted:
 - Interview conducted with contextual follow-ups; closing turn is a statement
   (no trailing question); no substantive questions after the close.
-- Report page renders: overall + 4 dimensions, S+A=O balance, coaching,
-  moments, summary.
+- Limited sample: useful qualitative feedback when enough speech was captured,
+  with no numeric overall/dimension scores. Insufficient speech has an honest
+  unscored state. An upgrade must not change evidence eligibility.
+- Score-eligible sample: overall + 4 dimensions and answer-content breakdown
+  may render with grounded coaching, moments and summary. Use the current
+  [provisional evidence thresholds](voice-turn-budget-evidence.md); elapsed
+  time alone is not eligibility or validated score calibration.
+- Confirm meaningful three-topic progression, at most two follow-up
+  opportunities per topic, a final invitation and natural close. Repetition
+  and interruption must not cause the model to rush through useful coverage.
 - Full Transcript: coherent order (no fact referenced before the candidate said
   it); audio-check exchange absent; **no standalone noise fragments** ("you",
   "Bye.") as candidate turns.
-- History: session appears with role · seniority, duration, score chip;
-  progress strip updates.
+- History: exactly one session appears with role · seniority, duration and
+  the appropriate scored/unscored state; reopening agrees with the report.
+  Verify provider closure and the expected credit balance separately.
 
 ---
 
@@ -160,27 +183,39 @@ Non-blocking observations from the run, and their status:
 
 ## 4. Next-run script
 
-Remaining gates: Tests 3, 4, 5 (one combined session), Test 6 (separate
-session), Test 7 persisted-artifact inspection (piggybacks on the combined
-session). Do not spend the run re-proving Tests 1–2 beyond incidental
-observation.
+Select outstanding gates from the current acceptance record, not the historical
+August results. The October 30 goodbye stop has an owner-observed pass with
+save/provider-closure evidence; do not repeat it merely because capture was
+missed. The next full interview should verify natural completion and
+interruption recovery with independent listening evidence.
 
-**Session A — reconnect + termination (Tests 3, 4, 5, 7-artifacts):**
+Before a captured session, make the recorder visible beside the interview and
+confirm **Recording** plus a playable microphone/interviewer sample. Sharing a
+tab alone does not start recording. Follow the capture agreement above; raw
+media stays outside the repository. Do not start another interview until the
+tester can see the recording state.
+
+**Session A: full natural completion, interruption and reconnect (Tests 1, 2, 3, 5, 7):**
 1. Fill in the fixture block. Start normally; confirm the name in the sound check.
 2. Answer 2–3 questions with specific numbers (gives reconnect context and
    scoring material).
 3. Kill the connection; reconnect. Verify: same topic resumed, name retained,
    no re-greeting, no audio check, no credit consumed.
-4. Continue one or two questions.
+4. Continue the interview. Interrupt once with a clarification or request to
+   repeat; confirm the answer can resume and useful topic coverage is retained.
 5. Work in the historical statement ("…I ended the interview process early with
    one candidate…"). Verify nothing terminates.
 6. Work in the hypothetical ("If this interview ended early because of a
    connection issue…"). Verify nothing terminates.
-7. Issue a genuine spoken end request. Verify immediate `user_ended` end.
+7. Continue through all three topics and the final invitation. Allow the
+   interviewer to close naturally; verify no trailing question and the
+   expected `completed` end reason. Do not use Finish or a spoken end request
+   in this run.
 8. Open the report. Inspect the Full Transcript: end request absent; the answer
-   immediately before it present; both Step 5/6 sentences present; no
+   before the closing present; both Step 5/6 sentences present; no
    standalone "you"/"Bye." noise turns; audio check absent; coherent order.
-9. Verify the scorecard rendered and the session appears correctly in history.
+9. Verify the eligible or feedback-only report, one history entry, the credit
+   balance and provider closure.
 
 **Session B — Safety (Test 6):**
 1. Fresh session, brief normal opening.
@@ -189,16 +224,22 @@ observation.
    panel, "Safety" history chip, and correct re-render when reopening the row
    from history.
 
+**Spoken-end regression (Test 4), when relevant changes require it:** use a
+separate session and its explicit-end fixture. Do not replace Session A's
+natural-completion evidence with an intentional early stop. The existing
+October 30 owner-observed goodbye result remains part of the acceptance record.
+
 ---
 
-## 5. What automated tests already prove (don't re-test live)
+## 5. Automated coverage and its limits
 
-CI runs five deterministic suites on every PR touching the voice files
-(`.github/workflows/test-ats-scoring.yml`); run locally with
-`npm run test:voice:{interviewer,transcript-order,conduct,lifecycle,client}`.
+The baseline suites below are part of the voice checks; inspect the actual
+candidate CI results rather than inferring coverage from this list. Run the
+aggregate locally with `npm --prefix app run test:voice`; turn-budget and
+score-evidence checks are documented in `voice-turn-budget-evidence.md`.
 
 - Prompt facts and delivery on every opening path (fresh/resume/early-resume),
-  name binding, speed 0.9, semantic VAD untouched — `voice-interviewer.test.mjs`.
+  name binding, configured speed and VAD contract: `voice-interviewer.test.mjs`.
 - End-request detector precision (narrative/hypothetical/habitual rejected;
   genuine requests matched) — `voice-lifecycle.test.mjs`.
 - End request excluded from transcript/evaluation; preceding answer preserved;

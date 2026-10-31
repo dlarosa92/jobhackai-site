@@ -104,6 +104,30 @@ test('free report and paid history suppress numbers on a feedback-only card, whi
   assert.equal(history[1].overall, 66);
 });
 
+for (const invalidSource of ['competency', 'moment']) {
+  test(`rejected ${invalidSource} evidence removes dependent claims even with three valid assessments`, async t => {
+    const unsupported = 'You ignored the safety procedure.';
+    const card = { ...numericCard,
+      assessmentScope: unsupported, topStrength: unsupported,
+      topImprovement: unsupported, summary: unsupported, saoCoaching: [unsupported],
+      competencies: [...numericCard.competencies], moments: [] };
+    if (invalidSource === 'competency') card.competencies.push({
+      name: 'Safety', status: 'needs_practice', quote: 'I ignored the safety procedure.', feedback: unsupported
+    });
+    else card.moments.push({ quote: 'I ignored the safety procedure.', comment: unsupported });
+    mockScorer(t, card);
+    const { scorecard } = await scoreVoiceTranscript({ role: 'Analyst', transcript: enough }, { OPENAI_API_KEY: 'test-fixture' });
+    assert.equal(scorecard.evidenceLimited, true);
+    assert.equal(scorecard.feedbackOnly, true);
+    assert.equal(scorecard.overall, null);
+    assert.equal(scorecard.dimensions, null);
+    assert.equal(scorecard.saoBalance, null);
+    assert.equal(scorecard.competencies.filter(c => c.status !== 'not_assessed').length, 3);
+    assert.doesNotMatch(JSON.stringify(scorecard), /ignored the safety procedure/);
+    assert.doesNotMatch(JSON.stringify(partialScorecard(scorecard)), /ignored the safety procedure/);
+  });
+}
+
 for (const fullAccess of [true, false]) {
   test(`${fullAccess ? 'paid' : 'free'} limited report keeps useful feedback without score displays or score upsells`, async t => {
     const h = createVoiceClientHarness({ search: '?session=limited', routes: {

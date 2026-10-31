@@ -268,11 +268,27 @@ export async function scoreVoiceTranscript({ role, seniority, transcript, jd = n
     : result.content;
 
   scorecard.methodologyVersion = 2;
+  const proposedMoments = Array.isArray(scorecard.moments) ? scorecard.moments : [];
+  const proposedCompetencies = Array.isArray(scorecard.competencies) ? scorecard.competencies : [];
   scorecard.moments = groundedMoments(scorecard.moments, transcript);
   scorecard.competencies = groundedCompetencies(scorecard.competencies, transcript);
+  const rejectedEvidence = scorecard.moments.length !== proposedMoments.length ||
+    proposedCompetencies.slice(0, 5).some((c, i) =>
+      c.status !== 'not_assessed' && scorecard.competencies[i].status === 'not_assessed');
+  if (rejectedEvidence) {
+    // Global narrative and numbers have no per-claim evidence links. Once an
+    // asserted quote fails verification we cannot safely retain dependent
+    // praise or criticism, even when other competency quotes are valid.
+    scorecard.evidenceLimited = true;
+    scorecard.assessmentScope = 'Some supporting excerpts could not be verified against the captured answers. This report contains limited feedback and no numerical assessment.';
+    scorecard.topStrength = '';
+    scorecard.topImprovement = 'Review the verified excerpts below and practice one example that explains your own actions and the result.';
+    scorecard.saoCoaching = [];
+    scorecard.summary = 'A complete assessment could not be verified from this report. Use the verified excerpts as a practice reference; this is not a judgment of your ability.';
+  }
   // Even a long transcript needs grounded assessments before numbers may show.
   const assessed = scorecard.competencies.filter(c => c.status !== 'not_assessed');
-  scorecard.scoreEligibility = { ...evidence, version: 1, eligible: evidence.eligible && assessed.length >= 3 };
+  scorecard.scoreEligibility = { ...evidence, version: 1, eligible: !rejectedEvidence && evidence.eligible && assessed.length >= 3 };
   if (!scorecard.scoreEligibility.eligible) {
     scorecard.feedbackOnly = true;
     scorecard.overall = null;
