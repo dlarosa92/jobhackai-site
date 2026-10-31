@@ -783,7 +783,7 @@
       button.id = 'open-cookie-preferences';
       button.type = 'button';
       button.textContent = 'Cookie Preferences';
-      button.style.cssText = 'background:none;border:0;color:inherit;font:inherit;padding:8px;cursor:pointer;text-decoration:underline;';
+      button.className = 'footer-preferences';
       const links = footer.querySelector('.footer-links');
       (links || footer.querySelector('.footer-container') || footer).appendChild(button);
     }

@@ -1626,6 +1626,7 @@ const NAVIGATION_CONFIG = {
       { text: 'Blog', href: VISITOR_BLOG_HREF },
       { text: 'Features', href: VISITOR_FEATURES_HREF },
       { text: 'Pricing', href: `${APP_BASE_URL}/pricing` },
+      { text: 'Local directory', href: 'https://jobhackai.io/directory/' },
       { text: 'Login', href: `${APP_BASE_URL}/login` }
     ],
     cta: { text: 'Sign Up Free', href: `${APP_BASE_URL}/login?mode=signup`, isCTA: true, planId: 'free' }
@@ -3152,6 +3153,7 @@ function renderMarketingNav(desktop, mobile) {
     <a href="${VISITOR_BLOG_HREF}">Blog</a>
     <a href="${VISITOR_FEATURES_HREF}">Features</a>
     <a href="${VISITOR_PRICING_HREF}">Pricing</a>
+    <a href="https://jobhackai.io/directory/">Local directory</a>
     <a class="btn-link" href="${APP_BASE_URL}/login">Login</a>
   `;
   if (mobile) mobile.innerHTML = desktop.innerHTML;
