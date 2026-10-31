@@ -8,7 +8,7 @@
       "path": "/index.md",
       "title": "JobHackAI | Practice Your Next Interview Out Loud",
       "description": "Practice a live voice mock interview for your target role. Your first interview is free with a feedback preview. Continue with $17/week, $34/month, or five interviews for $39.",
-      "source_sha256": "d22cd8d783f2b3d8d3c58514b8e8fa1e5e66dad4d77e9c3f6cd031a727449257",
+      "source_sha256": "2a519dfecb2fc53c62e00675056430580cbb97e5ed32e4e1a83f7a571d57cd73",
       "markdown_sha256": "51a301a91804b3782ca502193379be131292847c8df9ac7a12bc4911821ececc",
       "bytes": 5551
     },
@@ -18,7 +18,7 @@
       "path": "/blog.md",
       "title": "JobHackAI Blog | Job Search Tips, Resume & LinkedIn Guides",
       "description": "Actionable job search tips, resume optimization guides, LinkedIn strategies, and interview prep from the JobHackAI team. Published weekly.",
-      "source_sha256": "9c3a9ac293aec4ae3a26520a73472696b3c71ea812cfb9e48063f57a1fc4cc3b",
+      "source_sha256": "4e085fd5c8dc2c1884bf7d6f82b2fe7ca247ec6d385ad229a3da019f87c8a8a0",
       "markdown_sha256": "faccf36a080bf7fd6198b5fc40b9075de78ed702aaa17643c62a67495e2841cb",
       "bytes": 4487
     },
@@ -28,7 +28,7 @@
       "path": "/blog/68-5-days-response-gap-job-search-burnout.md",
       "title": "68.5 Days of Nothing: The Psychological Toll of the 2026 Response Gap | JobHackAI Blog",
       "description": "Long hiring timelines can drain job seekers before interviews even begin. Learn how to protect momentum, improve ATS alignment, and prepare while you wait.",
-      "source_sha256": "c0e6228e7e047fcbb307b6611015580c4c4f8eafcc5ac6c3d5de64f7199da6eb",
+      "source_sha256": "73b5169ae0029f4e78444b077c7e55cff067eace81532ca7629f6273b8ce037a",
       "markdown_sha256": "5cc3b7d98267e0dcbc909c2d045d2b5031f9c7d38dfaebbb68c3600b88f11d72",
       "bytes": 8240
     },
@@ -38,7 +38,7 @@
       "path": "/blog/7-day-interview-prep-routine.md",
       "title": "The 7-Day Interview Prep Routine That Builds Real Confidence | JobHackAI Blog",
       "description": "Stop cramming the night before. This structured 7-day interview prep routine builds the deep fluency that lets you answer any question naturally — not robotically — and walk in with genuine confidence.",
-      "source_sha256": "6a57226be748e57cd577a7ce89c02dcd6c13a872c01c03d3177fca15ef257d2e",
+      "source_sha256": "3d98b5980e09aa875fad4fa22062b5fd7d9a309154a9a6aa9b6335f7d0f477eb",
       "markdown_sha256": "36726596791079a40d92dadc759f14b668b115623a2011fd856b97f6b31fa08d",
       "bytes": 8673
     },
@@ -48,7 +48,7 @@
       "path": "/blog/ats-optimization-playbook.md",
       "title": "The ATS Optimization Playbook: Get Your Resume Past the Bots | JobHackAI Blog",
       "description": "Most resumes are rejected by ATS before a human reads them. This step-by-step playbook shows you exactly how to optimize your resume for ATS filters without losing your voice.",
-      "source_sha256": "73774ba822a42cff0ddfbcff95463ee0b02c9cd389b59892e2c185760a18c394",
+      "source_sha256": "6c45b325d225d568fe0ae80b34684f074c9badf13c11afa81836406b92b2f95e",
       "markdown_sha256": "cb8ac0a145f76ecc34fdaf27c0549271b9fb1551e6652a2c437fb3992dda0b8f",
       "bytes": 7405
     },
@@ -58,7 +58,7 @@
       "path": "/blog/behavioral-interview-anxiety.md",
       "title": "Behavioral Interview Anxiety: Why 85% of Job Seekers Feel Unprepared (And the Fix) | JobHackAI Blog",
       "description": "85% of job seekers feel unprepared for behavioral interviews. Learn the SAO framework and text-based practice method that closes the Experience Gap and beats anxiety.",
-      "source_sha256": "c058a33217fb9ceb2cf2e0004a7e2d22583538766f442878f6a9162b6b86d1be",
+      "source_sha256": "8696b3f3bd03c80c2d4ecee5186a637edcd62f5325f19f66a54957f196129129",
       "markdown_sha256": "2d8e47efec97efba4fe987cd599114a652bdd4a4c820f1876413e2a4d8c35a37",
       "bytes": 11012
     },
@@ -68,7 +68,7 @@
       "path": "/blog/below-1-0-leverage-gap-resume.md",
       "title": "Below 1.0: How the New Leverage Gap Is Rewriting the Rules of Your Resume | JobHackAI Blog",
       "description": "The job market has tilted back toward employers. Learn why generic resumes get filtered out faster and how ATS-friendly resume optimization helps candidates adapt.",
-      "source_sha256": "5eb2a6b5b285654363a7c531097558f28ff1b84f8c28135c0d7851eee89ee056",
+      "source_sha256": "7f24196f01a2f5c25a05cc47b67163da37bd7e352b926bbc5583670bc4f85c8f",
       "markdown_sha256": "c7652cfdc9f1167eea9bb6abfd55904af12ff05d1762caca38066716911135d9",
       "bytes": 9346
     },
@@ -88,7 +88,7 @@
       "path": "/blog/credibility-deficit-age-of-autocomplete.md",
       "title": "The Credibility Deficit: How We Lost Our Voice in the Age of Autocomplete | JobHackAI Blog",
       "description": "When AI writes everyone's resume, the polished version of you becomes a liability in the interview. Learn how to stand out by being unmistakably human.",
-      "source_sha256": "2e66571af6e3c9c800bdb8c69f1d8fb5984c6f8360890f408970c2e1a1f815a6",
+      "source_sha256": "5494e29fba03495874b8de4d6210a02c53448a185fd01d926e8dd3d4cc5881f9",
       "markdown_sha256": "6d5dc1afdab15baade003c856e0b6026d562a7b9ad464c2d803bc9607fa60881",
       "bytes": 11657
     },
@@ -98,7 +98,7 @@
       "path": "/blog/linkedin-profile-optimization.md",
       "title": "LinkedIn Profile Optimization: Turn Your Profile Into a Recruiter Magnet | JobHackAI Blog",
       "description": "A weak LinkedIn headline costs you interviews every week. Learn how to optimize your LinkedIn profile so recruiters find you, message you, and move you to the top of their shortlists.",
-      "source_sha256": "c755600531e5741a9758c72e83c6e0dd69732b0f6f80ab2066fac47f9caa27e8",
+      "source_sha256": "11effe4599f49fefef822958c8b6e981a36420f5cc956ad2d5aa18410cd1cd8b",
       "markdown_sha256": "1ef4f6424c311bad4fe1aaf53d0a20c6e6c4c5302b737f6b9b277aafad3ebe87",
       "bytes": 7314
     },
@@ -108,7 +108,7 @@
       "path": "/blog/mock-interview-online.md",
       "title": "Mock Interview Online: How to Run a Useful Practice Session | JobHackAI Blog",
       "description": "Choose a relevant question, practice a specific example, and review one change at a time. A practical guide to typed and spoken interview preparation.",
-      "source_sha256": "47ba83e7d8f988ed7c4128fc46268d0677352bf35eb730800b9f22df18e53163",
+      "source_sha256": "992390ddae7ecd6a9f90238ac7d252f5ea7e332909b3590d9cbfc04653f863ae",
       "markdown_sha256": "e94d3ce69538c9913a201c1e38aef41fb56cfea1c97454c09fc7defc31928170",
       "bytes": 6452
     },
@@ -118,7 +118,7 @@
       "path": "/blog/the-2-percent-rule.md",
       "title": "The 2% Rule: 98% of Job Applications Are Ghosted in 2026. | JobHackAI Blog",
       "description": "Only 2% of generic job applications get a response. Learn why tailored resumes, AI-optimized cover letters, and LinkedIn branding get you into the 5% interview club.",
-      "source_sha256": "fe8430eef01fb2e5c182d43f7ca8046ca1f86c6f1b9c932de203e62f39431494",
+      "source_sha256": "2dceb96fbfeba8300838d6e79acae51bd89a9bed81c5174710a312bbd7d00e08",
       "markdown_sha256": "1db41302766904eb2502066f73ec25cabf865a99ca2b690564de518551500595",
       "bytes": 10945
     },
@@ -128,7 +128,7 @@
       "path": "/features.md",
       "title": "JobHackAI Features | Smarter Resume + LinkedIn Feedback",
       "description": "Explore JobHackAI features: ATS scoring, resume feedback, LinkedIn optimization, and interview prep tools built for modern job seekers.",
-      "source_sha256": "a030d97ab898061199d31221c0ca3db091a12b5ac524a21080eade007f44818e",
+      "source_sha256": "3c86c417f5749ccb7c555c1a2c53a0a63f246029d9b72011c4857ee523867743",
       "markdown_sha256": "20abd5b9b3ac43d2dc23f0554c22d83a4b8574be29e87bc235e327dd52e69e74",
       "bytes": 2419
     },
