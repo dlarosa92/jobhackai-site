@@ -51,6 +51,11 @@ async function prepare(c){
   await c.work('source-health',{source:'marblism',expectedVersion:0,status:'current',checkedAt:c.now.toISOString(),evidenceUrl:proof[0].url,detail:'Read saved copy',maxAgeMinutes:120});
   return (await c.board()).items[0];
 }
+async function checkItem(c,run,id='post'){
+  const item=(await c.board()).items.find(i=>i.id===id),checkedAt=new Date(c.now.getTime()+1000).toISOString();
+  const snapshot={...snap(c.now),...item.snapshot,checkedAt};
+  assert.equal((await c.work('reconcile',{runId:run.id,id,expectedVersion:item.version,sourceRevision:snapshot.sourceRevision,checkedAt,nativeState:'draft',snapshot})).status,200);
+}
 async function decision(c,action='approve',note='Short links only please'){
   const item=await prepare(c);const input={id:item.id,expectedVersion:item.version,revision:item.snapshotRevision,requestId:'owner-decision',action,note};
   assert.equal((await c.work('feedback',input)).status,200);return input;
@@ -152,7 +157,7 @@ test('fresh source checks do not disguise an untouched preparation backlog',asyn
   const c=fixture();await prepare(c);
   await c.work('prepare',{id:'unfinished',source:'marblism',sourceId:'unfinished',expectedVersion:0,document:{...doc,preparation:'in_progress',blocker:'Copy and timing still need checking'}});
   const run=(await c.flow('start',{workflow:'preparation'})).body;
-  const next=new Date(c.now.getTime()+1000);await c.work('source-health',{runId:run.id,source:'marblism',expectedVersion:1,status:'current',checkedAt:next.toISOString(),evidenceUrl:proof[0].url,detail:'Native source re-read',maxAgeMinutes:120});
+  const next=new Date(c.now.getTime()+1000);await checkItem(c,run);
   assert.equal((await c.flow('finish',{id:run.id,outcome:'checked',summary:'Weekend email hold',evidence:proof},machine,next)).status,400);
   assert.equal((await c.flow('finish',{id:run.id,outcome:'blocked',summary:'Needs a short URL',blocker:'Product must deploy the verified redirect',evidence:proof},machine,next)).status,400);
   const held={id:run.id,outcome:'blocked',summary:'Draft cannot be finished yet',blocker:'Product must deploy the verified redirect',nextCheckAt:new Date(c.now.getTime()+3600000).toISOString(),evidence:proof};
@@ -196,7 +201,7 @@ test('finished owner-review packets do not prevent a verified quiet check or hid
   assert.deepEqual((await response.json()).preparationQueue.awaitingOwner,['outreach-approved','outreach-draft','post']);
   const run=(await c.flow('start',{workflow:'preparation'})).body;
   const next=new Date(c.now.getTime()+1000);
-  await c.work('source-health',{runId:run.id,source:'marblism',expectedVersion:1,status:'current',checkedAt:next.toISOString(),evidenceUrl:proof[0].url,detail:'Native source re-read',maxAgeMinutes:120});
+  await checkItem(c,run);
   assert.equal((await c.flow('finish',{id:run.id,outcome:'checked',summary:'Finished packet awaits owner; no unfinished preparation',evidence:proof},machine,next)).status,200);
   await c.work('prepare',{id:'independent',source:'marblism',sourceId:'independent',expectedVersion:0,document:{...doc,preparation:'in_progress',nextAction:'Verify the saved source and prepare its packet'}});
   response=await workflowApi(new Request('https://dashboard.jobhackai.io/api/workflow'),c.env,machine,c.now,c.board);
@@ -291,7 +296,7 @@ test('completed dependency chains do not hide eligible preparation work',async()
   await c.work('prepare',{id:'middle',source:'operations',sourceId:'middle',expectedVersion:0,document:{...doc,preparation:'complete',dependencies:['prerequisite']}});
   await c.work('prepare',{id:'dependent',source:'marblism',sourceId:'dependent',expectedVersion:0,document:{...doc,dependencies:['middle']}});
   const run=(await c.flow('start',{workflow:'preparation'})).body;
-  assert.equal((await c.work('source-health',{runId:run.id,source:'marblism',expectedVersion:0,status:'current',checkedAt:new Date().toISOString(),evidenceUrl:proof[0].url,detail:'Saved source checked',maxAgeMinutes:120})).status,200);
+  await checkItem(c,run,'dependent');
   assert.deepEqual((await c.board()).items.find(i=>i.id==='dependent').unfinishedDependencies,[]);
   const rejected=await c.flow('finish',{id:run.id,outcome:'checked',summary:'Freshness only despite eligible dependent',evidence:proof});
   assert.equal(rejected.status,400);assert.match(rejected.body.error,/Eligible preparation remains/);
@@ -369,7 +374,7 @@ for(let round=1;round<=3;round++)test(`reconciliation rejects a GitHub-only pass
   assert.equal(c.sql.prepare('SELECT status FROM workflow_runs WHERE id=?').get(run.id).status,'running');
   await checkSources(c,run,['campaign','gmail','directory']);
   const prep=(await c.flow('start',{workflow:'preparation'})).body;
-  await checkSources(c,prep,['marblism']);
+  assert.equal((await c.work('source-health',{runId:prep.id,source:'marblism',expectedVersion:0,status:'current',checkedAt:new Date().toISOString(),evidenceUrl:proof[0].url,detail:'Wrong workflow writer',maxAgeMinutes:45})).status,409);
   result=await c.flow('finish',finish);assert.equal(result.status,400);assert.match(result.body.error,/Missing: marblism/);
   await checkSources(c,run,['marblism']);
   result=await c.flow('finish',finish);assert.equal(result.status,200);assert.equal(result.body.coverage.complete,true);
@@ -410,4 +415,21 @@ test('historical GitHub-only success stays in history but cannot display a compl
   assert.equal(state.lastRun.result.summary,'Old run checked only GitHub');
   assert.match(board.alerts.find(a=>a.id==='workflow-reconciliation').detail,/did not verify all required sources/);
   assert.equal(c.sql.prepare('SELECT result FROM workflow_runs WHERE id=?').get(run.id).result,historical);
+});
+
+for(let round=1;round<=3;round++)test(`scheduled source health has one writer and retains independent audits, round ${round}`,async()=>{
+  const c=fixture(),recon=(await c.flow('start',{workflow:'reconciliation'})).body;
+  await checkSources(c,recon,['campaign']);
+  const before=c.sql.prepare("SELECT * FROM source_health WHERE source='campaign'").get();
+  const writes=c.sql.prepare('SELECT count(*) n FROM workflow_run_writes').get().n;
+  for(const workflow of ['preparation','coordination']){
+    const run=(await c.flow('start',{workflow})).body;
+    const result=await c.work('source-health',{runId:run.id,source:'campaign',expectedVersion:before.version,status:'incomplete',checkedAt:new Date(c.now.getTime()+2000).toISOString(),evidenceUrl:proof[0].url,detail:'Another workflow could not access the audit tab',maxAgeMinutes:45});
+    assert.equal(result.status,409);assert.match(result.body.error,/owned by reconciliation/);
+    assert.deepEqual(c.sql.prepare("SELECT * FROM source_health WHERE source='campaign'").get(),before);
+    assert.equal(c.sql.prepare('SELECT count(*) n FROM workflow_run_writes').get().n,writes);
+  }
+  const audit={source:'campaign',expectedVersion:before.version,status:'incomplete',checkedAt:new Date(c.now.getTime()+3000).toISOString(),evidenceUrl:proof[0].url,detail:'Independent audit found missing native coverage',maxAgeMinutes:45};
+  assert.equal((await c.work('source-health',audit)).status,200);
+  const after=c.sql.prepare("SELECT * FROM source_health WHERE source='campaign'").get();assert.equal(after.status,'incomplete');assert.equal(after.last_success_at,before.last_success_at);
 });
