@@ -21,6 +21,14 @@ function fixture(){
   const work=async(path,input,identity=input.runId?machine:owner)=>{const response=await workApi(request(`/api/work-items/${path}`,input),env,identity,board);return {status:response.status,body:await response.json()};};
   return {sql,db,env,flow,work,board,now,request};
 }
+const requiredSources=['marblism','campaign','gmail','directory','github'];
+async function checkSources(c,run,sources=requiredSources,status='current') {
+  for(const source of sources){
+    const old=c.sql.prepare('SELECT version,checked_at FROM source_health WHERE source=?').get(source);
+    const checkedAt=new Date(Math.max(Date.now(),c.now.getTime()+1,Date.parse(old?.checked_at||0)+1)).toISOString();
+    assert.equal((await c.work('source-health',{runId:run.id,source,expectedVersion:old?.version||0,status,checkedAt,evidenceUrl:proof[0].url,detail:'Native metadata observed for this source',maxAgeMinutes:45})).status,200);
+  }
+}
 const doc={title:'Move-out worksheet post',department:'marketing',product:'local',preparation:'ready',channel:'Facebook',contributors:[],expectedValue:'Useful move-out comparison guidance',effort:'Small',dependencies:[],nextAction:'Review the exact copy',completionCriteria:'Complete verified packet',reason:'Existing campaign continuation',sourceRefs:[{id:'saved-post',url:'https://example.com/saved-draft'}]};
 const snap=(now,revision='source-1')=>({complete:true,conflict:false,sourceRevision:revision,checkedAt:now.toISOString(),verifiedBy:'Independent check',text:`Exact full draft ${revision}`,html:'',destination:'JobHackAI Local Facebook',subject:'',timing:'Proposed Tuesday, pending release',media:[],links:['https://jobhackai.io/go/moveout-worksheet'],evidence:[{id:revision,...proof[0]}]});
 async function prepare(c){
@@ -92,7 +100,7 @@ test('half-hour reconciliation checks overlapping starts atomically after the ba
 test('half-hour reconciliation deadline migration is repeatable, retains history and alerts after 45 minutes',async()=>{
   const c=fixture(),time=new Date('2026-10-31T10:00:00.000Z');
   const run=(await c.flow('start',{workflow:'reconciliation'},machine,time)).body;
-  c.sql.prepare("UPDATE workflow_runs SET status='checked',finished_at=?,result='{}' WHERE id=?").run(time.toISOString(),run.id);
+  c.sql.prepare("UPDATE workflow_runs SET status='checked',finished_at=?,result=? WHERE id=?").run(time.toISOString(),JSON.stringify({coverage:{verified:requiredSources}}),run.id);
   c.sql.exec("UPDATE workflow_policies SET max_age_minutes=90 WHERE id='reconciliation'");
   const before=c.sql.prepare('SELECT * FROM workflow_runs').all();
   const migration=readFileSync(new URL('./migrations/009-half-hour-reconciliation.sql',import.meta.url),'utf8');
@@ -248,7 +256,8 @@ test('overlapping workflows cannot borrow source checks, artifacts or coordinati
   assert.equal((await c.work('source-health',{...check,runId:recon.id})).status,200);
   assert.equal((await c.flow('finish',{id:prep.id,outcome:'advanced',summary:'Changed own artifact but borrowed reconciliation check',evidence:proof})).status,400);
   assert.equal((await c.flow('finish',{id:recon.id,outcome:'advanced',summary:'Borrowed preparation artifact',evidence:proof})).status,400);
-  assert.equal((await c.flow('finish',{id:recon.id,outcome:'checked',summary:'Own current source check',evidence:proof})).status,200);
+  await checkSources(c,recon);
+  assert.equal((await c.flow('finish',{id:recon.id,outcome:'checked',summary:'Own current source checks',evidence:proof})).status,200);
   assert.equal((await c.flow('finish',{id:coord.id,outcome:'checked',summary:'Own completed daily review',evidence:proof})).status,200);
 });
 test('completed dependency chains do not hide eligible preparation work',async()=>{
@@ -296,6 +305,7 @@ test('wording and evidence-only edits cannot claim progress or reset work age',a
  const revised={...changed,text:'A genuinely changed complete draft.',checkedAt:new Date(c.now.getTime()+2).toISOString()};
  assert.equal((await c.work('reconcile',{runId:run.id,id:current.id,expectedVersion:current.version,sourceRevision:revised.sourceRevision,checkedAt:revised.checkedAt,nativeState:'draft',snapshot:revised})).status,200);
  current=(await c.board()).items[0];assert.ok(current.lastMovedAt);assert.ok((await c.board()).progress.trackedSince);
+ await checkSources(c,run);
  const finished=await c.flow('finish',{id:run.id,outcome:'advanced',summary:'Revised draft saved',evidence:proof});assert.equal(finished.status,200);assert.deepEqual(finished.body.advancedItems,['post']);
 });
 
@@ -313,6 +323,7 @@ for(let round=1;round<=3;round++)test(`receipt attribution survives a lost respo
  assert.equal((await c.work('receipt',{...event,runId:other.id})).status,200);
  assert.equal(c.sql.prepare('SELECT count(*) n FROM workflow_run_writes WHERE run_id=?').get(other.id).n,0,'A different run cannot borrow the original result');
  assert.equal((await c.flow('finish',{id:other.id,outcome:'advanced',summary:'Borrowed result',evidence:proof})).status,400);
+ await checkSources(c,run);
  assert.equal((await c.flow('finish',{id:run.id,outcome:'advanced',summary:'Verified publication with recovered response',evidence:proof})).status,200);
 });
 
@@ -322,4 +333,56 @@ test('receipt and originating workflow attribution roll back together on attribu
  await assert.rejects(c.work('receipt',{id:item.id,eventId:'atomic-failure',expectedVersion:item.version,candidate:'approved-post',stage:'published',evidenceUrl:proof[0].url,summary:'Native publication verified',occurredAt:new Date().toISOString(),runId:run.id}),/injected write failure/);
  assert.equal(c.sql.prepare('SELECT count(*) n FROM work_receipts').get().n,0);
  const after=(await c.board()).items[0];assert.equal(after.version,item.version);assert.equal(after.nativeState,'draft');
+});
+
+for(let round=1;round<=3;round++)test(`reconciliation rejects a GitHub-only pass and requires all native source observations, round ${round}`,async()=>{
+  const c=fixture(),run=(await c.flow('start',{workflow:'reconciliation'})).body;
+  await checkSources(c,run,['github']);
+  const finish={id:run.id,outcome:'checked',summary:'Source metadata checked',evidence:proof};
+  let result=await c.flow('finish',finish);
+  assert.equal(result.status,400);assert.match(result.body.error,/Missing: marblism, campaign, gmail, directory/);
+  assert.equal(c.sql.prepare('SELECT status FROM workflow_runs WHERE id=?').get(run.id).status,'running');
+  await checkSources(c,run,['campaign','gmail','directory']);
+  const prep=(await c.flow('start',{workflow:'preparation'})).body;
+  await checkSources(c,prep,['marblism']);
+  result=await c.flow('finish',finish);assert.equal(result.status,400);assert.match(result.body.error,/Missing: marblism/);
+  await checkSources(c,run,['marblism']);
+  result=await c.flow('finish',finish);assert.equal(result.status,200);assert.equal(result.body.coverage.complete,true);
+  assert.deepEqual(result.body.coverage.verified,requiredSources);
+  assert.deepEqual(result.body.coverage.missing,[]);assert.deepEqual(result.body.coverage.unsuccessful,[]);
+  const readback=await workflowStatus(c.db,c.now);
+  assert.equal(readback.workflows.find(w=>w.id==='reconciliation').status,'current');
+});
+test('failed or partial source reads preserve last success and cannot become a successful reconciliation',async()=>{
+  for(const status of ['unavailable','incomplete']){
+    const c=fixture(),run=(await c.flow('start',{workflow:'reconciliation'})).body;
+    await checkSources(c,run);
+    const successfulAt=c.sql.prepare("SELECT last_success_at FROM source_health WHERE source='marblism'").get().last_success_at;
+    await checkSources(c,run,['marblism'],status);
+    const result=await c.flow('finish',{id:run.id,outcome:'checked',summary:'Not actually complete',evidence:proof});
+    assert.equal(result.status,400);assert.match(result.body.error,/Unsuccessful: marblism/);
+    assert.equal(c.sql.prepare("SELECT last_success_at FROM source_health WHERE source='marblism'").get().last_success_at,successfulAt);
+    const held=await c.flow('finish',{id:run.id,outcome:'blocked',summary:'Independent sources checked; Marblism unavailable',blocker:'Native Marblism access could not be verified',nextCheckAt:new Date(c.now.getTime()+1800000).toISOString(),evidence:proof});
+    assert.equal(held.status,200);assert.equal(held.body.coverage.complete,false);
+    assert.deepEqual(held.body.coverage.unsuccessful,['marblism']);assert.ok(!held.body.checkedSources.includes('marblism'));
+  }
+});
+test('reusing an old source timestamp does not verify that source for this run',async()=>{
+  const c=fixture(),run=(await c.flow('start',{workflow:'reconciliation'})).body;
+  await checkSources(c,run);
+  const old=c.sql.prepare("SELECT version,checked_at FROM source_health WHERE source='marblism'").get();
+  assert.equal((await c.work('source-health',{runId:run.id,source:'marblism',expectedVersion:old.version,status:'current',checkedAt:old.checked_at,evidenceUrl:proof[0].url,detail:'No fresh native observation',maxAgeMinutes:45})).status,200);
+  const result=await c.flow('finish',{id:run.id,outcome:'checked',summary:'Replayed timestamps',evidence:proof});
+  assert.equal(result.status,400);assert.match(result.body.error,/Missing: marblism/);
+});
+test('historical GitHub-only success stays in history but cannot display a complete current source check',async()=>{
+  const c=fixture(),run=(await c.flow('start',{workflow:'reconciliation'})).body;
+  const historical=JSON.stringify({summary:'Old run checked only GitHub',checkedSources:['github']});
+  c.sql.prepare("UPDATE workflow_runs SET status='checked',finished_at=?,result=? WHERE id=?").run(c.now.toISOString(),historical,run.id);
+  const board=await workflowStatus(c.db,c.now),state=board.workflows.find(w=>w.id==='reconciliation');
+  assert.equal(state.status,'incomplete');assert.equal(state.lastSuccessAt,null);
+  assert.deepEqual(state.requiredSources,requiredSources);
+  assert.equal(state.lastRun.result.summary,'Old run checked only GitHub');
+  assert.match(board.alerts.find(a=>a.id==='workflow-reconciliation').detail,/did not verify all required sources/);
+  assert.equal(c.sql.prepare('SELECT result FROM workflow_runs WHERE id=?').get(run.id).result,historical);
 });
