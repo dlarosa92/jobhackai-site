@@ -195,3 +195,13 @@ test('open details reflect completion without another click and changed copy can
  current=data([{...current.items[0],version:3,state:'published',nativeState:'published',boardLane:'completed',canApprove:false,receipts:[{stage:'published',summary:'Verified live post',evidence_url:'https://example.com/post'}],nextAction:'Publication verified.'}]);
  await view.run('refreshBoard()');assert.match(text(view.nodes.get('review-content')),/Verified live post/);assert.equal(view.nodes.get('review-actions').children.length,0);
 });
+
+test('the source-check panel names missing Marblism coverage even when a run note claims success',()=>{
+ const {render,nodes}=ui();const state=data([]);
+ state.workflow={alerts:[],workflows:[{id:'reconciliation',status:'incomplete',requiredSources:['marblism','campaign','gmail','directory','github'],lastSuccessAt:null,lastRun:{result:{summary:'Checked GitHub',coverage:{verified:['github']}}}}]};
+ render(state);
+ assert.match(text(nodes.get('workflow-runs')),/Every 30 minutes/);
+ assert.match(text(nodes.get('workflow-runs')),/Verified in the last run: github/);
+ assert.match(text(nodes.get('workflow-runs')),/Still unverified: marblism, campaign, gmail, directory/);
+ assert.doesNotMatch(text(nodes.get('workflow-runs')),/Check completed/);
+});
