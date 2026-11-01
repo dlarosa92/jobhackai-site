@@ -1478,14 +1478,16 @@
     if (panel) panel.hidden = !(state.audioSetup || state.playbackBlocked || state.microphoneLost);
     var note = $('vi-audio-note');
     if (note) note.textContent = state.audioSetup
-      ? 'This audio check does not use an interview. Say a few words, then confirm you can hear the voice.'
+      ? state.activationUnconfirmed
+        ? 'Your interview start is being confirmed. Retry Start recovers this same interview without using another.'
+        : 'This audio check does not use an interview. Say a few words, then confirm you can hear the voice.'
       : state.microphoneLost ? 'Microphone disconnected. Questions are paused. Choose Reconnect to use an available microphone.'
       : 'Audio needs attention. Questions are paused. Retry audio to hear the current question again.';
     var confirm = $('vi-audio-confirm');
     if (confirm) {
       confirm.hidden = !state.audioSetup;
       confirm.disabled = state.activating || state.micMuted || state.microphoneLost || !state.microphoneConfirmed || !state.playbackReady || state.playbackBlocked || !turnControl.ready;
-      confirm.textContent = state.activating ? 'Starting your interview...' : 'I can hear you. Start interview';
+      confirm.textContent = state.activating ? 'Starting your interview...' : state.activationUnconfirmed ? 'Retry start' : 'I can hear you. Start interview';
     }
     var mic = $('vi-audio-mic-status');
     if (mic) mic.textContent = state.microphoneLost ? 'Microphone disconnected. Choose Reconnect.' : state.micMuted ? 'Unmute your microphone before starting.' : state.microphoneConfirmed ? 'Microphone checked. We received your words.' : 'Say a few words to check your microphone.';
@@ -1494,8 +1496,8 @@
       : state.playbackReady ? 'Can you hear the voice clearly?' : 'Waiting for the test voice...';
     var retry = $('vi-audio-retry');
     if (retry) retry.textContent = state.playbackBlocked ? 'Enable audio' : 'Play again';
-    if ($('vi-timer')) $('vi-timer').setAttribute('aria-label', state.audioSetup ? 'Audio setup time remaining' : 'Session time remaining');
-    if ($('vi-timer-label')) $('vi-timer-label').textContent = state.audioSetup ? 'Audio setup time left' : 'Session time left';
+    if ($('vi-timer')) $('vi-timer').setAttribute('aria-label', state.audioSetup ? state.activationUnconfirmed ? 'Interview start status' : 'Audio setup time remaining' : 'Session time remaining');
+    if ($('vi-timer-label')) $('vi-timer-label').textContent = state.audioSetup ? state.activationUnconfirmed ? 'Interview start' : 'Audio setup time left' : 'Session time left';
     if ($('vi-end-btn')) $('vi-end-btn').textContent = state.audioSetup ? 'Cancel audio check' : 'Finish interview';
   }
 
@@ -1574,7 +1576,9 @@
     state.activationTimer = setTimeout(function () {
       state.activating = false; state.activationEvent = null;
       updateAudioReadiness();
-      setStatus('Audio setup could not finish. Try Start again or cancel. No interview has started.', 'vi-error');
+      setStatus(state.activationUnconfirmed
+        ? 'Start could not be confirmed. Retry Start to recover the same interview, or cancel.'
+        : 'Audio setup could not finish. Try Start again or cancel. No interview has started.', 'vi-error');
     }, 8000);
   }
 
@@ -1590,14 +1594,21 @@
       return;
     }
     state.activationRequestPending = true;
+    // Once sent, the server may have committed even if the response is lost.
+    // Keep that uncertainty until an authoritative response resolves it.
+    state.activationUnconfirmed = true;
+    updateAudioReadiness();
     clearTimeout(state.activationTimer);
-    var sessionId = state.sessionId, attemptId = state.providerAttemptId;
+    var sessionId = state.sessionId, attemptId = state.providerAttemptId, pc = state.pc;
+    var controller = new AbortController();
+    var requestTimer = setTimeout(function () { controller.abort(); }, 10000);
     try {
-      var result = await api('/api/voice/connection', { method:'POST', body:JSON.stringify(Object.assign({
+      var result = await api('/api/voice/connection', { method:'POST', signal:controller.signal, body:JSON.stringify(Object.assign({
         action:'activate', sessionId:sessionId, attemptId:attemptId, audioReady:true
       },state.setupValues)) });
-      if (state.ending || state.sessionId !== sessionId || state.providerAttemptId !== attemptId) return;
+      if (state.ending || state.sessionId !== sessionId || state.providerAttemptId !== attemptId || state.pc !== pc) return;
       if (!result.ok || !result.data || result.data.activated !== true || result.data.sessionId !== sessionId || result.data.attemptId !== attemptId) {
+        if (result.data && ['voice_connection_ended','voice_connection_expired','voice_connection_not_found'].indexOf(result.data.reason) !== -1) state.activationUnconfirmed = false;
         throw new Error('activation_unconfirmed');
       }
       var deadline = result.data.deadlineAt;
@@ -1607,12 +1618,13 @@
       state.deadlineAtMs = deadlineMs;
       finishAudioActivation();
     } catch (_) {
-      if (state.ending || state.sessionId !== sessionId || state.providerAttemptId !== attemptId) return;
+      if (state.ending || state.sessionId !== sessionId || state.providerAttemptId !== attemptId || state.pc !== pc) return;
       state.activating = false; state.activationEvent = null;
       updateAudioReadiness();
       setStatus('Start could not be confirmed. Retry Start to recover the same interview, or cancel.', 'vi-error');
     } finally {
-      if (state.sessionId === sessionId && state.providerAttemptId === attemptId) state.activationRequestPending = false;
+      clearTimeout(requestTimer);
+      if (state.sessionId === sessionId && state.providerAttemptId === attemptId && state.pc === pc) state.activationRequestPending = false;
     }
   }
 
@@ -1620,6 +1632,7 @@
     clearTimeout(state.activationTimer);
     state.activationEvent = null;
     state.activating = false;
+    state.activationUnconfirmed = false;
     state.audioSetup = false;
     state.audioConfirmed = true;
     stopMicMeter();
@@ -1927,9 +1940,9 @@
 
   // ---------- timer ----------
 
-  // Session time follows the server deadline (or connection time on legacy
-  // transport), including the audio check. A stuck setup phase must never
-  // freeze the clock or promise time the server will not allow.
+  // Session time follows the last confirmed server deadline. An unconfirmed
+  // activation can have replaced the setup deadline remotely; the server's
+  // alarm owns that limit while the browser recovers its receipt.
   function startTimer(maxMinutes) {
     if (!state.startedAtMs || !state.managedTransport) state.startedAtMs = Date.now();
     tickTimer();
@@ -1953,6 +1966,10 @@
     var remaining = remainingSeconds();
     var counting = !!state.interviewStartedAtMs;
     var timerEl = $('vi-timer');
+    if (state.audioSetup && state.activationUnconfirmed) {
+      if (timerEl) timerEl.textContent = state.activationRequestPending ? 'Confirming...' : 'Retry start';
+      return;
+    }
     if (timerEl) {
       timerEl.textContent = formatClock(Math.max(0, remaining));
     }
@@ -2091,6 +2108,7 @@
     state.activating = false;
     state.activationEvent = null;
     state.activationRequestPending = false;
+    state.activationUnconfirmed = false;
     state.audioSetupItems = [];
     state.setupValues = {role:role,seniority:seniority,jd:jd};
     stopMicMeter();

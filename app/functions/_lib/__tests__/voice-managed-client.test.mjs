@@ -550,3 +550,70 @@ test('a delayed playback rejection cannot undo a newer successful click recovery
   assert.equal(f.h.el('vi-audio-retry').textContent,'Play again');
   assert.match(f.h.el('vi-status').textContent,/Check your audio before starting/);
 });
+
+for (const lost of [false,true]) test('setup expiry cannot close an activation with a '+(lost?'lost':'delayed')+' receipt',async t=>{
+  let now=Date.now(),tick,activations=0;
+  const pending=deferred();
+  const f=audioFixture(t,{Date:class extends Date {static now(){return now;}},onInterval(fn,ms){if(ms===1000)tick=fn;},routes:{
+    '/api/voice/connection':(url,init)=>{
+      const body=JSON.parse(init.body);
+      if(body.action==='close')return {connectionClosed:true};
+      if(body.action==='activate'){
+        activations++;
+        return activations===1?pending.promise:{...body,activated:true,deadlineAt:new Date(now+1200000).toISOString()};
+      }
+      return {...f.answer(body),requiresAudioCheck:true,interviewInstructions:f.instructions,deadlineAt:new Date(now+120000).toISOString()};
+    }
+  }});
+  await f.check();f.speech();await f.greetingDone();await f.h.click('vi-audio-confirm');await f.acknowledge();
+  now+=121000;tick();await f.h.settle();
+  assert.equal(f.closes().length,0,'the obsolete setup deadline cannot close a potentially charged interview');
+  assert.equal(f.h.completeBodies().length,0);
+  if(lost){
+    pending.reject(Error('lost response'));await f.h.settle();tick();await f.h.settle();
+    assert.equal(f.closes().length,0,'receipt loss also leaves the same interview recoverable');
+    assert.match(f.h.el('vi-audio-note').textContent,/recover/i);
+    await f.h.click('vi-audio-confirm');await f.acknowledge();
+  } else pending.resolve({...f.activations()[0].body,activated:true,deadlineAt:new Date(now+1200000).toISOString()});
+  await f.h.settle();tick();await f.h.settle();
+  assert.equal(f.h.el('vi-audio-check').hidden,true);
+  assert.equal(f.closes().length,0);
+  assert.equal(new Set(f.activations().map(x=>x.body.sessionId)).size,1);
+  assert.equal(f.h.sends.filter(x=>x.type==='response.create'&&x.response.metadata.jobhackai_purpose==='new_topic').length,1);
+});
+
+test('a stalled activation request times out to a retry without closing a potentially committed interview',async t=>{
+  const f=audioFixture(t,{timerDelay:ms=>ms===10000?10:ms,routes:{
+    '/api/voice/connection':(url,init)=>{
+      const body=JSON.parse(init.body);
+      if(body.action==='activate')return new Promise((_,reject)=>init.signal.addEventListener('abort',()=>reject(Error('timeout'))));
+      if(body.action==='close')return {connectionClosed:true};
+      return {...f.answer(body),requiresAudioCheck:true,interviewInstructions:f.instructions};
+    }
+  }});
+  await f.check();f.speech();await f.greetingDone();await f.h.click('vi-audio-confirm');await f.acknowledge();
+  await new Promise(resolve=>setTimeout(resolve,25));await f.h.settle();
+  assert.equal(f.activations()[0].signal.aborted,true);
+  assert.equal(f.h.el('vi-audio-confirm').disabled,false);
+  assert.equal(f.h.el('vi-audio-confirm').textContent,'Retry start');
+  assert.equal(f.closes().length,0);
+});
+
+test('a late activation receipt cannot act while reconnect is acquiring a replacement microphone',async t=>{
+  let devices=0;const activation=deferred(),permission=deferred();
+  const f=audioFixture(t,{getUserMedia:()=>++devices===1?Promise.resolve(mic()):permission.promise,routes:{
+    '/api/voice/connection':(url,init)=>{
+      const body=JSON.parse(init.body);
+      if(body.action==='activate')return activation.promise;
+      if(body.action==='close')return {connectionClosed:true};
+      return {...f.answer(body),requiresAudioCheck:true,interviewInstructions:f.instructions};
+    }
+  }});
+  await f.check();f.speech();await f.greetingDone();await f.h.click('vi-audio-confirm');await f.acknowledge();
+  f.h.peerConnection().connectionState='disconnected';const reconnecting=f.h.click('vi-reconnect-btn');await f.h.settle();
+  activation.resolve({...f.activations()[0].body,activated:true,deadlineAt:new Date(Date.now()+1200000).toISOString()});await f.h.settle();
+  assert.equal(f.closes().length,0);
+  assert.equal(f.h.sends.filter(x=>x.type==='response.create'&&x.response.metadata.jobhackai_purpose==='new_topic').length,0);
+  permission.resolve(mic());await reconnecting;
+  assert.equal(f.opens().length,2);
+});

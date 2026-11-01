@@ -246,10 +246,14 @@ export function createVoiceClientHarness(options = {}) {
   win.RTCPeerConnection = StubPeerConnection;
   win.URLSearchParams = URLSearchParams;
   win.AbortController = AbortController;
+  win.Date = options.Date || Date;
   win.fetch = (url, opts) => respond(url, opts);
   win.setTimeout = (fn, ms) => trackTimer(setTimeout(fn, options.timerDelay ? options.timerDelay(ms) : ms));
   win.clearTimeout = (h) => { timers.delete(h); clearTimeout(h); };
-  win.setInterval = (fn, ms) => trackTimer(setInterval(fn, ms));
+  win.setInterval = (fn, ms) => {
+    if (options.onInterval) options.onInterval(fn, ms);
+    return trackTimer(setInterval(fn, ms));
+  };
   win.clearInterval = (h) => { timers.delete(h); clearInterval(h); };
   win.console = {
     log: (...a) => logs.push(['log', a.join(' ')]),
