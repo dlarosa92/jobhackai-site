@@ -205,7 +205,7 @@ test('revoking and regranting reuse the same GA runtime and configuration',async
 for (const {name,host,runtime,ga,noReplay} of [
   {name:'jobhackai.io',host:'jobhackai.io'},
   {name:'app.jobhackai.io',host:'app.jobhackai.io'},
-  {name:'directory production',host:'jobhackai.io',runtime:directoryConsentSource,ga:GA,noReplay:true},
+  {name:'directory production',host:'jobhackai.io',runtime:directoryConsentSource,ga:GA},
   {name:'directory QA preview',host:'directory-qa.jobhackai-app-marketing-seo.pages.dev',runtime:directoryConsentSource,ga:'G-VH888WWY3M',noReplay:true}
 ]) {
   test(name+' sets Google consent v2 before loading the tag or sending measurement',async()=>{
@@ -227,6 +227,7 @@ for (const {name,host,runtime,ga,noReplay} of [
     assert.equal(h.events('page_view').length,1);
     if(ga) assert.equal(commands.find(args=>args[0]==='config')[1],ga);
     if(noReplay) assert.ok(h.insertedScripts.every(script=>!script.src.includes('clarity.ms')));
+    else assert.ok(h.insertedScripts.some(script=>script.src==='https://www.clarity.ms/tag/wskzma4clw'));
   });
 }
 for (const [name,runtime] of [['shared',source],['directory',directoryConsentSource]]) {
@@ -292,7 +293,8 @@ test('directory runtime retains consented Local campaign fields and never replay
   h.setConsent(true);h.runTimers();
   assert.equal(h.events('directory_contact_click').length,1);
   assert.equal(h.events('directory_listing_view').length,1);
-  assert.equal(h.insertedScripts.length,1,'Local keeps one Google runtime and no Clarity runtime');
+  assert.equal(h.insertedScripts.filter(script=>script.src.includes('googletagmanager.com')).length,1,'Local keeps one Google runtime');
+  assert.equal(h.insertedScripts.filter(script=>script.src.includes('clarity.ms/tag/')).length,1,'Local keeps one Clarity runtime without restarting it on regrant');
 });
 
 test('directory queued events gain only consented campaign fields and bounded page asset IDs',async()=>{
