@@ -100,7 +100,7 @@ test('compiled deletion route verifies JWT and runs durable cleanup without admi
 
 test('compiled managed voice route keeps its cutover gate, verifies JWT ownership and closes the recorded provider call',async t=>{
   const db=sqliteD1();t.after(()=>db.close());
-  for(const name of ['schema.sql','migrations/028_account_deletion_recovery.sql']) db.exec(readFileSync(new URL('../../../db/'+name,import.meta.url),'utf8'));
+  for(const name of ['schema.sql','migrations/028_account_deletion_recovery.sql','migrations/035_voice_audio_readiness.sql']) db.exec(readFileSync(new URL('../../../db/'+name,import.meta.url),'utf8'));
   db.exec("INSERT INTO users(id,auth_id,email) VALUES(1,'owner','owner@example.test')");
   const env={DB:db,FIREBASE_PROJECT_ID:'fixture',ENVIRONMENT:'qa',VOICE_INTERVIEW_ENABLED:'true',OPENAI_API_KEY:'sk_fixture_only',
     FRONTEND_URL:'https://qa.jobhackai.io',ASSETS:{fetch:async()=>new Response('fixture asset')}};
@@ -127,7 +127,7 @@ test('compiled managed voice route keeps its cutover gate, verifies JWT ownershi
   assert.equal((await run({action:'open',sdp:'v=0 offer',role:'Engineer'})).status,404);await flush();assert.equal(calls.length,0);
   env.VOICE_MANAGED_CALLS_ENABLED='true';
   delete env.VOICE_DEADLINES;
-  const unavailable=await run({action:'open',sdp:'v=0 offer',role:'Engineer'});await flush();
+  const unavailable=await run({action:'open',sdp:'v=0 offer',role:'Engineer',audioCheck:true});await flush();
   assert.equal(unavailable.status,409);assert.equal((await unavailable.json()).reason,'voice_connection_deadline_unavailable');
   assert.equal(calls.length,0,'missing scheduler must not create a provider call');
   assert.equal((await db.prepare("SELECT free_session_used FROM users WHERE auth_id='owner'").first()).free_session_used,0);
@@ -137,12 +137,21 @@ test('compiled managed voice route keeps its cutover gate, verifies JWT ownershi
   }),env,context);
   assert.equal(oldIssuer.status,409);assert.equal((await oldIssuer.json()).reason,'voice_transport_updated');await flush();
   assert.equal(calls.length,0,'cutover must stop the old reusable-credential issuer');
-  const opened=await run({action:'open',sdp:'v=0 offer',role:'Engineer',uid:'other'});
+  const opened=await run({action:'open',sdp:'v=0 offer',role:'Engineer',uid:'other',audioCheck:true});
   assert.equal(opened.status,200,await opened.clone().text());const payload=await opened.json();await flush();
   assert.equal(payload.sdp,'v=0 answer');assert.equal(payload.clientSecret,undefined);assert.equal(payload.providerCallId,undefined);
   assert.equal(opened.headers.get('x-qa-mw'),'hit');assert.match(opened.headers.get('cache-control'),/no-store/);
   assert.equal(await db.prepare('SELECT auth_id FROM voice_provider_calls').first('auth_id'),'owner');
   assert.equal(await db.prepare("SELECT COUNT(*) AS n FROM account_operation_claims WHERE state<>'finished'").first('n'),0);
+  assert.equal(payload.requiresAudioCheck,true);
+  assert.equal(await db.prepare('SELECT free_session_used FROM users').first('free_session_used'),0);
+  assert.equal(await db.prepare('SELECT COUNT(*) AS n FROM voice_sessions').first('n'),0);
+  const activation={action:'activate',attemptId:payload.attemptId,audioReady:true,role:'Engineer',uid:'other'};
+  const active=await run(activation);await flush();
+  assert.equal(active.status,200,await active.clone().text());assert.equal((await active.json()).activated,true);
+  const duplicate=await run(activation);await flush();assert.equal(duplicate.status,200);
+  assert.equal(await db.prepare('SELECT COUNT(*) AS n FROM voice_sessions WHERE user_id=1').first('n'),1);
+  assert.equal(await db.prepare('SELECT free_session_used FROM users').first('free_session_used'),1);
   const closed=await run({action:'close'});assert.equal(closed.status,200,await closed.clone().text());assert.equal((await closed.json()).connectionClosed,true);await flush();
   assert.equal(await db.prepare('SELECT state FROM voice_provider_calls').first('state'),'closed');
   assert.equal(await db.prepare('SELECT free_session_used FROM users').first('free_session_used'),1);
