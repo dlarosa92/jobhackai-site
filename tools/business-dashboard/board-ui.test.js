@@ -311,3 +311,9 @@ for(let round=1;round<=3;round++)test(`verified Stripe indicators clear only wit
  view.run("overviewData.stripe={status:'incomplete',detail:'App records changed after the Stripe check.'};renderHealth()");
  assert.match(text(stripe()),/Needs attention.*App records changed/s);assert.doesNotMatch(text(stripe()),/Up to date/);
 });
+
+test('Google verification blocker states the owner action while preserving remaining analytics gaps',()=>{
+ const view=ui();view.render({...data([]),analytics:{status:'incomplete',detail:'Native GA4 read reached Verify it’s you. Campaign coverage remains unverified.',report:null}});
+ const card=view.nodes.get('source-health').children.find(c=>c.attributes['data-disclosure-key']==='Website analytics');
+ assert.match(text(card),/Needs attention.*Sign in to Google Analytics.*Other measurement checks are still pending.*Open Google Analytics/s);
+});
