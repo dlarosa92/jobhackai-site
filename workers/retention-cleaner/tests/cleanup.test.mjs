@@ -5,7 +5,7 @@ import {readFileSync} from 'node:fs';
 import {admitAccountOperation,settleAccountOperation,beginDeletionAdmission,assertDeletionQuiescent} from '../../../app/functions/_lib/account-deletion-admission.js';
 import { sqliteD1 } from '../../../app/functions/_lib/__tests__/sqlite-d1-helper.mjs';
 import {pathToFileURL} from 'node:url';
-const {runCleanup}=await import(process.env.JOBHACKAI_RETENTION_BUNDLE ? pathToFileURL(process.env.JOBHACKAI_RETENTION_BUNDLE) : new URL('../src/index.js',import.meta.url));
+const {default:worker,runCleanup}=await import(process.env.JOBHACKAI_RETENTION_BUNDLE ? pathToFileURL(process.env.JOBHACKAI_RETENTION_BUNDLE) : new URL('../src/index.js',import.meta.url));
 import { getVoiceEntitlement } from '../../../app/functions/_lib/voice-entitlements.js';
 import { ENTITLED_SUBSCRIPTION_STATUSES } from '../../../app/functions/_lib/billing-ownership.js';
 function setup(t) {
@@ -51,6 +51,32 @@ function setup(t) {
   };
   return {db,env,kv,snapshot};
 }
+test('scheduled cleanup finishes before resolving and logs only aggregate counts',async t=>{
+  const f=setup(t),receipts=[];
+  t.mock.method(console,'log',line=>{if(typeof line==='string' && line.startsWith('{'))receipts.push(JSON.parse(line));});
+  await worker.scheduled({}, {...f.env,RETENTION_MODE:'delete'});
+  assert.equal(await f.db.prepare("SELECT COUNT(*) n FROM voice_sessions WHERE id='paid-old'").first('n'),0);
+  assert.equal(receipts.length,1);
+  assert.equal(receipts[0].event,'retention_batch_complete');
+  assert.equal(receipts[0].mode,'delete');
+  assert.equal(receipts[0].voice_sessions_stripped,1);
+  assert.equal(receipts[0].voice_sessions,3);
+  for(const key of ['after_user_id','next_user_id','auth_id','user_id']) assert.ok(!(key in receipts[0]),key);
+  assert.ok(!JSON.stringify(receipts).includes('Synthetic'));
+});
+test('scheduled failure rejects without a success receipt or sensitive error log',async t=>{
+  const f=setup(t),receipts=[],failures=[];
+  t.mock.method(console,'log',line=>{if(typeof line==='string' && line.startsWith('{'))receipts.push(line);});
+  t.mock.method(console,'error',line=>failures.push(JSON.parse(line)));
+  await assert.rejects(worker.scheduled({}, {...f.env,RETENTION_MODE:'delete',JOBHACKAI_KV:{delete:async()=>{throw Error('private object key');}}}),/^Error: Retention cleanup failed$/);
+  assert.deepEqual(receipts,[]);
+  assert.deepEqual(failures,[{event:'retention_failed',mode:'delete'}]);
+});
+test('paused development scheduling stops before accessing storage',async t=>{
+  const receipts=[];t.mock.method(console,'log',line=>receipts.push(JSON.parse(line)));
+  await worker.scheduled({}, {ENVIRONMENT:'dev',DEV_CUTOVER_PAUSED:'true'});
+  assert.deepEqual(receipts,[{event:'retention_skipped',reason:'dev_cutover_paused'}]);
+});
 test('default and invalid modes audit exact predicates without a D1 or KV mutation',async t=>{
   const f=setup(t);const before=await f.snapshot();
   const readsOnly={prepare(sql){assert.match(sql.trim(),/^(SELECT|PRAGMA)\b/);return f.db.prepare(sql);}};
@@ -78,6 +104,34 @@ test('KV failure retains resume references for retry rather than orphaning paylo
   const f=setup(t);await assert.rejects(runCleanup({...f.env,RETENTION_MODE:'delete',JOBHACKAI_KV:{delete:async()=>{throw Error('fixture failure');}}}),/references retained/);
   assert.equal(await f.db.prepare('SELECT COUNT(*) AS n FROM resume_sessions').first('n'),3);
   assert.equal(await f.db.prepare('SELECT COUNT(*) AS n FROM feedback_sessions').first('n'),2);
+});
+test('real snapshot and role schemas expire omitted content without crossing ownership or deletion locks',async t=>{
+  const f=setup(t);
+  const schema=readFileSync(new URL('../../../app/db/schema.sql',import.meta.url),'utf8');
+  f.db.exec(schema.match(/CREATE TABLE IF NOT EXISTS first_resume_snapshots \([\s\S]+?\);/)[0]);
+  f.db.exec(readFileSync(new URL('../../../app/db/migrations/009_role_templates.sql',import.meta.url),'utf8'));
+  f.db.exec(`INSERT INTO first_resume_snapshots(user_id,resume_session_id,snapshot_json,created_at) VALUES
+    (1,999,'old private progress',datetime('now','-100 days')),
+    (2,998,'held progress',datetime('now','-100 days')),
+    (3,997,'recent progress',datetime('now','-2 days'));
+    INSERT INTO role_usage_log(user_id,role_label,role_family,created_at) VALUES
+    ('owner1','old private role','software',datetime('now','-100 days')),
+    ('owner1','recent role','software',datetime('now','-2 days')),
+    ('owner2','held role','software',datetime('now','-100 days')),
+    ('unmapped-owner','unmapped role','software',datetime('now','-100 days'));`);
+  await beginDeletionAdmission(f.env,{origin:'user_request',uid:'owner2'});
+  const rows=async table=>(await f.db.prepare(`SELECT * FROM ${table} ORDER BY id`).all()).results;
+  const before=[await rows('first_resume_snapshots'),await rows('role_usage_log')];
+  const audit=await runCleanup(f.env);
+  assert.equal(audit.first_resume_snapshots,1);assert.equal(audit.role_usage_log,1);assert.equal(audit.unmapped_uid_rows,1);
+  assert.equal(audit.accounts_held,1,'pre-existing operation and deletion holds must not disappear from audit reporting');
+  assert.deepEqual([await rows('first_resume_snapshots'),await rows('role_usage_log')],before);
+  const result=await runCleanup({...f.env,RETENTION_MODE:'delete'});
+  assert.equal(result.first_resume_snapshots,audit.first_resume_snapshots);assert.equal(result.role_usage_log,audit.role_usage_log);
+  assert.deepEqual((await rows('first_resume_snapshots')).map(r=>r.snapshot_json),['held progress','recent progress']);
+  assert.deepEqual((await rows('role_usage_log')).map(r=>r.role_label),['recent role','held role','unmapped role']);
+  const again=await runCleanup({...f.env,RETENTION_MODE:'delete'});
+  assert.equal(again.first_resume_snapshots,0);assert.equal(again.role_usage_log,0);
 });
 test('missing bindings or voice schema fail before deleting anything',async t=>{
   const f=setup(t);const before=await f.snapshot();
