@@ -599,6 +599,37 @@ test('a stalled activation request times out to a retry without closing a potent
   assert.equal(f.closes().length,0);
 });
 
+for (const reason of ['voice_connection_paywall','voice_connection_limit_reached','voice_connection_reservation_unavailable','voice_connection_ended','voice_connection_expired','voice_connection_not_found']) {
+  test('a definitive activation rejection returns to refreshed setup: '+reason,async t=>{
+    let plans=0;const stream=mic();
+    const canRetry=reason==='voice_connection_reservation_unavailable';
+    const f=audioFixture(t,{getUserMedia:async()=>stream,routes:{
+      '/api/plan/me':()=>({voice:{...PLAN_PAYLOAD.voice,transport:'managed',canStart:++plans===1||canRetry,reason:'paywall'}}),
+      '/api/voice/connection':(url,init)=>{
+        const body=JSON.parse(init.body);
+        if(body.action==='activate')return {__status:reason==='voice_connection_paywall'?403:409,reason};
+        return {...f.answer(body),requiresAudioCheck:true,interviewInstructions:f.instructions};
+      }
+    }});
+    await f.check();f.speech();await f.greetingDone();const pc=f.h.peerConnection();
+    await f.h.click('vi-audio-confirm');await f.acknowledge();
+    assert.equal(plans,2);assert.equal(f.h.el('vi-setup-view').style.display,'');
+    assert.equal(f.h.el('vi-live-view').style.display,'none');
+    assert.equal(f.h.el('vi-start-btn').disabled,!canRetry);
+    assert.equal(pc.connectionState,'closed');assert.equal(stream.track.enabled,false);
+    assert.equal(f.h.el('vi-audio-check').hidden,true);
+    await f.h.click('vi-audio-confirm');await f.acknowledge();
+    assert.equal(f.activations().length,1,'the rejected session cannot activate again');
+    assert.equal(f.h.completeBodies().length,0,'no unstarted interview is sent for scoring');
+    assert.equal(f.h.sends.filter(x=>x.type==='response.create'&&x.response.metadata.jobhackai_purpose==='new_topic').length,0);
+    if(canRetry){
+      await f.h.click('vi-start-btn');
+      assert.notEqual(f.opens()[1].body.sessionId,f.opens()[0].body.sessionId);
+      assert.equal(f.opens()[1].body.replacesAttemptId,null);
+    }
+  });
+}
+
 test('a late activation receipt cannot act while reconnect is acquiring a replacement microphone',async t=>{
   let devices=0;const activation=deferred(),permission=deferred();
   const f=audioFixture(t,{getUserMedia:()=>++devices===1?Promise.resolve(mic()):permission.promise,routes:{

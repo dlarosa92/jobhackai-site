@@ -511,6 +511,30 @@ test('activation is once-only across duplicate requests, lost responses and late
   const again=await f.activate(options);assert.equal(again.deadlineAt,a.deadlineAt);assert.equal((await f.user()).voice_sessions_remaining,1);
 });
 
+test('an entitlement rejection racing a committed activation preserves same-session recovery',async t=>{
+  const f=fixture(t),checked=await f.check(),options={attemptId:checked.attemptId};
+  const prepare=f.db.prepare.bind(f.db);let raced=false;
+  f.db.prepare=sql=>{
+    const statement=prepare(sql),first=statement.first;
+    if (/SELECT id, plan, subscription_status,/.test(sql)) statement.first=async function(column){
+      if(!raced){raced=true;await f.activate(options);}
+      return first.call(this,column);
+    };
+    return statement;
+  };
+  await assert.rejects(f.activate(options),/voice_connection_unconfirmed/);
+  assert.equal(raced,true);assert.equal((await f.sessions()).length,1);
+  assert.equal((await f.user()).free_session_used,1);assert.equal((await f.controls()).closed_at,null);
+  assert.equal(f.calls.filter(call=>call.url.endsWith('/hangup')).length,0);
+  assert.equal((await f.activate(options)).activated,true);assert.equal((await f.sessions()).length,1);
+});
+
+test('activation rejection reports a missing session as a terminal reason',async t=>{
+  const f=fixture(t),run=requestContext(f,{action:'activate',sessionId:FIRST,attemptId:'missing',audioReady:true});
+  const response=await route(run.context);await run.flush();
+  assert.equal(response.status,404);assert.equal((await response.json()).reason,'voice_connection_not_found');
+});
+
 test('failed activation scheduling closes the check and preserves the free interview',async t=>{
   const f=fixture(t),checked=await f.check();delete f.env.VOICE_DEADLINES;
   await assert.rejects(f.activate({attemptId:checked.attemptId}),/deadline_unavailable/);

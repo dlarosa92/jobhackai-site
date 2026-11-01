@@ -199,8 +199,15 @@ export async function activateManagedInterview(env,{uid,sessionId,attemptId,audi
     // An unactivated failure is safely closed. A committed activation remains
     // recoverable by its ID even when the HTTP/DB receipt was lost.
     const receipt=await db.prepare('SELECT 1 FROM voice_sessions WHERE id=? AND user_id=?').bind(sessionId,user.id).first();
+    const code=/^voice_connection_[a-z_]+$/.test(error?.message || '') ? error.message : 'voice_connection_unconfirmed';
+    // A duplicate may read entitlement after the first activation spends it.
+    // That receipt makes a paywall/reservation failure nonterminal: recover
+    // this same interview instead of telling the client to discard its ID.
+    if (receipt && ['voice_connection_paywall','voice_connection_limit_reached','voice_connection_reservation_unavailable'].includes(code)) {
+      throw Error('voice_connection_unconfirmed');
+    }
     if (!receipt) await closeManagedInterview(env,{uid,sessionId}).catch(()=>{});
-    throw Error(/^voice_connection_[a-z_]+$/.test(error?.message || '') ? error.message : 'voice_connection_unconfirmed');
+    throw Error(code);
   }
 }
 

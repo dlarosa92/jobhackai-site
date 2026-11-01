@@ -86,7 +86,7 @@ export async function onRequest(context) {
           reason:code,currentAttemptId:error.currentAttemptId},409);
       }
       if (['voice_connection_request_invalid','voice_connection_role_required'].includes(code)) return fail('Invalid connection request',400,{reason:code});
-      if (['voice_connection_not_found','voice_connection_owner_missing'].includes(code)) return fail('Session not found',404);
+      if (['voice_connection_not_found','voice_connection_owner_missing'].includes(code)) return fail('Session not found',404,{reason:code});
       // This prerequisite fails before provider creation/replacement. A known
       // setup conflict must not leave a crashed-provider account claim behind.
       if (code==='voice_connection_deadline_unavailable') return fail('Voice interviews are temporarily unavailable. Please try again later.',409,{reason:code});

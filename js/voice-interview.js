@@ -1608,7 +1608,12 @@
       },state.setupValues)) });
       if (state.ending || state.sessionId !== sessionId || state.providerAttemptId !== attemptId || state.pc !== pc) return;
       if (!result.ok || !result.data || result.data.activated !== true || result.data.sessionId !== sessionId || result.data.attemptId !== attemptId) {
-        if (result.data && ['voice_connection_ended','voice_connection_expired','voice_connection_not_found'].indexOf(result.data.reason) !== -1) state.activationUnconfirmed = false;
+        if (result.data && ['voice_connection_ended','voice_connection_expired','voice_connection_not_found',
+          'voice_connection_history_removed','voice_connection_paywall','voice_connection_limit_reached',
+          'voice_connection_reservation_unavailable'].indexOf(result.data.reason) !== -1) {
+          await resetRejectedAudioCheck(result.data.reason);
+          return;
+        }
         throw new Error('activation_unconfirmed');
       }
       var deadline = result.data.deadlineAt;
@@ -1626,6 +1631,30 @@
       clearTimeout(requestTimer);
       if (state.sessionId === sessionId && state.providerAttemptId === attemptId && state.pc === pc) state.activationRequestPending = false;
     }
+  }
+
+  async function resetRejectedAudioCheck(reason) {
+    // The server definitively rejected this ID. Release local devices and
+    // refresh access before allowing a new check; retrying this ID cannot help.
+    state.ending = true;
+    state.activating = false; state.activationEvent = null;
+    state.activationRequestPending = false; state.activationUnconfirmed = false;
+    state.audioSetup = false; state.playbackBlocked = false; state.microphoneLost = false;
+    if (state.timerInterval) { clearInterval(state.timerInterval); state.timerInterval = null; }
+    teardownConnection();
+    clearTurnWait();
+    historyLiveClear(false);
+    state.sessionId = null; state.startRequestId = null; state.providerAttemptId = null;
+    state.startedAtMs = null; state.deadlineAtMs = null;
+    state.canStart = false;
+    updateAudioReadiness();
+    resetStartButton();
+    await loadEntitlement();
+    show('vi-setup-view');
+    resetStartButton();
+    alert(reason === 'voice_connection_paywall' ? 'You have no voice interviews left. See plans to keep practicing.'
+      : reason === 'voice_connection_limit_reached' ? 'You have reached this month\'s session limit. It resets at the start of next month.'
+      : 'This audio check can no longer start an interview. Your access has been refreshed. Check your balance before starting a new audio check.');
   }
 
   function finishAudioActivation() {
