@@ -622,7 +622,7 @@ for(const analytics of [true,false])test('signup waits for restored account cons
   h.ctx.JHA.trackEventSafe('sign_up',{method:'google'});
   const flushing=h.ctx.JHA.cookieConsent.flushAnalyticsBeforeNavigate();
   assert.equal(h.events('sign_up').length,0);
-  h.finishServer(analytics);await restoring;await flushing;
+  h.finishServer(analytics);await restoring;h.runTimers();await flushing;
   assert.equal(h.events('sign_up').length,analytics?1:0);
 });
 test('a later external tagged visit updates last touch while retaining first touch', async()=>{
@@ -859,4 +859,70 @@ for (const runtime of [source, directoryConsentSource]) test('staff validation a
   await h.init();h.ctx.JHA.gtagSafe('event','staff_runtime_check',{});
   assert.equal(h.events('staff_runtime_check')[0][2].debug_mode,true);
   assert.equal(h.cookies.get('jha_staff_test_prod'),'1');
+});
+
+// A callable gtag is initially only a dataLayer queue, not a loaded vendor tag.
+test('signup navigation waits for event processing instead of the local gtag stub', async()=>{
+  const h=harness();await h.init();
+  h.ctx.JHA.trackEventSafe('sign_up',{method:'email',transport_type:'beacon'});
+  let navigable=false;
+  const flush=h.ctx.JHA.cookieConsent.flushAnalyticsBeforeNavigate().then(()=>{navigable=true;});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(navigable,false,'queued signup must not allow immediate document unload');
+  h.events('sign_up')[0][2].event_callback();
+  await flush;
+  assert.equal(navigable,true);
+  assert.equal(h.events('sign_up').length,1);
+});
+
+test('blocked Google tag cannot hold signup navigation beyond the local deadline', async()=>{
+  const h=harness();await h.init();
+  const delays=[], schedule=h.ctx.setTimeout;
+  h.ctx.setTimeout=(fn,ms)=>{delays.push(ms);return schedule(fn);};
+  h.ctx.JHA.trackEventSafe('sign_up',{method:'google'});
+  assert.deepEqual(delays,[1500]);
+  let navigable=false;
+  const flush=h.ctx.JHA.cookieConsent.flushAnalyticsBeforeNavigate().then(()=>{navigable=true;});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(navigable,false);
+  h.runTimers();await flush;
+  assert.equal(navigable,true);
+  assert.equal(h.events('sign_up').length,1,'timeout must not retry or duplicate conversions');
+});
+
+for(const consent of [false,null])test('navigation never waits for or enables unconsented signup: '+consent,async()=>{
+  const h=harness({consent});await h.init();
+  h.ctx.JHA.trackEventSafe('sign_up',{method:'email'});
+  await h.ctx.JHA.cookieConsent.flushAnalyticsBeforeNavigate();
+  assert.equal(h.events('sign_up').length,0);
+  assert.equal(h.scripts.length,0);
+});
+
+test('signup processing preserves campaign, identity order, callback and beacon',async()=>{
+  const h=harness({search:tagged});await h.init();let calls=0;
+  h.ctx.JHA.gtagSafe('set',{user_id:'fixture'});
+  h.ctx.JHA.trackEventSafe('sign_up',{method:'linkedin',transport_type:'beacon',event_callback:()=>{calls++;throw Error('caller failure');}});
+  const flush=h.ctx.JHA.cookieConsent.flushAnalyticsBeforeNavigate();
+  const event=h.events('sign_up')[0];
+  assert.equal(event[2].jha_first_source,'linkedin');
+  assert.equal(event[2].transport_type,'beacon');
+  assert.equal(event[2].event_timeout,1500);
+  assert.ok(h.ctx.dataLayer.findIndex(a=>a[0]==='set')<h.ctx.dataLayer.indexOf(event));
+  event[2].event_callback();await flush;
+  assert.equal(calls,1);
+  assert.equal(h.events('sign_up').length,1);
+});
+
+test('withdrawal during a pending signup never replays it on regrant',async()=>{
+  const h=harness();await h.init();
+  h.ctx.JHA.trackEventSafe('sign_up',{method:'email'});
+  const flush=h.ctx.JHA.cookieConsent.flushAnalyticsBeforeNavigate();
+  h.setConsent(false);h.runTimers();await flush;
+  assert.equal(h.ctx['ga-disable-'+GA],true);
+  h.setConsent(true);h.runTimers();
+  assert.equal(h.events('sign_up').length,1);
+});
+
+test('marketing and app share the same navigation delivery protection',()=>{
+  assert.equal(readFileSync(new URL('../../../../marketing/js/cookie-consent.js',import.meta.url),'utf8'),source);
 });
