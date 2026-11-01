@@ -92,6 +92,14 @@ test('background failures explain the next step without creating a fake owner de
  assert.equal(view.nodes.get('attention-title').textContent,'Nothing ready for your approval');
  assert.equal(view.nodes.get('attention').className,'attention');
 });
+test('overdue blocked jobs keep their completed history and point to the saved blocker',()=>{
+ const view=ui();const state=data([]);
+ state.workflow={alerts:[{id:'workflow-preparation',detail:'Preparation follow-up overdue.'}],workflows:[{id:'preparation',status:'overdue',lastSuccessAt:'2026-10-30T20:00:00Z',lastRun:{result:{summary:'Waiting for required source access.',blocker:'Required source access',nextCheckAt:'2026-10-31T12:00:00Z'}}}]};
+ view.render(state);
+ assert.match(text(view.nodes.get('data-brief')),/Prepare work: The follow-up date has passed.*Review the saved blocker/s);
+ assert.match(text(view.nodes.get('workflow-runs')),/Needs attention.*resolve it, then rerun this job.*Last completed check:.*Waiting for required source access/s);
+ assert.doesNotMatch(text(view.nodes.get('workflow-runs')),/No successful update|Run the source refresh|No completed check saved/);
+});
 const walk = node => [node, ...node.children.flatMap(walk)];
 const text = node => walk(node).map(x => x.textContent).join(' ');
 const lane = (nodes, title) => nodes.get('board').children.find(x => text(x.children[0]).includes(title));
