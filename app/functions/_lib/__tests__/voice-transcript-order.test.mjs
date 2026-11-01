@@ -487,6 +487,31 @@ test('NOISE: removing a noise turn between identical real turns lets the dedupe 
   assert.deepEqual(o.list(), [{ speaker: 'user', text: 'I led the migration.' }]);
 });
 
+test('turn eligibility shares the stored transcript noise, echo and duplicate filters', () => {
+  const o = createTranscriptOrder();
+  o.setText('q', 'assistant', 'Tell me about a process improvement you led.');
+  o.setText('echo', 'user', 'Tell me about a process improvement you led.');
+  o.setText('noise', 'user', 'Um.');
+  o.setText('answer', 'user', 'I reduced the turnaround by two days.');
+  o.setText('replay', 'user', 'I reduced the turnaround by two days.');
+  for (const id of ['q', 'echo', 'noise', 'replay', 'unknown']) assert.equal(o.hasUsableUserItem(id), false, id);
+  assert.equal(o.hasUsableUserItem('answer'), true);
+  assert.deepEqual(o.list(), [
+    {speaker:'assistant',text:'Tell me about a process improvement you led.'},
+    {speaker:'user',text:'I reduced the turnaround by two days.'}
+  ], 'the public transcript shape does not expose internal item IDs');
+});
+
+test('turn eligibility rechecks late echo context and never re-admits a dropped item', () => {
+  const o = createTranscriptOrder();o.noteItem('q');o.noteItem('echo');
+  o.setText('echo', 'user', 'Tell me about a process improvement you led.');
+  assert.equal(o.hasUsableUserItem('echo'), true);
+  o.setText('q', 'assistant', 'Tell me about a process improvement you led.');
+  assert.equal(o.hasUsableUserItem('echo'), false);
+  o.drop('echo');o.setText('echo', 'user', 'A late replacement cannot revive a dropped item.');
+  assert.equal(o.hasUsableUserItem('echo'), false);
+});
+
 for (const run of asyncTests) await run();
 
 console.log(`\n${passed} passed, ${failed} failed`);

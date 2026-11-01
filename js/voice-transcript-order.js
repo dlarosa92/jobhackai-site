@@ -215,12 +215,12 @@ export function createTranscriptOrder() {
   // Ordered, placeholder-free, with identical consecutive same-speaker lines
   // collapsed (dedupes realtime event replays), ASR noise fragments dropped,
   // and microphone echo removed.
-  function list() {
+  function visibleSlots() {
     var filled = [];
     for (var i = 0; i < slots.length; i++) {
       var s = slots[i];
       if (!s.speaker || !s.text) continue;
-      filled.push({ speaker: s.speaker, text: s.text });
+      filled.push(s);
     }
     var out = [];
     for (var j = 0; j < filled.length; j++) {
@@ -229,9 +229,20 @@ export function createTranscriptOrder() {
       if (t.speaker === 'user' && isEchoOfNeighbor(filled, j)) continue;
       var prev = out[out.length - 1];
       if (prev && prev.speaker === t.speaker && prev.text === t.text) continue;
-      out.push({ speaker: t.speaker, text: t.text });
+      out.push(t);
     }
     return out;
+  }
+
+  function list() {
+    return visibleSlots().map(function (s) { return { speaker: s.speaker, text: s.text }; });
+  }
+
+  // The live turn gate uses the same noise, echo and duplicate verdict as
+  // persistence. An audio commit alone cannot establish a candidate answer.
+  function hasUsableUserItem(id) {
+    if (!id) return false;
+    return visibleSlots().some(function (s) { return s.id === id && s.speaker === 'user' && !!s.text.trim(); });
   }
 
   function reset() {
@@ -249,6 +260,7 @@ export function createTranscriptOrder() {
     append: append,
     drop: drop,
     list: list,
+    hasUsableUserItem: hasUsableUserItem,
     pendingCount: pendingCount,
     flushTranscript: flushTranscript,
     reset: reset

@@ -452,6 +452,47 @@ test('silent microphone cannot pass readiness even when playback succeeds',async
   await f.h.click('vi-audio-confirm');assert.equal(f.activations().length,0);assert.equal(f.h.el('vi-audio-confirm').disabled,true);
 });
 
+test('each audio sample ignores prior microphone-test conversation while the interview keeps its context',async t=>{
+  const f=audioFixture(t);await f.check();await f.greetingDone();f.speech();
+  f.h.event({type:'conversation.item.input_audio_transcription.completed',item_id:'mic-test',transcript:'Hold on, let me try again. Are you working?'});
+  await f.h.click('vi-audio-retry');
+  const samples=f.h.sends.filter(x=>x.type==='response.create');
+  assert.equal(samples.length,2);
+  for(const sample of samples){
+    assert.deepEqual(sample.response.input,[],'a sample cannot answer the microphone test or continue an earlier replay');
+    assert.equal(sample.response.metadata.jobhackai_purpose,'audio_check');
+  }
+  assert.equal(f.activations().length,0);
+  await f.greetingDone();await f.h.click('vi-audio-confirm');await f.acknowledge();
+  const opening=f.h.sends.filter(x=>x.type==='response.create').at(-1);
+  assert.equal(opening.response.metadata.jobhackai_purpose,'new_topic');
+  assert.equal(opening.response.input,undefined,'the real interview still uses the conversation');
+});
+
+test('one replay click during microphone speech plays once when speech stops without a second click',async t=>{
+  const f=audioFixture(t);await f.check();await f.greetingDone();
+  const requests=()=>f.h.sends.filter(x=>x.type==='response.create');
+  f.h.event({type:'input_audio_buffer.speech_started',item_id:'checking'});
+  await f.h.click('vi-audio-retry');
+  assert.equal(requests().length,1,'do not talk over the microphone test');
+  f.h.event({type:'input_audio_buffer.speech_stopped',item_id:'checking'});
+  assert.equal(requests().length,2,'speech end releases the queued click');
+  f.h.event({type:'input_audio_buffer.committed',item_id:'checking'});
+  f.h.event({type:'conversation.item.input_audio_transcription.completed',item_id:'checking',transcript:'Testing.'});
+  await f.greetingDone();
+  assert.equal(requests().length,2,'commit and transcription must not add a replay');
+  assert.equal(f.activations().length,0);
+});
+
+test('a cancelled check cannot release a queued replay on a late speech stop',async t=>{
+  const f=audioFixture(t);await f.check();await f.greetingDone();
+  f.h.event({type:'input_audio_buffer.speech_started',item_id:'checking'});
+  await f.h.click('vi-audio-retry');await f.h.endInterview();
+  f.h.event({type:'input_audio_buffer.speech_stopped',item_id:'checking'});
+  assert.equal(f.h.sends.filter(x=>x.type==='response.create').length,1);
+  assert.equal(f.activations().length,0);
+});
+
 test('click recovery replays the check without consuming a question and activation waits for the exact provider acknowledgement',async t=>{
   const f=audioFixture(t);let blocked=true;
   f.h.el('vi-remote-audio').play=async()=>{if(blocked)throw Error('blocked');};
@@ -480,6 +521,29 @@ test('late setup transcripts remain excluded after activation and later words ar
   await f.h.endInterview();const body=f.h.completeBodies()[0];
   assert.ok(body.transcript.some(x=>x.text.includes('intake process')));
   assert.ok(!body.transcript.some(x=>/Testing|Late setup/.test(x.text)));
+});
+
+test('managed activation does not let empty audio or late setup commits spend an interview question',async t=>{
+  const f=audioFixture(t);await f.check();f.speech();await f.greetingDone();
+  await f.h.click('vi-audio-confirm');await f.acknowledge();const h=f.h;
+  h.event({type:'response.created',response:{id:'opening'}});
+  h.event({type:'conversation.item.created',item:{id:'question',role:'assistant'}});
+  h.event({type:'response.output_audio_transcript.done',response_id:'opening',item_id:'question',transcript:'Tell me about an improvement you led.'});
+  h.event({type:'response.done',response:{id:'opening',status:'completed'}});
+  const requests=()=>h.sends.filter(x=>x.type==='response.create');const before=requests().length;
+  h.event({type:'input_audio_buffer.committed',item_id:'mic-test'});
+  h.event({type:'conversation.item.input_audio_transcription.completed',item_id:'mic-test',transcript:'Late setup words.'});
+  assert.equal(requests().length,before);
+  h.event({type:'conversation.item.created',item:{id:'empty',role:'user'}});
+  h.event({type:'input_audio_buffer.committed',item_id:'empty'});
+  assert.equal(requests().length,before);
+  h.event({type:'conversation.item.input_audio_transcription.completed',item_id:'empty',transcript:''});
+  assert.equal(requests().length,before);
+  h.event({type:'conversation.item.created',item:{id:'answer',role:'user'}});
+  h.event({type:'input_audio_buffer.committed',item_id:'answer'});
+  h.event({type:'conversation.item.input_audio_transcription.completed',item_id:'answer',transcript:'I reduced our turnaround by two days.'});
+  assert.equal(requests().length,before+1);assert.equal(f.activations().length,1);
+  assert.equal(requests().at(-1).response.metadata.jobhackai_purpose,'follow_up');
 });
 
 test('cancel during activation ignores its late success and never requests a question',async t=>{

@@ -108,6 +108,7 @@
   // replies explicitly so it can apply a turn budget before audio is generated.
   var turnControl = { plan: null, ready: false, setupTimer: null, pending: null,
     busy: false, speaking: false, serial: 0, seen: Object.create(null), start: null,
+    inputs: [], transcribed: Object.create(null),
     responseId: '', requestId: '', finished: Object.create(null), responseTimer: null };
 
   function resetTurnConnection() {
@@ -119,6 +120,8 @@
     turnControl.setupTimer = null;
     turnControl.ready = false;
     turnControl.pending = null;
+    turnControl.inputs = [];
+    turnControl.transcribed = Object.create(null);
     turnControl.busy = false;
     turnControl.speaking = false;
     turnControl.start = null;
@@ -132,8 +135,31 @@
   }
 
   function drainTurn() {
-    if (!turnControl.ready || !turnControl.pending || turnControl.busy || turnControl.speaking || state.audioPlaying ||
+    if (!turnControl.ready || turnControl.busy || turnControl.speaking || state.audioPlaying ||
         state.ending || state.conductEnd || state.playbackBlocked || state.microphoneLost || lifecycle().is(PHASES.CLOSING)) return;
+    if (!turnControl.pending && turnControl.inputs.length) {
+      // Wait for every committed fragment, including a possible spoken Finish.
+      // Late ASR must neither interrupt continued speech nor generate separate
+      // questions for fragments that were already committed together.
+      if (turnControl.inputs.some(function (input) { return !turnControl.transcribed[input.id]; })) return;
+      var inputs = turnControl.inputs;
+      turnControl.inputs = [];
+      inputs.forEach(function (input) {
+        if (!input.opening && !lifecycle().shouldCommit(input.id)) return;
+        if (state.liveOrder && typeof state.liveOrder.hasUsableUserItem === 'function' && state.liveOrder.hasUsableUserItem(input.id)) {
+          turnControl.pending = { opening: input.opening };
+        } else {
+          // A filtered input must not become the last thing the model answers
+          // when a real answer follows it. Retire it from both contexts.
+          lifecycle().excludeItem(input.id);
+          if (state.order) state.order.drop(input.id);
+          if (state.liveOrder) state.liveOrder.drop(input.id);
+          sendRealtime({ type: 'conversation.item.delete', item_id: input.id });
+        }
+      });
+      if (!turnControl.pending) clearTurnWait();
+    }
+    if (!turnControl.pending) return;
     var pending = turnControl.pending;
     turnControl.pending = null;
     if (state.audioSetup && !pending.greeting) return;
@@ -150,9 +176,10 @@
     turnControl.responseId = '';
     turnControl.responseTimer = setTimeout(turnControlFailed, 45000);
     if (!sendRealtime({ type: 'response.create', event_id: id + '_response', response: {
-      // A retry is still just a sound check even if interview instructions
-      // were configured but their acknowledgement or activation was lost.
-      ...(state.audioSetup ? {instructions:'This is only an audio check. Say: "Can you hear this clearly? Say a few words to check your microphone, then choose I can hear you on the page." Do not ask interview questions, evaluate answers or continue the conversation.'} : {}),
+      // Each sample starts with empty input. Microphone-test speech and prior
+      // replays must not turn the next sample into a conversational reply.
+      // The override also survives a lost interview-configuration receipt.
+      ...(state.audioSetup ? {input:[],instructions:'This is only an audio check. Say only: "Can you hear this clearly? Say a few words to check your microphone, then choose I can hear you on the page." Do not ask interview questions, evaluate answers or continue the conversation.'} : {}),
       metadata: {
       jobhackai_purpose: pending.greeting ? 'audio_check' : plan.kind,
       jobhackai_turn: id,
@@ -163,8 +190,12 @@
   function queueTurn(itemId, opening) {
     if (!itemId || turnControl.seen[itemId]) return;
     turnControl.seen[itemId] = true;
-    turnControl.speaking = false;
-    turnControl.pending = { opening: opening };
+    turnControl.inputs.push({ id: itemId, opening: opening });
+    drainTurn();
+  }
+
+  function noteTranscriptionSettled(itemId) {
+    if (itemId) turnControl.transcribed[itemId] = true;
     drainTurn();
   }
 
@@ -1290,11 +1321,13 @@
     }
     if (type === 'conversation.item.input_audio_transcription.failed') {
       clearUncapturedAnswer(evt.item_id, 'Could not transcribe that. Please try saying it again.');
+      noteTranscriptionSettled(evt.item_id);
       return;
     }
     if (type === 'conversation.item.input_audio_transcription.completed') {
       if (!String(evt.transcript || '').trim()) {
         clearUncapturedAnswer(evt.item_id, 'No words captured. Please try saying it again.');
+        noteTranscriptionSettled(evt.item_id);
         return;
       }
       // An unambiguous "end this interview" is a control utterance, not an
@@ -1302,6 +1335,7 @@
       // recorded, so it cannot reach the stored transcript or the evaluation.
       if (handleSpokenEndRequest(evt.transcript, evt.item_id)) return;
       recordTurn('user', evt.transcript, evt.item_id);
+      noteTranscriptionSettled(evt.item_id);
       return;
     }
     if (type === 'input_audio_buffer.speech_started') {
@@ -1317,6 +1351,9 @@
     if (type === 'input_audio_buffer.speech_stopped') {
       turnControl.speaking = false;
       if (!state.ending) setInputStatus('Transcribing your answer…');
+      // A Play again click can arrive while the microphone is active. Setup
+      // commits do not queue replies, so speech end must release that click.
+      if (state.audioSetup) drainTurn();
       return;
     }
     if (type === 'input_audio_buffer.committed') {
@@ -2043,7 +2080,8 @@
     var seniority = ($('vi-seniority') && $('vi-seniority').value || '').trim();
     var jd = ($('vi-jd') && $('vi-jd').value || '').trim();
     if (!role) { alert('Pick the role you are interviewing for.'); return; }
-    if (typeof window.createVoiceTurnPlan !== 'function') {
+    if (typeof window.createVoiceTurnPlan !== 'function' || typeof window.createTranscriptOrder !== 'function' ||
+        typeof window.createTranscriptOrder().hasUsableUserItem !== 'function') {
       alert('The interview controls did not load. Refresh this page before starting.'); return;
     }
     if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function' || typeof RTCPeerConnection !== 'function') {
