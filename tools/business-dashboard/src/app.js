@@ -104,8 +104,11 @@ function render(data){
   if(!costDirty){$('costs').value=data.costCents===null?'':(data.costCents/100).toFixed(2);$('complete').checked=data.costsComplete;}
   if(!costDirty)$('cost-status').textContent=data.costCents===null?'No costs recorded yet.':`${data.costsComplete?'Costs marked complete':'Some costs may be missing'} · saved ${time(data.costUpdatedAt)}`;
   $('available').textContent=data.estimatedAvailableCents===null?'Cash after costs: not known yet.':`Estimated cash after costs: ${money(data.estimatedAvailableCents)}`;
-  $('goal-status').textContent='Real user count unknown';$('goal-fill').style.width='0%';$('goal-fill').parentElement?.classList.add('unverified');
-  $('goal-status').setAttribute('data-help',`${data.d1UserRecords??'Unknown'} account records are saved. Staff and test accounts have not been removed, so verified progress toward 250 users is not yet known.`);
+  const paidVerified=data.stripe?.status==='current'&&Number.isSafeInteger(data.stripe.customers);
+  $('goal-status').textContent=paidVerified?`${data.stripe.customers} paying customers`:'Real user count unknown';
+  $('goal-fill').style.width=paidVerified?`${Math.min(100,data.stripe.customers/250*100)}%`:'0%';
+  if(paidVerified)$('goal-fill').parentElement?.classList.remove('unverified');else $('goal-fill').parentElement?.classList.add('unverified');
+  $('goal-status').setAttribute('data-help',paidVerified?`Current paid accounts checked against Stripe. Staff accounts excluded. Checked ${time(data.stripe.checkedAt)}.`:`${data.d1UserRecords??'Unknown'} account records are saved. Staff and test accounts have not been removed, so verified progress toward 250 users is not yet known.`);
   $('error').hidden=true;renderMetrics();renderHealth();
 }
 function renderMetrics(){
@@ -117,19 +120,20 @@ function renderMetrics(){
   for(const metric of metrics){
     const card=element('article',undefined,'metric');const head=element('div',undefined,'metric-head');head.append(element('span',metric.label),help(`${metric.definition} ${metric.note}`,`What ${metric.label.toLowerCase()} means`));
     card.append(head,element('div',metric.value===null?(period||numbersFailed?'Unavailable':'Loading…'):metricValue(metric,metric.value),`metric-value${metric.value===null?' unknown':''}`));
-    const bottom=element('div',undefined,'metric-bottom'),change=element('div');change.append(element('p',metricChange(metric),'metric-change'),element('p',metric.value===null?'No trusted count yet':`vs prior ${selectedPeriod} days`,'metric-caption'));bottom.append(change);
+    const bottom=element('div',undefined,'metric-bottom'),change=element('div');change.append(element('p',metricChange(metric),'metric-change'),element('p',metric.value===null?'No trusted count yet':metric.id==='customers'?'Current paid accounts':`vs prior ${selectedPeriod} days`,'metric-caption'));bottom.append(change);
     const chart=sparkline(metric.series,`${metric.label}: daily raw records from ${period?.start} to ${period?.end}. ${metric.series.map(p=>`${p.date}: ${metricValue(metric,p.value)}`).join('; ')}`);if(chart)bottom.append(chart);
     if(metric.value!==null)card.append(bottom);
     const quality=element('div',undefined,'metric-quality');
-    const problem=numbersFailed?'Refresh failed. Saved numbers may be old.':!period?null:metric.id==='customers'?'Paid customer count is missing.':metric.value===null?'Could not load this number.':metric.id==='money'?'Total is not verified with Stripe.':null;
+    const problem=numbersFailed?'Refresh failed. Saved numbers may be old.':!period?null:metric.id==='customers'&&metric.status!=='verified'?'Paid customer count is missing.':metric.value===null?'Could not load this number.':metric.id==='money'&&metric.status!=='verified'?'Total is not verified with Stripe.':null;
     if(problem){quality.append(element('strong','Needs attention','amber'),element('p',problem));const link=element('a','See what to do');link.href='#data-health';link.addEventListener('click',()=>{$('data-health').open=true;});quality.append(link);}
+    else if(metric.status==='verified'){quality.append(element('strong','Verified with Stripe','green'),element('p',metric.id==='customers'?'Staff accounts excluded.':'Includes staff and test payments.'));}
     else quality.append(element('p',!period?'Waiting for business numbers…':metric.id==='accounts'?'Includes staff and test accounts.':'Includes staff and test interviews.'));
     card.append(quality);
     grid.append(card);
     const definition=element('div',undefined,'definition');definition.append(element('strong',metric.label),element('p',metric.definition),element('p',`${metric.source}. ${metric.note}`));definitions.append(definition);
   }
   const table=element('table'),head=element('thead'),row=element('tr');['Metric','This period','Previous','Change'].forEach(t=>row.append(element('th',t)));head.append(row);table.append(head);const body=element('tbody');
-  for(const metric of metrics){const row=element('tr'),label=element('td',metric.label);label.append(element('small',metric.value===null?'Not verified':metric.id==='money'?'Saved ledger':'Includes tests','raw-note'));row.append(label,element('td',metricValue(metric,metric.value)),element('td',metricValue(metric,metric.previous)),element('td',metric.change===null?'—':metricChange(metric),'change'));body.append(row);}table.append(body);$('trends-table').replaceChildren(table);
+  for(const metric of metrics){const row=element('tr'),label=element('td',metric.label);label.append(element('small',metric.status==='verified'?'Verified with Stripe':metric.value===null?'Not verified':metric.id==='money'?'Saved ledger':'Includes tests','raw-note'));row.append(label,element('td',metricValue(metric,metric.value)),element('td',metricValue(metric,metric.previous)),element('td',metric.change===null?'—':metricChange(metric),'change'));body.append(row);}table.append(body);$('trends-table').replaceChildren(table);
 }
 function matches(item){return (selectedDepartment==='all'||department(item)===selectedDepartment)&&(selectedChannel==='All'||channelName(item)===selectedChannel)&&(selectedProduct==='all'||(item.product||'core')===selectedProduct);}
 function rankedItems(items){
@@ -227,18 +231,20 @@ function renderHealth(){
   const data=boardData,sources=[],missing=data?'missing':'loading';
   const appMetrics=overviewData?.business?.periods?.[selectedPeriod]?.metrics||[],appLoaded=['accounts','interviews'].every(id=>appMetrics.some(metric=>metric.id===id&&metric.value!==null));
   sources.push({name:'App records',...sourceState(numbersFailed?'failed':overviewData?(appLoaded?'current':'incomplete'):'loading','Saved account and interview records loaded. These counts include staff and tests.','Could not load all business numbers. Retry with the refresh button.'),date:overviewData?.asOf,how:'Read from the app database each visible minute.',detail:'A successful read confirms the records loaded. Staff and test activity still needs to be removed before measuring customer growth.'});
-  sources.push({name:'Stripe',...sourceState('incomplete',null,'Paid customers and payment totals are not verified with Stripe.'),how:'Next: compare the saved payments and current paid accounts with Stripe.',detail:'This dashboard reads saved payment records, not a fresh Stripe account total. This warning means verification is missing. It does not report a Stripe outage.'});
+  const stripe=overviewData?.stripe;
+  sources.push({name:'Stripe',...sourceState(numbersFailed?'failed':stripe?.status||'incomplete','Payments, refunds and paid accounts match Stripe. Staff accounts are excluded from the customer count.',numbersFailed?'Could not refresh the Stripe check.':stripe?.detail||'Paid customers and payment totals are not verified with Stripe.'),date:stripe?.checkedAt,how:stripe?.status==='current'?'Checked against a native Stripe observation. Changes to app records require another comparison.':'Next: compare the saved payments and current paid accounts with Stripe.',detail:stripe?.detail||'This dashboard reads saved payment records. The warning means verification is missing, not a Stripe outage.'});
   const coverage=data?.analytics?.report?.coverage,analyticsGaps=Object.keys(analyticsChecks).some(key=>coverage?.[key]!==true);
   const analyticsState=data?.analytics?.status==='current'&&analyticsGaps?'incomplete':data?.analytics?.status||missing;
-  sources.push({name:'Website analytics',...sourceState(analyticsState,'The saved report is current and all required data checks passed.',analyticsState==='incomplete'?'Visitor and campaign numbers are not fully verified. Finish the checks listed under website visits below.':null),date:data?.analytics?.report?.checkedAt,how:'Codex imports one 28-day report each Eastern day.',detail:data?.analytics?.detail||'Staff exclusions, attribution, purchases and campaign breakdowns require separate verification.'});
+  const analyticsSignIn=/Verify it['’]s you|sign in again|requires? (?:sign-in|reauthentication)/i.test(data?.analytics?.detail||'');
+  sources.push({name:'Website analytics',...sourceState(analyticsState,'The saved report is current and all required data checks passed.',analyticsSignIn?'Sign in to Google Analytics to restore updates. Other measurement checks are still pending.':analyticsState==='incomplete'?'Visitor and campaign numbers are not fully verified. Finish the checks listed under website visits below.':null),date:data?.analytics?.report?.checkedAt,how:'Codex imports one 28-day report each Eastern day.',detail:data?.analytics?.detail||'Staff exclusions, attribution, purchases and campaign breakdowns require separate verification.',actionUrl:analyticsSignIn?'https://analytics.google.com/analytics/web/#/p523348532/reports/reportinghub':null});
   const gmail=data?.gmailSync;sources.push({name:'Gmail',...sourceState(gmail?.status||missing,'Tracked email synced successfully.','Tracked email is not up to date. Rerun the mail sync before relying on the inbox count.'),date:gmail?.lastSuccessfulSyncAt,how:'Google checks tracked conversations about every 5 minutes.',detail:'Only tracked conversations and send records are included. A page refresh does not start a Gmail scan.'});
   const directory=data?.directorySource,directoryFailed=directory?.status==='unavailable';
   sources.push({name:'Directory requests',...sourceState(directory?.status==='current'&&directory.truncated?'incomplete':directory?.status||missing,'Listing requests loaded successfully.',directoryFailed?'Directory check failed. New requests could be missing. Refresh again before relying on this list.':directory?.truncated?'Only the newest 200 requests are shown. Review older requests in the source.':null),date:directory?.checkedAt||directory?.lastSuccessfulCheckAt,dateLabel:directoryFailed?'Last successful check':'Checked',how:'Read from the app database on each board refresh.',detail:'Listing requests are read directly. They do not depend on email delivery or the Gmail scan.'});
   for(const [key,label,good,how] of [['marblism','Marblism','The latest required Marblism pages were read successfully.','Codex checks the required Marblism pages every 30 minutes.'],['github','Product work','GitHub source information is current. Open each work card for its release status.','Codex checks GitHub during its source refresh.']]){const source=data?.sources?.find(x=>x.source===key);sources.push({name:label,...sourceState(source?.status||missing,good),date:source?.checked_at,dateLabel:'Last attempt',how,detail:source?.detail||'No source check is saved yet.'});}
   const node=$('source-health'),restore=retainDisclosures(node);node.replaceChildren();
   for(const source of sources){const card=element('article',undefined,'source-card'),head=element('header');card.setAttribute('data-disclosure-key',source.name);head.append(element('strong',source.name),element('span',source.status,source.tone));card.append(head,element('p',source.reason,'source-reason'));
-    if(source.name!=='Stripe')card.append(element('p',source.date?`${source.dateLabel||'Checked'} ${time(source.date)}`:'No check time saved.'));
-    card.append(element('p',source.how),detail('Technical details',source.detail));node.append(card);
+    if(source.name!=='Stripe'||source.date)card.append(element('p',source.date?`${source.dateLabel||'Checked'} ${time(source.date)}`:'No check time saved.'));
+    card.append(element('p',source.how));if(source.actionUrl){const link=safeLink(source.actionUrl,'Open Google Analytics');if(link)card.append(link);}card.append(detail('Technical details',source.detail));node.append(card);
   }restore();
   const problems=data?.workflow?.alerts||[],jobProblems=problems.filter(alert=>alert.id?.startsWith('workflow-')),otherProblems=problems.filter(alert=>!alert.id?.startsWith('workflow-'));
   const problemCount=[jobProblems.length?`${jobProblems.length} background ${jobProblems.length===1?'job':'jobs'}`:'',otherProblems.length?`${otherProblems.length} work ${otherProblems.length===1?'follow-up':'follow-ups'}`:''].filter(Boolean).join(' and ');
@@ -246,7 +252,7 @@ function renderHealth(){
   $('data-summary').className=numbersFailed||boardFailed||directoryFailed||problems.length?'red':'amber';
   $('checked').textContent=data?`Board read ${relative(data.asOf)}`:'Loading…';
   $('source-count').textContent='What is working and what needs attention';
-  const brief=$('data-brief');brief.replaceChildren(element('p','Stripe verification is missing. Compare paid accounts and payment totals with Stripe. Remove staff and test activity before using the account count as customer growth.'));
+  const brief=$('data-brief');brief.replaceChildren(element('p',stripe?.status==='current'&&!numbersFailed?'Stripe comparison passed. Staff accounts are excluded from paying customers. Account and interview activity still includes tests.':stripe?.detail||'Stripe verification is missing. Compare paid accounts and payment totals with Stripe.'));
   if(numbersFailed||boardFailed)brief.append(element('p','Refresh failed. Saved information may be old. Use the refresh button to retry.','caution'));
   if(directoryFailed)brief.append(element('p',`Directory check failed. New requests could be missing. ${directory.lastSuccessfulCheckAt?`Last successful check: ${time(directory.lastSuccessfulCheckAt)}.`:'No successful check is saved.'}`, 'caution'));
   else if(directory?.truncated)brief.append(element('p','Only the newest 200 directory requests are shown. Older requests are not included.', 'caution'));
@@ -392,18 +398,21 @@ async function pollBoardChanges(){
   try {
     const {revision}=await getJSON('/api/work-items/changes');
     if(actionPending)return;
-    if((boardFailed||revision!==lastBoardRevision) && await refreshBoard())lastBoardRevision=revision;
+    if((boardFailed||revision!==lastBoardRevision) && await refreshBoard()){lastBoardRevision=revision;if(overviewData)await refreshNumbers();}
   } catch {
     boardFailed=true;renderHealth();$('campaign-error').textContent='Live updates are disconnected. Saved cards may be old. Retrying automatically.';$('campaign-error').hidden=false;
   } finally {changePollPending=false;}
 }
+let numberRequestSequence=0;
+async function refreshNumbers(){
+  const sequence=++numberRequestSequence;
+  try{const numbers=await getJSON('/api/overview');if(sequence===numberRequestSequence)render(numbers);}
+  catch{if(sequence===numberRequestSequence){numbersFailed=true;$('error').textContent='Numbers could not refresh. Any saved numbers below may be old.';$('error').hidden=false;renderMetrics();renderHealth();}}
+}
 async function refresh(){
   const sequence=++refreshSequence;$('refresh').disabled=true;$('refresh').setAttribute('aria-label','Refreshing saved data');
   // Work renders independently of slower revenue and analytics queries.
-  await Promise.all([refreshBoard(),(async()=>{
-    try{const numbers=await getJSON('/api/overview');if(sequence===refreshSequence)render(numbers);}
-    catch{if(sequence===refreshSequence){numbersFailed=true;$('error').textContent='Numbers could not refresh. Any saved numbers below may be old.';$('error').hidden=false;renderMetrics();}}
-  })()]);
+  await Promise.all([refreshBoard(),refreshNumbers()]);
   if(sequence!==refreshSequence)return;
   renderHealth();$('refresh').disabled=false;$('refresh').setAttribute('aria-label','Refresh saved data');
 }
