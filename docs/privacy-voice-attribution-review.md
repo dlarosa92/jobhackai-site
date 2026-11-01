@@ -13,11 +13,11 @@ The 90-day content standard is preserved, with existing pinned LinkedIn, reused-
 - Local browser cookie policy renders the new disclosure and its button opens Cookie Preferences after rejection. A static local server cannot persist consent to D1; the expected sync-pending notice was visible.
 - Clarity lifecycle/masking must ship with PR899. Real SDK0.8.70 synthetic receipt, stop and masking evidence is in `docs/consent-runtime-review.md`.
 
-## Publication gates
+## Current release follow-up, October 31, 2026
 
-Production policy publication remains held. Before publication: set actual effective/updated dates consistently, verify the production worker revision/schedule and approved deletion mode with a reviewed current audit, verify inactive-account cleanup, complete authenticated export/deletion/cancellation checks, and verify provider configuration. Publishing the draft does not prove these gates. The old March8 dates are retained solely to avoid falsely claiming a new effective policy during preparation.
+The owner has resumed the staged retention and IT release. Before production publication: set actual effective/updated dates consistently, verify the production worker revision/schedule and approved deletion mode with a reviewed current audit, verify inactive-account cleanup, complete authenticated export/deletion/cancellation checks, and verify provider configuration. Publishing the draft does not prove these gates. The old March8 dates are retained solely to avoid falsely claiming a new effective policy during preparation.
 
-The existing account-deletion handler removes Firebase first and then treats billing/data cleanup as best effort. Failed cleanup can leave the user unable to retry and still returns success; this is an unresolved implementation issue, not cured by the revised copy. No live account was deleted in this review.
+The earlier Firebase-first, best-effort deletion finding is superseded in the current source by the durable deletion processor. The API returns 202 while work is pending and reports completion only after the processor confirms it. Migration 028 is present in development, QA and production. This source correction does not prove live earlier-deletion or recovery behavior; those need deployed acceptance. The production inactivity worker is still an older deployment and must be verified separately before claiming its newer recovery behavior is live. No user account was deleted during this review.
 
 ## Primary sources checked September20,2026
 

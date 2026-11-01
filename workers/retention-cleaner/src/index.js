@@ -10,9 +10,19 @@ const ACCOUNT_BATCH = 25;
 const RESUME_BATCH = 10;
 
 export default {
-  async scheduled(event, env, ctx) {
-    if (isDevCutoverPaused(env)) return;
-    ctx.waitUntil(runCleanup(env));
+  async scheduled(event, env) {
+    if (isDevCutoverPaused(env)) {
+      console.log(JSON.stringify({ event: 'retention_skipped', reason: 'dev_cutover_paused' }));
+      return;
+    }
+    try {
+      // Keep the invocation open until storage cleanup and its receipt finish.
+      await runCleanup(env);
+    } catch (_) {
+      // Storage errors may include object keys or SQL values. Never log them.
+      console.error(JSON.stringify({ event: 'retention_failed', mode: env.RETENTION_MODE === 'delete' ? 'delete' : 'audit' }));
+      throw new Error('Retention cleanup failed');
+    }
   }
 };
 
@@ -30,23 +40,27 @@ export async function runCleanup(env, { afterUserId } = {}) {
   // migration/ownership reconciliation that precedes retention activation.
   let unmappedUidRows = 0;
   try {
-    for (const table of ['linkedin_runs', 'cover_letter_history']) {
+    const uidTables = ['linkedin_runs', 'cover_letter_history'];
+    if (await checkColumnExists(sourceDb, 'role_usage_log', 'id')) uidTables.push('role_usage_log');
+    for (const table of uidTables) {
       const row = await sourceDb.prepare(`SELECT COUNT(*) AS count FROM ${table} h
         WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u.auth_id=h.user_id)`).first();
       unmappedUidRows += row.count;
     }
   } catch (_) { throw new Error('Retention database operation failed'); }
-  const candidates = await sourceDb.prepare(`SELECT id,auth_id FROM users u WHERE id>?
-    AND NOT EXISTS (SELECT 1 FROM account_deletion_admissions d WHERE d.auth_id=u.auth_id)
-    AND NOT EXISTS (SELECT 1 FROM deleted_auth_ids d WHERE d.auth_id=u.auth_id)
-    AND NOT EXISTS (SELECT 1 FROM account_operation_claims c WHERE c.auth_id=u.auth_id AND c.state!='finished')
+  const heldOwner = `EXISTS (SELECT 1 FROM account_deletion_admissions d WHERE d.auth_id=u.auth_id)
+    OR EXISTS (SELECT 1 FROM deleted_auth_ids d WHERE d.auth_id=u.auth_id)
+    OR EXISTS (SELECT 1 FROM account_operation_claims c WHERE c.auth_id=u.auth_id AND c.state!='finished')`;
+  const held = await sourceDb.prepare(`SELECT COUNT(*) AS count FROM users u WHERE ${heldOwner}`).first();
+  if (!Number.isSafeInteger(held?.count) || held.count < 0) throw new Error('Retention held-account count unavailable');
+  const candidates = await sourceDb.prepare(`SELECT id,auth_id FROM users u WHERE id>? AND NOT (${heldOwner})
     ORDER BY id LIMIT ?`).bind(after, ACCOUNT_BATCH + 1).all();
   const owners = candidates.results.slice(0, ACCOUNT_BATCH);
-  const results = { mode: audit ? 'audit' : 'delete', accounts: 0, accounts_skipped: 0, unmapped_uid_rows: unmappedUidRows, after_user_id: after,
+  const results = { mode: audit ? 'audit' : 'delete', accounts: 0, accounts_held: held.count, accounts_skipped: 0, unmapped_uid_rows: unmappedUidRows, after_user_id: after,
     next_user_id: candidates.results.length > ACCOUNT_BATCH ? owners.at(-1).id : 0,
     linkedin_runs: 0, resume_sessions: 0, resume_kv_sessions: 0, resume_accounts_with_more_payloads: 0, feedback_sessions: 0,
     interview_question_sets: 0, mock_interview_sessions: 0, cover_letter_history: 0,
-    usage_events: 0, voice_sessions_stripped: 0, voice_sessions: 0 };
+    usage_events: 0, first_resume_snapshots: 0, role_usage_log: 0, voice_sessions_stripped: 0, voice_sessions: 0 };
   if (audit) results.kv_keys_would_delete = 0;
   // Audit reads the same bounded batch and predicates, with no claims or cursor writes.
   for (const owner of owners) {
@@ -80,7 +94,9 @@ export async function runCleanup(env, { afterUserId } = {}) {
       : await sourceDb.prepare("INSERT INTO account_maintenance_cursors(name,last_user_id,revision) VALUES('retention',?,1) ON CONFLICT(name) DO NOTHING").bind(results.next_user_id).run();
     results.cursor_advanced = result.meta?.changes === 1;
   }
-  console.log('[retention-cleaner] cleanup batch complete', results);
+  // Cursors identify accounts. Keep them in the operator result, not logs.
+  const { after_user_id, next_user_id, ...counts } = results;
+  console.log(JSON.stringify({ event: 'retention_batch_complete', retention_days: RETENTION_DAYS, ...counts }));
   return results;
 }
 
@@ -194,6 +210,14 @@ async function cleanupOwner(env, sourceDb, owner) {
     cutoff
   );
 
+  // Progress snapshots have no resume FK and can survive a removed resume.
+  // Role telemetry includes user-supplied context. Neither is an exception
+  // to the standard 90-day content window. Older schemas may omit these tables.
+  results.first_resume_snapshots = await checkColumnExists(db, 'first_resume_snapshots', 'id')
+    ? await deleteRows(db, owner, 'DELETE FROM first_resume_snapshots WHERE created_at < ?', cutoff) : 0;
+  results.role_usage_log = await checkColumnExists(db, 'role_usage_log', 'id')
+    ? await deleteRows(db, owner, 'DELETE FROM role_usage_log WHERE created_at < ?', cutoff) : 0;
+
   // 9. Voice sessions — same 90-day rule as mock interviews, with the
   // free-taste carve-out: a user with no active voice plan (no live
   // subscription, no usable pack credits) keeps their most recent session
@@ -280,8 +304,8 @@ async function checkColumnExists(db, table, column) {
 
 async function deleteRows(db, owner, sql, ...binds) {
   const table = sql.match(/^(?:DELETE FROM|UPDATE) (\w+)\b/)?.[1];
-  const directIds = ['resume_sessions','interview_question_sets','mock_interview_sessions','usage_events','voice_sessions'];
-  const authIds = ['linkedin_runs','cover_letter_history'];
+  const directIds = ['resume_sessions','interview_question_sets','mock_interview_sessions','usage_events','first_resume_snapshots','voice_sessions'];
+  const authIds = ['linkedin_runs','cover_letter_history','role_usage_log'];
   let predicate, value;
   if (directIds.includes(table)) { predicate = `${table}.user_id=?`; value = owner.id; }
   else if (authIds.includes(table)) { predicate = `${table}.user_id=?`; value = owner.auth_id; }
