@@ -7,6 +7,7 @@ import { workApi, workRecords, cacheNativeSources } from './work-items.js';
 import { workflowApi, checkWorkflowDeadlines } from './workflow.js';
 import { analyticsApi, analyticsReport } from './analytics.js';
 import { directoryRecords, duplicateDirectoryRecord, applyResolutions, resolveNotification } from './notifications.js';
+import { stripeCheckApi, stripeCheckStatus } from './stripe-check.js';
 import { businessMetrics } from './business-metrics.js';
 
 const OWNER = 'sebastian.larosa@jobhackai.io';
@@ -53,13 +54,20 @@ async function accessTokenIsOwner(token, keys = ACCESS_KEYS) {
 
 async function overview(env, now = new Date()) {
   const month = monthKey(now);
-  const [users, charges, refunds, costs, business] = await Promise.all([
+  const [users, charges, refunds, costs, business, stripe] = await Promise.all([
     env.PRODUCTION_DB.prepare('SELECT COUNT(*) AS count, MAX(updated_at) AS latest_update FROM users').first(),
     env.PRODUCTION_DB.prepare("SELECT amount_captured AS cents, charge_created_at AS ts FROM stripe_collected_payments WHERE environment = 'prod' AND livemode = 1 AND currency = 'usd' AND charge_created_at >= ?").bind(Math.floor(now.getTime() / 1000) - 40 * 86400).all(),
     env.PRODUCTION_DB.prepare("SELECT r.amount AS cents, r.refund_created_at AS ts FROM stripe_payment_refunds r JOIN stripe_collected_payments p ON p.charge_id = r.charge_id WHERE r.status = 'succeeded' AND r.currency = 'usd' AND p.environment = 'prod' AND p.livemode = 1 AND r.refund_created_at >= ?").bind(Math.floor(now.getTime() / 1000) - 40 * 86400).all(),
     env.DASHBOARD_DB.prepare('SELECT amount_cents, complete, updated_at FROM monthly_costs WHERE month = ?').bind(month).first(),
     businessMetrics(env.PRODUCTION_DB, now),
+    stripeCheckStatus(env, now),
   ]);
+  for (const period of Object.values(business.periods)) {
+    for (const metric of period.metrics) {
+      if (metric.id === 'customers' && stripe.status === 'current') Object.assign(metric, {value:stripe.customers,status:'verified',note:'Current paid accounts match Stripe. Staff accounts excluded. This is a current count, not a historical trend.'});
+      if (metric.id === 'money' && metric.value !== null && stripe.status === 'current') Object.assign(metric, {status:'verified',note:'Payments and refunds match Stripe for this period. Includes staff and test payments. Before fees and costs.'});
+    }
+  }
   const capturedCents = charges.results.filter(row => sameMonth(row.ts, month)).reduce((sum, row) => sum + row.cents, 0);
   const refundedCents = refunds.results.filter(row => sameMonth(row.ts, month)).reduce((sum, row) => sum + row.cents, 0);
   const netCollectedCents = capturedCents - refundedCents;
@@ -67,6 +75,7 @@ async function overview(env, now = new Date()) {
   return {
     asOf: now.toISOString(),
     business,
+    stripe,
     month,
     userGoal: 250,
     d1UserRecords: users?.count ?? null,
@@ -138,6 +147,7 @@ export default {
       if(request.method==='GET'&&url.pathname==='/api/session')return json({role:identity.role,capabilities:identity.capabilities||[]});
       if(request.method==='GET'&&url.pathname==='/api/operating-guide')return json({version:'2026-10-31',text:GUIDE});
       if(url.pathname==='/api/workflow'||url.pathname.startsWith('/api/workflow/'))return workflowApi(request,env,identity,new Date(),async()=>workRecords(env.DASHBOARD_DB,await campaignRecords(env)));
+      if(url.pathname==='/api/stripe-check')return stripeCheckApi(request,env);
       if(url.pathname==='/api/analytics')return analyticsApi(request,env);
       if(request.method==='POST'&&url.pathname==='/api/work-items/capture-native')return json(await cacheNativeSources(env.DASHBOARD_DB,await campaignRecords(env)));
       if(url.pathname==='/api/work-items'||url.pathname.startsWith('/api/work-items/'))return workApi(request,env,identity,async()=>{
