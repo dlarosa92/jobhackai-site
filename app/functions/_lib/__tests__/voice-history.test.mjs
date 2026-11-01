@@ -212,7 +212,9 @@ await test('free user\'s aged session stays listed with reportAvailable:false (r
   assert.equal(sessions.length, 1, 'the single free-taste row survives the 90-day lapse');
   assert.equal(sessions[0].reportAvailable, false);
   assert.equal(sessions[0].overall, null, 'no score leaks on a locked free row');
-  assert.equal(sessions[0].role, 'Data Engineer', 'row metadata remains');
+  assert.equal(sessions[0].role, null, 'expired role context is withheld before cleanup');
+  assert.equal(sessions[0].seniority, null);
+  assert.equal(sessions[0].createdAt, state.sessions[0].started_at, 'limited timing metadata remains');
 });
 
 await test('lapsed-paid user (no active plan) also keeps only the most recent aged row', async () => {
@@ -225,6 +227,7 @@ await test('lapsed-paid user (no active plan) also keeps only the most recent ag
   assert.equal(sessions[0].reportAvailable, false);
   assert.equal(sessions[0].overall, null,
     'a locked expired row must not leak its score, even with fullAccess and an unstripped scorecard');
+  for (const key of ['role', 'seniority', 'topImprovement', 'methodologyVersion']) assert.equal(sessions[0][key], null, key);
 });
 
 await test('paid user\'s aged sessions are excluded from the list (typed rule)', async () => {
