@@ -131,8 +131,9 @@ export function createTranscriptOrder() {
   }
 
   // conversation.item.created / conversation.item.added — reserves order
-  function noteItem(id, previousItemId) {
-    reserve(id, previousItemId);
+  function noteItem(id, previousItemId, speaker) {
+    var slot = reserve(id, previousItemId);
+    if (slot && (speaker === 'user' || speaker === 'assistant')) slot.speaker = speaker;
   }
 
   // Reserved slots still waiting on a transcript. These are the turns that
@@ -254,6 +255,24 @@ export function createTranscriptOrder() {
       !isNoiseFragment(filled[at].text) && !isEchoOfNeighbor(filled, at);
   }
 
+  // Echo matching needs nearby interviewer text. A blank announced item is
+  // not proof that there is no echo. Count filled neighbors as the matcher
+  // does, while retaining any intervening assistant/unknown placeholders.
+  // Short answers cannot match echo and do not need to wait for captions.
+  function hasPendingEchoContext(id) {
+    var mine = byId[id], at = slots.indexOf(mine);
+    if (at < 0 || mine.speaker !== 'user' || echoTokens(mine.text).length < ECHO_MIN_TOKENS) return false;
+    for (var direction = -1; direction <= 1; direction += 2) {
+      var filled = 0;
+      for (var i = at + direction; i >= 0 && i < slots.length && filled < ECHO_WINDOW; i += direction) {
+        var s = slots[i];
+        if ((!s.speaker || s.speaker === 'assistant') && !s.text) return true;
+        if (s.speaker && s.text) filled++;
+      }
+    }
+    return false;
+  }
+
   function reset() {
     slots = [];
     byId = Object.create(null);
@@ -270,6 +289,7 @@ export function createTranscriptOrder() {
     drop: drop,
     list: list,
     hasUsableUserItem: hasUsableUserItem,
+    hasPendingEchoContext: hasPendingEchoContext,
     pendingCount: pendingCount,
     flushTranscript: flushTranscript,
     reset: reset

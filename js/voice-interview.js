@@ -141,7 +141,9 @@
       // Wait for every committed fragment, including a possible spoken Finish.
       // Late ASR must neither interrupt continued speech nor generate separate
       // questions for fragments that were already committed together.
-      if (turnControl.inputs.some(function (input) { return !turnControl.transcribed[input.id]; })) return;
+      if (turnControl.inputs.some(function (input) {
+        return !turnControl.transcribed[input.id] || (state.liveOrder && state.liveOrder.hasPendingEchoContext(input.id));
+      })) return;
       var inputs = turnControl.inputs;
       turnControl.inputs = [];
       inputs.forEach(function (input) {
@@ -1294,13 +1296,13 @@
     // teardown flush to wait on.
     if (type === 'conversation.item.created' || type === 'conversation.item.added') {
       if (!state.ending && state.liveOrder && evt.item && evt.item.role !== 'system' && evt.item.type !== 'function_call') {
-        state.liveOrder.noteItem(evt.item.id, evt.previous_item_id);
+        state.liveOrder.noteItem(evt.item.id, evt.previous_item_id, evt.item.role);
       }
       if (!lifecycle().noteItem(evt.item && evt.item.id)) return;
       if (!state.order) state.order = newTranscriptOrder();
       // previous_item_id says which item this one follows, so an item inserted
       // out of band lands in the right place instead of at the end.
-      state.order.noteItem(evt.item && evt.item.id, evt.previous_item_id);
+      state.order.noteItem(evt.item && evt.item.id, evt.previous_item_id, evt.item && evt.item.role);
       return;
     }
 
@@ -1362,6 +1364,14 @@
     }
     // GA + beta event names for assistant transcript
     if (type === 'response.output_audio_transcript.done' || type === 'response.audio_transcript.done') {
+      // Interrupted output can finish with no words. Retire its placeholder
+      // so a candidate answer does not wait on a caption that is already final.
+      if (!String(evt.transcript || '').trim()) {
+        if (state.liveOrder) state.liveOrder.drop(evt.item_id);
+        if (state.order) state.order.drop(evt.item_id);
+        drainTurn();
+        return;
+      }
       // Settle a provisional acknowledgement BEFORE the turn can reach the
       // assembler: if the candidate had actually said they could not hear,
       // this turn is another hearing check — the lifecycle walks back to
@@ -1405,6 +1415,7 @@
       maybeConductBackstop(evt.transcript, evt.response_id);
       maybeSafetyBackstop(evt.transcript, evt.response_id);
       maybeClosingAnnouncement(evt.transcript, evt.response_id);
+      drainTurn();
       return;
     }
 
@@ -2081,7 +2092,8 @@
     var jd = ($('vi-jd') && $('vi-jd').value || '').trim();
     if (!role) { alert('Pick the role you are interviewing for.'); return; }
     if (typeof window.createVoiceTurnPlan !== 'function' || typeof window.createTranscriptOrder !== 'function' ||
-        typeof window.createTranscriptOrder().hasUsableUserItem !== 'function') {
+        typeof window.createTranscriptOrder().hasUsableUserItem !== 'function' ||
+        typeof window.createTranscriptOrder().hasPendingEchoContext !== 'function') {
       alert('The interview controls did not load. Refresh this page before starting.'); return;
     }
     if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function' || typeof RTCPeerConnection !== 'function') {

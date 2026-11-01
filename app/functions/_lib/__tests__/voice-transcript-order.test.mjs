@@ -513,6 +513,35 @@ test('turn eligibility rechecks late echo context and never re-admits a dropped 
   assert.equal(o.hasUsableUserItem('echo'), false);
 });
 
+test('echo readiness waits for nearby missing captions in either direction, but not short answers', () => {
+  for (const before of [true, false]) {
+    const o = createTranscriptOrder();
+    if (before) o.noteItem('q', null, 'assistant');
+    o.setText('answer', 'user', 'I reduced the turnaround by two days.');
+    if (!before) o.noteItem('q', null, 'assistant');
+    assert.equal(o.hasPendingEchoContext('answer'), true);
+    o.setText('answer', 'user', 'Yes.');
+    assert.equal(o.hasPendingEchoContext('answer'), false);
+    o.setText('answer', 'user', 'I reduced the turnaround by two days.');
+    o.setText('q', 'assistant', 'How did you improve the process?');
+    assert.equal(o.hasPendingEchoContext('answer'), false);
+  }
+});
+
+test('echo readiness ignores known candidate placeholders and captions outside its neighbor window', () => {
+  const o = createTranscriptOrder();
+  o.noteItem('old-question', null, 'assistant');
+  o.setText('older-answer', 'user', 'Yes.');
+  o.setText('question', 'assistant', 'How did you measure the result?');
+  o.noteItem('continued', null, 'user');
+  o.setText('answer', 'user', 'I reduced the turnaround by two days.');
+  assert.equal(o.hasPendingEchoContext('answer'), false);
+  o.noteItem('unknown');
+  assert.equal(o.hasPendingEchoContext('answer'), true);
+  o.drop('unknown');
+  assert.equal(o.hasPendingEchoContext('answer'), false);
+});
+
 for (const run of asyncTests) await run();
 
 console.log(`\n${passed} passed, ${failed} failed`);

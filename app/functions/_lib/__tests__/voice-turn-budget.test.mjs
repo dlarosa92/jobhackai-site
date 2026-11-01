@@ -89,6 +89,34 @@ test('the same short answer to a later question survives a delayed interviewer c
   assert.equal(h.completeBodies()[0].transcript.filter(x=>x.speaker==='user'&&x.text==='Yes.').length,2);
 });
 
+for (const echo of [true,false]) {
+  test('delayed interviewer caption settles before accepting a long '+(echo?'echo':'real answer'),async t=>{
+    const h=await live(t);begin(h);answer(h,'first','Yes.');
+    const question='Tell me about a time when you had to influence a stakeholder who disagreed with your approach.';
+    h.event({type:'response.created',response:{id:'next-question'}});
+    h.event({type:'conversation.item.created',item:{id:'next-question-item',role:'assistant'}});
+    h.event({type:'response.done',response:{id:'next-question',status:'completed'}});
+    const n=requests(h).length;
+    answer(h,'candidate',echo?question:'I showed our customer research and agreed on a smaller pilot.');
+    assert.equal(requests(h).length,n,'an unfinished neighboring caption cannot establish absence of echo');
+    h.event({type:'response.output_audio_transcript.done',response_id:'next-question',item_id:'next-question-item',transcript:question});
+    assert.equal(requests(h).length,n+(echo?0:1));
+    assert.equal(h.sends.some(x=>x.type==='conversation.item.delete'&&x.item_id==='candidate'),echo);
+  });
+}
+
+test('an interrupted empty interviewer caption releases a waiting real answer',async t=>{
+  const h=await live(t);begin(h);answer(h,'first','Yes.');
+  h.event({type:'response.created',response:{id:'interrupted'}});
+  h.event({type:'conversation.item.created',item:{id:'interrupted-item',role:'assistant'}});
+  h.event({type:'response.done',response:{id:'interrupted',status:'cancelled'}});
+  const n=requests(h).length;
+  answer(h,'continued','I also checked the outcome with the team.');
+  assert.equal(requests(h).length,n);
+  h.event({type:'response.output_audio_transcript.done',response_id:'interrupted',item_id:'interrupted-item',transcript:''});
+  assert.equal(requests(h).length,n+1,'a final empty caption is settled, not missing');
+});
+
 test('late transcription cannot interrupt continued speech or turn two answer fragments into two questions',async t=>{
   const h=await live(t);begin(h);const n=requests(h).length;
   commit(h,'first');
