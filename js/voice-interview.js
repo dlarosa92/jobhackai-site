@@ -51,6 +51,17 @@
     sessionId: null,
     startRequestId: null, // retained across failed starts to recover without spending twice
     managedTransport: false,
+    audioSetup: false,
+    audioConfirmed: false,
+    microphoneConfirmed: false,
+    microphoneLost: false,
+    playbackReady: false,
+    playbackBlocked: false,
+    activating: false,
+    activationEvent: null,
+    audioContext: null,
+    micMeterTimer: null,
+    setupValues: null,
     providerAttemptId: null,
     closeRequest: null,
     deadlineAtMs: null,
@@ -122,10 +133,11 @@
 
   function drainTurn() {
     if (!turnControl.ready || !turnControl.pending || turnControl.busy || turnControl.speaking || state.audioPlaying ||
-        state.ending || state.conductEnd || lifecycle().is(PHASES.CLOSING)) return;
+        state.ending || state.conductEnd || state.playbackBlocked || state.microphoneLost || lifecycle().is(PHASES.CLOSING)) return;
     var pending = turnControl.pending;
     turnControl.pending = null;
-    var plan = pending.greeting ? null : turnControl.plan.next({ opening: pending.opening, wrapUp: state.wrapUpNoted });
+    if (state.audioSetup && !pending.greeting) return;
+    var plan = pending.greeting ? null : pending.repeat ? { kind: 'audio_recovery', instruction: 'Repeat the current interview question in the same words. Do not add a new question or follow-up.' } : turnControl.plan.next({ opening: pending.opening, wrapUp: state.wrapUpNoted });
     var id = 'jha_turn_' + (++turnControl.serial);
     turnControl.requestId = id;
     if (plan) {
@@ -137,7 +149,11 @@
     turnControl.busy = true;
     turnControl.responseId = '';
     turnControl.responseTimer = setTimeout(turnControlFailed, 45000);
-    if (!sendRealtime({ type: 'response.create', event_id: id + '_response', response: { metadata: {
+    if (!sendRealtime({ type: 'response.create', event_id: id + '_response', response: {
+      // A retry is still just a sound check even if interview instructions
+      // were configured but their acknowledgement or activation was lost.
+      ...(state.audioSetup ? {instructions:'This is only an audio check. Say: "Can you hear this clearly? Say a few words to check your microphone, then choose I can hear you on the page." Do not ask interview questions, evaluate answers or continue the conversation.'} : {}),
+      metadata: {
       jobhackai_purpose: pending.greeting ? 'audio_check' : plan.kind,
       jobhackai_turn: id,
       ...(plan ? { jobhackai_topic: String(plan.topic) } : {})
@@ -228,10 +244,12 @@
       var voice = res.data.voice;
       if (!voice || !voice.enabled) { show('vi-disabled-view'); return; }
       state.managedTransport = voice.transport === 'managed';
+      if ($('vi-audio-setup-hint')) $('vi-audio-setup-hint').hidden = !state.managedTransport;
 
       initHistory(voice);
 
       if (!banner || !startBtn) return;
+      startBtn.textContent = state.managedTransport ? 'Check audio' : 'Start the interview';
       state.canStart = !!voice.canStart;
 
       if (voice.canStart) {
@@ -273,7 +291,7 @@
   // After a failed start, Start is usable again only if the entitlement says so.
   function resetStartButton() {
     var startBtn = $('vi-start-btn');
-    if (startBtn) { startBtn.disabled = !state.canStart; startBtn.textContent = 'Start the interview'; }
+    if (startBtn) { startBtn.disabled = !state.canStart; startBtn.textContent = state.managedTransport ? 'Check audio' : 'Start the interview'; }
   }
 
   // ---------- realtime event handling ----------
@@ -1204,6 +1222,29 @@
 
   function handleRealtimeEvent(evt) {
     var type = evt.type || '';
+    // Setup is uncharged to the customer but still uses provider resources.
+    if (state.usage && type === 'response.done') state.usage.add('response', evt.response && evt.response.id, evt.response && evt.response.usage);
+    if (state.usage && type === 'conversation.item.input_audio_transcription.completed') state.usage.add('transcription', evt.item_id, evt.usage);
+    if (state.activationEvent && type === 'session.updated' && evt.session &&
+        evt.session.instructions === state.activationInstructions) {
+      if (!state.ending) activateAudioReady();
+      return;
+    }
+    if (state.audioSetup) {
+      if ((type === 'conversation.item.created' || type === 'conversation.item.added') && evt.item) {
+        lifecycle().excludeItem(evt.item.id);
+        (state.audioSetupItems || (state.audioSetupItems = [])).push(evt.item.id);
+      }
+      if (type === 'input_audio_buffer.speech_started' && evt.item_id) lifecycle().excludeItem(evt.item_id);
+      if (type === 'input_audio_buffer.committed') { lifecycle().excludeItem(evt.item_id); return; }
+      if (type === 'conversation.item.input_audio_transcription.completed') {
+        lifecycle().excludeItem(evt.item_id);
+        if (handleSpokenEndRequest(evt.transcript, evt.item_id)) return;
+        if (String(evt.transcript || '').trim() && !state.micMuted) state.microphoneConfirmed = true;
+        updateAudioReadiness();
+        return;
+      }
+    }
     if (type === 'session.updated' && !turnControl.ready && turnControl.start) {
       var detection = evt.session && evt.session.audio && evt.session.audio.input && evt.session.audio.input.turn_detection;
       if (!detection || detection.type !== 'semantic_vad' || detection.create_response !== false || detection.interrupt_response !== true) return;
@@ -1215,10 +1256,6 @@
       start();
       return;
     }
-    // Include audio checks and control utterances: they consume tokens too.
-    if (state.usage && type === 'response.done') state.usage.add('response', evt.response && evt.response.id, evt.response && evt.response.usage);
-    if (state.usage && type === 'conversation.item.input_audio_transcription.completed') state.usage.add('transcription', evt.item_id, evt.usage);
-
     // Items are announced in true conversation order and carry the id that
     // the (later, out-of-order) transcript events reference. The lifecycle
     // classifies each item exactly once; only official-interview items reach
@@ -1432,6 +1469,181 @@
     }
   }
 
+  // ---------- audio readiness ----------
+
+  function updateAudioReadiness() {
+    var wrap = document.querySelector('.vi-wrap');
+    if (wrap && wrap.classList) wrap.classList.toggle('vi-mode-audio-setup', state.audioSetup);
+    var panel = $('vi-audio-check');
+    if (panel) panel.hidden = !(state.audioSetup || state.playbackBlocked || state.microphoneLost);
+    var note = $('vi-audio-note');
+    if (note) note.textContent = state.audioSetup
+      ? 'This audio check does not use an interview. Say a few words, then confirm you can hear the voice.'
+      : state.microphoneLost ? 'Microphone disconnected. Questions are paused. Choose Reconnect to use an available microphone.'
+      : 'Audio needs attention. Questions are paused. Retry audio to hear the current question again.';
+    var confirm = $('vi-audio-confirm');
+    if (confirm) {
+      confirm.hidden = !state.audioSetup;
+      confirm.disabled = state.activating || state.micMuted || state.microphoneLost || !state.microphoneConfirmed || !state.playbackReady || state.playbackBlocked || !turnControl.ready;
+      confirm.textContent = state.activating ? 'Starting your interview...' : 'I can hear you. Start interview';
+    }
+    var mic = $('vi-audio-mic-status');
+    if (mic) mic.textContent = state.microphoneLost ? 'Microphone disconnected. Choose Reconnect.' : state.micMuted ? 'Unmute your microphone before starting.' : state.microphoneConfirmed ? 'Microphone checked. We received your words.' : 'Say a few words to check your microphone.';
+    var output = $('vi-audio-output-status');
+    if (output) output.textContent = state.playbackBlocked ? 'Sound could not play. Choose Enable audio, then check your volume and output device.'
+      : state.playbackReady ? 'Can you hear the voice clearly?' : 'Waiting for the test voice...';
+    var retry = $('vi-audio-retry');
+    if (retry) retry.textContent = state.playbackBlocked ? 'Enable audio' : 'Play again';
+    if ($('vi-timer')) $('vi-timer').setAttribute('aria-label', state.audioSetup ? 'Audio setup time remaining' : 'Session time remaining');
+    if ($('vi-timer-label')) $('vi-timer-label').textContent = state.audioSetup ? 'Audio setup time left' : 'Session time left';
+    if ($('vi-end-btn')) $('vi-end-btn').textContent = state.audioSetup ? 'Cancel audio check' : 'Finish interview';
+  }
+
+  function playbackFailed(pc) {
+    if (state.ending || (pc && state.pc !== pc)) return;
+    state.playbackAttempt = (state.playbackAttempt || 0) + 1;
+    state.playbackReady = false;
+    state.playbackBlocked = true;
+    updateAudioReadiness();
+    setStatus('Sound needs attention.', 'vi-error');
+    track('voice_audio_playback_blocked', { setup: state.audioSetup });
+  }
+
+  async function playRemoteAudio() {
+    var pc = state.pc, el = state.audioEl;
+    if (!el || !el.srcObject || state.ending) return false;
+    var playbackAttempt = state.playbackAttempt = (state.playbackAttempt || 0) + 1;
+    try {
+      await el.play();
+      if (state.pc !== pc || state.ending || state.playbackAttempt !== playbackAttempt) return false;
+      state.playbackReady = true;
+      state.playbackBlocked = false;
+      updateAudioReadiness();
+      if (!state.microphoneLost) setStatus(state.audioSetup ? 'Check your audio before starting.' : 'Live interview', state.audioSetup ? 'vi-connecting' : 'vi-live');
+      return true;
+    } catch (_) {
+      if (state.playbackAttempt === playbackAttempt) playbackFailed(pc);
+      return false;
+    }
+  }
+
+  async function retryAudio() {
+    // The play call runs directly from a click. No settings changes or assumed
+    // autoplay permission. Repeat uses no question opportunity.
+    if (state.audioContext) state.audioContext.resume().catch(function () {});
+    if (!await playRemoteAudio() || state.ending || state.activating) return;
+    turnControl.pending = state.audioSetup ? { greeting: true } : { repeat: true };
+    drainTurn();
+  }
+
+  function stopMicMeter() {
+    clearInterval(state.micMeterTimer); state.micMeterTimer = null;
+    if (state.audioContext) state.audioContext.close().catch(function () {});
+    state.audioContext = null;
+    if ($('vi-audio-meter')) $('vi-audio-meter').value = 0;
+  }
+
+  function startMicMeter(stream) {
+    if (!state.audioContext) return;
+    try {
+      var analyser = state.audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      state.audioContext.createMediaStreamSource(stream).connect(analyser);
+      var samples = new Uint8Array(analyser.fftSize);
+      state.micMeterTimer = setInterval(function () {
+        analyser.getByteTimeDomainData(samples);
+        var peak = 0;
+        for (var i = 0; i < samples.length; i++) peak = Math.max(peak, Math.abs(samples[i] - 128));
+        if ($('vi-audio-meter')) $('vi-audio-meter').value = Math.min(100, peak * 3);
+      }, 100);
+    } catch (_) { /* Actual transcribed speech remains the readiness check. */ }
+  }
+
+  function confirmAudioReady() {
+    if (!state.audioSetup || state.activating || state.micMuted || state.microphoneLost || !state.microphoneConfirmed || !state.playbackReady || state.playbackBlocked || !turnControl.ready || state.ending) return;
+    if (!state.activationInstructions) { setStatus('Refresh this page to load the audio check.', 'vi-error'); return; }
+    state.activating = true;
+    updateAudioReadiness();
+    // Configure the interviewer before spending credit. A missing/rejected
+    // provider acknowledgement remains an uncharged setup failure.
+    state.activationEvent = 'jha_activate_' + crypto.randomUUID();
+    if (!sendRealtime({ type:'session.update', event_id:state.activationEvent,
+      session:{type:'realtime',instructions:state.activationInstructions} })) {
+      state.activating = false; state.activationEvent = null; updateAudioReadiness(); return;
+    }
+    state.activationTimer = setTimeout(function () {
+      state.activating = false; state.activationEvent = null;
+      updateAudioReadiness();
+      setStatus('Audio setup could not finish. Try Start again or cancel. No interview has started.', 'vi-error');
+    }, 8000);
+  }
+
+  async function activateAudioReady() {
+    if (!state.activationEvent || state.activationRequestPending) return;
+    // The device can disappear while the configuration acknowledgement is in
+    // flight. Require a fresh confirmation before sending a chargeable start.
+    if (!state.audioSetup || state.ending || state.micMuted || state.microphoneLost || !state.microphoneConfirmed || !state.playbackReady || state.playbackBlocked) {
+      clearTimeout(state.activationTimer);
+      state.activating = false; state.activationEvent = null;
+      updateAudioReadiness();
+      if (!state.ending) setStatus('Audio changed during setup. Check it again before starting.', 'vi-error');
+      return;
+    }
+    state.activationRequestPending = true;
+    clearTimeout(state.activationTimer);
+    var sessionId = state.sessionId, attemptId = state.providerAttemptId;
+    try {
+      var result = await api('/api/voice/connection', { method:'POST', body:JSON.stringify(Object.assign({
+        action:'activate', sessionId:sessionId, attemptId:attemptId, audioReady:true
+      },state.setupValues)) });
+      if (state.ending || state.sessionId !== sessionId || state.providerAttemptId !== attemptId) return;
+      if (!result.ok || !result.data || result.data.activated !== true || result.data.sessionId !== sessionId || result.data.attemptId !== attemptId) {
+        throw new Error('activation_unconfirmed');
+      }
+      var deadline = result.data.deadlineAt;
+      if (/^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/.test(deadline)) deadline = deadline.replace(' ', 'T') + 'Z';
+      var deadlineMs = Date.parse(deadline);
+      if (!Number.isFinite(deadlineMs)) throw new Error('activation_unconfirmed');
+      state.deadlineAtMs = deadlineMs;
+      finishAudioActivation();
+    } catch (_) {
+      if (state.ending || state.sessionId !== sessionId || state.providerAttemptId !== attemptId) return;
+      state.activating = false; state.activationEvent = null;
+      updateAudioReadiness();
+      setStatus('Start could not be confirmed. Retry Start to recover the same interview, or cancel.', 'vi-error');
+    } finally {
+      if (state.sessionId === sessionId && state.providerAttemptId === attemptId) state.activationRequestPending = false;
+    }
+  }
+
+  function finishAudioActivation() {
+    clearTimeout(state.activationTimer);
+    state.activationEvent = null;
+    state.activating = false;
+    state.audioSetup = false;
+    state.audioConfirmed = true;
+    stopMicMeter();
+    lifecycle().to(PHASES.ACTIVE_INTERVIEW);
+    state.interviewStartedAtMs = Date.now();
+    state.startedAtMs = Date.now();
+    state.liveOrder = newTranscriptOrder();
+    state.captionDrafts = Object.create(null);
+    turnControl.plan = window.createVoiceTurnPlan();
+    // Remove the test speech from the provider context too. Late setup ASR
+    // still cannot reach scoring because its item IDs were excluded.
+    (state.audioSetupItems || []).forEach(function (id) { sendRealtime({type:'conversation.item.delete',item_id:id}); });
+    state.audioSetupItems = [];
+    if ($('vi-your-answer')) $('vi-your-answer').textContent = 'Your words will appear here after you speak.';
+    updateAudioReadiness();
+    setStatus('Live interview', 'vi-live');
+    if ($('vi-question')) { $('vi-question').setAttribute('tabindex', '-1'); $('vi-question').focus(); }
+    track('voice_interview_begin', {});
+    track('voice_session_start', {});
+    tickTimer();
+    turnControl.pending = { opening: true };
+    drainTurn();
+  }
+
   // ---------- connection ----------
 
   function cancelConnectionAttempt() {
@@ -1445,6 +1657,17 @@
   async function connectRealtime(clientSecret, model, managedBody) {
     if (state.ending) return false;
     cancelConnectionAttempt();
+    state.playbackReady = false;
+    state.playbackBlocked = false;
+    if (state.audioSetup) {
+      state.microphoneConfirmed = false;
+      state.activating = false;
+      state.activationEvent = null;
+      state.activationRequestPending = false;
+      clearTimeout(state.activationTimer);
+      clearInterval(state.micMeterTimer);
+    }
+    updateAudioReadiness();
     var attempt = { cancelled: false, controller: new AbortController() };
     state.connectionAttempt = attempt;
     var stream = null, pc = null, dc = null, completed = false;
@@ -1457,6 +1680,8 @@
       // finally without ever attaching it to a peer connection.
       if (!current()) return false;
       state.micStream = stream;
+      state.microphoneLost = false;
+      if (state.audioSetup) startMicMeter(stream);
       state.micMuted = false;
       if ($('vi-mute-btn')) {
         $('vi-mute-btn').textContent = 'Mute mic';
@@ -1469,9 +1694,23 @@
 
       state.audioEl = $('vi-remote-audio') || document.createElement('audio');
       state.audioEl.autoplay = true;
+      state.audioEl.onerror = function () { playbackFailed(pc); };
       pc.ontrack = function (e) {
-        if (!state.ending && state.pc === pc && state.audioEl) state.audioEl.srcObject = e.streams[0];
+        if (state.ending || state.pc !== pc || !state.audioEl) return;
+        state.audioEl.srcObject = e.streams[0];
+        if (e.track) e.track.onended = function () { playbackFailed(pc); };
+        playRemoteAudio();
       };
+      stream.getAudioTracks().forEach(function (track) {
+        track.onended = function () {
+          if (state.ending || state.pc !== pc) return;
+          state.microphoneConfirmed = false;
+          state.microphoneLost = true;
+          updateAudioReadiness();
+          setStatus('Microphone disconnected. Reconnect to choose an available microphone.', 'vi-error');
+          offerReconnect();
+        };
+      });
 
       state.micStream.getTracks().forEach(function (t) { pc.addTrack(t, state.micStream); });
 
@@ -1512,8 +1751,10 @@
             return;
           }
           if (!lc.is(PHASES.ACTIVE_INTERVIEW)) {
-            setStatus('Connected. Quick audio check...', 'vi-connecting');
+            if (state.playbackBlocked) setStatus('Sound needs attention.', 'vi-error');
+            else setStatus('Connected. Quick audio check...', 'vi-connecting');
           }
+          updateAudioReadiness();
           turnControl.pending = { greeting: true };
           drainTurn();
         };
@@ -1554,7 +1795,7 @@
       if (managedBody) {
         var connection = await api('/api/voice/connection', {
           method: 'POST',
-          body: JSON.stringify(Object.assign({}, managedBody, { action: 'open', sdp: offer.sdp })),
+          body: JSON.stringify(Object.assign({}, managedBody, { action: 'open', sdp: offer.sdp, audioCheck: true })),
           signal: attempt.controller.signal
         });
         if (!current()) return false;
@@ -1574,6 +1815,10 @@
             !details.sdp.startsWith('v=0') || typeof details.attemptId !== 'string') {
           throw new Error('invalid_connection_response');
         }
+        if (details.requiresAudioCheck === true && typeof details.interviewInstructions !== 'string') throw new Error('invalid_audio_setup');
+        state.activationInstructions = details.interviewInstructions || null;
+        state.audioSetup = details.requiresAudioCheck === true;
+        updateAudioReadiness();
         state.providerAttemptId = details.attemptId;
         state.model = details.model;
         state.maxMinutes = details.maxMinutes || 20;
@@ -1651,6 +1896,8 @@
     try { if (state.dc) state.dc.close(); } catch (_) {}
     try { if (state.pc) state.pc.close(); } catch (_) {}
     stopMicrophone();
+    stopMicMeter();
+    clearTimeout(state.activationTimer);
     state.pc = null; state.dc = null; state.connected = false;
   }
 
@@ -1713,7 +1960,7 @@
     if (remaining <= 0) {
       // endInterview defers to a pending conduct or safety close on its own;
       // checking here too just keeps this from logging that once a second.
-      if (!state.conductEnd) endInterview('time_up');
+      if (!state.conductEnd) endInterview(state.audioSetup ? 'connection_lost' : 'time_up');
     }
   }
 
@@ -1752,6 +1999,9 @@
     if (!role) { alert('Pick the role you are interviewing for.'); return; }
     if (typeof window.createVoiceTurnPlan !== 'function') {
       alert('The interview controls did not load. Refresh this page before starting.'); return;
+    }
+    if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function' || typeof RTCPeerConnection !== 'function') {
+      alert('Voice audio is unavailable in this browser. Use an updated browser and try again. No interview was used.'); return;
     }
     if (state.managedTransport) return startManagedInterview(role, seniority, jd);
 
@@ -1834,6 +2084,20 @@
 
   async function startManagedInterview(role, seniority, jd) {
     state.starting = true;
+    state.audioSetup = true;
+    state.microphoneConfirmed = false;
+    state.playbackReady = false;
+    state.playbackBlocked = false;
+    state.activating = false;
+    state.activationEvent = null;
+    state.activationRequestPending = false;
+    state.audioSetupItems = [];
+    state.setupValues = {role:role,seniority:seniority,jd:jd};
+    stopMicMeter();
+    try {
+      var AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (AudioContext) { state.audioContext = new AudioContext(); state.audioContext.resume().catch(function () {}); }
+    } catch (_) {}
     var startBtn = $('vi-start-btn');
     if (startBtn) { startBtn.disabled = true; startBtn.textContent = 'Starting...'; }
     try {
@@ -1859,6 +2123,8 @@
       clearTurnWait();
       resetLiveView();
       show('vi-live-view');
+      updateAudioReadiness();
+      if ($('vi-audio-title')) { $('vi-audio-title').setAttribute('tabindex', '-1'); $('vi-audio-title').focus(); }
       setStatus('Connecting...', 'vi-connecting');
       historyLiveStart(role, seniority);
       // Permission is obtained inside connectRealtime before any server
@@ -1869,7 +2135,8 @@
       });
       if (!result || state.ending) return;
       state.startRequestId = null;
-      track('voice_session_start', { mode: result.mode });
+      if (!state.audioSetup) track('voice_session_start', { mode: result.mode });
+      else track('voice_audio_check_start', {});
       startTimer(state.maxMinutes);
     } catch (error) {
       if (state.ending) return;
@@ -1892,8 +2159,14 @@
         connectionMessage = 'We could not confirm the interview connection. Please wait while we check it. Contact support if this continues.';
       } else if (error.reason === 'voice_connection_deadline_unavailable' || error.reason === 'voice_call_create_rejected') {
         connectionMessage = 'Voice interviews are temporarily unavailable. Please try again later.';
-      } else if (error.name === 'NotAllowedError' || error.name === 'NotFoundError') {
-        connectionMessage = 'We could not access your microphone. Check your browser microphone permissions and selected device, then retry.';
+      } else if (error.reason === 'voice_connection_setup_limit') {
+        connectionMessage = 'Audio setup has been tried several times. Wait 15 minutes, then try again. This attempt did not use an interview.';
+      } else if (error.reason === 'voice_connection_audio_check_required') {
+        connectionMessage = 'Refresh this page to load the audio check before starting.';
+      } else if (error.name === 'NotAllowedError' || error.name === 'NotFoundError' || error.name === 'NotReadableError') {
+        connectionMessage = error.name === 'NotFoundError' ? 'No microphone was found. Connect a microphone and try again. No interview was used.'
+          : error.name === 'NotReadableError' ? 'Your microphone is unavailable. Close other apps using it and try again. No interview was used.'
+          : 'Microphone access is blocked. Allow it for this site in your browser or system settings, then try again. No interview was used.';
       } else {
         connectionMessage = 'Could not connect the interview. Please try again later or contact support.';
       }
@@ -1932,7 +2205,7 @@
     }
     // A brief network outage may recover without replacing the provider call.
     // A stale button click must not tear down that recovered connection.
-    if (state.pc && state.pc.connectionState === 'connected' && state.dc && state.dc.readyState === 'open') {
+    if (!state.microphoneLost && state.pc && state.pc.connectionState === 'connected' && state.dc && state.dc.readyState === 'open') {
       hideReconnect();
       return;
     }
@@ -1976,6 +2249,7 @@
         setStatus('Reconnecting...', 'vi-connecting');
         if (!await connectRealtime(null, null, {
           sessionId: state.sessionId, replacesAttemptId: state.providerAttemptId,
+          ...(state.audioSetup ? state.setupValues : {}),
           transcript: getTranscript().slice(-20),
           interviewStarted: lifecycle().is(PHASES.ACTIVE_INTERVIEW) && !windowOpen
         }) || state.ending) return;
@@ -2019,6 +2293,7 @@
       btn.setAttribute('aria-pressed', String(!enabled));
     }
     state.micMuted = enabled === false;
+    updateAudioReadiness();
     setInputStatus('Listening when you speak');
   }
 
@@ -3131,6 +3406,9 @@
     if ($('vi-save-retry')) $('vi-save-retry').addEventListener('click', saveCompletion);
     if ($('vi-entitlement-retry')) $('vi-entitlement-retry').addEventListener('click', function () { loadEntitlement(); });
     if (muteBtn) muteBtn.addEventListener('click', toggleMute);
+    if ($('vi-audio-confirm')) $('vi-audio-confirm').addEventListener('click', confirmAudioReady);
+    if ($('vi-audio-retry')) $('vi-audio-retry').addEventListener('click', retryAudio);
+    if ($('vi-audio-help')) $('vi-audio-help').addEventListener('click', function () { playbackFailed(state.pc); });
     if (reconnectBtn) reconnectBtn.addEventListener('click', reconnect);
 
     window.addEventListener('beforeunload', function (e) {

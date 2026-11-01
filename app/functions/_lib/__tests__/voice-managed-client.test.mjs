@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createVoiceClientHarness, PLAN_PAYLOAD, scoredSessionPayload } from './helpers/voice-client-harness.mjs';
-const deferred=()=>{let resolve;const promise=new Promise(r=>{resolve=r;});return {promise,resolve};};
+const deferred=()=>{let resolve,reject;const promise=new Promise((r,j)=>{resolve=r;reject=j;});return {promise,resolve,reject};};
 const mic=()=>{const track={enabled:true,stop(){this.enabled=false;}};return {track,getTracks:()=>[track],getAudioTracks:()=>[track]};};
 function fixture(t,options={}) {
   let opened=0;
@@ -403,3 +403,150 @@ for (const result of ['', '   ', null]) {
     await h.endInterview();assert.equal(h.completeBodies()[0].transcript.length,0,'partial and empty text is never scored');
   });
 }
+
+function audioFixture(t,options={}) {
+  let activations=0, greeting=0;
+  const instructions='Audio check passed. Begin the interview with the first question.';
+  const f=fixture(t,{...options,routes:{
+    '/api/voice/connection':(url,init)=>{
+      const body=JSON.parse(init.body);
+      if(body.action==='close')return {connectionClosed:true,sessionReserved:activations>0};
+      if(body.action==='activate'){
+        activations++;
+        return {activated:true,sessionId:body.sessionId,attemptId:body.attemptId,deadlineAt:new Date(Date.now()+1200000).toISOString(),instructions};
+      }
+      return {...f.answer(body),requiresAudioCheck:true,interviewInstructions:instructions,deadlineAt:new Date(Date.now()+120000).toISOString()};
+    },
+    '/api/voice/session/':()=>({status:'cancelled',saved:false,connectionClosed:true}),
+    ...options.routes
+  }});
+  return {...f,instructions,activations:()=>f.h.requests.filter(r=>r.url==='/api/voice/connection'&&r.body.action==='activate'),
+    async check(){await f.start();const pc=f.h.peerConnection();pc.ontrack({streams:[{}],track:{}});await f.h.settle();await f.h.openDataChannel();},
+    speech(id='mic-test'){
+      f.h.event({type:'conversation.item.created',item:{id,role:'user'}});
+      f.h.event({type:'input_audio_buffer.committed',item_id:id});
+      f.h.event({type:'conversation.item.input_audio_transcription.completed',item_id:id,transcript:'Testing my microphone.'});
+    },
+    async greetingDone(){
+      const id='test-greeting-'+(++greeting);
+      f.h.event({type:'response.created',response:{id}});
+      f.h.event({type:'response.done',response:{id,status:'completed'}});await f.h.settle();
+    },
+    async acknowledge(){f.h.event({type:'session.updated',session:{instructions}});await f.h.settle();}
+  };
+}
+
+test('blocked playback and microphone permission alone cannot activate or advance a question',async t=>{
+  const f=audioFixture(t);f.h.el('vi-remote-audio').play=async()=>{throw Object.assign(Error('blocked'),{name:'NotAllowedError'});};
+  await f.check();f.speech();await f.h.settle();
+  assert.equal(f.h.el('vi-audio-confirm').disabled,true);assert.equal(f.h.el('vi-audio-retry').textContent,'Enable audio');
+  await f.h.click('vi-audio-confirm');assert.equal(f.activations().length,0);
+  assert.equal(f.h.sends.filter(x=>x.type==='response.create'&&x.response.metadata.jobhackai_purpose!=='audio_check').length,0);
+  await f.h.endInterview();assert.equal(f.h.completeBodies()[0].transcript.length,0);
+  assert.match(f.h.el('vi-done-status').textContent,/No interview credit was used/);
+});
+
+test('silent microphone cannot pass readiness even when playback succeeds',async t=>{
+  const f=audioFixture(t);await f.check();
+  f.h.event({type:'conversation.item.input_audio_transcription.completed',item_id:'silence',transcript:'  '});
+  await f.h.click('vi-audio-confirm');assert.equal(f.activations().length,0);assert.equal(f.h.el('vi-audio-confirm').disabled,true);
+});
+
+test('click recovery replays the check without consuming a question and activation waits for the exact provider acknowledgement',async t=>{
+  const f=audioFixture(t);let blocked=true;
+  f.h.el('vi-remote-audio').play=async()=>{if(blocked)throw Error('blocked');};
+  await f.check();await f.greetingDone();f.speech();blocked=false;await f.h.click('vi-audio-retry');
+  assert.equal(f.h.el('vi-audio-confirm').disabled,false);
+  await f.greetingDone();await f.h.click('vi-audio-confirm');await f.h.click('vi-audio-confirm');
+  assert.equal(f.activations().length,0,'provider readiness is acknowledged before credit activation');
+  assert.equal(f.h.sends.filter(x=>x.type==='response.create'&&x.response.metadata.jobhackai_purpose==='new_topic').length,0);
+  f.h.event({type:'session.updated',session:{instructions:'unrelated acknowledgement'}});
+  assert.equal(f.h.el('vi-audio-check').hidden,false);
+  await f.acknowledge();assert.equal(f.h.el('vi-audio-check').hidden,true);
+  assert.equal(f.activations().length,1);assert.equal(f.activations()[0].body.audioReady,true);
+  assert.equal(f.activations()[0].body.sessionId,f.opens()[0].body.sessionId);
+  const question=f.h.sends.filter(x=>x.type==='response.create'&&x.response.metadata.jobhackai_purpose==='new_topic');
+  assert.equal(question.length,1);assert.equal(question[0].response.metadata.jobhackai_topic,'0');
+  assert.ok(f.h.sends.some(x=>x.type==='conversation.item.delete'&&x.item_id==='mic-test'));
+});
+
+test('late setup transcripts remain excluded after activation and later words are preserved',async t=>{
+  const f=audioFixture(t,{routes:{'/api/voice/session/':()=>({status:'completed',saved:true,connectionClosed:true})}});
+  await f.check();f.speech();await f.greetingDone();await f.h.click('vi-audio-confirm');await f.acknowledge();
+  f.h.event({type:'conversation.item.input_audio_transcription.completed',item_id:'mic-test',transcript:'Late setup words must not be scored.'});
+  f.h.event({type:'conversation.item.created',item:{id:'real-answer',role:'user'}});
+  f.h.event({type:'input_audio_buffer.committed',item_id:'real-answer'});
+  f.h.event({type:'conversation.item.input_audio_transcription.completed',item_id:'real-answer',transcript:'I redesigned our intake process and cut the delay by two days.'});
+  await f.h.endInterview();const body=f.h.completeBodies()[0];
+  assert.ok(body.transcript.some(x=>x.text.includes('intake process')));
+  assert.ok(!body.transcript.some(x=>/Testing|Late setup/.test(x.text)));
+});
+
+test('cancel during activation ignores its late success and never requests a question',async t=>{
+  const pending=deferred();let activateBody;
+  const f=audioFixture(t,{routes:{'/api/voice/connection':(url,init)=>{
+    const body=JSON.parse(init.body);if(body.action==='close')return {connectionClosed:true};
+    if(body.action==='activate'){activateBody=body;return pending.promise;}
+    return {...f.answer(body),requiresAudioCheck:true,interviewInstructions:f.instructions};
+  }}});
+  await f.check();f.speech();await f.greetingDone();await f.h.click('vi-audio-confirm');await f.acknowledge();
+  await f.h.endInterview();pending.resolve({...activateBody,activated:true,instructions:f.instructions,deadlineAt:new Date(Date.now()+1200000).toISOString()});await f.h.settle();
+  assert.equal(f.h.peerConnection().connectionState,'closed');
+  assert.equal(f.h.sends.filter(x=>x.type==='response.create'&&x.response.metadata.jobhackai_purpose==='new_topic').length,0);
+});
+
+test('a missing provider configuration acknowledgement leaves setup uncharged and retryable',async t=>{
+  const f=audioFixture(t,{timerDelay:ms=>ms===8000?10:ms});await f.check();f.speech();await f.greetingDone();
+  await f.h.click('vi-audio-confirm');await new Promise(resolve=>setTimeout(resolve,25));await f.h.settle();
+  assert.equal(f.activations().length,0);assert.equal(f.h.el('vi-audio-confirm').disabled,false);
+  assert.match(f.h.el('vi-status').textContent,/No interview has started/);
+  await f.h.click('vi-audio-retry');
+  const replay=f.h.sends.filter(x=>x.type==='response.create').at(-1);
+  assert.equal(replay.response.metadata.jobhackai_purpose,'audio_check');
+  assert.match(replay.response.instructions,/Do not ask interview questions/);
+  assert.equal(f.activations().length,0);
+});
+
+test('audio recovery during the interview neither spends another credit nor advances the question budget',async t=>{
+  const f=audioFixture(t);await f.check();f.speech();await f.greetingDone();await f.h.click('vi-audio-confirm');await f.acknowledge();
+  f.h.event({type:'response.created',response:{id:'question-one'}});
+  f.h.event({type:'response.done',response:{id:'question-one'}});
+  await f.h.click('vi-audio-help');
+  assert.equal(f.h.el('vi-audio-check').hidden,false);
+  await f.h.click('vi-audio-retry');
+  assert.equal(f.activations().length,1);assert.equal(f.opens().length,1);
+  const turns=f.h.sends.filter(x=>x.type==='response.create').map(x=>x.response.metadata.jobhackai_purpose);
+  assert.deepEqual(turns,['audio_check','new_topic','audio_recovery']);
+});
+
+test('a muted or disconnected microphone cannot activate, and reconnect rechecks the replacement device',async t=>{
+  const streams=[];
+  const f=audioFixture(t,{getUserMedia:async()=>{const stream=mic();streams.push(stream);return stream;}});
+  await f.check();f.speech();await f.greetingDone();await f.h.click('vi-mute-btn');
+  await f.h.click('vi-audio-confirm');assert.equal(f.activations().length,0);assert.equal(f.h.el('vi-audio-confirm').disabled,true);
+  await f.h.click('vi-mute-btn');streams[0].track.onended();f.h.peerConnection().connectionState='connected';
+  assert.equal(f.h.el('vi-audio-confirm').disabled,true);
+  await f.h.click('vi-reconnect-btn');assert.equal(f.opens().length,2);
+  assert.equal(f.h.el('vi-audio-confirm').disabled,true,'the old microphone confirmation cannot approve the new device');
+  assert.equal(f.activations().length,0);
+});
+
+test('microphone loss while configuration is being acknowledged cannot activate an interview',async t=>{
+  const stream=mic(),f=audioFixture(t,{getUserMedia:async()=>stream});
+  await f.check();f.speech();await f.greetingDone();await f.h.click('vi-audio-confirm');
+  stream.track.onended();await f.acknowledge();
+  assert.equal(f.activations().length,0);
+  assert.equal(f.h.el('vi-audio-confirm').disabled,true);
+  assert.match(f.h.el('vi-status').textContent,/Audio changed during setup/);
+});
+
+test('a delayed playback rejection cannot undo a newer successful click recovery',async t=>{
+  const oldPlay=deferred(),f=audioFixture(t);let plays=0;
+  f.h.el('vi-remote-audio').play=()=>++plays===1?oldPlay.promise:Promise.resolve();
+  await f.check();f.speech();await f.greetingDone();await f.h.click('vi-audio-retry');
+  assert.equal(f.h.el('vi-audio-confirm').disabled,false);
+  oldPlay.reject(Error('stale playback failure'));await f.h.settle();
+  assert.equal(f.h.el('vi-audio-confirm').disabled,false);
+  assert.equal(f.h.el('vi-audio-retry').textContent,'Play again');
+  assert.match(f.h.el('vi-status').textContent,/Check your audio before starting/);
+});

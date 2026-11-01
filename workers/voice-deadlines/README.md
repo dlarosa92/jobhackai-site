@@ -1,9 +1,13 @@
 # Managed voice deadline worker
 
-Draft only. Nothing in this folder deploys automatically. Managed voice and
-deadline scheduling remain disabled remotely; production release is held.
+Nothing in this folder deploys automatically. The November 1 audio-readiness
+candidate requires migration035 before this worker, then the matching app.
+It permits one server-authorized setup-to-interview deadline transition and
+protects an activated call from a stale setup alarm. See the current
+[implementation and rollout procedure](../../docs/voice-audio-readiness.md).
+This candidate's deployment and real-audio acceptance remain pending.
 
-Staging update, September 20: migration028 is now applied and verified in dev
+Historical staging update, September 20: migration028 was applied and verified in dev
 and QA, after private backups and tests against both database copies. It remains
 unapplied in production. Both staging workers are now installed with the owner-provided
 development key and scheduling disabled. Matching Pages namespace bindings and the

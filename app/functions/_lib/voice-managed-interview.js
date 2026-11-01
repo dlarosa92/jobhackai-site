@@ -5,6 +5,8 @@ import { createManagedVoiceCall, closeManagedVoiceCall } from './voice-provider-
 import { armVoiceDeadline } from './voice-deadline.js';
 
 export const MANAGED_INTERVIEW_MINUTES = 20;
+export const AUDIO_CHECK_SECONDS = 120;
+const AUDIO_CHECK_INSTRUCTIONS = 'This is a brief audio setup check, not an interview. Say only: "Can you hear this clearly? Say a few words to check your microphone, then choose I can hear you on the page." Do not ask interview questions, evaluate answers or continue a conversation. Wait for the application to activate the interview.';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function validateOwner(uid, sessionId) {
@@ -16,21 +18,22 @@ function control(db, uid, sessionId) {
   return db.prepare(`SELECT *,julianday(deadline_at)>julianday('now') AS in_window
     FROM voice_interview_controls WHERE session_id=? AND auth_id=?`).bind(sessionId,uid).first();
 }
-async function stillOpen(db, uid, sessionId, attemptId) {
+async function stillOpen(db, uid, sessionId, attemptId, requireReservation = true) {
   return db.prepare(`SELECT 1 FROM voice_interview_controls c
     JOIN voice_provider_calls p ON p.id=c.current_attempt_id AND p.auth_id=c.auth_id AND p.session_id=c.session_id
     WHERE c.session_id=? AND c.auth_id=? AND c.closed_at IS NULL
       AND julianday(c.deadline_at)>julianday('now') AND p.id=? AND p.state='active'
       AND NOT EXISTS(SELECT 1 FROM account_deletion_admissions WHERE auth_id=c.auth_id)
-      AND EXISTS(SELECT 1 FROM voice_sessions s JOIN users u ON u.id=s.user_id
-        WHERE s.id=c.session_id AND u.auth_id=c.auth_id AND s.status IN ('created','active'))`)
+      ${requireReservation ? `AND EXISTS(SELECT 1 FROM voice_sessions s JOIN users u ON u.id=s.user_id
+        WHERE s.id=c.session_id AND u.auth_id=c.auth_id AND s.status IN ('created','active'))` : ''}`)
     .bind(sessionId,uid,attemptId).first();
 }
 
 /** Server-only lifecycle used by the authenticated SDP route. uid must come from
  * verified authentication. Never return this answer until this function has
- * committed the interview reservation and rechecked the saved close intent. */
-export async function openManagedInterview(env,{uid,sessionId,sdp,role,seniority,jd,firstName='',transcript,interviewStarted=false,replacesAttemptId=null}) {
+ * armed a bounded audio check and rechecked the saved close intent. New checks
+ * do not reserve credit; activation is a separate authenticated operation. */
+export async function openManagedInterview(env,{uid,sessionId,sdp,role,seniority,jd,firstName='',transcript,interviewStarted=false,replacesAttemptId=null,audioCheck=true}) {
   validateOwner(uid,sessionId);
   if (typeof sdp !== 'string' || !sdp.startsWith('v=0') || new TextEncoder().encode(sdp).length>65536) {
     throw Error('voice_connection_request_invalid');
@@ -52,11 +55,13 @@ export async function openManagedInterview(env,{uid,sessionId,sdp,role,seniority
   // cannot be silently adopted as if the new ledger had observed their end.
   if (existing && !saved) throw Error('voice_connection_legacy_session');
   if (!existing && saved?.reserved_at) throw Error('voice_connection_history_removed');
+  if (!existing && saved && !saved.closed_at && !saved.audio_check_deadline_at) throw Error('voice_connection_audio_check_required');
   if (saved?.closed_at) throw Error('voice_connection_ended');
   if (saved && !saved.in_window) throw Error('voice_connection_expired');
 
   let entitlement=null;
   if (!existing) {
+    if (audioCheck !== true) throw Error('voice_connection_audio_check_required');
     role=String(role || '').trim().slice(0,120);
     seniority=String(seniority || '').trim().slice(0,60);
     jd=String(jd || '').trim().slice(0,2000);
@@ -64,12 +69,19 @@ export async function openManagedInterview(env,{uid,sessionId,sdp,role,seniority
     entitlement=await getVoiceEntitlement(env,uid,{managed:true});
     if (!entitlement.canStart) throw Error('voice_connection_'+(entitlement.reason || 'paywall'));
     if (!saved) {
-      await db.prepare(`INSERT INTO voice_interview_controls(session_id,auth_id,deadline_at)
-        SELECT ?,?,datetime('now','+20 minutes') WHERE EXISTS(SELECT 1 FROM users WHERE auth_id=?)
+      // Atomic admission bounds abandoned checks across browsers and tabs.
+      await db.prepare(`INSERT INTO voice_interview_controls(session_id,auth_id,deadline_at,audio_check_deadline_at,audio_check_mode)
+        SELECT ?,?,datetime('now',?),datetime('now',?),?
+        WHERE EXISTS(SELECT 1 FROM users WHERE auth_id=?)
           AND NOT EXISTS(SELECT 1 FROM account_deletion_admissions WHERE auth_id=?)
-        ON CONFLICT(session_id) DO NOTHING`).bind(sessionId,uid,uid,uid).run();
+          AND (SELECT COUNT(*) FROM voice_interview_controls WHERE auth_id=?
+            AND audio_check_deadline_at IS NOT NULL AND created_at>datetime('now','-15 minutes')) < 3
+        ON CONFLICT(session_id) DO NOTHING`).bind(sessionId,uid,'+'+AUDIO_CHECK_SECONDS+' seconds','+'+AUDIO_CHECK_SECONDS+' seconds',entitlement.mode,uid,uid,uid).run();
       saved=await control(db,uid,sessionId);
-      if (!saved) throw Error('voice_connection_not_admitted');
+      if (!saved) {
+        if (await db.prepare('SELECT 1 FROM voice_interview_controls WHERE session_id=?').bind(sessionId).first()) throw Error('voice_connection_not_admitted');
+        throw Error('voice_connection_setup_limit');
+      }
       if (saved.closed_at) throw Error('voice_connection_ended');
     }
   }
@@ -99,22 +111,18 @@ export async function openManagedInterview(env,{uid,sessionId,sdp,role,seniority
   let call;
   try {
     call=await createManagedVoiceCall(env,{uid,sessionId,sdp,guarded:true,expectedAttemptId:saved.current_attempt_id,
-      instructions:interviewerInstructions({
+      instructions:existing ? interviewerInstructions({
         role:existing?.role || role,seniority:existing?.seniority || seniority,jd:existing?.jd_excerpt || jd,
         firstName,maxMinutes:MANAGED_INTERVIEW_MINUTES,
         resumeContext:existing ? buildResumeContext(tail) : null,
-        interviewStarted:!!existing && interviewStarted===true
-      })});
-    if (!existing) {
-      const reserved=await reserveVoiceSession(env,{sessionId,userRowId:user.id,role,
-        seniority:seniority || null,jd:jd || null,mode:entitlement.mode,model,managedAttemptId:call.attemptId});
-      if (!reserved.inserted) throw Error('voice_connection_reservation_unavailable');
-    }
-    if (!await stillOpen(db,uid,sessionId,call.attemptId)) throw Error('voice_connection_ended');
+        interviewStarted:interviewStarted===true
+      }) : AUDIO_CHECK_INSTRUCTIONS});
+    if (!await stillOpen(db,uid,sessionId,call.attemptId,!!existing)) throw Error('voice_connection_ended');
     return {sessionId,attemptId:call.attemptId,sdp:call.sdp,model,resumed:!!existing,
       mode:existing?.entitlement_mode || entitlement?.mode,maxMinutes:MANAGED_INTERVIEW_MINUTES,
-      deadlineAt:saved.deadline_at,
-      sessionsRemaining:entitlement?.mode==='pack' ? Math.max(0,entitlement.sessionsRemaining-1) : null};
+      deadlineAt:saved.deadline_at,requiresAudioCheck:!existing,
+      interviewInstructions:existing ? null : interviewerInstructions({role,seniority,jd,firstName,maxMinutes:MANAGED_INTERVIEW_MINUTES,audioReady:true}),
+      sessionsRemaining:entitlement?.mode==='pack' ? entitlement.sessionsRemaining : null};
   } catch (error) {
     // A lost reservation receipt may have committed the credit. Preserve the
     // same session ID for recovery; never refund or create a second interview.
@@ -123,6 +131,76 @@ export async function openManagedInterview(env,{uid,sessionId,sdp,role,seniority
     const code=/^voice_(?:connection|call)_[a-z_]+$/.test(error?.message || '')
       ? error.message : 'voice_connection_unconfirmed';
     throw Error(code);
+  }
+}
+
+/** Only explicit readiness can activate an owned check. The same session ID
+ * makes a lost response or duplicate click recoverable without another credit.
+ * The alarm is acknowledged before reservation. End/deletion/deadline guards
+ * are rechecked by the reservation transaction, not trusted from this read. */
+export async function activateManagedInterview(env,{uid,sessionId,attemptId,audioReady,role,seniority,jd,firstName=''}) {
+  validateOwner(uid,sessionId);
+  if (audioReady !== true || typeof attemptId !== 'string') throw Error('voice_connection_audio_check_required');
+  const db=getDb(env), saved=await control(db,uid,sessionId);
+  if (!saved) throw Error('voice_connection_not_found');
+  if (saved.closed_at) throw Error('voice_connection_ended');
+  if (!saved.in_window) throw Error('voice_connection_expired');
+  if (saved.current_attempt_id!==attemptId) throw Error('voice_connection_stale_attempt');
+  let existing=await db.prepare('SELECT * FROM voice_sessions WHERE id=?').bind(sessionId).first();
+  const user=await db.prepare('SELECT id FROM users WHERE auth_id=?').bind(uid).first();
+  if (!user || (existing && existing.user_id!==user.id)) throw Error('voice_connection_not_found');
+  if (!existing && saved.reserved_at) throw Error('voice_connection_history_removed');
+  if (existing && !['created','active'].includes(existing.status)) throw Error('voice_connection_ended');
+  if (!saved.audio_check_deadline_at) throw Error('voice_connection_audio_check_required');
+  if (!await stillOpen(db,uid,sessionId,attemptId,false)) throw Error('voice_connection_ended');
+  role=String(role || '').trim().slice(0,120);
+  seniority=String(seniority || '').trim().slice(0,60);
+  jd=String(jd || '').trim().slice(0,2000);
+  if (!existing && !role) throw Error('voice_connection_role_required');
+  try {
+    if (!existing) {
+      const entitlement=await getVoiceEntitlement(env,uid,{managed:true});
+      if (!entitlement.canStart) throw Error('voice_connection_'+(entitlement.reason || 'paywall'));
+      if (entitlement.mode !== saved.audio_check_mode) throw Error('voice_connection_reservation_unavailable');
+      // Only the first readiness intent sets the interview clock. A retry can
+      // never grant more time. The original setup deadline remains auditable.
+      await db.prepare(`UPDATE voice_interview_controls SET audio_ready_at=datetime('now'),
+        deadline_at=datetime('now','+20 minutes'),updated_at=datetime('now')
+        WHERE session_id=? AND auth_id=? AND current_attempt_id=? AND audio_ready_at IS NULL
+          AND closed_at IS NULL AND julianday(deadline_at)>julianday('now')
+          AND NOT EXISTS(SELECT 1 FROM account_deletion_admissions WHERE auth_id=?)`)
+        .bind(sessionId,uid,attemptId,uid).run();
+      const ready=await control(db,uid,sessionId);
+      if (!ready?.audio_ready_at || ready.closed_at) throw Error('voice_connection_ended');
+      await armVoiceDeadline(env,{uid,sessionId,deadlineAt:ready.deadline_at});
+      // Another activation may have committed while the alarm RPC was pending.
+      existing=await db.prepare('SELECT * FROM voice_sessions WHERE id=?').bind(sessionId).first();
+      if (!existing) {
+        try {
+          const reserved=await reserveVoiceSession(env,{sessionId,userRowId:user.id,role,
+            seniority:seniority || null,jd:jd || null,mode:entitlement.mode,
+            model:env.OPENAI_MODEL_VOICE || 'gpt-realtime-mini',managedAttemptId:attemptId});
+          if (!reserved.inserted) throw Error('voice_connection_reservation_unavailable');
+        } catch (error) {
+          // A concurrent INSERT or a lost transaction receipt is resolved by
+          // reading the owned receipt. Never refund a committed activation.
+          existing=await db.prepare('SELECT * FROM voice_sessions WHERE id=? AND user_id=?').bind(sessionId,user.id).first();
+          if (!existing) throw error;
+        }
+      }
+    }
+    if (!await stillOpen(db,uid,sessionId,attemptId)) throw Error('voice_connection_ended');
+    existing=await db.prepare('SELECT * FROM voice_sessions WHERE id=?').bind(sessionId).first();
+    const active=await control(db,uid,sessionId);
+    return {sessionId,attemptId,activated:true,deadlineAt:active.deadline_at,mode:existing.entitlement_mode,
+      instructions:interviewerInstructions({role:existing.role,seniority:existing.seniority,jd:existing.jd_excerpt,
+        firstName,maxMinutes:MANAGED_INTERVIEW_MINUTES,audioReady:true})};
+  } catch (error) {
+    // An unactivated failure is safely closed. A committed activation remains
+    // recoverable by its ID even when the HTTP/DB receipt was lost.
+    const receipt=await db.prepare('SELECT 1 FROM voice_sessions WHERE id=? AND user_id=?').bind(sessionId,user.id).first();
+    if (!receipt) await closeManagedInterview(env,{uid,sessionId}).catch(()=>{});
+    throw Error(/^voice_connection_[a-z_]+$/.test(error?.message || '') ? error.message : 'voice_connection_unconfirmed');
   }
 }
 

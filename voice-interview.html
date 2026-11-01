@@ -58,6 +58,12 @@
     .vi-btn-secondary:hover { background: var(--color-bg-light); }
     .vi-btn-danger { background: #fff; color: var(--color-error); font-weight: 700; border: 1.5px solid var(--color-error); border-radius: var(--radius-button); padding: 0.8rem 1.6rem; cursor: pointer; }
     .vi-btn-danger:hover, .vi-btn-danger:focus { background: var(--color-error); color: #fff; }
+    .vi-mode-audio-setup .vi-live-card > .vi-answer-card,
+    .vi-mode-audio-setup #vi-caption,
+    .vi-mode-audio-setup #vi-recent,
+    .vi-mode-audio-setup #vi-answer-tip,
+    .vi-mode-audio-setup #vi-audio-help { display: none !important; }
+    #vi-audio-check[hidden] { display: none !important; }
     .vi-status { font-weight: 600; margin-bottom: 0.6rem; }
     .vi-status.vi-live { color: var(--color-success); }
     .vi-status.vi-connecting { color: var(--color-warning); }
@@ -412,15 +418,34 @@
         </div>
       </div>
       <p class="vi-hint">Find a quiet room and use headphones if you can. The interviewer hears everything your microphone hears.</p>
-      <button id="vi-start-btn" class="vi-btn-primary" disabled>Start the interview</button>
+      <p id="vi-audio-setup-hint" class="vi-hint" hidden>Check your microphone and sound first. Audio setup does not use an interview.</p>
+      <button id="vi-start-btn" class="vi-btn-primary" disabled>Check audio</button>
     </div>
 
     <!-- Live -->
     <div id="vi-live-view" class="vi-card vi-live-card" style="display:none">
       <div class="vi-live-top">
         <div id="vi-status" class="vi-status vi-connecting">Connecting...</div>
-        <div><div class="vi-timer-label">Session time left</div><div class="vi-timer" id="vi-timer" role="timer" aria-label="Session time remaining">20:00</div></div>
+        <div><div id="vi-timer-label" class="vi-timer-label">Session time left</div><div class="vi-timer" id="vi-timer" role="timer" aria-label="Session time remaining">20:00</div></div>
       </div>
+      <section id="vi-audio-check" class="vi-question-card" aria-labelledby="vi-audio-title" hidden>
+        <h2 id="vi-audio-title">Check your audio</h2>
+        <p id="vi-audio-note">This check does not use an interview.</p>
+        <label for="vi-audio-meter">Your microphone</label>
+        <meter id="vi-audio-meter" min="0" max="100" value="0" style="width:100%">Microphone level</meter>
+        <p id="vi-audio-mic-status" role="status">Say a few words to check your microphone.</p>
+        <p id="vi-audio-output-status" role="status">Waiting for the test voice...</p>
+        <div class="vi-live-actions">
+          <button id="vi-audio-retry" type="button" class="vi-btn-secondary">Play again</button>
+          <button id="vi-audio-confirm" type="button" class="vi-btn-primary" disabled>I can hear you. Start interview</button>
+        </div>
+        <details>
+          <summary>Need help with sound?</summary>
+          <p>Check that this tab and your device are not muted. Choose the correct headphones or speakers in your device's sound settings. If using Bluetooth, check that it is connected.</p>
+          <p>For the microphone, allow access to this site when your browser asks. If you previously blocked it, use the site's permission controls beside the address bar. Your system's privacy settings may also need microphone access enabled for this browser.</p>
+          <p>You can cancel this check and return later. You do not need to share your screen or tab audio.</p>
+        </details>
+      </section>
       <div class="vi-question-card">
         <div class="vi-presence">
           <span id="vi-speaking" class="vi-speaking" aria-hidden="true"></span>
@@ -449,6 +474,7 @@
       </details>
       <div class="vi-live-actions">
         <button id="vi-mute-btn" class="vi-btn-secondary">Mute mic</button>
+        <button id="vi-audio-help" type="button" class="vi-btn-secondary">Audio help</button>
         <button id="vi-reconnect-btn" class="vi-btn-secondary" style="display:none">Reconnect</button>
         <button id="vi-end-btn" class="vi-btn-danger">Finish interview</button>
       </div>
@@ -461,7 +487,7 @@
           <button id="vi-end-confirm-btn" type="button" class="vi-btn-danger">Finish &amp; save</button>
         </div>
       </dialog>
-      <audio id="vi-remote-audio" autoplay></audio>
+      <audio id="vi-remote-audio" autoplay playsinline></audio>
     </div>
 
     <!-- Done / report -->
@@ -618,9 +644,9 @@
   <script src="js/role-selector.js?v=20261017-page-tag-1" type="module"></script>
   <script src="js/voice-transcript-order.js?v=20260809-1" type="module"></script>
   <script src="js/voice-conduct.js?v=20260725-3" type="module"></script>
-  <script src="js/voice-lifecycle.js?v=20261101-polite-finish-1" type="module"></script>
+  <script src="js/voice-lifecycle.js?v=20261101-audio-readiness-1" type="module"></script>
   <script src="js/voice-usage.js?v=20260920-1" type="module"></script>
   <script src="js/voice-turn-plan.js?v=20261025-1" type="module"></script>
-  <script src="js/voice-interview.js?v=20261101-polite-finish-1" defer></script>
+  <script src="js/voice-interview.js?v=20261101-audio-readiness-1" defer></script>
 </body>
 </html>

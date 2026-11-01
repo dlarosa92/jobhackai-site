@@ -42,6 +42,8 @@ const CLIENT_SRC = new URL('../../../../../js/voice-interview.js', import.meta.u
 // bails on a missing #vi-history-panel, exactly as it does on a page that does
 // not render the rail.
 const ELEMENT_IDS = [
+  'vi-audio-check', 'vi-audio-note', 'vi-audio-confirm', 'vi-audio-retry', 'vi-audio-help',
+  'vi-audio-mic-status', 'vi-audio-output-status', 'vi-audio-meter', 'vi-timer-label',
   'vi-setup-view', 'vi-live-view', 'vi-done-view', 'vi-disabled-view',
   'vi-status', 'vi-caption', 'vi-timer', 'vi-speaking',
   'vi-done-status', 'vi-scorecard', 'vi-save-status', 'vi-save-retry',
@@ -81,6 +83,8 @@ function makeElement(id) {
     value: '',
     className: '',
     innerHTML: '',
+    play: async () => {},
+    pause: () => {},
     autoplay: false,
     srcObject: null,
     offsetParent: null,
