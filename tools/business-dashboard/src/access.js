@@ -24,11 +24,11 @@ export function allowed(identity,method,path) {
   if(identity?.role==='owner')return true;
   if(identity?.role!=='machine')return false;
   const caps=identity.capabilities;
-  if(method==='GET'&&caps.includes('read'))return ['/api/campaigns','/api/operating-guide','/api/session','/api/workflow','/api/analytics'].includes(path)||/^\/api\/work-items(?:\/[a-z0-9_-]+)?$/.test(path);
+  if(method==='GET'&&caps.includes('read'))return ['/api/campaigns','/api/operating-guide','/api/session','/api/workflow','/api/analytics','/api/stripe-check'].includes(path)||/^\/api\/work-items(?:\/[a-z0-9_-]+)?$/.test(path);
   if(method!=='POST')return false;
   if(['/api/workflow/start','/api/workflow/finish'].includes(path))return ['prepare','reconcile','coordinate'].some(c=>caps.includes(c));
   const routes={
-    '/api/workflow/handoff':'prepare','/api/analytics':'reconcile',
+    '/api/workflow/handoff':'prepare','/api/analytics':'reconcile','/api/stripe-check':'reconcile',
     '/api/work-items/prepare':'prepare','/api/outreach/prepare':'prepare',
     '/api/work-items/capture-native':'reconcile','/api/work-items/reconcile':'reconcile','/api/work-items/source-health':'reconcile','/api/work-items/receipt':'reconcile',
     '/api/work-items/contribute':'contribute','/api/work-items/rank':'coordinate','/api/work-items/coordination':'coordinate',

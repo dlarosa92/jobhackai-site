@@ -297,3 +297,17 @@ test('the source-check panel names missing Marblism coverage even when a run not
  assert.match(text(nodes.get('workflow-runs')),/Still unverified: marblism, campaign, gmail, directory/);
  assert.doesNotMatch(text(nodes.get('workflow-runs')),/Check completed/);
 });
+
+for(let round=1;round<=3;round++)test(`verified Stripe indicators clear only with a current comparison, round ${round}`,()=>{
+ const view=ui();view.render(data([]));
+ view.run(`render({asOf:'2026-11-01T17:00:00Z',month:'2026-11',netCollectedCents:0,costCents:null,stripe:{status:'current',customers:0,checkedAt:'2026-11-01T17:00:00Z',detail:'Payments match Stripe.'},business:{periods:{7:{start:'2026-10-25',end:'2026-10-31',previousStart:'2026-10-18',previousEnd:'2026-10-24',metrics:[
+ {id:'customers',label:'Paying customers',value:0,status:'verified',previous:null,change:null,series:[]},
+ {id:'money',label:'Money collected',value:1700,status:'verified',previous:0,change:1700,series:[]}
+ ]}}}})`);
+ const stripe=()=>view.nodes.get('source-health').children.find(c=>c.attributes['data-disclosure-key']==='Stripe');
+ assert.match(text(stripe()),/Up to date.*match Stripe/s);assert.doesNotMatch(text(stripe()),/Needs attention/);
+ assert.match(text(view.nodes.get('kpi-grid').children[0]),/0.*Verified with Stripe.*Staff accounts excluded/s);
+ assert.equal(view.nodes.get('goal-status').textContent,'0 paying customers');
+ view.run("overviewData.stripe={status:'incomplete',detail:'App records changed after the Stripe check.'};renderHealth()");
+ assert.match(text(stripe()),/Needs attention.*App records changed/s);assert.doesNotMatch(text(stripe()),/Up to date/);
+});
