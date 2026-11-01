@@ -47,7 +47,7 @@ async function harness(responses, initialUser={getIdToken:async()=> 'test-only-t
     async click(id) {assert.equal(element(id).disabled,false,id+' enabled');element(id).click();await flush();},
     cleanup() {for(const timer of timers)clearTimeout(timer);}};
 }
-const plan={voice:{transport:'managed'}}, opened={attemptId:'attempt-1',sdp:'v=0-answer'};
+const plan={voice:{transport:'managed'}}, opened={attemptId:'attempt-1',sdp:'v=0-answer',requiresAudioCheck:true};
 test('pending authentication does not enable Start and a later user does', async t=>{
   const h=await harness([], {_authPending:true});t.after(h.cleanup);
   assert.equal(h.element('start').disabled,true);
@@ -71,10 +71,13 @@ test('saved but pending closure remains finishable and retains unload warning', 
   warned=false;h.events.beforeunload({preventDefault(){warned=true;}});assert.equal(warned,false);
 });
 test('successful reconnect completes normally using the original session and replacement attempt', async t=>{
-  const h=await harness([plan,opened,{attemptId:'attempt-2',sdp:'v=0-answer'},{},{saved:true,connectionClosed:true}]);t.after(h.cleanup);
+  const h=await harness([plan,opened,{...opened,attemptId:'attempt-2'},{},{status:'cancelled',saved:false,connectionClosed:true}]);t.after(h.cleanup);
   await h.click('start');await h.click('drop');await h.click('reconnect');await h.click('finish');
   assert.equal(h.calls[2].body.sessionId,h.calls[1].body.sessionId);
   assert.equal(h.calls[2].body.replacesAttemptId,'attempt-1');
+  assert.equal(h.calls[1].body.audioCheck,true);
+  assert.equal(h.calls[2].body.audioCheck,true);
+  assert.equal(h.calls.filter(call=>call.body?.action==='activate').length,0,'the silent diagnostic never activates a paid interview');
   assert.equal(h.calls.at(-1).body.reason,'user_ended');
 });
 test('failed reconnect requires Finish and does not replay an uncertain create', async t=>{
