@@ -397,18 +397,21 @@ async function pollBoardChanges(){
   try {
     const {revision}=await getJSON('/api/work-items/changes');
     if(actionPending)return;
-    if((boardFailed||revision!==lastBoardRevision) && await refreshBoard())lastBoardRevision=revision;
+    if((boardFailed||revision!==lastBoardRevision) && await refreshBoard()){lastBoardRevision=revision;if(overviewData)await refreshNumbers();}
   } catch {
     boardFailed=true;renderHealth();$('campaign-error').textContent='Live updates are disconnected. Saved cards may be old. Retrying automatically.';$('campaign-error').hidden=false;
   } finally {changePollPending=false;}
 }
+let numberRequestSequence=0;
+async function refreshNumbers(){
+  const sequence=++numberRequestSequence;
+  try{const numbers=await getJSON('/api/overview');if(sequence===numberRequestSequence)render(numbers);}
+  catch{if(sequence===numberRequestSequence){numbersFailed=true;$('error').textContent='Numbers could not refresh. Any saved numbers below may be old.';$('error').hidden=false;renderMetrics();renderHealth();}}
+}
 async function refresh(){
   const sequence=++refreshSequence;$('refresh').disabled=true;$('refresh').setAttribute('aria-label','Refreshing saved data');
   // Work renders independently of slower revenue and analytics queries.
-  await Promise.all([refreshBoard(),(async()=>{
-    try{const numbers=await getJSON('/api/overview');if(sequence===refreshSequence)render(numbers);}
-    catch{if(sequence===refreshSequence){numbersFailed=true;$('error').textContent='Numbers could not refresh. Any saved numbers below may be old.';$('error').hidden=false;renderMetrics();}}
-  })()]);
+  await Promise.all([refreshBoard(),refreshNumbers()]);
   if(sequence!==refreshSequence)return;
   renderHealth();$('refresh').disabled=false;$('refresh').setAttribute('aria-label','Refresh saved data');
 }
