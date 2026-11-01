@@ -1,6 +1,6 @@
 # Voice audio readiness
 
-Implementation candidate prepared November 1, 2026 against dev0 `a13ebd30ba34d2651596a6e699c744506ff5bce3`. Local validation is separate from deployment and recorded owner acceptance. This increment has not been deployed.
+The original audio-readiness increment was deployed to development in PR 1145, dev0 `562919bf8e4f1095bb6dcab7d777129729361db6`. This follow-up adds replay isolation and candidate-input validation. Deployment and recorded owner acceptance are separate gates.
 
 ## Customer behavior
 
@@ -21,7 +21,18 @@ The browser cannot detect whether a physical speaker is muted or override denied
 - A lost activation receipt keeps the same ID recoverable past the old setup deadline. A definitive entitlement or reservation rejection releases the browser devices and refreshes account access instead of offering Retry start. If another request already committed this same ID, the server preserves recovery rather than reporting a terminal entitlement rejection.
 - The deadline worker acknowledges the one allowed transition to 20 minutes from first readiness intent before reservation. A delayed setup alarm cannot terminate a valid activated interview. Alarms persist retry/review behavior for uncertain provider closure.
 - Old peer connections, stale playback promises, late setup transcripts and cancelled activation responses cannot start questions on a replacement or ended connection. A microphone disconnect while configuration is pending blocks activation.
-- Provider configuration is acknowledged before credit activation. Each setup replay has response-specific audio-check instructions so a lost acknowledgement cannot turn Play again into an interview question. This uses the documented [Realtime response override](https://developers.openai.com/api/reference/resources/realtime/client-events).
+- Provider configuration is acknowledged before credit activation. Each setup replay uses empty response input plus audio-check instructions, so microphone-test conversation is not input to the sample. The real interview retains its normal conversation context. This uses the documented [Realtime response override and input isolation](https://developers.openai.com/api/reference/resources/realtime/client-events#response.create).
+- A replay click made during microphone-test speech waits until speech stops, then plays once. Cancelling the check discards that queued replay.
+
+## Recorded development follow-up, November 1
+
+The recorded desktop run verified an uncharged setup, one activation with the full interview allowance, one saved short interview, transcript exclusion of setup speech, and provider closure. It also exposed conversational drift in Play again and a replay click that could remain queued after microphone speech stopped. This follow-up isolates each sample from conversation history and releases a queued setup replay on speech end. Two replay regressions failed before the change and pass afterward; cancellation is also covered. Real audible acceptance remains required.
+
+The recording also contains two consecutive interview questions with no captured candidate answer between them. A client regression reproduced a follow-up request on an audio commit whose transcription was empty. The client now waits for committed input to finish transcription, then uses the transcript assembler's existing noise and echo filters before spending a turn. Event deduplication uses item IDs, so two legitimate identical answers remain eligible even if an intervening interviewer caption is delayed. Discarded inputs are removed from provider context as well. Pending fragments are combined into one reply; late transcription cannot interrupt continued speech. A spoken Finish takes precedence over requesting a reply, and reconnect discards unsettled reply work without resetting the question budget. A missing or stale transcript-validation module stops before microphone access or credit use.
+
+Long answers also wait for nearby pending interviewer captions before echo detection; short acknowledgements need no echo context. A delayed caption releases a real answer and rejects an echo. Final empty captions from interrupted output retire their placeholder so an answer cannot stall on it. Tool calls, tool results and system instructions do not reserve caption slots. These event-order cases have client regressions, including continued answers after a conduct warning.
+
+This removes a reproduced cause of extra questions; the exact event sequence in the recording was not captured. The deployed audible retest must establish the user-facing result and acceptable response latency. Cancellation, polite spoken Finish, fresh-free-account protection, cross-browser acceptance and the full natural interview remain open. No server API, database schema or Worker change is required for this follow-up.
 
 ## Local verification
 
@@ -53,7 +64,7 @@ Obtain the applicable development rollout approval. Recheck the exact dev0 head 
 
 1. Back up the development database and verify the existing managed-call, closure-receipt and early-end-grace schema (including 033). Migration 034 is the separate question-retry feature, is not a dependency, and remains held with `VOICE_RETRY_ENABLED` off. Apply only `app/db/migrations/035_voice_audio_readiness.sql` to `jobhackai-dev-db`, then verify all three columns and the rate index. This additive migration must precede both runtime deployments.
 2. Deploy the reviewed deadline worker to the existing `jobhackai-voice-deadlines-dev` target (`workers/voice-deadlines`, Wrangler environment `dev`). Preserve the existing D1/DO bindings, scheduling flag and issuing key. Do not roll this worker back to code that cannot recognize readiness extensions while activated calls remain.
-3. Deploy the exact reviewed app candidate through dev0 to `jobhackai-app-dev`. Verify the canonical deployment, served HTML and both versioned scripts (`20261101-audio-readiness-1`) against the candidate. Confirm managed transport and the correct deadline binding through authenticated development checks.
+3. Deploy the exact reviewed app candidate through dev0 to `jobhackai-app-dev`. Verify the canonical deployment, served HTML and versioned scripts against the candidate. This follow-up uses `20261101-input-readiness-1` for the client and transcript-order module; the lifecycle remains `20261101-audio-readiness-1`. Confirm managed transport and the correct deadline binding through authenticated development checks. For an environment already on PR 1145, retain its existing schema and Worker deployment; only the app changes.
 4. Run the fresh-account acceptance below on `https://dev.jobhackai.io/voice-interview`. Verify credit/grace state and actual provider closure from server evidence as well as the screen. Preserve the prior spoken-finish retest and full natural-interview cases.
 5. Only after development acceptance, prepare the same accepted candidate for develop/QA with its own database migration and worker/app alignment. QA acceptance precedes a separately authorized main/production candidate and production checks.
 

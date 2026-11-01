@@ -487,6 +487,61 @@ test('NOISE: removing a noise turn between identical real turns lets the dedupe 
   assert.deepEqual(o.list(), [{ speaker: 'user', text: 'I led the migration.' }]);
 });
 
+test('turn eligibility shares noise and echo filters while keeping distinct identical answers eligible', () => {
+  const o = createTranscriptOrder();
+  o.setText('q', 'assistant', 'Tell me about a process improvement you led.');
+  o.setText('echo', 'user', 'Tell me about a process improvement you led.');
+  o.setText('noise', 'user', 'Um.');
+  o.setText('answer', 'user', 'I reduced the turnaround by two days.');
+  o.setText('replay', 'user', 'I reduced the turnaround by two days.');
+  for (const id of ['q', 'echo', 'noise', 'unknown']) assert.equal(o.hasUsableUserItem(id), false, id);
+  assert.equal(o.hasUsableUserItem('answer'), true);
+  assert.equal(o.hasUsableUserItem('replay'), true, 'distinct item IDs can contain the same legitimate answer');
+  assert.deepEqual(o.list(), [
+    {speaker:'assistant',text:'Tell me about a process improvement you led.'},
+    {speaker:'user',text:'I reduced the turnaround by two days.'}
+  ], 'the public transcript shape does not expose internal item IDs');
+});
+
+test('turn eligibility rechecks late echo context and never re-admits a dropped item', () => {
+  const o = createTranscriptOrder();o.noteItem('q');o.noteItem('echo');
+  o.setText('echo', 'user', 'Tell me about a process improvement you led.');
+  assert.equal(o.hasUsableUserItem('echo'), true);
+  o.setText('q', 'assistant', 'Tell me about a process improvement you led.');
+  assert.equal(o.hasUsableUserItem('echo'), false);
+  o.drop('echo');o.setText('echo', 'user', 'A late replacement cannot revive a dropped item.');
+  assert.equal(o.hasUsableUserItem('echo'), false);
+});
+
+test('echo readiness waits for nearby missing captions in either direction, but not short answers', () => {
+  for (const before of [true, false]) {
+    const o = createTranscriptOrder();
+    if (before) o.noteItem('q', null, 'assistant');
+    o.setText('answer', 'user', 'I reduced the turnaround by two days.');
+    if (!before) o.noteItem('q', null, 'assistant');
+    assert.equal(o.hasPendingEchoContext('answer'), true);
+    o.setText('answer', 'user', 'Yes.');
+    assert.equal(o.hasPendingEchoContext('answer'), false);
+    o.setText('answer', 'user', 'I reduced the turnaround by two days.');
+    o.setText('q', 'assistant', 'How did you improve the process?');
+    assert.equal(o.hasPendingEchoContext('answer'), false);
+  }
+});
+
+test('echo readiness ignores known candidate placeholders and captions outside its neighbor window', () => {
+  const o = createTranscriptOrder();
+  o.noteItem('old-question', null, 'assistant');
+  o.setText('older-answer', 'user', 'Yes.');
+  o.setText('question', 'assistant', 'How did you measure the result?');
+  o.noteItem('continued', null, 'user');
+  o.setText('answer', 'user', 'I reduced the turnaround by two days.');
+  assert.equal(o.hasPendingEchoContext('answer'), false);
+  o.noteItem('unknown');
+  assert.equal(o.hasPendingEchoContext('answer'), true);
+  o.drop('unknown');
+  assert.equal(o.hasPendingEchoContext('answer'), false);
+});
+
 for (const run of asyncTests) await run();
 
 console.log(`\n${passed} passed, ${failed} failed`);
