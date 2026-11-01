@@ -529,6 +529,32 @@ test('an entitlement rejection racing a committed activation preserves same-sess
   assert.equal((await f.activate(options)).activated,true);assert.equal((await f.sessions()).length,1);
 });
 
+test('failed activation cleanup cannot close a reservation committed after its receipt read',async t=>{
+  const f=fixture(t),checked=await f.check(),options={attemptId:checked.attemptId};
+  const binding=f.env.VOICE_DEADLINES;let fail=true,raced=false;
+  f.env.VOICE_DEADLINES={getByName(id){return {async arm(request){
+    if(fail){fail=false;throw Error('fixture lost alarm receipt');}
+    return binding.getByName(id).arm(request);
+  }}}};
+  const prepare=f.db.prepare.bind(f.db);
+  f.db.prepare=sql=>{
+    const statement=prepare(sql),first=statement.first;
+    if(sql==='SELECT 1 FROM voice_sessions WHERE id=? AND user_id=?') statement.first=async function(column){
+      const row=await first.call(this,column);
+      if(!row&&!raced){raced=true;await f.activate(options);}
+      return row;
+    };
+    return statement;
+  };
+  let failure;try{await f.activate(options);}catch(error){failure=error;}
+  assert.equal(raced,true);assert.equal((await f.controls()).closed_at,null);
+  assert.equal(await f.db.prepare('SELECT state FROM voice_provider_calls').first('state'),'active');
+  assert.equal(f.calls.filter(call=>call.url.endsWith('/hangup')).length,0);
+  assert.equal(failure?.message,'voice_connection_unconfirmed');
+  assert.equal((await f.user()).free_session_used,1);assert.equal((await f.sessions()).length,1);
+  assert.equal((await f.activate(options)).activated,true);
+});
+
 test('activation rejection reports a missing session as a terminal reason',async t=>{
   const f=fixture(t),run=requestContext(f,{action:'activate',sessionId:FIRST,attemptId:'missing',audioReady:true});
   const response=await route(run.context);await run.flush();

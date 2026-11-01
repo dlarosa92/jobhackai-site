@@ -206,7 +206,18 @@ export async function activateManagedInterview(env,{uid,sessionId,attemptId,audi
     if (receipt && ['voice_connection_paywall','voice_connection_limit_reached','voice_connection_reservation_unavailable'].includes(code)) {
       throw Error('voice_connection_unconfirmed');
     }
-    if (!receipt) await closeManagedInterview(env,{uid,sessionId}).catch(()=>{});
+    if (!receipt) {
+      // Fence cleanup atomically against reservation, not against the earlier
+      // receipt read. A reservation that wins keeps its provider call; if this
+      // close wins, the reservation transaction's closed_at guard rejects it.
+      const fenced=await db.prepare(`UPDATE voice_interview_controls
+        SET closed_at=COALESCE(closed_at,datetime('now')),updated_at=datetime('now')
+        WHERE session_id=? AND auth_id=? AND reserved_at IS NULL
+          AND NOT EXISTS(SELECT 1 FROM voice_sessions WHERE id=?)
+        RETURNING session_id`).bind(sessionId,uid,sessionId).first();
+      if (!fenced) throw Error('voice_connection_unconfirmed');
+      await closeManagedInterview(env,{uid,sessionId}).catch(()=>{});
+    }
     throw Error(code);
   }
 }
