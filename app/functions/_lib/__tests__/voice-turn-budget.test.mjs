@@ -75,6 +75,20 @@ test('transcription before commit waits for the matching commit and duplicate ev
   assert.equal(requests(h).length,n+1);
 });
 
+test('the same short answer to a later question survives a delayed interviewer caption',async t=>{
+  const h=await live(t);begin(h);answer(h,'first-yes','Yes.');
+  h.event({type:'response.created',response:{id:'next-question'}});
+  h.event({type:'conversation.item.created',item:{id:'next-question-item',role:'assistant'}});
+  h.event({type:'response.done',response:{id:'next-question',status:'completed'}});
+  const n=requests(h).length;
+  answer(h,'second-yes','Yes.');
+  assert.equal(requests(h).length,n+1,'a distinct answer is not a replay of the first Yes');
+  assert.ok(!h.sends.some(x=>x.type==='conversation.item.delete'&&x.item_id==='second-yes'));
+  h.event({type:'response.output_audio_transcript.done',response_id:'next-question',item_id:'next-question-item',transcript:'Did you check the following week as well?'});
+  await h.endInterview();
+  assert.equal(h.completeBodies()[0].transcript.filter(x=>x.speaker==='user'&&x.text==='Yes.').length,2);
+});
+
 test('late transcription cannot interrupt continued speech or turn two answer fragments into two questions',async t=>{
   const h=await live(t);begin(h);const n=requests(h).length;
   commit(h,'first');

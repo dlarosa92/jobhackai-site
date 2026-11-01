@@ -212,16 +212,21 @@ export function createTranscriptOrder() {
     settleWaiters();
   }
 
-  // Ordered, placeholder-free, with identical consecutive same-speaker lines
-  // collapsed (dedupes realtime event replays), ASR noise fragments dropped,
-  // and microphone echo removed.
-  function visibleSlots() {
+  function filledSlots() {
     var filled = [];
     for (var i = 0; i < slots.length; i++) {
       var s = slots[i];
       if (!s.speaker || !s.text) continue;
       filled.push(s);
     }
+    return filled;
+  }
+
+  // Ordered, placeholder-free, with identical consecutive same-speaker lines
+  // collapsed (dedupes realtime event replays), ASR noise fragments dropped,
+  // and microphone echo removed.
+  function visibleSlots() {
+    var filled = filledSlots();
     var out = [];
     for (var j = 0; j < filled.length; j++) {
       var t = filled[j];
@@ -238,11 +243,15 @@ export function createTranscriptOrder() {
     return visibleSlots().map(function (s) { return { speaker: s.speaker, text: s.text }; });
   }
 
-  // The live turn gate uses the same noise, echo and duplicate verdict as
-  // persistence. An audio commit alone cannot establish a candidate answer.
+  // Share the noise/echo verdict, but not display deduplication. Two distinct
+  // answers can have identical words while an intervening assistant caption
+  // is still missing. The live turn gate deduplicates events by item ID.
   function hasUsableUserItem(id) {
     if (!id) return false;
-    return visibleSlots().some(function (s) { return s.id === id && s.speaker === 'user' && !!s.text.trim(); });
+    var filled = filledSlots();
+    var at = filled.findIndex(function (s) { return s.id === id; });
+    return at >= 0 && filled[at].speaker === 'user' && !!filled[at].text.trim() &&
+      !isNoiseFragment(filled[at].text) && !isEchoOfNeighbor(filled, at);
   }
 
   function reset() {
