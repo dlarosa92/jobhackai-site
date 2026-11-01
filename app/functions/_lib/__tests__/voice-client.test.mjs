@@ -353,7 +353,7 @@ for (const withoutModules of [[], ['isExplicitEndRequest']]) {
 // --------------------------------------------------- live safety end view
 
 for (const withoutModules of [[], ['isExplicitEndRequest']]) {
-  for (const request of ["I'd like to end this now.", 'I would like to end this now.', 'I gotta go. Bye-bye.', 'I have to go, goodbye.']) {
+  for (const request of ["I'd like to end this now.", 'I would like to end this now.', 'I gotta go. Bye-bye.', 'I have to go, goodbye.', "I'd like to finish this, please.", "I'd like to finish this please.", "I'd like to finish this now, please.", 'I would like to stop this, please.']) {
     test(`QA spoken stop completes once and excludes the control (${request}, ${withoutModules.length ? 'fallback' : 'module'})`, async () => {
       const h = await liveInterviewWithOneAnswer({ withoutModules });
       try {
@@ -386,6 +386,28 @@ for (const withoutModules of [[], ['isExplicitEndRequest']]) {
       assert.ok(h.completeBodies()[0].transcript.some(turn => turn.text === 'I would like to leave.'));
     } finally { h.dispose(); }
   });
+  for (const answer of [
+    "I'd like to finish this.",
+    "The customer said, I'd like to finish this, please.",
+    "If we had more time, I'd like to finish this, please.",
+    "I'd like to finish this, please, before we start the next project.",
+    "I'd like to finish this project, please.",
+    "I'd like to finish this now, please, with a summary."
+  ]) {
+    test(`polite finish wording inside an answer remains interview content (${answer}, ${withoutModules.length ? 'fallback' : 'module'})`, async () => {
+      const h = await liveInterviewWithOneAnswer({ withoutModules });
+      try {
+        h.event({ type: 'conversation.item.created', item: { id: 'finish-answer' } });
+        h.event({ type: 'input_audio_buffer.committed', item_id: 'finish-answer' });
+        h.event({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'finish-answer', transcript: answer });
+        await h.settle();
+        assert.equal(h.completeBodies().length, 0);
+        assert.ok(h.peerConnection().tracks.some(track => track.enabled));
+        await h.endInterview();
+        assert.ok(h.completeBodies()[0].transcript.some(turn => turn.text === answer));
+      } finally { h.dispose(); }
+    });
+  }
 }
 
 test('a session that ends live for safety shows the same visible, scoreless state', async () => {
