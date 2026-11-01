@@ -5,7 +5,7 @@ import vm from 'node:vm';
 import test from 'node:test';
 const source = readFileSync(new URL('../directory/consent.js', import.meta.url), 'utf8');
 const GA = 'G-SQYSWPFM5X';
-function harness({host = 'app.jobhackai.io', consent = true, config, pendingServer = false, pendingPost = false, search = '', cookies = new Map(), store = new Map(), scopedCookies = null, footerPreferences = false, accountAuthPage = false} = {}) {
+function harness({host = 'app.jobhackai.io', consent = true, config, pendingServer = false, pendingPost = false, search = '', cookies = new Map(), store = new Map(), scopedCookies = null, footerPreferences = false, accountAuthPage = false, intakeForm = false} = {}) {
   const scripts = [], insertedScripts = [], appendedElements = [], elements = new Map(), timers = [], requests = [], listeners = {};
   if (consent !== null) store.set('jha_cookie_consent_v1', JSON.stringify({version:1,analytics: consent}));
   function element(tag = 'div') {
@@ -20,7 +20,7 @@ function harness({host = 'app.jobhackai.io', consent = true, config, pendingServ
     createElement: element, getElementById: id => footerPreferences && id === 'open-cookie-preferences' ? (elements.get(id) || null) : node(id),
     head: {appendChild(e){scripts.push(e);insertedScripts.push(e);}}, body: {style:{},appendChild(e){appendedElements.push(e);}},
     addEventListener(type,fn){listeners[type]=fn;},
-    querySelector(selector){ if(accountAuthPage && selector === 'script[type="module"][src*="firebase-auth.js"]')return {}; if(footerPreferences && selector === 'footer') return {appendChild(e){appendedElements.push(e);elements.set(e.id,e);}}; return this.querySelectorAll(selector)[0] || null; },
+    querySelector(selector){ if(intakeForm && ['#directory-request','#request-success'].includes(selector))return node(selector.slice(1)); if(accountAuthPage && selector === 'script[type="module"][src*="firebase-auth.js"]')return {}; if(footerPreferences && selector === 'footer') return {appendChild(e){appendedElements.push(e);elements.set(e.id,e);}}; return this.querySelectorAll(selector)[0] || null; },
     querySelectorAll(selector){const needle=selector.match(/src\*="([^"]+)"/)?.[1]; return needle ? scripts.filter(s => (s.src||'').includes(needle)) : [];},
     getElementsByTagName(){return [element('script')];}
   };
@@ -231,8 +231,8 @@ test('a failed tag cannot replace a runtime that has already taken over',async()
   assert.equal(h.ctx.clarity,runtime);assert.equal(h.insertedScripts.length,1);
   assert.deepEqual(calls,[['stop']]);
 });
-test('directory has no default session replay on either production or QA',async()=>{
- for(const host of ['jobhackai.io','directory-qa.jobhackai-app-marketing-seo.pages.dev']){
+test('nonproduction directory never sends replay to the production project',async()=>{
+ for(const host of ['dev.jobhackai.io','qa.jobhackai.io','directory-qa.jobhackai-app-marketing-seo.pages.dev']){
  const h=harness({host});await h.init();h.runTimers();assert.equal(h.scripts.some(s=>s.src.includes('clarity.ms')),false);
  }
 });
@@ -481,4 +481,20 @@ test('marketing footer reopens its own consent controls after a prior rejection'
   assert.ok(h.scripts.some(s=>s.src.includes('G-VH888WWY3M')));
   button.events.click();h.node('jha-toggle-analytics').checked=false;h.node('jha-save-preferences').onclick();
   assert.equal(h.cookies.has('jha_campaign_qa_v2'),false);
+});
+
+for (const host of ['jobhackai.io', 'www.jobhackai.io']) {
+  test(host + ' loads both Local analytics providers after consent', async () => {
+    const h = harness({host, consent:true}); await h.init(); h.runTimers();
+    assert.ok(h.scripts.some(s => s.src.includes('G-SQYSWPFM5X')));
+    assert.ok(h.scripts.some(s => s.src === 'https://www.clarity.ms/tag/wskzma4clw'));
+    assert.equal(h.events('page_view').length, 1);
+  });
+}
+test('Local intake details and confirmation are masked before Clarity loads', async () => {
+  const h = harness({host:'jobhackai.io', consent:true, intakeForm:true});
+  await h.init(); h.runTimers();
+  assert.equal(h.node('directory-request')['data-clarity-mask'], 'true');
+  assert.equal(h.node('request-success')['data-clarity-mask'], 'true');
+  assert.ok(h.scripts.some(s => s.src.includes('clarity.ms/tag/')));
 });

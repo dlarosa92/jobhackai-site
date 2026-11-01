@@ -32,8 +32,6 @@
   const config = { ...(window.JHA_CONFIG || {}) };
   const PRODUCTION_GA_ID = 'G-SQYSWPFM5X';
   const PRODUCTION_CLARITY_ID = 'wskzma4clw';
-  // Directory intake has no session replay; leave shared application defaults untouched.
-  if (!Object.prototype.hasOwnProperty.call(config, 'CLARITY_ID')) config.CLARITY_ID = '';
   // Nonproduction is off by default. An explicit, separate test destination
   // is allowed; accidentally copying production's ID must still fail closed.
   function destination(key, productionId) {
@@ -528,6 +526,10 @@
   // navigation; never restart an SDK whose storage defaults may have changed.
   function loadClarityScript() {
     if (!CLARITY_PROJECT_ID || !hasAnalyticsConsent()) return;
+    // Preserve Local session analytics while masking privately submitted details.
+    // Apply before the SDK loads so the initial snapshot is protected too.
+    document.querySelector('#directory-request')?.setAttribute('data-clarity-mask', 'true');
+    document.querySelector('#request-success')?.setAttribute('data-clarity-mask', 'true');
     let existing = document.querySelector('script[src*="clarity.ms/tag/"]');
     if (clarityScriptFailed && window.clarity === clarityBootstrap) {
       // An external tag that failed to download never executed. Only that
