@@ -100,6 +100,17 @@ test('overdue blocked jobs keep their completed history and point to the saved b
  assert.match(text(view.nodes.get('workflow-runs')),/Needs attention.*resolve it, then rerun this job.*Last completed check:.*Waiting for required source access/s);
  assert.doesNotMatch(text(view.nodes.get('workflow-runs')),/No successful update|Run the source refresh|No completed check saved/);
 });
+test('workflow messages distinguish old success from no history and scheduled waiting',()=>{
+ const view=ui();const state=data([]);const run={id:'coordination',status:'missing',lastSuccessAt:'2026-10-20T12:00:00Z'};
+ state.workflow={alerts:[{id:'workflow-coordination'}],workflows:[run]};view.render(state);
+ assert.match(text(view.nodes.get('workflow-runs')),/Needs attention.*last completed check is too old.*rerun this job.*Last completed check:/s);
+ assert.doesNotMatch(text(view.nodes.get('workflow-runs')),/No completed run is saved/);
+ run.lastSuccessAt=null;view.render(state);
+ assert.match(text(view.nodes.get('workflow-runs')),/No completed run is saved. Run this job/);
+ run.status='waiting';state.workflow.alerts=[];view.render(state);
+ assert.match(text(view.nodes.get('workflow-runs')),/Waiting.*first scheduled run/s);
+ assert.doesNotMatch(text(view.nodes.get('workflow-runs')),/Needs attention|Run the source refresh/);
+});
 const walk = node => [node, ...node.children.flatMap(walk)];
 const text = node => walk(node).map(x => x.textContent).join(' ');
 const lane = (nodes, title) => nodes.get('board').children.find(x => text(x.children[0]).includes(title));
