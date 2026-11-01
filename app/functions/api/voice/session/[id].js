@@ -80,8 +80,8 @@ export async function onRequest(context) {
     if (isSessionExpired(session.started_at)) {
       return successResponse({
         sessionId: session.id,
-        role: session.role,
-        seniority: session.seniority,
+        role: null,
+        seniority: null,
         status: session.status,
         startedAt: session.started_at,
         createdAt: session.started_at,
@@ -92,10 +92,7 @@ export async function onRequest(context) {
         expired: true,
         activePlan: hasActiveVoicePlan(ent),
         endReason: session.end_reason || null,
-        scorecard: {
-          topStrength: scorecard?.topStrength ?? null,
-          topImprovement: scorecard?.topImprovement ?? null
-        },
+        scorecard: null,
         transcript: null
       }, 200, origin, env, requestId);
     }
