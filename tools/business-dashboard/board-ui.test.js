@@ -254,6 +254,10 @@ test('release receipts override old draft approval labels and remove draft actio
  walk(lane(view.nodes,'Working')).find(x=>x.className==='card-title').listeners.click();
  assert.match(text(view.nodes.get('review-content')),/Complete development acceptance/);
  assert.doesNotMatch(text(view.nodes.get('review-actions')),/Approve|Decline|Request changes/);
+ release.snapshot=null;release.source='github';release.state='closed';release.nativeState='closed';release.boardLane='completed';release.receipts=[{stage:'production_verified',summary:'Production checks passed',evidence_url:'https://example.com/deployment'}];
+ view.render(data([release]));walk(lane(view.nodes,'Done')).find(x=>x.className==='card-title').listeners.click();
+ assert.match(text(view.nodes.get('review-content')),/Production checks passed/);
+ assert.doesNotMatch(text(view.nodes.get('review-content')),/draft, destination and media have not been verified|finish preparation before approval/);
 });
 test('open details reflect completion without another click and changed copy cannot be silently approved',async()=>{
  let current=data([item('Visible draft','Facebook','hold',{version:1,workId:'visible',snapshotRevision:'v1',canApprove:true,boardLane:'ready',snapshot:{text:'Exact copy',links:[],media:[],evidence:[]}})]);
