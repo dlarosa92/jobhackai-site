@@ -526,8 +526,8 @@
     if (lower.length < 8 || lower.length > 240) return false;
     // Keep the whole-utterance departure + farewell guard in sync with the module.
     if (/^(?:(?:ok|okay|alright|all right|sorry)[, ]+)?i (?:gotta|have to|need to) (?:go|leave)(?: now)?[,.!\s]+(?:bye(?:[- ]bye)?|goodbye)[.!]?$/i.test(lower.trim())) return true;
-    // Keep the exact standalone request in sync with voice-lifecycle.js.
-    if (/^(?:(?:ok|okay|alright|all right)[, ]+)?i(?: would|'d) like to (?:end|stop|finish) this (?:right now|now|here)(?: please)?[.!]?$/i.test(lower.trim())) return true;
+    // Keep the whole immediate or polite request in sync with voice-lifecycle.js.
+    if (/^(?:(?:ok|okay|alright|all right)[, ]+)?i(?: would|'d) like to (?:end|stop|finish) this(?: (?:right now|now|here)(?:,? please)?|,? please)[.!?]?$/i.test(lower.trim())) return true;
     // A short, standalone stop command observed in live QA. Do not broaden
     // this to future-tense stories or instructions about how to finish.
     if (/^(?:(?:ok|okay|alright|all right)[, ]+)?i(?:'ll| will) end (?:this|the) interview(?: now| here| please)*[.!]?$/i.test(lower.trim())) return true;

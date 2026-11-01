@@ -730,8 +730,16 @@ test('curly apostrophes from whisper are handled like straight ones', () => {
   assert.equal(isExplicitEndRequest('Let’s stop the interview here.'), true);
 });
 
-test('live QA pronoun requests end only as complete immediate requests', () => {
-  for (const request of ["I'd like to end this now.", 'I’d like to stop this here please.', 'Okay, I would like to finish this right now.']) {
+test('live QA pronoun requests end only as complete immediate or polite requests', () => {
+  for (const request of [
+    "I'd like to end this now.",
+    'I’d like to stop this here please.',
+    'Okay, I would like to finish this right now.',
+    "I'd like to finish this, please.",
+    "I'd like to finish this please.",
+    "I'd like to finish this now, please.",
+    'I would like to stop this, please.'
+  ]) {
     assert.equal(isExplicitEndRequest(request), true, request);
   }
   for (const answer of [
@@ -745,7 +753,15 @@ test('live QA pronoun requests end only as complete immediate requests', () => {
     'I would like to end this now, but first I would ask the customer.',
     'The customer said, "I would like to leave."',
     '"I would like to leave."',
-    'I would like to leave tomorrow.'
+    'I would like to leave tomorrow.',
+    "I'd like to finish this.",
+    "If we had more time, I'd like to finish this, please.",
+    "The customer said, I'd like to finish this, please.",
+    '"I would like to finish this, please."',
+    "I'd like to finish this, please, before we start the next project.",
+    "I'd like to finish this please. That is what the customer said.",
+    "I'd like to finish this project, please.",
+    "I'd like to finish this now, please, with a summary."
   ]) assert.equal(isExplicitEndRequest(answer), false, answer);
 });
 
