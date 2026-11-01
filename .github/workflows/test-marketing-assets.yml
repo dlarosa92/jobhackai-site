@@ -42,4 +42,4 @@ jobs:
           if-no-files-found: error
       - run: node marketing/scripts/sync-shared-assets.mjs --check
       - run: node --test app/functions/_lib/__tests__/blog-cta.test.mjs app/functions/_lib/__tests__/analytics-consent.test.mjs
-      - run: node --test marketing/tests/directory-consent.test.mjs
+      - run: node --test marketing/tests/directory-consent.test.mjs marketing/tests/directory-consent-runtime.test.mjs
