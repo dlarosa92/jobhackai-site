@@ -34,7 +34,7 @@ function authScript(plan) {
     document.addEventListener('DOMContentLoaded',()=>{document.dispatchEvent(new CustomEvent('firebase-auth-ready',{detail:{user}}));window.dispatchEvent(new CustomEvent('firebase-auth-ready',{detail:{user}}));});
   })();`;
 }
-function startFixtureServer({port=3003, apiHandler}={}) {
+function startFixtureServer({port=3003, apiHandler, bootstrap=''}={}) {
   const server = http.createServer(async (req,res) => {
     try {
       const url = new URL(req.url,'http://localhost');
@@ -43,6 +43,7 @@ function startFixtureServer({port=3003, apiHandler}={}) {
       const plan = plans.includes(candidatePlan) ? candidatePlan : 'free';
       const history = (url.searchParams.get('state') || referer.searchParams.get('state')) === 'saved';
       res.setHeader('Cache-Control','no-store');
+      if (bootstrap) res.setHeader('Content-Security-Policy', "connect-src 'self'; script-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self';");
       const json = (body,status=200) => {res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(body));};
       if (url.pathname.startsWith('/api/')) {
         if (apiHandler && await apiHandler(req,res,url)) return;
@@ -73,7 +74,7 @@ function startFixtureServer({port=3003, apiHandler}={}) {
       if (!path.extname(file)) file += '.html';
       if (!fs.existsSync(file) || !fs.statSync(file).isFile()) return json({error:'Not found'},404);
       let content = fs.readFileSync(file);
-      if (path.extname(file)==='.html') content = content.toString().replace('<head>','<head><script>'+authScript(plan)+'</script>');
+      if (path.extname(file)==='.html') content = content.toString().replace('<head>','<head><script>'+authScript(plan)+bootstrap+'</script>');
       res.writeHead(200,{'Content-Type':types[path.extname(file)]||'application/octet-stream'}); res.end(content);
     } catch { res.writeHead(500); res.end('Fixture request failed'); }
   });

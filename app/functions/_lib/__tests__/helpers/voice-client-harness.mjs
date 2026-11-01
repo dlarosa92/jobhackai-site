@@ -42,6 +42,8 @@ const CLIENT_SRC = new URL('../../../../../js/voice-interview.js', import.meta.u
 // bails on a missing #vi-history-panel, exactly as it does on a page that does
 // not render the rail.
 const ELEMENT_IDS = [
+  'vi-audio-check', 'vi-audio-note', 'vi-audio-confirm', 'vi-audio-retry', 'vi-audio-help',
+  'vi-audio-mic-status', 'vi-audio-output-status', 'vi-audio-meter', 'vi-timer-label',
   'vi-setup-view', 'vi-live-view', 'vi-done-view', 'vi-disabled-view',
   'vi-status', 'vi-caption', 'vi-timer', 'vi-speaking',
   'vi-done-status', 'vi-scorecard', 'vi-save-status', 'vi-save-retry',
@@ -81,6 +83,8 @@ function makeElement(id) {
     value: '',
     className: '',
     innerHTML: '',
+    play: async () => {},
+    pause: () => {},
     autoplay: false,
     srcObject: null,
     offsetParent: null,
@@ -242,10 +246,14 @@ export function createVoiceClientHarness(options = {}) {
   win.RTCPeerConnection = StubPeerConnection;
   win.URLSearchParams = URLSearchParams;
   win.AbortController = AbortController;
+  win.Date = options.Date || Date;
   win.fetch = (url, opts) => respond(url, opts);
   win.setTimeout = (fn, ms) => trackTimer(setTimeout(fn, options.timerDelay ? options.timerDelay(ms) : ms));
   win.clearTimeout = (h) => { timers.delete(h); clearTimeout(h); };
-  win.setInterval = (fn, ms) => trackTimer(setInterval(fn, ms));
+  win.setInterval = (fn, ms) => {
+    if (options.onInterval) options.onInterval(fn, ms);
+    return trackTimer(setInterval(fn, ms));
+  };
   win.clearInterval = (h) => { timers.delete(h); clearInterval(h); };
   win.console = {
     log: (...a) => logs.push(['log', a.join(' ')]),

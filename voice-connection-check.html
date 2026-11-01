@@ -14,12 +14,12 @@
 </head>
 <body>
   <h1>Voice connection check</h1>
-  <p>QA only. Uses a silent generated audio track, never your microphone. This uses one interview from the signed-in QA account. Reconnect keeps the same interview.</p>
+  <p>QA only. Uses a silent generated audio track, never your microphone. This checks the uncharged setup connection without starting an interview. Reconnect keeps the same check.</p>
   <p>Finish the check before leaving. It automatically attempts to finish after 60 seconds. No spoken answers or interview transcript are collected.</p>
   <p id="status" role="status">Checking QA access...</p>
   <button id="start" disabled>Start silent QA check</button>
   <button id="drop" disabled>Disconnect browser transport</button>
-  <button id="reconnect" disabled>Reconnect same interview</button>
+  <button id="reconnect" disabled>Reconnect same check</button>
   <button id="finish" disabled>Finish check</button>
   <p><a href="/voice-interview">Back to voice interviews</a></p>
   <pre id="events" aria-label="Connection check events"></pre>
@@ -71,10 +71,11 @@
         } catch { /* No arbitrary provider content is displayed. */ }
       };
       await next.setLocalDescription(await next.createOffer());
-      const answer = await api('/api/voice/connection', {action:'open', sessionId,
+      const answer = await api('/api/voice/connection', {action:'open', sessionId, audioCheck:true,
         replacesAttemptId:attemptId || null, sdp:next.localDescription.sdp,
         role:'QA connection check', seniority:'Any level', transcript:[], interviewStarted:false});
       if (finishing || finished || pc !== next) { next.close(); return; }
+      if (answer.requiresAudioCheck !== true) throw Error('audio_check_protocol_required');
       attemptId = answer.attemptId;
       log('owned_attempt', {sessionId, attemptId});
       await next.setRemoteDescription({type:'answer', sdp:answer.sdp});
@@ -147,7 +148,7 @@
       if (busy || finishing || finished) return;
       dropped = true; disconnect(); log('browser_transport_disconnected');
       el('drop').disabled = true; el('reconnect').disabled = false;
-      status('Browser transport disconnected. Reconnect uses the same interview.');
+      status('Browser transport disconnected. Reconnect uses the same uncharged check.');
     });
     el('reconnect').addEventListener('click', () => { void run(async () => {
       el('reconnect').disabled = true; status('Requesting a replacement connection...'); await connect();

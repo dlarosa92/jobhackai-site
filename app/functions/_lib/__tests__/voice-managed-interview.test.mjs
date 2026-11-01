@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { webcrypto } from 'node:crypto';
 import { sqliteD1 } from './sqlite-d1-helper.mjs';
-import { openManagedInterview, closeManagedInterview } from '../voice-managed-interview.js';
+import { openManagedInterview, activateManagedInterview, closeManagedInterview } from '../voice-managed-interview.js';
 import { beginDeletionAdmission, assertDeletionQuiescent } from '../account-deletion-admission.js';
 import { withAccountOperation } from '../account-operation-scope.js';
 import { getVoiceEntitlement } from '../voice-entitlements.js';
@@ -15,7 +15,7 @@ const SECOND='22222222-2222-4222-8222-222222222222';
 const deferred=()=>{let resolve;const promise=new Promise(r=>{resolve=r;});return {promise,resolve};};
 function fixture(t) {
   const db=sqliteD1();t.after(()=>db.close());
-  for(const name of ['schema.sql','migrations/028_account_deletion_recovery.sql']) db.exec(readFileSync(new URL('../../../db/'+name,import.meta.url),'utf8'));
+  for(const name of ['schema.sql','migrations/028_account_deletion_recovery.sql','migrations/035_voice_audio_readiness.sql']) db.exec(readFileSync(new URL('../../../db/'+name,import.meta.url),'utf8'));
   db.exec("INSERT INTO users(id,auth_id,email) VALUES(1,'owner','owner@example.test'),(2,'other','other@example.test')");
   const env={DB:db,OPENAI_API_KEY:'sk-test-private-fixture',VOICE_INTERVIEW_ENABLED:'true',VOICE_MANAGED_CALLS_ENABLED:'true'};
   env.VOICE_DEADLINES=deadlineBinding(db);
@@ -26,14 +26,21 @@ function fixture(t) {
   };
   t.after(()=>{globalThis.fetch=realFetch;});
   return {db,env,calls,setHandler:fn=>{handler=fn;},
-    open:(options={})=>openManagedInterview(env,{uid:'owner',sessionId:FIRST,sdp:SDP,role:'Engineer',firstName:'Pat',...options}),
+    check:(options={})=>openManagedInterview(env,{uid:'owner',sessionId:FIRST,sdp:SDP,role:'Engineer',firstName:'Pat',...options}),
+    activate:(options={})=>activateManagedInterview(env,{uid:'owner',sessionId:FIRST,role:'Engineer',firstName:'Pat',audioReady:true,...options}),
+    open:async(options={})=>{
+      const result=await openManagedInterview(env,{uid:'owner',sessionId:FIRST,sdp:SDP,role:'Engineer',firstName:'Pat',...options});
+      if (!result.requiresAudioCheck) return result;
+      const active=await activateManagedInterview(env,{uid:'owner',sessionId:FIRST,role:'Engineer',firstName:'Pat',...options,attemptId:result.attemptId,audioReady:true});
+      return {...result,...active};
+    },
     close:(sessionId=FIRST)=>closeManagedInterview(env,{uid:'owner',sessionId}),
     user:()=>db.prepare("SELECT * FROM users WHERE auth_id='owner'").first(),
     sessions:async()=> (await db.prepare('SELECT * FROM voice_sessions').all()).results,
     controls:()=>db.prepare('SELECT * FROM voice_interview_controls WHERE session_id=?').bind(FIRST).first()};
 }
 
-test('SDP is returned only after the owned provider call and one free reservation exist',async t=>{
+test('explicit activation after the owned provider call creates one free reservation',async t=>{
   const f=fixture(t);f.setHandler(async({init})=>{
     assert.equal((await f.user()).free_session_used,0);assert.equal((await f.sessions()).length,0);
     const config=JSON.parse(init.body.get('session'));assert.equal(config.model,'gpt-realtime-mini');assert.equal(config.audio.output.voice,'marin');
@@ -60,7 +67,7 @@ test('lost scheduling receipt keeps the same interview and retry does not reset 
   }}}};
   await assert.rejects(f.open(),/voice_connection_deadline_unavailable/);const initial=await f.controls();
   assert.equal(f.calls.length,0);f.env.VOICE_DEADLINES=binding;
-  const result=await f.open();assert.equal(result.deadlineAt,initial.deadline_at);assert.equal((await f.sessions()).length,1);
+  const result=await f.check();assert.equal(result.deadlineAt,initial.deadline_at);assert.equal((await f.sessions()).length,0);
 });
 
 test('scheduler failure during reconnect leaves the previous provider connection alone',async t=>{
@@ -112,7 +119,7 @@ test('deletion intent during setup withholds SDP and consumes no interview',asyn
     entered.resolve();await release.promise;return new Response(SDP,{status:201,headers:{Location:'/v1/realtime/calls/rtc_deleting'}});
   });
   const starting=f.open();await entered.promise;await beginDeletionAdmission(f.env,{uid:'owner',origin:'user_request'});
-  release.resolve();await assert.rejects(starting,/reservation_unavailable/);
+  release.resolve();await assert.rejects(starting,/connection_ended/);
   assert.equal((await f.user()).free_session_used,0);assert.equal((await f.sessions()).length,0);assert.equal(f.calls.length,2);
 });
 
@@ -173,8 +180,8 @@ test('two different interviews racing for the last credit close the losing provi
 test('lost reservation receipt preserves the committed credit and resumes its existing row',async t=>{
   const f=fixture(t),batch=f.db.batch;let lose=true;
   f.db.batch=async statements=>{const result=await batch(statements);if(lose){lose=false;throw Error('fixture lost DB receipt');}return result;};
-  await assert.rejects(f.open(),/connection_unconfirmed/);assert.equal((await f.sessions()).length,1);
-  assert.equal((await f.user()).free_session_used,1);assert.equal((await f.open()).resumed,true);
+  const first=await f.open();assert.equal((await f.sessions()).length,1);
+  assert.equal((await f.user()).free_session_used,1);assert.equal((await f.open({replacesAttemptId:first.attemptId})).resumed,true);
   assert.equal((await f.sessions()).length,1);assert.equal((await f.user()).free_session_used,1);
 });
 
@@ -182,7 +189,7 @@ test('failed reservation rolls back credit and closes the provider call before a
   const f=fixture(t);f.db.exec("CREATE TRIGGER fail_reserve BEFORE INSERT ON voice_sessions BEGIN SELECT RAISE(ABORT,'fixture rollback'); END;");
   await assert.rejects(f.open(),/connection_unconfirmed/);assert.equal((await f.user()).free_session_used,0);
   assert.equal((await f.sessions()).length,0);assert.equal(f.calls.length,2);
-  f.db.exec('DROP TRIGGER fail_reserve');assert.equal((await f.open()).resumed,false);
+  f.db.exec('DROP TRIGGER fail_reserve');assert.equal((await f.open({sessionId:SECOND})).resumed,false);
 });
 
 test('another account cannot adopt or end an owned interview or pending start',async t=>{
@@ -205,7 +212,7 @@ test('a deadline passed during setup prevents reservation and reconnect cannot e
     f.db.exec("UPDATE voice_interview_controls SET deadline_at=datetime('now','-1 second')");
     return new Response(SDP,{status:201,headers:{Location:'/v1/realtime/calls/rtc_expired'}});
   });
-  await assert.rejects(f.open(),/reservation_unavailable/);assert.equal((await f.user()).free_session_used,0);
+  await assert.rejects(f.open(),/connection_ended/);assert.equal((await f.user()).free_session_used,0);
   await assert.rejects(f.open(),/expired/);assert.equal(f.calls.length,2);
 });
 
@@ -275,7 +282,7 @@ function requestContext(f,body,{token='valid',signal}={}) {
     {method:'POST',headers:{Authorization:token,Origin:'https://qa.jobhackai.io','Content-Type':'application/json'},body:JSON.stringify(body),signal})};
   return {context,waits,flush:async()=>{let offset=0;while(offset<waits.length){const pending=waits.slice(offset);offset=waits.length;await Promise.allSettled(pending);}}};
 }
-const openBody={action:'open',sessionId:FIRST,sdp:SDP,role:'Engineer'};
+const openBody={action:'open',audioCheck:true,sessionId:FIRST,sdp:SDP,role:'Engineer'};
 
 test('real connection route authenticates ownership, returns only an SDP answer and exposes a recoverable conflict',async t=>{
   const f=fixture(t);
@@ -283,7 +290,7 @@ test('real connection route authenticates ownership, returns only an SDP answer 
   const first=requestContext(f,{...openBody,uid:'other',providerCallId:'rtc_foreign'});
   const response=await route(first.context),payload=await response.json();await first.flush();
   assert.equal(response.status,200);assert.equal(payload.sdp,SDP);assert.equal(payload.clientSecret,undefined);assert.equal(payload.providerCallId,undefined);
-  assert.equal(response.headers.get('Cache-Control'),'no-store');assert.equal((await f.sessions())[0].user_id,1);
+  assert.equal(response.headers.get('Cache-Control'),'no-store');assert.equal((await f.sessions()).length,0);assert.equal((await f.controls()).auth_id,'owner');assert.equal(payload.requiresAudioCheck,true);
   const retry=requestContext(f,openBody);const conflict=await route(retry.context);const error=await conflict.json();await retry.flush();
   assert.equal(conflict.status,409);assert.equal(error.success,false);assert.equal(error.currentAttemptId,payload.attemptId);assert.equal(f.calls.length,1);
 });
@@ -296,7 +303,7 @@ test('real route registers provider work before dispatch and retains it after th
   controller.abort();assert.equal(await f.db.prepare("SELECT state FROM account_operation_claims WHERE auth_id='owner'").first('state'),'active');
   release.resolve();assert.equal((await response).status,200);await run.flush();
   assert.equal(await f.db.prepare("SELECT state FROM account_operation_claims WHERE auth_id='owner'").first('state'),'finished');
-  assert.equal((await f.sessions()).length,1);
+  assert.equal((await f.sessions()).length,0);assert.equal((await f.user()).free_session_used,0);
 });
 
 test('real close route keeps pending creation distinct from confirmed closure and never accepts another owner ID',async t=>{
@@ -408,7 +415,7 @@ test('completion overtaking setup reports pending, then cancelled without consum
   const opening=f.open();await entered.promise;
   const first=completion(f);const pending=await first.execute();await first.flush();
   assert.equal(pending.status,202);assert.deepEqual(Object.fromEntries(Object.entries(await pending.json()).filter(([key])=>['status','saved','connectionClosed','closureNeedsReview'].includes(key))),{status:'ending',saved:false,connectionClosed:false,closureNeedsReview:false});
-  release.resolve();await assert.rejects(opening,/reservation_unavailable/);
+  release.resolve();await assert.rejects(opening,/connection_ended/);
   const retry=completion(f);const cancelled=await retry.execute();await retry.flush();
   assert.equal(cancelled.status,200);assert.equal((await cancelled.json()).status,'cancelled');assert.equal((await f.user()).free_session_used,0);
 });
@@ -477,4 +484,125 @@ test('managed entitlement display requires the verified-closure receipt schema t
   const f=fixture(t);f.db.exec('DROP TABLE voice_closure_reconciliations');
   assert.equal((await getVoiceEntitlement(f.env,'owner',{managed:true})).reason,'not_migrated');
   assert.equal((await getVoiceEntitlement(f.env,'owner')).canStart,true);
+});
+
+for (const mode of ['free','pack','subscription']) test(mode+' audio setup closes without consuming entitlement or the early-end grace',async t=>{
+  const f=fixture(t);
+  f.db.exec(readFileSync(new URL('../../../db/migrations/033_voice_early_end_grace.sql',import.meta.url),'utf8'));
+  if(mode==='pack') f.db.exec("UPDATE users SET free_session_used=1,voice_sessions_remaining=2 WHERE id=1");
+  if(mode==='subscription') f.db.exec("UPDATE users SET plan='monthly',subscription_status='active' WHERE id=1");
+  const before=await f.user(),checked=await f.check();
+  assert.equal(checked.requiresAudioCheck,true);assert.equal((await f.sessions()).length,0);
+  assert.ok(Date.parse(checked.deadlineAt.replace(' ','T')+'Z')-Date.now()<=120000);
+  const run=completion(f);const response=await run.execute();await run.flush();
+  assert.deepEqual((await response.json()).saved,false);
+  const after=await f.user();assert.equal(after.free_session_used,before.free_session_used);
+  assert.equal(after.voice_sessions_remaining,before.voice_sessions_remaining);assert.equal(after.voice_grace_session_id,null);
+  assert.equal((await f.sessions()).length,0);assert.equal((await getVoiceEntitlement(f.env,'owner',{managed:true})).canStart,true);
+  assert.equal(await f.db.prepare('SELECT state FROM voice_provider_calls').first('state'),'closed');
+});
+
+test('activation is once-only across duplicate requests, lost responses and later retries',async t=>{
+  const f=fixture(t);f.db.exec("UPDATE users SET free_session_used=1,voice_sessions_remaining=2 WHERE id=1");
+  const checked=await f.check();const options={attemptId:checked.attemptId};
+  const [a,b]=await Promise.all([f.activate(options),f.activate(options)]);
+  assert.equal(a.activated,true);assert.equal(b.activated,true);assert.equal(a.deadlineAt,b.deadlineAt);
+  assert.equal((await f.user()).voice_sessions_remaining,1);assert.equal((await f.sessions()).length,1);
+  const again=await f.activate(options);assert.equal(again.deadlineAt,a.deadlineAt);assert.equal((await f.user()).voice_sessions_remaining,1);
+});
+
+test('an entitlement rejection racing a committed activation preserves same-session recovery',async t=>{
+  const f=fixture(t),checked=await f.check(),options={attemptId:checked.attemptId};
+  const prepare=f.db.prepare.bind(f.db);let raced=false;
+  f.db.prepare=sql=>{
+    const statement=prepare(sql),first=statement.first;
+    if (/SELECT id, plan, subscription_status,/.test(sql)) statement.first=async function(column){
+      if(!raced){raced=true;await f.activate(options);}
+      return first.call(this,column);
+    };
+    return statement;
+  };
+  await assert.rejects(f.activate(options),/voice_connection_unconfirmed/);
+  assert.equal(raced,true);assert.equal((await f.sessions()).length,1);
+  assert.equal((await f.user()).free_session_used,1);assert.equal((await f.controls()).closed_at,null);
+  assert.equal(f.calls.filter(call=>call.url.endsWith('/hangup')).length,0);
+  assert.equal((await f.activate(options)).activated,true);assert.equal((await f.sessions()).length,1);
+});
+
+test('failed activation cleanup cannot close a reservation committed after its receipt read',async t=>{
+  const f=fixture(t),checked=await f.check(),options={attemptId:checked.attemptId};
+  const binding=f.env.VOICE_DEADLINES;let fail=true,raced=false;
+  f.env.VOICE_DEADLINES={getByName(id){return {async arm(request){
+    if(fail){fail=false;throw Error('fixture lost alarm receipt');}
+    return binding.getByName(id).arm(request);
+  }}}};
+  const prepare=f.db.prepare.bind(f.db);
+  f.db.prepare=sql=>{
+    const statement=prepare(sql),first=statement.first;
+    if(sql==='SELECT 1 FROM voice_sessions WHERE id=? AND user_id=?') statement.first=async function(column){
+      const row=await first.call(this,column);
+      if(!row&&!raced){raced=true;await f.activate(options);}
+      return row;
+    };
+    return statement;
+  };
+  let failure;try{await f.activate(options);}catch(error){failure=error;}
+  assert.equal(raced,true);assert.equal((await f.controls()).closed_at,null);
+  assert.equal(await f.db.prepare('SELECT state FROM voice_provider_calls').first('state'),'active');
+  assert.equal(f.calls.filter(call=>call.url.endsWith('/hangup')).length,0);
+  assert.equal(failure?.message,'voice_connection_unconfirmed');
+  assert.equal((await f.user()).free_session_used,1);assert.equal((await f.sessions()).length,1);
+  assert.equal((await f.activate(options)).activated,true);
+});
+
+test('activation rejection reports a missing session as a terminal reason',async t=>{
+  const f=fixture(t),run=requestContext(f,{action:'activate',sessionId:FIRST,attemptId:'missing',audioReady:true});
+  const response=await route(run.context);await run.flush();
+  assert.equal(response.status,404);assert.equal((await response.json()).reason,'voice_connection_not_found');
+});
+
+test('failed activation scheduling closes the check and preserves the free interview',async t=>{
+  const f=fixture(t),checked=await f.check();delete f.env.VOICE_DEADLINES;
+  await assert.rejects(f.activate({attemptId:checked.attemptId}),/deadline_unavailable/);
+  assert.equal((await f.user()).free_session_used,0);assert.equal((await f.sessions()).length,0);
+  assert.ok((await f.controls()).closed_at);assert.equal(await f.db.prepare('SELECT state FROM voice_provider_calls').first('state'),'closed');
+});
+
+test('cancellation racing readiness cannot charge or reopen the cancelled setup',async t=>{
+  const f=fixture(t),checked=await f.check();const binding=f.env.VOICE_DEADLINES;
+  f.env.VOICE_DEADLINES={getByName(id){return {async arm(request){const receipt=await binding.getByName(id).arm(request);await f.close();return receipt;}}}};
+  await assert.rejects(f.activate({attemptId:checked.attemptId}),/reservation_unavailable|ended/);
+  assert.equal((await f.user()).free_session_used,0);assert.equal((await f.sessions()).length,0);
+});
+
+test('missing readiness, another owner and a stale provider attempt cannot activate',async t=>{
+  const f=fixture(t),checked=await f.check();
+  await assert.rejects(f.activate({attemptId:checked.attemptId,audioReady:false}),/audio_check_required/);
+  await assert.rejects(f.activate({attemptId:'stale'}),/stale_attempt/);
+  await assert.rejects(f.activate({uid:'other',attemptId:checked.attemptId}),/not_found/);
+  assert.equal((await f.user()).free_session_used,0);
+});
+
+test('repeated setup has a server-side rate bound but never consumes a free credit',async t=>{
+  const f=fixture(t);
+  for(const sessionId of [FIRST,SECOND,'33333333-3333-4333-8333-333333333333']) {
+    await f.check({sessionId});await f.close(sessionId);
+  }
+  await assert.rejects(f.check({sessionId:'44444444-4444-4444-8444-444444444444'}),/setup_limit/);
+  assert.equal((await f.user()).free_session_used,0);assert.equal((await f.sessions()).length,0);assert.equal(f.calls.length,6);
+});
+
+test('old clients cannot start a new charged interview without the audio-check protocol',async t=>{
+  const f=fixture(t),run=requestContext(f,{...openBody,audioCheck:false});
+  const response=await route(run.context);await run.flush();
+  assert.equal(response.status,409);assert.equal((await response.json()).reason,'voice_connection_audio_check_required');
+  assert.equal(f.calls.length,0);assert.equal((await f.user()).free_session_used,0);
+});
+
+test('authenticated activation route ignores a supplied owner and returns no provider credential',async t=>{
+  const f=fixture(t),checked=await f.check();
+  const run=requestContext(f,{action:'activate',sessionId:FIRST,attemptId:checked.attemptId,role:'Engineer',audioReady:true,uid:'other'});
+  const response=await route(run.context);await run.flush();const body=await response.json();
+  assert.equal(response.status,200);assert.equal(body.activated,true);assert.equal(body.clientSecret,undefined);
+  assert.equal((await f.sessions())[0].user_id,1);assert.equal((await f.user()).free_session_used,1);
 });

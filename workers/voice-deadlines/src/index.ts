@@ -29,21 +29,26 @@ export class VoiceDeadline extends DurableObject<Env> {
         !this.ctx.id.equals(this.env.VOICE_DEADLINES.idFromName(sessionId))) throw Error('voice_deadline_invalid');
     if (!/^[a-f0-9]{64}$/.test(providerKeySha256 || '') ||
         await voiceProviderKeyIdentity(this.env) !== providerKeySha256) throw Error('voice_deadline_provider_mismatch');
-    const control = await this.env.DB.prepare(`SELECT deadline_at,closed_at FROM voice_interview_controls
+    const control = await this.env.DB.prepare(`SELECT deadline_at,closed_at,audio_check_deadline_at,audio_ready_at FROM voice_interview_controls
       WHERE session_id=? AND auth_id=? AND legacy_unverified=0
         AND NOT EXISTS(SELECT 1 FROM account_deletion_admissions WHERE auth_id=?)
         AND NOT EXISTS(SELECT 1 FROM voice_closure_reconciliations WHERE session_id=?)`)
-      .bind(sessionId,uid,uid,sessionId).first<{deadline_at: string; closed_at: string | null}>();
+      .bind(sessionId,uid,uid,sessionId).first<{deadline_at: string; closed_at: string | null; audio_check_deadline_at: string | null; audio_ready_at: string | null}>();
     if (!control || control.closed_at) throw Error('voice_deadline_not_open');
     const deadlineMs = Date.parse(control.deadline_at.replace(' ','T') + (/Z|[+-]\d\d:\d\d$/.test(control.deadline_at) ? '' : 'Z'));
     if (!Number.isFinite(deadlineMs) || deadlineMs <= Date.now() || deadlineMs > Date.now() + 20 * 60_000) {
       throw Error('voice_deadline_invalid');
     }
-    // Atomic local state+alarm. Repeated RPCs can neither extend the first
-    // deadline nor erase an unresolved alarm result.
+    const setupMs = control.audio_check_deadline_at ? Date.parse(control.audio_check_deadline_at.replace(' ','T')+'Z') : NaN;
+    const readyMs = control.audio_ready_at ? Date.parse(control.audio_ready_at.replace(' ','T')+'Z') : NaN;
+    // A server-recorded readiness intent permits exactly one transition from
+    // the original setup deadline to 20 minutes from readiness. Retries cannot
+    // move either timestamp or erase an unresolved closure result.
     await this.ctx.storage.transaction(async storage => {
       const previous = await storage.get<Deadline>('deadline');
-      if (previous && (previous.sessionId !== sessionId || previous.deadlineMs !== deadlineMs || previous.status !== 'armed')) {
+      const activation = previous && previous.deadlineMs === setupMs && Number.isFinite(readyMs) &&
+        readyMs < setupMs && deadlineMs === readyMs + 20 * 60_000;
+      if (previous && (previous.sessionId !== sessionId || (previous.deadlineMs !== deadlineMs && !activation) || previous.status !== 'armed')) {
         throw Error('voice_deadline_conflict');
       }
       await storage.put<Deadline>('deadline',{sessionId,deadlineMs,status:'armed'});
@@ -86,7 +91,18 @@ export class VoiceDeadline extends DurableObject<Env> {
     try {
       await this.env.DB.prepare(`UPDATE voice_interview_controls
         SET closed_at=COALESCE(closed_at,datetime('now')),updated_at=datetime('now')
-        WHERE session_id=?`).bind(saved.sessionId).run();
+        WHERE session_id=? AND NOT (audio_ready_at IS NOT NULL AND
+          deadline_at=datetime(audio_ready_at,'+20 minutes') AND julianday(deadline_at)>julianday('now'))`)
+        .bind(saved.sessionId).run();
+      // Activation can race the original setup alarm. D1's conditional End
+      // wins or the confirmed readiness wins; a stale alarm cannot hang up an
+      // activated call. Re-arm from the authoritative row, never browser time.
+      const extended = await this.env.DB.prepare(`SELECT auth_id,closed_at FROM voice_interview_controls
+        WHERE session_id=? AND closed_at IS NULL`).bind(saved.sessionId).first<{auth_id:string;closed_at:string|null}>();
+      if (extended) {
+        await this.#arm({uid:extended.auth_id,sessionId:saved.sessionId,providerKeySha256:await voiceProviderKeyIdentity(this.env)});
+        return;
+      }
       const active = await this.env.DB.prepare(`SELECT id,auth_id FROM voice_provider_calls
         WHERE session_id=? AND state='active' LIMIT 1`).bind(saved.sessionId).first<{id:string;auth_id:string}>();
       if (active) await closeManagedVoiceCall(this.env,{uid:active.auth_id,attemptId:active.id}).catch(()=>{});

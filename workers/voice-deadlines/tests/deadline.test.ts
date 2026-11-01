@@ -3,7 +3,7 @@ import { applyD1Migrations, runInDurableObject, runDurableObjectAlarm } from 'cl
 import { beforeAll, beforeEach, afterEach, describe, it, expect, vi } from 'vitest';
 import { deliverDeletionNotifications } from '../../../app/functions/_lib/account-deletion-notifications.js';
 import { voiceProviderKeyIdentity } from '../../../app/functions/_lib/voice-provider-calls.js';
-import { openManagedInterview, closeManagedInterview } from '../../../app/functions/_lib/voice-managed-interview.js';
+import { openManagedInterview, activateManagedInterview, closeManagedInterview } from '../../../app/functions/_lib/voice-managed-interview.js';
 import {calls as reconcileCalls,legacy as reconcileLegacy} from '../../../app/scripts/lib/voice-closure-reconcile-core.mjs';
 
 let sessionId: string;
@@ -11,18 +11,27 @@ let stub: DurableObjectStub<import('../src/index').VoiceDeadline>;
 let requests: string[];
 let keySha: string;
 const appEnv = {...env,VOICE_INTERVIEW_ENABLED:'true',VOICE_MANAGED_CALLS_ENABLED:'true'};
-const open = (extra={}) => openManagedInterview(appEnv,{uid:'owner',sessionId,sdp:'v=0 offer',role:'Engineer',...extra});
+const check = (extra={}) => openManagedInterview(appEnv,{uid:'owner',sessionId,sdp:'v=0 offer',role:'Engineer',...extra});
+const open = async (extra={}) => {
+  const result = await check(extra);
+  if (!result.requiresAudioCheck) return result;
+  const active = await activateManagedInterview(appEnv,{uid:'owner',sessionId,role:'Engineer',audioReady:true,attemptId:result.attemptId});
+  return {...result,...active};
+};
 const control = () => env.DB.prepare('SELECT * FROM voice_interview_controls WHERE session_id=?').bind(sessionId).first();
 const call = () => env.DB.prepare("SELECT * FROM voice_provider_calls WHERE session_id=? ORDER BY rowid DESC LIMIT 1").bind(sessionId).first();
 const arm = async (request: Parameters<typeof stub.arm>[0]) => await stub.arm(request);
 const deferred = () => {let resolve!: () => void;const promise=new Promise<void>(r=>{resolve=r;});return {promise,resolve};};
 const state = () => runInDurableObject(stub,async(_instance,ctx)=>({saved:await ctx.storage.get('deadline'),alarm:await ctx.storage.getAlarm()}));
-const due = () => runInDurableObject(stub,async(_instance,ctx)=>{
+const due = async () => {
+  await env.DB.prepare("UPDATE voice_interview_controls SET deadline_at=datetime('now','-1 second') WHERE session_id=?").bind(sessionId).run();
+  return runInDurableObject(stub,async(_instance,ctx)=>{
   const saved=await ctx.storage.get<{sessionId:string;deadlineMs:number;status:string}>('deadline');
   if(!saved) throw Error('fixture missing alarm');
   await ctx.storage.put('deadline',{...saved,deadlineMs:Date.now()-1});
   // runDurableObjectAlarm executes the actual handler without a 20-minute wait.
-});
+  });
+};
 async function reconcile(old=false) {
   const core=old?reconcileLegacy:reconcileCalls,current=await call(),id=old?sessionId:String(current!.id);
   const row=await env.DB.prepare(core.inspectionSql(id)).first();
@@ -41,6 +50,7 @@ beforeAll(async()=>{
   keySha=await voiceProviderKeyIdentity(env);
 });
 beforeEach(async()=>{
+  await env.DB.prepare("DELETE FROM voice_interview_controls WHERE auth_id='owner'").run();
   sessionId=crypto.randomUUID();stub=env.VOICE_DEADLINES.getByName(sessionId);requests=[];
   await env.DB.prepare("INSERT INTO users(auth_id,email) VALUES('owner','owner@example.test') ON CONFLICT(auth_id) DO UPDATE SET free_session_used=0,voice_sessions_remaining=0").run();
   vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{
@@ -201,7 +211,7 @@ describe('durable interview deadlines in the actual Workers runtime',()=>{
       await due();await runDurableObjectAlarm(stub);
       expect((await state()).saved).toMatchObject({status:'waiting'});expect((await control())?.closed_at).toBeTruthy();
     } finally {release.resolve();}
-    await expect(starting).rejects.toThrow('voice_connection_reservation_unavailable');
+    await expect(starting).rejects.toThrow('voice_connection_ended');
     expect((await call())?.state).toBe('closed');
     expect((await env.DB.prepare("SELECT free_session_used FROM users WHERE auth_id='owner'").first())?.free_session_used).toBe(0);
     expect(requests.filter(x=>x.endsWith('/hangup'))).toHaveLength(1);
@@ -268,4 +278,30 @@ for (const status of [200,307]) it(`completion email handles native request and 
   const row=await env.DB.prepare('SELECT state,email,execution_token FROM account_deletion_notifications WHERE job_id=?').bind(jobId).first();
   if(status===200){expect(result.accepted).toBe(1);expect(row).toMatchObject({state:'sent',email:null,execution_token:null});}
   else {expect(result.uncertain).toBe(1);expect(row?.state).toBe('needs_review');expect(row?.execution_token).toBeTruthy();}
+});
+
+it('an abandoned audio check is closed by the real alarm without using the free interview',async()=>{
+  const result=await check();expect(result.requiresAudioCheck).toBe(true);
+  expect((await control())?.reserved_at).toBeNull();
+  expect((await state()).alarm).toBeLessThanOrEqual(Date.now()+120000);
+  await due();await runDurableObjectAlarm(stub);
+  expect((await call())?.state).toBe('closed');expect((await control())?.closed_at).toBeTruthy();
+  expect((await env.DB.prepare("SELECT free_session_used FROM users WHERE auth_id='owner'").first())?.free_session_used).toBe(0);
+  expect(await env.DB.prepare('SELECT 1 FROM voice_sessions WHERE id=?').bind(sessionId).first()).toBeNull();
+});
+
+it('readiness replaces the setup alarm once and a stale setup alarm cannot close the interview',async()=>{
+  const result=await check();const original=await state();
+  const active=await activateManagedInterview(appEnv,{uid:'owner',sessionId,attemptId:result.attemptId,role:'Engineer',audioReady:true});
+  const activated=await state();expect(activated.alarm).toBeGreaterThan(original.alarm!);
+  const setupAt=Date.parse(String((await control())?.audio_check_deadline_at).replace(' ','T')+'Z');
+  // Emulate an original alarm already delivered while activation updates D1.
+  await runInDurableObject(stub,async(_instance,ctx)=>{await ctx.storage.put('deadline',original.saved);});
+  vi.spyOn(Date,'now').mockReturnValue(setupAt+1);
+  await runDurableObjectAlarm(stub);
+  expect((await state()).alarm).toBe(activated.alarm);expect((await call())?.state).toBe('active');
+  expect((await control())?.closed_at).toBeNull();
+  const again=await activateManagedInterview(appEnv,{uid:'owner',sessionId,attemptId:result.attemptId,role:'Engineer',audioReady:true});
+  expect(again.deadlineAt).toBe(active.deadlineAt);expect((await state()).alarm).toBe(activated.alarm);
+  expect(requests.filter(x=>x.endsWith('/hangup'))).toHaveLength(0);
 });
