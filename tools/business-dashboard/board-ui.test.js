@@ -23,6 +23,94 @@ function ui(options = {}) {
 }
 const item = (id, channel, state, extra = {}) => ({ id, channel, state, title: id, detail: 'Saved draft details', evidence: 'Source checked', impact: 'campaign', reviewUrl: 'https://chatgpt.com/space/example', updatedAt: '2026-10-17 23:00:00', ...extra });
 const data = items => ({ items, asOf: '2026-10-18T02:00:00Z', gmailSync: { status: 'current', lastSuccessfulSyncAt: '2026-10-18T01:59:00Z', trackedCount: 1 } });
+
+test('zero decisions is calm, real decisions are highlighted, and a failed read cannot claim none',()=>{
+ const view=ui();view.render(data([]));
+ assert.equal(view.nodes.get('attention').className,'attention');
+ assert.equal(view.nodes.get('attention-title').textContent,'Nothing ready for your approval');
+ assert.equal(view.nodes.get('decision-count').hidden,true);
+ view.render(data([item('Ready','Facebook','pending',{canApprove:true,boardLane:'ready'})]));
+ assert.equal(view.nodes.get('attention').className,'attention needs-action');
+ assert.equal(view.nodes.get('decision-count').hidden,false);
+ assert.equal(view.nodes.get('decision-count').textContent,1);
+ view.run('boardFailed=true;renderHealth()');
+ assert.equal(view.nodes.get('attention-title').textContent,'Decision list could not refresh');
+ assert.equal(view.nodes.get('attention').className,'attention unavailable');
+ assert.equal(view.nodes.get('decision-count').hidden,true);
+ view.run('boardFailed=false');view.render(data([]));
+ assert.equal(view.nodes.get('attention').className,'attention');
+});
+
+test('money warnings explain missing verification; test counts stay neutral; Stripe has no invented check time',()=>{
+ const view=ui();view.render(data([]));
+ view.run(`render({asOf:'2026-10-31T20:00:00Z',month:'2026-10',netCollectedCents:1700,costCents:null,business:{periods:{7:{start:'2026-10-24',end:'2026-10-30',previousStart:'2026-10-17',previousEnd:'2026-10-23',metrics:[
+ {id:'customers',label:'Paying customers',value:null,previous:null,change:null,series:[]},
+ {id:'money',label:'Money collected',value:1700,previous:0,change:1700,series:[]},
+ {id:'accounts',label:'New accounts',value:0,previous:0,change:0,series:[]},
+ {id:'interviews',label:'Interviews finished',value:2,previous:3,change:-1,series:[]}
+ ]}}}})`);
+ const cards=view.nodes.get('kpi-grid').children;
+ assert.match(text(cards[0]),/Unavailable.*Needs attention.*Paid customer count is missing/s);
+ assert.match(text(cards[1]),/\$17.00.*Needs attention.*Total is not verified with Stripe/s);
+ assert.match(text(cards[2]),/Includes staff and test accounts/);
+ assert.doesNotMatch(text(cards[2]),/Needs attention/);
+ assert.match(text(cards[3]),/Includes staff and test interviews/);
+ const stripe=view.nodes.get('source-health').children.find(c=>c.attributes['data-disclosure-key']==='Stripe');
+ assert.match(text(stripe),/Next: compare the saved payments and current paid accounts with Stripe/);
+ assert.doesNotMatch(text(stripe),/Checked|Last attempt|Oct 31/);
+ walk(cards[0]).find(n=>n.tag==='a').listeners.click();
+ assert.equal(view.nodes.get('data-health').open,true);
+ view.run('numbersFailed=true;renderMetrics();renderHealth()');
+ assert.match(text(view.nodes.get('kpi-grid')),/Refresh failed. Saved numbers may be old/);
+ assert.equal(view.nodes.get('data-summary').className,'red');
+});
+
+test('source indicators explain success and preserve incomplete or missing coverage',()=>{
+ const view=ui();const state=data([]);
+ state.sources=[{source:'marblism',status:'incomplete',checked_at:'2026-10-31T20:00:00Z',detail:'Native pages did not load.'}];
+ state.analytics={status:'current',report:{checkedAt:'2026-10-31T20:00:00Z',coverage:{internalTrafficExcluded:true}}};
+ state.directorySource={status:'current',checkedAt:'2026-10-31T20:00:00Z'};
+ view.render(state);
+ const card=name=>view.nodes.get('source-health').children.find(c=>c.attributes['data-disclosure-key']===name);
+ assert.match(text(card('Gmail')),/Up to date.*Tracked email synced successfully/s);
+ assert.match(text(card('Website analytics')),/Needs attention.*not fully verified/s);
+ assert.match(text(card('Marblism')),/Needs attention.*Retry the source refresh/s);
+ assert.doesNotMatch(text(card('Marblism')),/Up to date/);
+ state.sources[0].status='current';view.render(state);
+ assert.match(text(card('Marblism')),/Up to date.*pages were read successfully/s);
+ state.sources[0].status='stale';view.render(state);
+ assert.match(text(card('Marblism')),/Needs attention.*overdue/s);
+});
+
+test('background failures explain the next step without creating a fake owner decision',()=>{
+ const view=ui();const state=data([]);
+ state.workflow={alerts:[{id:'workflow-preparation',detail:'Preparation failed.'}],workflows:[{id:'preparation',status:'failed',lastRun:{result:{summary:'No saved work changed.'}}}]};
+ view.render(state);
+ assert.equal(view.nodes.get('data-summary').textContent,'Needs attention: 1 background job');
+ assert.match(text(view.nodes.get('data-brief')),/Prepare work: The last run failed.*Fix the error/s);
+ assert.match(text(view.nodes.get('workflow-runs')),/Needs attention.*Fix the error.*No saved work changed/s);
+ assert.equal(view.nodes.get('attention-title').textContent,'Nothing ready for your approval');
+ assert.equal(view.nodes.get('attention').className,'attention');
+});
+test('overdue blocked jobs keep their completed history and point to the saved blocker',()=>{
+ const view=ui();const state=data([]);
+ state.workflow={alerts:[{id:'workflow-preparation',detail:'Preparation follow-up overdue.'}],workflows:[{id:'preparation',status:'overdue',lastSuccessAt:'2026-10-30T20:00:00Z',lastRun:{result:{summary:'Waiting for required source access.',blocker:'Required source access',nextCheckAt:'2026-10-31T12:00:00Z'}}}]};
+ view.render(state);
+ assert.match(text(view.nodes.get('data-brief')),/Prepare work: The follow-up date has passed.*Review the saved blocker/s);
+ assert.match(text(view.nodes.get('workflow-runs')),/Needs attention.*resolve it, then rerun this job.*Last completed check:.*Waiting for required source access/s);
+ assert.doesNotMatch(text(view.nodes.get('workflow-runs')),/No successful update|Run the source refresh|No completed check saved/);
+});
+test('workflow messages distinguish old success from no history and scheduled waiting',()=>{
+ const view=ui();const state=data([]);const run={id:'coordination',status:'missing',lastSuccessAt:'2026-10-20T12:00:00Z'};
+ state.workflow={alerts:[{id:'workflow-coordination'}],workflows:[run]};view.render(state);
+ assert.match(text(view.nodes.get('workflow-runs')),/Needs attention.*last completed check is too old.*rerun this job.*Last completed check:/s);
+ assert.doesNotMatch(text(view.nodes.get('workflow-runs')),/No completed run is saved/);
+ run.lastSuccessAt=null;view.render(state);
+ assert.match(text(view.nodes.get('workflow-runs')),/No completed run is saved. Run this job/);
+ run.status='waiting';state.workflow.alerts=[];view.render(state);
+ assert.match(text(view.nodes.get('workflow-runs')),/Waiting.*first scheduled run/s);
+ assert.doesNotMatch(text(view.nodes.get('workflow-runs')),/Needs attention|Run the source refresh/);
+});
 const walk = node => [node, ...node.children.flatMap(walk)];
 const text = node => walk(node).map(x => x.textContent).join(' ');
 const lane = (nodes, title) => nodes.get('board').children.find(x => text(x.children[0]).includes(title));
@@ -76,24 +164,24 @@ test('healthy Gmail cannot hide a stalled preparation run or a partial Analytics
  state.workflow={alerts:[{detail:'Content preparation: stalled. No completed receipt.'}],workflows:[{label:'Content preparation',status:'stalled',lastSuccessAt:null,lastRun:null}]};
  state.analytics={status:'stale',detail:'Source observation only.',report:{startDate:'2026-09-27',endDate:'2026-10-24',checkedAt:'2026-10-25T14:00:00Z',sourceUrl:'https://analytics.google.com/analytics/web/',events:[{name:'partner_kit_action',count:6,users:1}],coverage:{internalTrafficExcluded:false,attributionVerified:false,purchasesReconciled:false,campaignBreakdownComplete:false,kitActionBreakdownComplete:false},notes:'One reported user is not six customers.'}};
  render(state);
- assert.match(text(nodes.get('source-health')),/Gmail.*Current/s);assert.match(text(nodes.get('workflow-alerts')),/stalled/);
+ assert.match(text(nodes.get('source-health')),/Gmail.*Up to date.*Tracked email synced successfully/s);assert.match(text(nodes.get('workflow-alerts')),/stalled/);
  assert.match(text(nodes.get('data-brief')),/need attention/);
- assert.match(text(nodes.get('analytics-report')),/Not observed.*Unverified/);assert.match(text(nodes.get('analytics-report')),/kit action breakdown/);assert.match(text(nodes.get('analytics-status')),/stale/);
+ assert.match(text(nodes.get('analytics-report')),/Not observed.*Unverified/);assert.match(text(nodes.get('analytics-report')),/kit action breakdown/);assert.match(text(nodes.get('analytics-status')),/report is overdue/);
 });
 test('directory outages remain visible with an empty queue, cached history, and recovery',()=>{
  const {render,nodes}=ui();const state=data([]);state.directorySource={status:'unavailable'};
  render(state);
- assert.match(text(nodes.get('data-summary')),/Directory check failed/);
+ assert.match(text(nodes.get('data-summary')),/directory check failed/i);
  assert.match(text(nodes.get('data-brief')),/New requests could be missing.*No successful check is saved/s);
- assert.match(text(nodes.get('source-health')),/Directory requests.*Check failed.*No check time saved/s);
+ assert.match(text(nodes.get('source-health')),/Directory requests.*Needs attention.*Directory check failed.*No check time saved/s);
  state.directorySource.lastSuccessfulCheckAt='2026-10-25T14:00:00Z';render(state);
  assert.match(text(nodes.get('data-brief')),/Last successful check: Oct 25, 2026/);
- assert.match(text(nodes.get('source-health')),/Directory requests.*Check failed.*Checked Oct 25, 2026/s);
+ assert.match(text(nodes.get('source-health')),/Directory requests.*Needs attention.*Last successful check Oct 25, 2026/s);
  state.directorySource={status:'current',checkedAt:'2026-10-28T04:00:00Z',truncated:true};render(state);
- assert.doesNotMatch(text(nodes.get('data-summary')),/Directory check failed/);
+ assert.doesNotMatch(text(nodes.get('data-summary')),/directory check failed/i);
  assert.match(text(nodes.get('data-summary')),/newest 200/);
  state.directorySource.truncated=false;render(state);
- assert.match(text(nodes.get('source-health')),/Directory requests.*Current.*Checked Oct 28, 2026|Directory requests.*Current.*Checked Oct 27, 2026/s);
+ assert.match(text(nodes.get('source-health')),/Directory requests.*Up to date.*Listing requests loaded successfully.*Checked Oct 2[78], 2026/s);
  assert.doesNotMatch(text(nodes.get('data-brief')),/requests could be missing|newest 200/);
 });
 test('prospect review shows the format and holds copy approval behind a separate format decision',()=>{
@@ -147,7 +235,7 @@ test('an older network response cannot replace a newer board; a failed read keep
  const failed=uiState.run('refresh()');requests[4]({ok:false});requests[5]({ok:false});await failed;
  assert.match(text(uiState.nodes.get('board')),/Newest work/);assert.equal(uiState.nodes.get('campaign-error').hidden,false);
  uiState.run("selectedDepartment='product';renderCampaigns(boardData)");assert.equal(uiState.nodes.get('campaign-error').hidden,false);
- assert.match(text(uiState.nodes.get('data-summary')),/Refresh failed/);
+ assert.match(text(uiState.nodes.get('data-summary')),/refresh failed/i);
 });
 
 for(let round=1;round<=3;round++)test(`live update replay ${round}: publication appears without reload and unchanged polls stay cheap`,async()=>{
@@ -185,6 +273,10 @@ test('release receipts override old draft approval labels and remove draft actio
  walk(lane(view.nodes,'Working')).find(x=>x.className==='card-title').listeners.click();
  assert.match(text(view.nodes.get('review-content')),/Complete development acceptance/);
  assert.doesNotMatch(text(view.nodes.get('review-actions')),/Approve|Decline|Request changes/);
+ release.snapshot=null;release.source='github';release.state='closed';release.nativeState='closed';release.boardLane='completed';release.receipts=[{stage:'production_verified',summary:'Production checks passed',evidence_url:'https://example.com/deployment'}];
+ view.render(data([release]));walk(lane(view.nodes,'Done')).find(x=>x.className==='card-title').listeners.click();
+ assert.match(text(view.nodes.get('review-content')),/Production checks passed/);
+ assert.doesNotMatch(text(view.nodes.get('review-content')),/draft, destination and media have not been verified|finish preparation before approval/);
 });
 test('open details reflect completion without another click and changed copy cannot be silently approved',async()=>{
  let current=data([item('Visible draft','Facebook','hold',{version:1,workId:'visible',snapshotRevision:'v1',canApprove:true,boardLane:'ready',snapshot:{text:'Exact copy',links:[],media:[],evidence:[]}})]);
