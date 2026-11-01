@@ -24,7 +24,7 @@ function fixture(){
 for(let round=1;round<=3;round++)test(`Stripe verification lifecycle round ${round}: missing, exact match, changed records, fresh recheck, failed source`,async()=>{
  const f=fixture();assert.equal((await stripeCheckStatus(f.env,now)).status,'unavailable');
  assert.equal((await f.post()).status,200);
- let status=await stripeCheckStatus(f.env,now);assert.equal(status.status,'current');assert.equal(status.customers,1);
+ let status=await stripeCheckStatus(f.env,now);assert.equal(status.status,'current');assert.equal(status.customers,1);assert.equal(status.moneyPeriods[7].value,1700);assert.equal(status.moneyPeriods[28].value,3200);
  assert.equal(f.sql.prepare('SELECT revision FROM board_revision').get().revision,1);
  const original=await readStripeBasis(f.env.PRODUCTION_DB,now);
  assert.equal((await f.post()).status,200);assert.equal(f.sql.prepare('SELECT revision FROM board_revision').get().revision,1);

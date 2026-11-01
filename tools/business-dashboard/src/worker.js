@@ -65,7 +65,7 @@ async function overview(env, now = new Date()) {
   for (const period of Object.values(business.periods)) {
     for (const metric of period.metrics) {
       if (metric.id === 'customers' && stripe.status === 'current') Object.assign(metric, {value:stripe.customers,status:'verified',note:'Current paid accounts match Stripe. Staff accounts excluded. This is a current count, not a historical trend.'});
-      if (metric.id === 'money' && metric.value !== null && stripe.status === 'current') Object.assign(metric, {status:'verified',note:'Payments and refunds match Stripe for this period. Includes staff and test payments. Before fees and costs.'});
+      if (metric.id === 'money' && metric.value !== null && stripe.status === 'current') Object.assign(metric, stripe.moneyPeriods[period.days], {status:'verified',note:'Payments and refunds match Stripe for this period. Includes staff and test payments. Before fees and costs.'});
     }
   }
   const capturedCents = charges.results.filter(row => sameMonth(row.ts, month)).reduce((sum, row) => sum + row.cents, 0);

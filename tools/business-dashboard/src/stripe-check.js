@@ -1,6 +1,6 @@
 // Native observations are compared with read-only application records. This never
 // changes a payment, entitlement, customer, refund, or production ledger row.
-import { easternDay, metricPeriods } from './business-metrics.js';
+import { easternDay, metricPeriods, seriesFromRows } from './business-metrics.js';
 import { digest } from './outreach-policy.js';
 export const STRIPE_ACCOUNT = 'acct_1RymDCApMPhcB1Y6';
 const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
@@ -83,7 +83,9 @@ export async function stripeCheckStatus(env, now = new Date()) {
   if (saved.result.fingerprint !== basis.fingerprint) return { ...base, status: 'incomplete', detail: 'App records changed after the Stripe check. Compare again.' };
   // Reevaluate time-dependent access even when the stored records did not change.
   const result = await compareStripeCheck(report, basis, now);
-  return { ...base, ...result, detail: result.status === 'current' ? 'Payments, refunds and current paid accounts match Stripe. Staff accounts are excluded from paying customers.' : result.issues.join(' ') };
+  const moneyRows=[...basis.charges.map(r=>({ts:`${r.date}T12:00:00Z`,value:r.amount})),...basis.refunds.map(r=>({ts:`${r.date}T12:00:00Z`,value:-r.amount}))];
+  const moneyPeriods=Object.fromEntries([7,28].map(days=>[days,seriesFromRows(moneyRows,metricPeriods(now,days))]));
+  return { ...base, ...result, moneyPeriods, detail: result.status === 'current' ? 'Payments, refunds and current paid accounts match Stripe. Staff accounts are excluded from paying customers.' : result.issues.join(' ') };
 }
 export async function stripeCheckApi(request, env, now = new Date()) {
   const response = (data, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
