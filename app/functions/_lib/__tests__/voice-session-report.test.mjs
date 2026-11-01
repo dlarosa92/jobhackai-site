@@ -187,6 +187,12 @@ for (const [label, ent, activePlan] of [
     assert.equal(body.activePlan, activePlan);
     assert.equal(body.fullAccess, false, 'retention locks the report for every plan');
     assert.equal(body.transcript, null);
-    assert.deepEqual(Object.keys(body.scorecard).sort(), ['topImprovement', 'topStrength']);
+    assert.equal(body.scorecard, null, 'expired feedback is withheld before scheduled cleanup');
+    assert.equal(body.role, null);
+    assert.equal(body.seniority, null);
+    assert.equal(body.durationSeconds, 45, 'limited session metadata remains');
+    for (const text of ['Product Manager', 'Senior', SCORED.topStrength, SCORED.topImprovement, TRANSCRIPT[1].text]) {
+      assert.ok(!JSON.stringify(body).includes(text), `expired content must not be returned: ${text}`);
+    }
   });
 }

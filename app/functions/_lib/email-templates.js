@@ -150,7 +150,7 @@ export function subscriptionCancelledEmail(userName, planName, accessEndDate) {
       Hi ${name}, your ${plan} subscription has been cancelled. You'll continue to have access to your plan features until <strong>${formattedDate}</strong>.
     </p>
     <p style="margin:0 0 16px;font-size:15px;color:#374151;line-height:1.6;">
-      After that, your account will revert to the free tier. Your tool history is automatically deleted after 90 days per our data retention policy, and inactive accounts are removed after 24 months.
+      After that, your account will revert to the free tier. Cancelling your subscription does not delete your account or saved content immediately. See our <a href="https://app.jobhackai.io/privacy">Privacy Policy</a> for content retention, deletion options, and inactive-account handling.
     </p>
     <p style="margin:0 0 8px;font-size:15px;color:#374151;line-height:1.6;">
       Changed your mind? You can resubscribe at any time.
