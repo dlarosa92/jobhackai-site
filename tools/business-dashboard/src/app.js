@@ -55,7 +55,7 @@ function stateLabel(item){
   if(displayLane(item)==='backlog')return 'Up next';
   if(item.unfinishedDependencies?.length)return 'Waiting on another task';
   if(item.issues?.length)return 'Checks need attention';
-  if(item.sourceHealth&&item.sourceHealth.status!=='current')return 'Source needs a check';
+  if(item.sourceHealth&&item.sourceHealth.status!=='current')return 'Source update missing or overdue';
   if(displayLane(item)==='waiting')return 'Waiting on a next step';
   return 'Preparing';
 }
@@ -100,11 +100,11 @@ function render(data){
   overviewData=data;currentMonth=data.month;numbersFailed=false;
   $('month-label').textContent=new Intl.DateTimeFormat('en-US',{month:'long',year:'numeric',timeZone:'UTC'}).format(new Date(`${data.month}-01T12:00:00Z`));
   $('monthly-money').textContent=`Collected after refunds: ${money(data.netCollectedCents)}.`;
-  $('basis').textContent='Saved USD payment records. Stripe totals and complete costs still need a check.';
+  $('basis').textContent='Payment totals have not been compared with Stripe. Add all costs before using this as available cash.';
   if(!costDirty){$('costs').value=data.costCents===null?'':(data.costCents/100).toFixed(2);$('complete').checked=data.costsComplete;}
   if(!costDirty)$('cost-status').textContent=data.costCents===null?'No costs recorded yet.':`${data.costsComplete?'Costs marked complete':'Some costs may be missing'} · saved ${time(data.costUpdatedAt)}`;
   $('available').textContent=data.estimatedAvailableCents===null?'Cash after costs: not known yet.':`Estimated cash after costs: ${money(data.estimatedAvailableCents)}`;
-  $('goal-status').textContent='Count needs review';$('goal-fill').style.width='0%';$('goal-fill').parentElement?.classList.add('unverified');
+  $('goal-status').textContent='Real user count unknown';$('goal-fill').style.width='0%';$('goal-fill').parentElement?.classList.add('unverified');
   $('goal-status').setAttribute('data-help',`${data.d1UserRecords??'Unknown'} account records are saved. Staff and test accounts have not been removed, so verified progress toward 250 users is not yet known.`);
   $('error').hidden=true;renderMetrics();renderHealth();
 }
@@ -116,10 +116,15 @@ function renderMetrics(){
   const grid=$('kpi-grid'),definitions=$('metric-definitions');grid.replaceChildren();definitions.replaceChildren();
   for(const metric of metrics){
     const card=element('article',undefined,'metric');const head=element('div',undefined,'metric-head');head.append(element('span',metric.label),help(`${metric.definition} ${metric.note}`,`What ${metric.label.toLowerCase()} means`));
-    card.append(head,element('div',metric.value===null?'Not verified':metricValue(metric,metric.value),`metric-value${metric.value===null?' unknown':''}`));
+    card.append(head,element('div',metric.value===null?(period||numbersFailed?'Unavailable':'Loading…'):metricValue(metric,metric.value),`metric-value${metric.value===null?' unknown':''}`));
     const bottom=element('div',undefined,'metric-bottom'),change=element('div');change.append(element('p',metricChange(metric),'metric-change'),element('p',metric.value===null?'No trusted count yet':`vs prior ${selectedPeriod} days`,'metric-caption'));bottom.append(change);
     const chart=sparkline(metric.series,`${metric.label}: daily raw records from ${period?.start} to ${period?.end}. ${metric.series.map(p=>`${p.date}: ${metricValue(metric,p.value)}`).join('; ')}`);if(chart)bottom.append(chart);
-    card.append(bottom,element('span',numbersFailed?'Refresh failed':metric.id==='customers'?'Stripe check needed':metric.value===null?'Source unavailable':metric.id==='money'?'Ledger · needs check':'Raw count · includes tests','metric-quality'));
+    if(metric.value!==null)card.append(bottom);
+    const quality=element('div',undefined,'metric-quality');
+    const problem=numbersFailed?'Refresh failed. Saved numbers may be old.':!period?null:metric.id==='customers'?'Paid customer count is missing.':metric.value===null?'Could not load this number.':metric.id==='money'?'Total is not verified with Stripe.':null;
+    if(problem){quality.append(element('strong','Needs attention','amber'),element('p',problem));const link=element('a','See what to do');link.href='#data-health';link.addEventListener('click',()=>{$('data-health').open=true;});quality.append(link);}
+    else quality.append(element('p',!period?'Waiting for business numbers…':metric.id==='accounts'?'Includes staff and test accounts.':'Includes staff and test interviews.'));
+    card.append(quality);
     grid.append(card);
     const definition=element('div',undefined,'definition');definition.append(element('strong',metric.label),element('p',metric.definition),element('p',`${metric.source}. ${metric.note}`));definitions.append(definition);
   }
@@ -150,8 +155,8 @@ function renderCampaigns(data){
   const channels=['All',...new Set(data.items.map(channelName))].sort((a,b)=>a==='All'?-1:b==='All'?1:a.localeCompare(b));
   const channelSelect=$('channel-filter');channelSelect.replaceChildren();for(const name of channels){const option=element('option',name==='All'?'All platforms':name);option.value=name;channelSelect.append(option);}channelSelect.value=selectedChannel;
   $('filter-status').textContent=visible.length?`${visible.length} saved items match these filters.`:'No saved items match. This does not prove there is no activity on a platform.';
-  const decisions=ranked.filter(i=>displayLane(i)==='needs');$('decision-count').textContent=decisions.length;
-  $('focus-text').textContent=decisions.length?'Start with the first item':'No decision ready';
+  const decisions=ranked.filter(i=>displayLane(i)==='needs');
+  renderDecisionStatus();
   const next=$('next-decisions');next.replaceChildren();
   for(const item of decisions.slice(0,1)){const row=element('div',undefined,'decision-row');const trigger=button('',()=>openReview(item,trigger),'decision-link');const copy=element('span',undefined,'decision-copy');copy.append(element('strong',cardTitle(item)),element('small',`${departmentNames[department(item)]} · ${stateLabel(item)}`));trigger.append(element('span',channelName(item)==='Email'||channelName(item)==='Nextdoor'?'✉':'◇','decision-icon'),copy);row.append(trigger);if(item.decision?.created_at)row.append(element('span',`Approved ${relative(item.decision.created_at)}`,'pill amber'));const action=button(nextStep(item),()=>openReview(item,action),'review-link','Opens the next step. No message will be sent by opening it.');row.append(action);next.append(row);}
   if(!decisions.length)next.append(element('p',`${ranked.filter(i=>displayLane(i)==='working').length} being prepared · ${ranked.filter(i=>displayLane(i)==='waiting').length} waiting`,'muted'));
@@ -198,41 +203,78 @@ function renderLearnings(data){
   restore();
 }
 function renderSafeguards(){
-  const rules=[['Do not resend sent emails','On','The email send gate checks saved sends and Gmail before one send attempt. An unknown result stays on hold. Historical conflicts still need review.'],['Keep tests out of growth','Needs fix','The current account and interview counts still include staff and tests. The goal stays unverified until that list is checked.'],['Approval does not mean sent','On','Approving a draft saves the decision and a follow-up for its owner. Only a recorded send or published result can show it as done.'],['Checks are not progress','On','Only changed draft content or a verified work milestone counts as a move. Reworded tasks and new check times do not. Older move history is not assumed.']];
+  const rules=[['Do not resend sent emails','On','The email send gate checks saved sends and Gmail before one send attempt. An unknown result stays on hold. Historical conflicts still need review.'],['Keep tests out of growth','Needs attention','The current account and interview counts still include staff and tests. The goal stays unverified until that list is checked.'],['Approval does not mean sent','On','Approving a draft saves the decision and a follow-up for its owner. Only a recorded send or published result can show it as done.'],['Checks are not progress','On','Only changed draft content or a verified work milestone counts as a move. Reworded tasks and new check times do not. Older move history is not assumed.']];
   const node=$('safeguards'),restore=retainDisclosures(node);node.replaceChildren();for(const [title,status,explanation] of rules){const row=element('details',undefined,'learning safeguard'),summary=element('summary');summary.append(element('span','◇','shield'),element('span',title),element('span',status,`pill ${status==='On'?'green':'amber'}`));row.append(summary,element('p',explanation));node.append(row);}restore();
 }
+function renderDecisionStatus(){
+  const count=boardData?.items?.filter(item=>displayLane(item)==='needs').length||0;
+  const unavailable=boardFailed||!boardData;
+  $('attention').className=`attention${unavailable?' unavailable':count?' needs-action':''}`;
+  $('attention-title').textContent=unavailable?(boardFailed?'Decision list could not refresh':'Loading your decisions…'):count?'Needs your attention':'Nothing ready for your approval';
+  $('attention-dot').className=`dot ${unavailable?'amber':count?'red':'green'}`;
+  $('attention-dot').hidden=unavailable&&!boardFailed;
+  $('decision-count').textContent=count;$('decision-count').hidden=unavailable||!count;
+  $('focus-text').textContent=boardFailed?'Saved items may be old':count?'Start with the first item':'';
+}
+function sourceState(status,good,problem){
+  if(status==='current')return {status:'Up to date',tone:'green',reason:good};
+  if(status==='loading')return {status:'Loading',tone:'muted',reason:'Waiting for saved source information.'};
+  return {status:'Needs attention',tone:'amber',reason:problem||({stale:'The last update is overdue. Run the source refresh.',failed:'The last update failed. Retry it and inspect the error if it fails again.',blocked:'The update is blocked. Resolve the saved blocker, then retry.',incomplete:'The last update could not verify all required information. Retry the source refresh.'}[status]||'No successful update is available. Run the source refresh.')};
+}
+const analyticsChecks={internalTrafficExcluded:'staff and test removal',attributionVerified:'signup and payment source',purchasesReconciled:'payment checks',campaignBreakdownComplete:'campaign breakdown',kitActionBreakdownComplete:'kit action breakdown'};
 function renderHealth(){
-  const data=boardData,sources=[];
-  sources.push({name:'Cloudflare app records',status:numbersFailed?'Refresh failed':overviewData?'Read saved data':'Not loaded',date:overviewData?.asOf,how:'API read on page load, refresh and each visible minute.',detail:'Accounts and finished interviews come from the app database. Counts include staff and tests. A new read does not prove the underlying data is complete.'});
-  sources.push({name:'Stripe',status:'Needs a check',date:overviewData?.asOf,how:'Payment events saved by the app, then read from Cloudflare.',detail:'This board does not make a fresh Stripe API call. Saved payments and refunds are shown; current paid customers and ledger completeness still need verification.'});
-  sources.push({name:'GA4',status:data?.analytics?.status==='current'?'Report read · gaps remain':data?.analytics?.status||'Not loaded',date:data?.analytics?.report?.checkedAt,how:'Codex imports one 28-day report each Eastern day.',detail:'Refreshing this page reads that saved report. It does not run a new Analytics query. Staff exclusions, attribution and purchases are checked separately.'});
-  const gmail=data?.gmailSync;sources.push({name:'Gmail',status:gmail?.status==='current'?'Current':gmail?.status||'Not loaded',date:gmail?.lastSuccessfulSyncAt,how:'Google checks tracked mail about every 5 minutes.',detail:'Only tracked conversations and send records are included. A page refresh does not start a Gmail scan.'});
+  renderDecisionStatus();
+  const data=boardData,sources=[],missing=data?'missing':'loading';
+  const appMetrics=overviewData?.business?.periods?.[selectedPeriod]?.metrics||[],appLoaded=['accounts','interviews'].every(id=>appMetrics.some(metric=>metric.id===id&&metric.value!==null));
+  sources.push({name:'App records',...sourceState(numbersFailed?'failed':overviewData?(appLoaded?'current':'incomplete'):'loading','Saved account and interview records loaded. These counts include staff and tests.','Could not load all business numbers. Retry with the refresh button.'),date:overviewData?.asOf,how:'Read from the app database each visible minute.',detail:'A successful read confirms the records loaded. Staff and test activity still needs to be removed before measuring customer growth.'});
+  sources.push({name:'Stripe',...sourceState('incomplete',null,'Paid customers and payment totals are not verified with Stripe.'),how:'Next: compare the saved payments and current paid accounts with Stripe.',detail:'This dashboard reads saved payment records, not a fresh Stripe account total. This warning means verification is missing. It does not report a Stripe outage.'});
+  const coverage=data?.analytics?.report?.coverage,analyticsGaps=Object.keys(analyticsChecks).some(key=>coverage?.[key]!==true);
+  const analyticsState=data?.analytics?.status==='current'&&analyticsGaps?'incomplete':data?.analytics?.status||missing;
+  sources.push({name:'Website analytics',...sourceState(analyticsState,'The saved report is current and all required data checks passed.',analyticsState==='incomplete'?'Visitor and campaign numbers are not fully verified. Finish the checks listed under website visits below.':null),date:data?.analytics?.report?.checkedAt,how:'Codex imports one 28-day report each Eastern day.',detail:data?.analytics?.detail||'Staff exclusions, attribution, purchases and campaign breakdowns require separate verification.'});
+  const gmail=data?.gmailSync;sources.push({name:'Gmail',...sourceState(gmail?.status||missing,'Tracked email synced successfully.','Tracked email is not up to date. Rerun the mail sync before relying on the inbox count.'),date:gmail?.lastSuccessfulSyncAt,how:'Google checks tracked conversations about every 5 minutes.',detail:'Only tracked conversations and send records are included. A page refresh does not start a Gmail scan.'});
   const directory=data?.directorySource,directoryFailed=directory?.status==='unavailable';
-  sources.push({name:'Directory requests',status:directoryFailed?'Check failed':directory?.status==='current'?(directory.truncated?'Newest 200 only':'Current'):'Not loaded',date:directory?.checkedAt||directory?.lastSuccessfulCheckAt,how:'Read from the app database on each board refresh.',detail:directoryFailed?'New listing requests could be missing. Any saved cards may be old. Refresh again before assuming there are no requests.':directory?.truncated?'Only the newest 200 requests are shown. Older requests still exist in the source.':'Listing requests are read directly. They do not depend on email delivery or the Gmail scan.'});
-  for(const [key,label,how] of [['marblism','Marblism','Codex reads and saves drafts during its scheduled work.'],['github','Product work','Codex checks saved product tasks and GitHub.']]){const s=data?.sources?.find(x=>x.source===key);sources.push({name:label,status:s?.status==='current'?'Current':s?.status||'Not loaded',date:s?.checked_at,how,detail:s?.detail||'No source check is saved yet.'});}
-  const node=$('source-health'),restore=retainDisclosures(node);node.replaceChildren();for(const source of sources){const card=element('article',undefined,'source-card'),head=element('header');card.setAttribute('data-disclosure-key',source.name);head.append(element('strong',source.name),element('span',source.status,source.status==='Current'?'green':'amber'));card.append(head,element('p',source.date?`Checked ${time(source.date)}`:'No check time saved.'),element('p',source.how),detail('What this means',source.detail));node.append(card);}restore();
-  const allGood=data&&!numbersFailed&&!boardFailed;$('data-summary').textContent=numbersFailed||boardFailed?'Refresh failed · saved data shown':directoryFailed?'Directory check failed · requests may be missing':directory?.truncated?'Directory shows newest 200 requests only':data?.workflow?.alerts?.length?`${data.workflow.alerts.length} work checks need attention`:'Some data needs a check';
-  $('checked').textContent=allGood?`Board read ${relative(data.asOf)}`:data?`Last board read ${relative(data.asOf)}`:'Loading…';
-  $('source-count').textContent='Source times and scheduled work';const brief=$('data-brief');brief.replaceChildren(element('p','This visible tab checks for saved work changes every two seconds. Business numbers refresh each minute. Each platform has its own source check time.'),element('p','Account and interview counts include tests. Current paying customers are not verified. Money comes from the saved Stripe ledger.','caution'));
+  sources.push({name:'Directory requests',...sourceState(directory?.status==='current'&&directory.truncated?'incomplete':directory?.status||missing,'Listing requests loaded successfully.',directoryFailed?'Directory check failed. New requests could be missing. Refresh again before relying on this list.':directory?.truncated?'Only the newest 200 requests are shown. Review older requests in the source.':null),date:directory?.checkedAt||directory?.lastSuccessfulCheckAt,dateLabel:directoryFailed?'Last successful check':'Checked',how:'Read from the app database on each board refresh.',detail:'Listing requests are read directly. They do not depend on email delivery or the Gmail scan.'});
+  for(const [key,label,good,how] of [['marblism','Marblism','The latest required Marblism pages were read successfully.','Codex checks the required Marblism pages every 30 minutes.'],['github','Product work','GitHub source information is current. Open each work card for its release status.','Codex checks GitHub during its source refresh.']]){const source=data?.sources?.find(x=>x.source===key);sources.push({name:label,...sourceState(source?.status||missing,good),date:source?.checked_at,dateLabel:'Last attempt',how,detail:source?.detail||'No source check is saved yet.'});}
+  const node=$('source-health'),restore=retainDisclosures(node);node.replaceChildren();
+  for(const source of sources){const card=element('article',undefined,'source-card'),head=element('header');card.setAttribute('data-disclosure-key',source.name);head.append(element('strong',source.name),element('span',source.status,source.tone));card.append(head,element('p',source.reason,'source-reason'));
+    if(source.name!=='Stripe')card.append(element('p',source.date?`${source.dateLabel||'Checked'} ${time(source.date)}`:'No check time saved.'));
+    card.append(element('p',source.how),detail('Technical details',source.detail));node.append(card);
+  }restore();
+  const problems=data?.workflow?.alerts||[],jobProblems=problems.filter(alert=>alert.id?.startsWith('workflow-')),otherProblems=problems.filter(alert=>!alert.id?.startsWith('workflow-'));
+  const problemCount=[jobProblems.length?`${jobProblems.length} background ${jobProblems.length===1?'job':'jobs'}`:'',otherProblems.length?`${otherProblems.length} work ${otherProblems.length===1?'follow-up':'follow-ups'}`:''].filter(Boolean).join(' and ');
+  $('data-summary').textContent=numbersFailed||boardFailed?'Needs attention: refresh failed':directoryFailed?'Needs attention: directory check failed':directory?.truncated?'Needs attention: only newest 200 requests shown':problems.length?`Needs attention: ${problemCount}`:'Needs attention: business data is unverified';
+  $('data-summary').className=numbersFailed||boardFailed||directoryFailed||problems.length?'red':'amber';
+  $('checked').textContent=data?`Board read ${relative(data.asOf)}`:'Loading…';
+  $('source-count').textContent='What is working and what needs attention';
+  const brief=$('data-brief');brief.replaceChildren(element('p','Stripe verification is missing. Compare paid accounts and payment totals with Stripe. Remove staff and test activity before using the account count as customer growth.'));
+  if(numbersFailed||boardFailed)brief.append(element('p','Refresh failed. Saved information may be old. Use the refresh button to retry.','caution'));
   if(directoryFailed)brief.append(element('p',`Directory check failed. New requests could be missing. ${directory.lastSuccessfulCheckAt?`Last successful check: ${time(directory.lastSuccessfulCheckAt)}.`:'No successful check is saved.'}`, 'caution'));
   else if(directory?.truncated)brief.append(element('p','Only the newest 200 directory requests are shown. Older requests are not included.', 'caution'));
-  if(data?.workflow?.alerts?.length)brief.append(element('p',`${data.workflow.alerts.length} work checks or follow-ups need attention. See Data & settings.`, 'caution'));
+  for(const run of data?.workflow?.workflows||[])if(!['current','running'].includes(run.status)){const issue=workflowStatus(run);brief.append(element('p',`${workflowName(run)}: ${issue.reason}`,'caution'));}
+  for(const problem of otherProblems)brief.append(element('p',problem.detail,'caution'));
+  if(problems.length)brief.append(element('p','These jobs and follow-ups need attention from the team. They are separate from decisions waiting for your approval. See the details below.'));
+}
+function workflowName(run){return ({preparation:'Prepare work',reconciliation:'Refresh sources',coordination:'Set team priorities'})[run.id]||run.label;}
+function workflowStatus(run){
+  const reason=({failed:'The last run failed. Fix the error in its saved notes, then rerun it.',blocked:'The last run was blocked. Resolve the missing source or blocker, then rerun it.',stalled:'The job stopped before finishing. Inspect its last run and restart it.',stale:'The job is overdue. Check the Mac scheduler and run it again.',incomplete:'Required work is missing. Finish the missing steps and rerun it.',missing:'No completed run is saved. Run this job.'})[run.status];
+  if(run.status==='running')return {status:'Running',tone:'blue',reason:'This job is still working. A result has not been saved yet.'};
+  return sourceState(run.status,'The last run completed its required checks.',reason);
 }
 function renderWorkflow(workflow,analytics){
   const runs=$('workflow-runs'),alerts=$('workflow-alerts'),restoreRuns=retainDisclosures(runs),restoreAlerts=retainDisclosures(alerts);runs.replaceChildren();alerts.replaceChildren();
-  const labels={preparation:['Prepare work','Hourly · Codex on the Mac'],reconciliation:['Check sources','Every 30 minutes · Codex on the Mac'],coordination:['Owner priorities','Daily · Codex on the Mac']};
-  for(const run of workflow?.workflows||[]){const name=labels[run.id]||[run.label,'Codex scheduled work'];const row=element('details',undefined,'workflow-run'),summary=element('summary');summary.append(element('strong',name[0]),element('span',run.status==='current'?'Check completed':run.status,run.status==='current'?'green':'amber'));row.append(summary,element('p',name[1]),element('p',run.lastSuccessAt?`Last completed check: ${time(run.lastSuccessAt)}`:'No completed check saved.'));
+  const labels={preparation:['Prepare work','Hourly · Codex on the Mac'],reconciliation:['Refresh sources','Every 30 minutes · Codex on the Mac'],coordination:['Set team priorities','Daily · Codex on the Mac']};
+  for(const run of workflow?.workflows||[]){const name=labels[run.id]||[run.label,'Codex scheduled work'];const row=element('details',undefined,'workflow-run'),summary=element('summary');const health=workflowStatus(run);summary.append(element('strong',name[0]),element('span',health.status,health.tone));row.append(summary,element('p',health.reason),element('p',name[1]),element('p',run.lastSuccessAt?`Last completed check: ${time(run.lastSuccessAt)}`:'No completed check saved.'));
     if(run.requiredSources?.length){const disputed=run.disputedSources||[],verified=(run.lastRun?.result?.coverage?.verified||[]).filter(source=>!disputed.includes(source));row.append(element('p',`Verified in the last run: ${verified.join(', ')||'none'}.`));const unverified=run.requiredSources.filter(source=>!verified.includes(source));if(unverified.length)row.append(element('p',`Still unverified: ${unverified.join(', ')}.`, 'caution'));if(disputed.length)row.append(element('p','A later source check disputed the saved success. The original run notes remain in history.','caution'));}
     if(run.lastRun?.result?.summary)row.append(detail('Saved run notes',run.lastRun.result.summary));if(run.lastRun?.result?.nextCheckAt)row.append(element('p',`Next check: ${time(run.lastRun.result.nextCheckAt)}`));runs.append(row);}
   if(!workflow)runs.append(element('p','Scheduled work records have not loaded.','caution'));
   for(const alert of workflow?.alerts||[]){const row=detail('Work needs attention',alert.detail);row.setAttribute('data-disclosure-key',alert.id||alert.detail);alerts.append(row);}restoreRuns();restoreAlerts();
-  const content=$('analytics-report'),report=analytics?.report,restoreReport=retainDisclosures(content);content.replaceChildren();$('analytics-status').textContent=report?`${report.startDate} to ${report.endDate} · ${analytics.status}`:'No saved GA4 report.';
+  const content=$('analytics-report'),report=analytics?.report,restoreReport=retainDisclosures(content);content.replaceChildren();$('analytics-status').textContent=report?`${report.startDate} to ${report.endDate} · ${analytics.status==='current'?'Report loaded':'Needs attention: '+(analytics.status==='stale'?'report is overdue':'report is incomplete')}`:'No saved website analytics report.';
   if(!report)return;
   if(analytics.status==='incomplete')content.append(element('p',analytics.detail,'caution'));
   content.append(element('p',`Source read ${time(report.checkedAt)}. These are reported events, not a customer count.`,'muted'));
   const table=element('table'),head=element('tr');['Event','Times','Reported users'].forEach(t=>head.append(element('th',t)));table.append(head);
   for(const name of ['session_start','sign_up','voice_session_start','voice_session_complete','begin_checkout','purchase','refund','partner_kit_action','directory_contact_click']){const e=report.events?.find(e=>e.name===name),row=element('tr');row.append(element('td',name.replaceAll('_',' ')),element('td',e?e.count:'Not observed'),element('td',e?e.users:'Unverified'));table.append(row);}content.append(table);
-  const gaps=Object.entries(report.coverage||{}).filter(([,v])=>!v).map(([key])=>({internalTrafficExcluded:'staff and test removal',attributionVerified:'signup and payment source',purchasesReconciled:'payment checks',campaignBreakdownComplete:'campaign breakdown',kitActionBreakdownComplete:'kit action breakdown'}[key]||key));if(gaps.length)content.append(element('p',`Still needs checking: ${gaps.join('; ')}.`,'caution'));
+  const gaps=Object.entries(analyticsChecks).filter(([key])=>report.coverage?.[key]!==true).map(([,label])=>label);if(gaps.length)content.append(element('p',`Finish these data checks: ${gaps.join('; ')}.`,'caution'));
   content.append(detail('Original report notes',report.notes));const link=safeLink(report.sourceUrl,'Open Analytics ↗');if(link)content.append(link);restoreReport();
 }
 function reviewKey(item){return JSON.stringify([item.version,item.snapshotRevision,item.revision,item.notificationRevision,item.deliveryState,item.approved,item.state,item.fresh,item.issues]);}
