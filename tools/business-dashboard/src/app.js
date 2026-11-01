@@ -256,7 +256,7 @@ function renderHealth(){
 }
 function workflowName(run){return ({preparation:'Prepare work',reconciliation:'Refresh sources',coordination:'Set team priorities'})[run.id]||run.label;}
 function workflowStatus(run){
-  const reason=({failed:'The last run failed. Fix the error in its saved notes, then rerun it.',blocked:'The last run was blocked. Resolve the missing source or blocker, then rerun it.',stalled:'The job stopped before finishing. Inspect its last run and restart it.',stale:'The job is overdue. Check the Mac scheduler and run it again.',incomplete:'Required work is missing. Finish the missing steps and rerun it.',missing:'No completed run is saved. Run this job.'})[run.status];
+  const reason=({failed:'The last run failed. Fix the error in its saved notes, then rerun it.',blocked:'The last run was blocked. Resolve the missing source or blocker, then rerun it.',overdue:'The follow-up date has passed. Review the saved blocker, resolve it, then rerun this job.',stalled:'The job stopped before finishing. Inspect its last run and restart it.',stale:'The job is overdue. Check the Mac scheduler and run it again.',incomplete:'Required work is missing. Finish the missing steps and rerun it.',missing:'No completed run is saved. Run this job.'})[run.status];
   if(run.status==='running')return {status:'Running',tone:'blue',reason:'This job is still working. A result has not been saved yet.'};
   return sourceState(run.status,'The last run completed its required checks.',reason);
 }
