@@ -107,8 +107,9 @@ export async function listVoiceSessions(env, userRowId, ent, nowMs = Date.now())
 
     sessions.push({
       sessionId: r.id,
-      role: r.role,
-      seniority: r.seniority,
+      // Expired history retains timing/status only, even before cleanup runs.
+      role: expired ? null : r.role,
+      seniority: expired ? null : r.seniority,
       createdAt: r.started_at,
       durationSeconds: r.duration_seconds,
       // A safety-ended session is never scored, so it must not report
