@@ -5,7 +5,7 @@ import { digest } from './outreach-policy.js';
 export const STRIPE_ACCOUNT = 'acct_1RymDCApMPhcB1Y6';
 const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
 const id = (v, prefix) => { if (typeof v !== 'string' || !new RegExp(`^${prefix}_[A-Za-z0-9]{1,100}$`).test(v)) fail('Invalid Stripe identifier.'); return v; };
-const date = v => { if (!/^\d{4}-\d{2}-\d{2}$/.test(v || '') || new Date(`${v}T12:00:00Z`).toISOString().slice(0, 10) !== v) fail('Invalid observation date.'); return v; };
+const date = v => { if (!/^\d{4}-\d{2}-\d{2}$/.test(v || '') || !Number.isFinite(Date.parse(`${v}T12:00:00Z`)) || new Date(`${v}T12:00:00Z`).toISOString().slice(0, 10) !== v) fail('Invalid observation date.'); return v; };
 const amount = v => { if (!Number.isSafeInteger(v) || v <= 0 || v > 100000000) fail('Invalid USD amount.'); return v; };
 const list = (v, map) => { if (!Array.isArray(v) || v.length > 2000) fail('Supply a bounded complete observation.'); return v.map(map); };
 const sort = rows => [...rows].sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
@@ -24,7 +24,7 @@ export function validateStripeCheck(input, now = new Date()) {
   for (const scope of ['payments', 'refunds', 'activeSubscriptions']) if (input.complete?.[scope] !== true) fail(`The ${scope} observation must include every page.`);
   const sourceUrls = list(input.sourceUrls, value => {
     let u; try { u = new URL(value); } catch { fail('Use native Stripe evidence URLs.'); }
-    if (u.protocol !== 'https:' || u.hostname !== 'dashboard.stripe.com' || !u.pathname.startsWith(`/${STRIPE_ACCOUNT}/`) || /\/test\//.test(u.pathname)) fail('Use native live Stripe evidence URLs.');
+    if (u.protocol !== 'https:' || u.hostname !== 'dashboard.stripe.com' || u.username || u.password || u.port || !u.pathname.startsWith(`/${STRIPE_ACCOUNT}/`) || /\/test\//.test(u.pathname)) fail('Use native live Stripe evidence URLs.');
     return u.href;
   });
   if (!sourceUrls.length) fail('Native evidence is required.');
@@ -58,7 +58,11 @@ export async function compareStripeCheck(report, basis, now = new Date()) {
   for (const sub of report.subscriptions) {
     const matched = basis.accounts.filter(a => a.customerId === sub.customerId && a.subscriptionId === sub.id);
     if (matched.length !== 1 || matched[0].status !== 'active' || !matched[0].plan || matched[0].plan === 'free' || !(Date.parse(matched[0].until) > now.getTime())) { issues.push('A Stripe subscription does not match current app access.'); continue; }
-    if (!matched[0].internal) paid.add(sub.customerId);
+    if (!matched[0].internal) {
+      const payments=basis.charges.filter(c=>c.customerId===sub.customerId), ids=new Set(payments.map(c=>c.paymentId));
+      const net=payments.reduce((sum,c)=>sum+c.amount,0)-basis.refunds.filter(r=>ids.has(r.paymentId)).reduce((sum,r)=>sum+r.amount,0);
+      if(net>0)paid.add(sub.customerId);else issues.push('An active paid account needs payment evidence outside this window.');
+    }
   }
   for (const account of basis.accounts) {
     if (account.status === 'active' && account.plan !== 'free' && Date.parse(account.until) > now.getTime() && !activeIds.has(account.subscriptionId)) issues.push('App access has an active subscription missing from Stripe.');
