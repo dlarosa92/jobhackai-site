@@ -24,7 +24,7 @@ const shell = (title, description, body, listing = '') => `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(title)} | JobHackAI Local</title><meta name="description" content="${esc(description)}">
 <meta name="robots" content="noindex, nofollow"><link rel="stylesheet" href="/css/tokens.css"><link rel="stylesheet" href="/directory/directory.css"><link rel="stylesheet" href="/css/cookie-consent.css">
-<script src="/js/cookie-consent.js?v=20260920-marketing-2" defer></script>
+<script src="/directory/consent.js?v=20261031-local-analytics" defer></script>
 <script src="/js/component-loader.js?v=20260920-marketing-2" defer></script>
 </head><body data-listing="${esc(listing)}"><a class="skip" href="#main">Skip to content</a>
 <header><a class="brand" href="/directory">JobHackAI <span>LOCAL</span></a><nav aria-label="Directory"><a href="/directory">Find a detailer</a><a href="/directory/get-listed">Get listed</a></nav></header>
