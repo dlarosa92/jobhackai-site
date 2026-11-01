@@ -117,6 +117,23 @@ test('an interrupted empty interviewer caption releases a waiting real answer',a
   assert.equal(requests(h).length,n+1,'a final empty caption is settled, not missing');
 });
 
+for (const type of ['conversation.item.created','conversation.item.added']) {
+  test('conduct tool output cannot stall the next answer: '+type,async t=>{
+    const h=await live(t);begin(h);answer(h,'first','Yes.');
+    h.event({type:'response.created',response:{id:'warning'}});
+    h.event({type,item:{id:'warning-call',type:'function_call',name:'conduct_action',call_id:'call-warning'}});
+    h.event({type:'response.function_call_arguments.done',response_id:'warning',item_id:'warning-call',
+      name:'conduct_action',call_id:'call-warning',arguments:JSON.stringify({stage:'warning'})});
+    const result=h.sends.find(x=>x.item?.type==='function_call_output'&&x.item.call_id==='call-warning');
+    assert.equal(JSON.parse(result.item.output).interview_continues,true);
+    h.event({type,item:{id:'warning-output',...result.item}});
+    assistant(h,'warning','Let us return to your example. What happened next?');
+    const n=requests(h).length;
+    answer(h,'continued','I showed the team our observations and we agreed on a pilot.');
+    assert.equal(requests(h).length,n+1,'tool output has no caption to wait for');
+  });
+}
+
 test('late transcription cannot interrupt continued speech or turn two answer fragments into two questions',async t=>{
   const h=await live(t);begin(h);const n=requests(h).length;
   commit(h,'first');

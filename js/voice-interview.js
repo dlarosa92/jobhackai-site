@@ -1295,7 +1295,10 @@
     // the assembler, so excluded items never leave pending slots for a
     // teardown flush to wait on.
     if (type === 'conversation.item.created' || type === 'conversation.item.added') {
-      if (!state.ending && state.liveOrder && evt.item && evt.item.role !== 'system' && evt.item.type !== 'function_call') {
+      // Tool calls/results and system instructions never produce captions.
+      // Reserving them would make echo readiness and teardown wait forever.
+      if (!evt.item || evt.item.role === 'system' || (evt.item.type && evt.item.type !== 'message')) return;
+      if (!state.ending && state.liveOrder) {
         state.liveOrder.noteItem(evt.item.id, evt.previous_item_id, evt.item.role);
       }
       if (!lifecycle().noteItem(evt.item && evt.item.id)) return;
