@@ -436,6 +436,61 @@ function audioFixture(t,options={}) {
   };
 }
 
+test('cancelled audio check waits for closure then retries with a fresh ID and preserved role',async t=>{
+  const closing=deferred();
+  const f=audioFixture(t,{elementIds:['vi-history-panel','vi-history-list'],routes:{
+    '/api/voice/session/':()=>closing.promise
+  }});
+  await f.check();
+  f.h.el('vi-seniority').value='Senior';f.h.el('vi-jd').value='Improve processes';
+  const ending=f.h.endInterview();await f.h.settle();
+  assert.match(f.h.el('vi-done-status').textContent,/Closing your audio check/);
+  assert.doesNotMatch(f.h.el('vi-history-list').innerHTML,/Scoring your report|Live now/);
+  assert.equal(f.h.el('vi-audio-restart').style.display,'none');
+  await f.h.click('vi-audio-restart');assert.equal(f.opens().length,1);
+  closing.resolve({status:'cancelled',saved:false,connectionClosed:true});await ending;
+  assert.equal(f.h.el('vi-audio-restart').style.display,'');
+  await f.h.click('vi-audio-restart');
+  assert.equal(f.h.el('vi-setup-view').style.display,'');
+  assert.equal(f.h.el('vi-role').value,'Engineer');
+  assert.equal(f.h.el('vi-seniority').value,'Senior');assert.equal(f.h.el('vi-jd').value,'Improve processes');
+  assert.equal(f.h.el('vi-audio-restart').style.display,'none');
+  await f.h.click('vi-start-btn');
+  assert.equal(f.opens().length,2);assert.notEqual(f.opens()[0].body.sessionId,f.opens()[1].body.sessionId);
+  assert.equal(f.opens()[1].body.replacesAttemptId,null);
+  assert.equal(f.activations().length,0);
+});
+
+test('retry after cancellation refreshes access and respects a newly exhausted account',async t=>{
+  let plans=0;
+  const f=audioFixture(t,{routes:{'/api/plan/me':()=>({voice:{...PLAN_PAYLOAD.voice,transport:'managed',canStart:++plans===1,reason:'paywall'}})}});
+  await f.check();await f.h.endInterview();await f.h.click('vi-audio-restart');
+  assert.equal(plans,2);assert.equal(f.h.el('vi-start-btn').disabled,true);
+  assert.match(f.h.el('vi-entitlement').textContent,/reached your voice interview limit/);
+});
+
+for(const result of ['failed','pending','review']) {
+  test('audio check '+result+' closure never offers a new attempt or promises a free cancellation',async t=>{
+    const f=audioFixture(t,{routes:{'/api/voice/session/':()=>{
+      if(result==='failed')throw Error('offline');
+      return {__status:202,status:'ending',saved:false,connectionClosed:false,closureNeedsReview:result==='review'};
+    }}});
+    await f.check();await f.h.endInterview();
+    assert.equal(f.h.el('vi-audio-restart').style.display,'none');
+    await f.h.click('vi-audio-restart');assert.equal(f.h.el('vi-done-view').style.display,'');
+    assert.doesNotMatch(f.h.el('vi-done-status').textContent,/No interview credit|reviewing your conversation/);
+    if(result==='failed')assert.match(f.h.el('vi-save-status').textContent,/could not confirm.*audio check closed/);
+  });
+}
+
+test('server-confirmed completion after an unacknowledged start keeps the report path, not a free retry',async t=>{
+  const f=audioFixture(t,{routes:{'/api/voice/session/':()=>({status:'completed',saved:true,connectionClosed:true})}});
+  await f.check();await f.h.endInterview();
+  assert.equal(f.h.el('vi-audio-restart').style.display,'none');
+  assert.match(f.h.el('vi-done-status').textContent,/Interview saved/);
+  assert.doesNotMatch(f.h.el('vi-done-status').textContent,/No interview credit/);
+});
+
 test('blocked playback and microphone permission alone cannot activate or advance a question',async t=>{
   const f=audioFixture(t);f.h.el('vi-remote-audio').play=async()=>{throw Object.assign(Error('blocked'),{name:'NotAllowedError'});};
   await f.check();f.speech();await f.h.settle();

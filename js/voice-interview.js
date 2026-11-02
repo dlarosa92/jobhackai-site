@@ -85,6 +85,7 @@
     completionSaved: false,
     reportPollingStarted: false,
     savingCompletion: false,
+    audioCheckCancelled: false,
     connected: false,
     audioPlaying: false,       // interviewer's audio is mid-playback
     audioResponseId: '',       // which response that audio belongs to
@@ -2446,6 +2447,8 @@
       return;
     }
     var wasConnecting = !!state.connectionAttempt;
+    state.audioCheckCancelled = false;
+    if ($('vi-audio-restart')) $('vi-audio-restart').style.display = 'none';
     state.ending = true;
     hideEndConfirm();
     cancelConnectionAttempt();
@@ -2479,6 +2482,9 @@
       // The safety view goes up immediately: no S+A=O copy, no scoring state,
       // whatever happens to the save below.
       renderSafetyEnd(null);
+    } else if (state.audioSetup) {
+      if (doneStatus) doneStatus.textContent = 'Closing your audio check...';
+      historyLiveClear(false);
     } else {
       if (doneStatus) doneStatus.textContent = 'We\'re reviewing your conversation against your role and the evidence in your answers. This usually takes a few seconds.';
       historyLiveScoring();
@@ -2521,10 +2527,11 @@
     state.savingCompletion = true;
     var pending = state.pendingCompletion;
     var isSafetyEnd = pending.reason === 'ended_for_safety';
+    var isAudioSetup = state.audioSetup;
     var retryBtn = $('vi-save-retry');
     var saveStatus = $('vi-save-status');
     if (retryBtn) { retryBtn.disabled = true; retryBtn.style.display = 'none'; }
-    if (saveStatus) saveStatus.textContent = 'Saving interview...';
+    if (saveStatus) saveStatus.textContent = isAudioSetup ? 'Confirming the connection has closed...' : 'Saving interview...';
     try {
       if (state.closeRequest) { await state.closeRequest; state.closeRequest = null; }
       var saved = await api('/api/voice/session/' + encodeURIComponent(pending.sessionId) + '/complete', {
@@ -2544,7 +2551,7 @@
             : 'Connection closure is still pending. Keep this page open and retry finishing.');
         if (!isSafetyEnd && $('vi-done-status')) $('vi-done-status').textContent = closureNeedsReview
           ? (state.completionSaved ? 'Interview saved. Preparing your report...' : 'Interview ended.')
-          : 'Finishing the interview...';
+          : (isAudioSetup ? 'Closing your audio check...' : 'Finishing the interview...');
         if (state.completionSaved && !isSafetyEnd && !state.reportPollingStarted) {
           // The saved report is useful even if operational call closure still
           // needs verification. Keep that pending status visible separately.
@@ -2567,7 +2574,11 @@
       if (saved.data && saved.data.status === 'cancelled') {
         state.providerAttemptId = null;
         historyLiveClear(true);
-        if (!isSafetyEnd && $('vi-done-status')) $('vi-done-status').textContent = 'Interview stopped before it started. No interview credit was used.';
+        if (!isSafetyEnd) {
+          if ($('vi-done-status')) $('vi-done-status').textContent = 'Interview stopped before it started. No interview credit was used.';
+          state.audioCheckCancelled = true;
+          if ($('vi-audio-restart')) { $('vi-audio-restart').style.display = ''; $('vi-audio-restart').focus(); }
+        }
         return;
       }
       track('voice_session_complete', { duration_seconds: pending.durationSeconds, reason: pending.reason });
@@ -2582,12 +2593,28 @@
       console.error('[VOICE] complete failed:', err);
       if (saveStatus) saveStatus.textContent = state.completionSaved
         ? 'Your interview is saved, but finishing still needs confirmation. Keep this page open and retry.'
-        : 'Your interview has not been saved. Keep this page open and retry saving.';
+        : (isAudioSetup ? 'We could not confirm that the audio check closed. Keep this page open and retry finishing.'
+          : 'Your interview has not been saved. Keep this page open and retry saving.');
       if (!isSafetyEnd && $('vi-done-status')) $('vi-done-status').textContent = state.completionSaved
-        ? 'Interview saved. Finishing needs another attempt.' : 'Interview ended. Saving needs another attempt.';
-      if (retryBtn) { retryBtn.style.display = ''; retryBtn.disabled = false; }
+        ? 'Interview saved. Finishing needs another attempt.' : (isAudioSetup ? 'Audio check ended. Closing needs another attempt.' : 'Interview ended. Saving needs another attempt.');
+      if (retryBtn) { retryBtn.textContent = isAudioSetup ? 'Retry finishing' : 'Retry saving interview'; retryBtn.style.display = ''; retryBtn.disabled = false; }
       historyLiveClear(false);
     } finally { state.savingCompletion = false; }
+  }
+
+  async function restartCancelledAudioCheck() {
+    // Only the server's cancelled receipt permits a new attempt. A lost
+    // activation or unfinished close must keep recovering the existing ID.
+    if (!state.audioCheckCancelled || state.pendingCompletion || state.savingCompletion) return;
+    state.audioCheckCancelled = false;
+    if ($('vi-audio-restart')) $('vi-audio-restart').style.display = 'none';
+    state.sessionId = null; state.startRequestId = null; state.providerAttemptId = null;
+    state.startedAtMs = null; state.deadlineAtMs = null;
+    state.canStart = false;
+    show('vi-setup-view');
+    resetStartButton();
+    await loadEntitlement();
+    if ($('vi-role')) $('vi-role').focus();
   }
 
   // The server gave this early-ended session's credit back (once per account).
@@ -3504,6 +3531,7 @@
       return endInterview('user_ended');
     });
     if ($('vi-save-retry')) $('vi-save-retry').addEventListener('click', saveCompletion);
+    if ($('vi-audio-restart')) $('vi-audio-restart').addEventListener('click', restartCancelledAudioCheck);
     if ($('vi-entitlement-retry')) $('vi-entitlement-retry').addEventListener('click', function () { loadEntitlement(); });
     if (muteBtn) muteBtn.addEventListener('click', toggleMute);
     if ($('vi-audio-confirm')) $('vi-audio-confirm').addEventListener('click', confirmAudioReady);
