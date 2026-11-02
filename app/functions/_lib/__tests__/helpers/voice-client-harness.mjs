@@ -46,7 +46,7 @@ const ELEMENT_IDS = [
   'vi-audio-mic-status', 'vi-audio-output-status', 'vi-audio-meter', 'vi-timer-label',
   'vi-setup-view', 'vi-live-view', 'vi-done-view', 'vi-disabled-view',
   'vi-status', 'vi-caption', 'vi-timer', 'vi-speaking',
-  'vi-done-status', 'vi-scorecard', 'vi-save-status', 'vi-save-retry',
+  'vi-done-status', 'vi-scorecard', 'vi-save-status', 'vi-save-retry', 'vi-audio-restart',
   'vi-entitlement', 'vi-entitlement-retry', 'vi-role', 'vi-seniority', 'vi-jd',
   'vi-start-btn', 'vi-end-btn', 'vi-mute-btn', 'vi-reconnect-btn',
   'vi-remote-audio', 'vi-question', 'vi-speaking-label', 'vi-time-note',
@@ -56,7 +56,7 @@ const ELEMENT_IDS = [
 ];
 
 // Elements voice-interview.html ships hidden with an inline display:none.
-const HIDDEN_IDS = ['vi-entitlement-retry', 'vi-time-note', 'vi-recent', 'vi-grace-note'];
+const HIDDEN_IDS = ['vi-entitlement-retry', 'vi-time-note', 'vi-recent', 'vi-grace-note', 'vi-audio-restart'];
 
 // The browser's textContent -> innerHTML escaping, which escapeHtml() in the
 // client leans on (it round-trips a detached div).
