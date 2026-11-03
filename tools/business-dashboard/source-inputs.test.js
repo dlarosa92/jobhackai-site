@@ -36,7 +36,29 @@ for(let round=1;round<=3;round++)test(`candidate identity replay ${round}: merge
 test('failed candidate lookup cannot be replaced by the dashboard receipt claim',async()=>{
  const candidate='c'.repeat(40);
  const r=await captureInputs(async(k,p)=>{if(p==='/api/work-items')return{...(await read(k,p)),items:[{id:'voice',source:'github',department:'product',boardLane:'in_progress',candidate}]};if(p.startsWith('commits/'))throw Error('private details');return read(k,p);},()=>now);
- assert.equal(r.github.status,'incomplete');assert.equal(r.github.candidateChecks[0].status,'incomplete');assert.equal(r.requests.filter(x=>x.error).length,1);assert.ok(!JSON.stringify(r).includes('private details'));
+ assert.equal(r.github.status,'current');assert.equal(r.github.candidateStatus,'incomplete');assert.equal(r.github.candidateChecks[0].status,'incomplete');assert.equal(r.requests.filter(x=>x.error).length,1);assert.ok(!JSON.stringify(r).includes('private details'));
  const missingBoard=await captureInputs((k,p)=>p==='/api/work-items'?Promise.reject(Error('unavailable')):read(k,p),()=>now);
- assert.equal(missingBoard.github.status,'incomplete','Without the current board, the helper cannot establish which candidates need checking');
+ assert.equal(missingBoard.github.status,'current');assert.equal(missingBoard.github.candidateStatus,'incomplete','Without the current board, candidate coverage is unknown even though the GitHub reads succeeded');
+});
+
+test('successful source reads stay separate from an unverified work candidate',async()=>{
+ const r=await captureInputs(async(k,p)=>p==='/api/work-items'?{...(await read(k,p)),items:[{id:'unverified',source:'github',department:'product',boardLane:'in_progress',candidate:'unknown-content-format'}]}:read(k,p),()=>now);
+ assert.equal(r.github.status,'current','An unfinished identity check must not pretend that the source read failed');
+ assert.equal(r.github.candidateStatus,'incomplete');
+ assert.equal(r.github.candidateChecks[0].status,'incomplete');
+});
+
+test('a dashboard tree is checked as an immutable Git tree, without claiming PR or deployment acceptance',async()=>{
+ const tree='d'.repeat(40),candidate=`dashboard-tree-${tree}`,calls=[];
+ const r=await captureInputs(async(k,p)=>{calls.push(p);if(p==='/api/work-items')return{...(await read(k,p)),items:[{id:'dashboard',source:'github',department:'product',boardLane:'in_progress',candidate}]};if(p===`git/trees/${tree}`)return {sha:tree,truncated:false,tree:[{path:'src',type:'tree',sha:'e'.repeat(40)}]};return read(k,p);},()=>now);
+ assert.ok(calls.includes(`git/trees/${tree}`));assert.equal(r.github.status,'current');assert.equal(r.github.candidateStatus,'verified');
+ const c=r.github.candidateChecks[0];assert.equal(c.status,'verified');assert.equal(c.kind,'git_tree');assert.equal(c.sha,tree);assert.deepEqual(c.matches,[]);assert.match(c.reason,/not.*deployment/i);
+});
+
+test('a failed or mismatched Git tree stays unverified without contaminating successful branch reads',async()=>{
+ const tree='d'.repeat(40),candidate=`dashboard-tree-${tree}`;
+ for(const result of [null,{sha:'f'.repeat(40),tree:[]},{sha:tree,tree:[],truncated:true}]){
+  const r=await captureInputs(async(k,p)=>{if(p==='/api/work-items')return{...(await read(k,p)),items:[{id:'dashboard',source:'github',department:'product',boardLane:'in_progress',candidate}]};if(p===`git/trees/${tree}`){if(!result)throw Error('private tree request failure');return result;}return read(k,p);},()=>now);
+  assert.equal(r.github.status,'current');assert.equal(r.github.candidateStatus,'incomplete');assert.equal(r.github.candidateChecks[0].status,'incomplete');assert.ok(!JSON.stringify(r).includes('private tree request failure'));
+ }
 });
