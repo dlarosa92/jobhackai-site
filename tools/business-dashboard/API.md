@@ -27,6 +27,8 @@ Outreach retains `/api/outreach/prepare`, `/approve`, `/send`, `/cancel`; only p
 
 Metadata-only reconciliation retains the saved review packet and its decision when the source revision is unchanged. A different source revision without a complete replacement snapshot removes it from current review while retaining historical packets and decisions. If the item has execution receipts, also send `candidate` equal to the latest receipt's exact candidate; `sourceRevision` is not a substitute for this field. Use `nativeState: "draft"` until a release reaches `production_verified`, then `"closed"`; publication/send receipts use `"published"`/`"sent"`. A merged development PR alone cannot close the release.
 
+`unknown` is an initial unverified state, not a replacement for a previously verified draft or schedule. A failed browser/source read must be recorded as unavailable coverage without overwriting the item's saved execution state, full packet, or last successful check. The API rejects that downgrade with 409. A confirmed native cancellation or execution failure can still be recorded with its actual state (`draft`, `failed`, or `closed`) and current evidence.
+
 Operations, GitHub and analytics tasks with complete preparation satisfy dependencies only after their prerequisite chain and explicit blockers are resolved. Content preparation alone never means publication or sending.
 
 409 means reload and reconcile; never blind-retry an obsolete version. Approval and preparation never execute publication or sending. There is no machine cost, access-admin, approval or release API.
