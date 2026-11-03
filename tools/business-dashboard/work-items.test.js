@@ -180,6 +180,20 @@ test('unavailable, incomplete and stale internal source health holds dependent a
 });
 
 const receipt=(id,stage,extra={})=>({id,eventId:`${id}-${stage}`,expectedVersion:1,candidate:'accepted-content-sha',stage,evidenceUrl:'https://github.com/example/repo/actions/runs/123',summary:`Verified ${stage}`,occurredAt:new Date().toISOString(),...extra});
+for(let round=1;round<=3;round++)test(`source-failure replay ${round}: keep the verified schedule and exact review packet`,async()=>{
+ const c=fixture();let item=await ready(c);
+ assert.equal((await c.call('reconcile',{id:item.id,expectedVersion:item.version,sourceRevision:item.snapshot.sourceRevision,checkedAt:new Date().toISOString(),nativeState:'scheduled'})).status,200);
+ item=(await c.board()).items[0];const before={version:item.version,state:item.nativeState,snapshot:item.snapshotRevision,checkedAt:item.checkedAt};
+ const failed=await c.call('reconcile',{id:item.id,expectedVersion:item.version,sourceRevision:'browser-locked-no-native-read',checkedAt:new Date().toISOString(),nativeState:'unknown'});
+ assert.equal(failed.status,409,'An unavailable source is not evidence that the verified schedule disappeared');
+ item=(await c.board()).items[0];assert.deepEqual({version:item.version,state:item.nativeState,snapshot:item.snapshotRevision,checkedAt:item.checkedAt},before);
+ const health=c.sql.prepare("SELECT version FROM source_health WHERE source='github'").get();
+ assert.equal((await c.call('source-health',{source:'github',expectedVersion:health.version,status:'unavailable',checkedAt:new Date().toISOString(),evidenceUrl:'https://example.com/native',detail:'Source access unavailable; prior schedule remains the last verified state.',maxAgeMinutes:120})).status,200);
+ item=(await c.board()).items[0];assert.equal(item.nativeState,'scheduled');assert.equal(item.snapshotRevision,before.snapshot);assert.equal(item.sourceHealth.status,'unavailable');assert.equal(item.canApprove,false);
+ // A confirmed native cancellation can still change the actual execution state.
+ assert.equal((await c.call('reconcile',{id:item.id,expectedVersion:item.version,sourceRevision:'native-schedule-cancelled',checkedAt:new Date().toISOString(),nativeState:'draft'})).status,200);
+ assert.equal((await c.board()).items[0].nativeState,'draft');c.sql.close();
+});
 for(let round=1;round<=3;round++)test(`regression replay ${round}: approval, execution, stale preparation, old reconciliation, reload`,async()=>{
  const c=fixture();
  const id=`social-${round}`;
