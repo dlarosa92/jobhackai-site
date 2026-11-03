@@ -102,6 +102,8 @@ async function reconcile(db,input,now) {
   if(receipt && input.candidate!==receipt.candidate)fail('This check does not identify the active candidate. Historical source checks cannot refresh the current release.',409);
   if(receipt){const state=receipt.stage==='production_verified'?'closed':['published','sent'].includes(receipt.stage)?receipt.stage:'draft';if(input.nativeState!==state)fail('Execution state belongs to verified receipts. A source check cannot complete or reopen this release.',409);}
   if(['published','sent','closed'].includes(row.native_state)&&input.nativeState!==row.native_state)fail('Completed execution cannot be reopened by reconciliation. Create a new work item for new work.',409);
+  // A failed observation is not a native cancellation and must not erase saved copy or timing.
+  if(input.nativeState==='unknown'&&row.native_state!=='unknown')fail('Keep the last verified native state. Record failed source access separately; confirm a cancellation or failure before changing execution state.',409);
   if(row.checked_at && checkedAt<row.checked_at)fail('Older evidence cannot replace newer evidence.',409);
   const snapshot=input.snapshot?snapshotInput(input.snapshot):null;
   if(snapshot && (snapshot.sourceRevision!==sourceRevision || snapshot.checkedAt!==checkedAt))fail('Snapshot and source revisions/times must match.');
