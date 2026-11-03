@@ -40,8 +40,18 @@ for(let round=1;round<=3;round++){
  const post=`${prefix}-post-${round}`;
  await call('/api/work-items/prepare',{id:post,source:'meta',sourceId:post,expectedVersion:0,document:{...document,department:'marketing'}});
  await call('/api/work-items/feedback',{id:post,action:'approve'},403);
+ const sourceRevision=`${post}-native-draft`,checkedAt=new Date().toISOString();
+ const snapshot={complete:true,conflict:false,sourceRevision,checkedAt,verifiedBy:'Isolated native-state regression',text:'Synthetic scheduled copy, never posted externally.',destination:'Isolated staging account',timing:'Synthetic future schedule',media:[],links:[],evidence:[{id:post,url:'https://example.com/isolated-test',fact:'Synthetic fixture in the isolated staging database.'}]};
+ await call('/api/work-items/reconcile',{id:post,expectedVersion:1,sourceRevision,checkedAt,nativeState:'draft',snapshot});
+ let scheduled=await item(post);
+ await call('/api/work-items/reconcile',{id:post,expectedVersion:scheduled.version,sourceRevision,checkedAt:new Date().toISOString(),nativeState:'scheduled'});
+ scheduled=await item(post);
+ const savedSchedule={version:scheduled.version,state:scheduled.nativeState,snapshot:scheduled.snapshotRevision,checkedAt:scheduled.checkedAt};
+ await call('/api/work-items/reconcile',{id:post,expectedVersion:scheduled.version,sourceRevision:'browser-locked-no-native-read',checkedAt:new Date().toISOString(),nativeState:'unknown'},409);
+ const afterFailedRead=await item(post);
+ assert.deepEqual({version:afterFailedRead.version,state:afterFailedRead.nativeState,snapshot:afterFailedRead.snapshotRevision,checkedAt:afterFailedRead.checkedAt},savedSchedule);
  const before=(await call('/api/work-items/changes')).revision;
- const event=receipt(post,'published',1),sentAt=performance.now();
+ const event=receipt(post,'published',afterFailedRead.version),sentAt=performance.now();
  await call('/api/work-items/receipt',event);
  const visible=await item(post),latencyMs=Math.round(performance.now()-sentAt);
  assert.equal(visible.boardLane,'completed');assert.equal(visible.state,'published');
@@ -50,7 +60,7 @@ for(let round=1;round<=3;round++){
  await call('/api/work-items/receipt',{...event,summary:'Conflicting result'},409);
  await call('/api/work-items/prepare',{id:post,source:'meta',sourceId:post,expectedVersion:visible.version,document:{...document,preparation:'ready'}});
  assert.equal((await item(post)).boardLane,'completed');
- results.push({round,release,post,publicationReceiptAndReadbackMs:latencyMs,result:'passed'});
+ results.push({round,release,post,failedSourcePreservedSchedule:true,publicationReceiptAndReadbackMs:latencyMs,result:'passed'});
  console.log(JSON.stringify(results.at(-1)));
 }
 console.log(JSON.stringify({stage,origin,started,finished:new Date().toISOString(),results,externalActions:0,productionWrites:0}));
