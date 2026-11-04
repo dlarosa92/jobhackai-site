@@ -18,6 +18,7 @@ on:
       - 'js/voice-lifecycle.js'
       - 'js/voice-usage.js'
       - 'js/voice-interview.js'
+      - 'js/voice-audio-diagnostics.js'
       - 'js/voice-turn-plan.js'
       - 'js/role-selector.js'
       - 'js/package.json'
@@ -40,6 +41,7 @@ on:
       - 'js/voice-lifecycle.js'
       - 'js/voice-usage.js'
       - 'js/voice-interview.js'
+      - 'js/voice-audio-diagnostics.js'
       - 'js/voice-turn-plan.js'
       - 'js/role-selector.js'
       - 'js/package.json'
@@ -111,7 +113,7 @@ jobs:
 
       - name: Run managed voice browser connection and completion tests
         working-directory: app/functions/_lib/__tests__
-        run: node --test voice-managed-client.test.mjs
+        run: node --test voice-managed-client.test.mjs voice-audio-diagnostics.test.mjs
 
       - name: Run voice turn budget and score evidence regressions
         working-directory: app/functions/_lib/__tests__

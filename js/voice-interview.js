@@ -110,6 +110,8 @@
     analyticsReportSessionId: null
   };
 
+  var audioDiagnostics = null;
+
   // VAD detects microphone speech during setup without interrupting the sample.
   // The official interview restores barge-in; replies stay application-owned.
   var turnControl = { plan: null, ready: false, setupTimer: null, pending: null,
@@ -777,6 +779,7 @@
     try {
       if (!state.dc || state.dc.readyState !== 'open') return false;
       state.dc.send(JSON.stringify(payload));
+      if (audioDiagnostics) audioDiagnostics.event('send', payload);
       return true;
     } catch (err) {
       console.warn('[VOICE] realtime send failed:', err && err.message);
@@ -1676,7 +1679,9 @@
     if (!el || !el.srcObject || state.ending) return false;
     var playbackAttempt = state.playbackAttempt = (state.playbackAttempt || 0) + 1;
     try {
+      if (audioDiagnostics) audioDiagnostics.mark('play-request');
       await el.play();
+      if (audioDiagnostics) audioDiagnostics.mark('play-resolved');
       if (state.pc !== pc || state.ending || state.playbackAttempt !== playbackAttempt) return false;
       state.playbackReady = true;
       state.playbackBlocked = false;
@@ -1684,12 +1689,14 @@
       if (!state.microphoneLost) setStatus(state.audioSetup ? 'Check your audio before starting.' : 'Live interview', state.audioSetup ? 'vi-connecting' : 'vi-live');
       return true;
     } catch (_) {
+      if (audioDiagnostics) audioDiagnostics.mark('play-rejected');
       if (state.playbackAttempt === playbackAttempt) playbackFailed(pc);
       return false;
     }
   }
 
   async function retryAudio() {
+    if (audioDiagnostics) audioDiagnostics.mark('retry-audio');
     // The play call runs directly from a click. No settings changes or assumed
     // autoplay permission. Repeat uses no question opportunity.
     if (state.audioContext) state.audioContext.resume().catch(function () {});
@@ -1899,6 +1906,7 @@
       state.audioEl = $('vi-remote-audio') || document.createElement('audio');
       state.audioEl.autoplay = true;
       state.audioEl.onerror = function () { playbackFailed(pc); };
+      if (audioDiagnostics) audioDiagnostics.watch(pc, state.audioEl, stream);
       pc.ontrack = function (e) {
         if (state.ending || state.pc !== pc || !state.audioEl) return;
         state.audioEl.srcObject = e.streams[0];
@@ -1926,6 +1934,7 @@
         if (state.pc !== pc) return;
         var event;
         try { event = JSON.parse(e.data); } catch (_) { return; }
+        if (audioDiagnostics) audioDiagnostics.event('receive', event);
         try { handleRealtimeEvent(event); } catch (_) {
           console.warn('[VOICE] event handling failed; recovery required');
           if (lifecycle().is(PHASES.ACTIVE_INTERVIEW)) offerTurnRecovery('event_handling');
@@ -2076,6 +2085,7 @@
         if (pc && state.pc === pc && !flushing) {
           state.pc = null; state.dc = null; state.connected = false;
           stopRemotePlayback();
+          if (audioDiagnostics) audioDiagnostics.stop();
         }
         try { if (dc && !flushing) dc.close(); } catch (_) {}
         try { if (pc && !flushing) pc.close(); } catch (_) {}
@@ -2104,6 +2114,7 @@
   }
 
   function teardownConnection() {
+    if (audioDiagnostics) audioDiagnostics.mark('teardown');
     resetTurnConnection();
     releaseRetiringConnection(state.retiringConnection);
     cancelConnectionAttempt();
@@ -2114,6 +2125,7 @@
     stopMicMeter();
     clearTimeout(state.activationTimer);
     state.pc = null; state.dc = null; state.connected = false;
+    if (audioDiagnostics) audioDiagnostics.stop();
   }
 
   // Transcript delivery may still need the data channel for up to 1.5s.
@@ -2121,6 +2133,7 @@
   // response must not keep talking over the report view. Natural/conduct/
   // safety closes reach this point only after their guarded closing audio.
   function stopRemotePlayback() {
+    if (audioDiagnostics) audioDiagnostics.mark('stop-playback');
     if (state.audioEl) {
       try { state.audioEl.pause(); } catch (_) {}
       try { state.audioEl.srcObject = null; } catch (_) {}
@@ -2511,6 +2524,7 @@
 
   function toggleMute() {
     if (!state.micStream) return;
+    if (audioDiagnostics) audioDiagnostics.mark('mute-toggle');
     var btn = $('vi-mute-btn');
     var enabled = null;
     state.micStream.getAudioTracks().forEach(function (t) {
@@ -3642,6 +3656,9 @@
   }
 
   document.addEventListener('DOMContentLoaded', async function () {
+    audioDiagnostics = typeof window.createVoiceAudioDiagnostics === 'function'
+      ? window.createVoiceAudioDiagnostics(window, function () { return state; }) : null;
+    if (audioDiagnostics) audioDiagnostics.mount();
     var startBtn = $('vi-start-btn');
     var endBtn = $('vi-end-btn');
     var muteBtn = $('vi-mute-btn');
