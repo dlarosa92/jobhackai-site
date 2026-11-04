@@ -33,6 +33,9 @@
   // the interviewer thinking, and must never trigger a cue or a reprompt.
   // ASR/VAD endpointing is untouched and stays server-side.
   var WAITING_CUE_MS = 4000;
+  // Cover the whole reply pipeline, including gates before response.create.
+  // Offer recovery after silence, never force a reply over continued speech.
+  var TURN_RECOVERY_MS = 15000;
 
   // With this much time left the interviewer is told to wrap up, so the
   // session closes through its normal closing line instead of the clock.
@@ -94,7 +97,9 @@
     conductEnd: null,          // pending end, waiting for the closing turn
     endCause: null,            // 'conduct' | 'safety' | 'closing' — which reason the pending end carries
     lifecycle: null,           // interview lifecycle (voice-lifecycle.js); owns commit boundaries
-    turnWait: null,            // { committedAtMs, cueTimer } — turn-start latency + waiting cue
+    turnWait: null,            // latency cue and bounded reply recovery
+    turnRecovery: false,
+    settledAssistantItems: Object.create(null),
     lastAssistantResponseId: '',  // most recent assistant response seen; straggler guard for the settling window
     interviewStartedAtMs: null,   // official interview start; enables the wrap-up cue
     wrapUpNoted: false,           // the 2-minute notice went out (screen and interviewer)
@@ -113,6 +118,9 @@
     responseId: '', requestId: '', finished: Object.create(null), responseTimer: null };
 
   function resetTurnConnection() {
+    clearTurnWait();
+    state.turnRecovery = false;
+    state.settledAssistantItems = Object.create(null);
     clearTimeout(turnControl.setupTimer);
     clearTimeout(turnControl.responseTimer);
     turnControl.responseTimer = null;
@@ -137,7 +145,7 @@
 
   function drainTurn() {
     if (!turnControl.ready || turnControl.busy || turnControl.speaking || state.audioPlaying ||
-        state.ending || state.conductEnd || state.playbackBlocked || state.microphoneLost || lifecycle().is(PHASES.CLOSING)) return;
+        state.ending || state.conductEnd || state.turnRecovery || state.playbackBlocked || state.microphoneLost || lifecycle().is(PHASES.CLOSING)) return;
     if (!turnControl.pending && turnControl.inputs.length) {
       // Wait for every committed fragment, including a possible spoken Finish.
       // Late ASR must neither interrupt continued speech nor generate separate
@@ -177,7 +185,10 @@
     }
     turnControl.busy = true;
     turnControl.responseId = '';
-    turnControl.responseTimer = setTimeout(turnControlFailed, 45000);
+    turnControl.responseTimer = setTimeout(function () {
+      if (lifecycle().is(PHASES.ACTIVE_INTERVIEW)) offerTurnRecovery('response_timeout');
+      else turnControlFailed();
+    }, 45000);
     if (!sendRealtime({ type: 'response.create', event_id: id + '_response', response: {
       // Each sample starts with empty input. Microphone-test speech and prior
       // replays must not turn the next sample into a conversational reply.
@@ -1127,7 +1138,23 @@
 
   function clearTurnWait() {
     if (state.turnWait && state.turnWait.cueTimer) clearTimeout(state.turnWait.cueTimer);
+    if (state.turnWait && state.turnWait.recoveryTimer) clearTimeout(state.turnWait.recoveryTimer);
     state.turnWait = null;
+  }
+
+  function offerTurnRecovery(reason) {
+    if (state.ending || state.conductEnd || state.reconnecting || state.audioSetup ||
+        !lifecycle().is(PHASES.ACTIVE_INTERVIEW) || state.turnRecovery) return;
+    state.turnRecovery = true;
+    clearTurnWait();
+    clearTimeout(turnControl.responseTimer);
+    turnControl.responseTimer = null;
+    setStatus('The interviewer is not responding. Reconnect to continue.', 'vi-error');
+    if ($('vi-caption')) $('vi-caption').textContent = 'Your captured answers will be kept. Reconnecting uses no extra interview; the timer keeps running. Quiet nearby speech first.';
+    offerReconnect();
+    // No speech, credentials or provider payloads in this diagnostic.
+    console.warn('[VOICE] reply recovery offered: ' + reason);
+    track('voice_reply_recovery_offered', { reason: reason });
   }
 
   // The candidate's turn was committed; the clock on the interviewer's reply
@@ -1136,8 +1163,9 @@
   // one truthful cue waits WAITING_CUE_MS and a 2-2.5s pause never triggers
   // anything: no cue, no reprompt, no forced turn.
   function beginTurnWait() {
+    if (state.turnRecovery) return;
     clearTurnWait();
-    var wait = { committedAtMs: Date.now(), cueTimer: null };
+    var wait = { committedAtMs: Date.now(), cueTimer: null, recoveryTimer: null };
     wait.cueTimer = setTimeout(function () {
       // Re-check the world before touching UI: the session may have ended,
       // begun closing, or a guarded end may own the screen by now.
@@ -1148,11 +1176,22 @@
       if (caption) caption.textContent = 'One moment. The interviewer is thinking.';
       track('voice_turn_wait_cue', { waited_ms: Date.now() - wait.committedAtMs });
     }, WAITING_CUE_MS);
+    wait.recoveryTimer = setTimeout(function () {
+      if (state.turnWait !== wait || turnControl.speaking || state.audioPlaying) return;
+      offerTurnRecovery('reply_wait');
+    }, TURN_RECOVERY_MS);
     state.turnWait = wait;
   }
 
   // The interviewer's audio began: that is the human-perceived turn start.
   function noteTurnStarted() {
+    // A delayed reply can arrive before the candidate chooses Reconnect.
+    // Actual playback is stronger evidence of recovery than WebRTC's status.
+    if (state.turnRecovery && !state.reconnecting && lifecycle().is(PHASES.ACTIVE_INTERVIEW)) {
+      state.turnRecovery = false;
+      hideReconnect();
+      setStatus('Live. The interviewer can hear you.', 'vi-live');
+    }
     var wait = state.turnWait;
     if (!wait) return;
     clearTurnWait();
@@ -1252,6 +1291,19 @@
       return;
     }
     if (action === 'committed') { beginTurnWait(); queueTurn(itemId, false); }
+  }
+
+  // Terminal item/response snapshots also carry the final caption. A cancelled
+  // output can have no separate transcript event; its empty placeholder must
+  // not keep every later answer waiting on echo context forever.
+  function settleAssistantOutput(item, responseId) {
+    if (!item || item.type !== 'message' || item.role !== 'assistant' || !item.id ||
+        !Array.isArray(item.content) || state.settledAssistantItems[item.id]) return;
+    var text = item.content.map(function (part) {
+      return typeof part.transcript === 'string' ? part.transcript : typeof part.text === 'string' ? part.text : '';
+    }).filter(Boolean).join('\n');
+    handleRealtimeEvent({ type: 'response.output_audio_transcript.done', item_id: item.id,
+      response_id: responseId || '', transcript: text });
   }
 
   function handleRealtimeEvent(evt) {
@@ -1368,6 +1420,10 @@
     }
     // GA + beta event names for assistant transcript
     if (type === 'response.output_audio_transcript.done' || type === 'response.audio_transcript.done') {
+      if (evt.item_id) {
+        if (state.settledAssistantItems[evt.item_id]) return;
+        state.settledAssistantItems[evt.item_id] = true;
+      }
       // Interrupted output can finish with no words. Retire its placeholder
       // so a candidate answer does not wait on a caption that is already final.
       if (!String(evt.transcript || '').trim()) {
@@ -1428,11 +1484,18 @@
       return;
     }
 
+    if (type === 'response.output_item.done') {
+      settleAssistantOutput(evt.item, evt.response_id);
+      return;
+    }
+
     // response.done does three jobs, in this order deliberately: usage is
     // counted even for the response that ends the session, the tool call is
     // picked up here on API versions that only surface it in the output, and
     // only then does the closing turn count as complete.
     if (type === 'response.done') {
+      var output = evt.response && evt.response.output;
+      if (Array.isArray(output)) output.forEach(function (item) { settleAssistantOutput(item, evt.response.id); });
       handleToolCall(readToolCall(evt));
       // response.done means generation finished, while the audio can keep
       // playing for seconds. Only without audio buffer events is it the best
@@ -1459,7 +1522,12 @@
         turnControl.responseId = '';
         turnControl.requestId = '';
         if (response.status === 'failed') turnControlFailed();
-        else drainTurn();
+        else {
+          drainTurn();
+          // Legacy transports use response.done as the playback fallback.
+          // Clear only an idle wait, never a queued input/caption dependency.
+          if (!state.audioEventsSeen && !turnControl.busy && !turnControl.inputs.length && !turnControl.pending) clearTurnWait();
+        }
       }
       return;
     }
@@ -1762,7 +1830,7 @@
       clearInterval(state.micMeterTimer);
     }
     updateAudioReadiness();
-    var attempt = { cancelled: false, controller: new AbortController() };
+    var attempt = { cancelled: false, controller: new AbortController(), repeatQuestion: state.turnRecovery };
     state.connectionAttempt = attempt;
     var stream = null, pc = null, dc = null, completed = false;
     function current() {
@@ -1814,7 +1882,13 @@
         // Keep the current channel's final transcripts during the bounded flush,
         // but never let a replaced channel act on the new interview.
         if (state.pc !== pc) return;
-        try { handleRealtimeEvent(JSON.parse(e.data)); } catch (_) {}
+        var event;
+        try { event = JSON.parse(e.data); } catch (_) { return; }
+        try { handleRealtimeEvent(event); } catch (_) {
+          console.warn('[VOICE] event handling failed; recovery required');
+          if (lifecycle().is(PHASES.ACTIVE_INTERVIEW)) offerTurnRecovery('event_handling');
+          else turnControlFailed();
+        }
       };
       dc.onopen = function () {
         if (state.pc !== pc || state.ending || state.conductEnd) return;
@@ -1842,6 +1916,11 @@
             // Reconnect mid-interview: the conversation resumes as before. A
             // fresh realtime session has not seen the wrap-up notice yet.
             if (state.wrapUpNoted) sendWrapUpInstruction();
+            if (attempt.repeatQuestion) {
+              turnControl.pending = { repeat: true };
+              beginTurnWait();
+              drainTurn();
+            }
             return;
           }
           if (!lc.is(PHASES.ACTIVE_INTERVIEW)) {
@@ -1863,6 +1942,9 @@
         var s = pc.connectionState;
         if (s === 'connected') {
           state.connected = true;
+          // Transport recovery does not resolve missing turn events. Keep the
+          // explicit replacement action available until the candidate uses it.
+          if (state.turnRecovery) return;
           hideReconnect();
           // Truthful per phase: nothing is being scored yet during the audio
           // check, so the status must not claim the interview is running.
@@ -2306,7 +2388,7 @@
     }
     // A brief network outage may recover without replacing the provider call.
     // A stale button click must not tear down that recovered connection.
-    if (!state.microphoneLost && state.pc && state.pc.connectionState === 'connected' && state.dc && state.dc.readyState === 'open') {
+    if (!state.turnRecovery && !state.microphoneLost && state.pc && state.pc.connectionState === 'connected' && state.dc && state.dc.readyState === 'open') {
       hideReconnect();
       return;
     }
@@ -2327,8 +2409,15 @@
         state.retiringConnection = retiring;
         state.pc = null; state.dc = null; state.connected = false;
       } else {
+        // teardown resets connection flags; retain the reason for this retry.
+        var recoveringReply = state.turnRecovery;
         teardownConnection();
+        state.turnRecovery = recoveringReply;
       }
+      // The retired channel can no longer deliver its missing captions. Keep
+      // captured text but discard its unresolved echo-context placeholders.
+      state.liveOrder = newTranscriptOrder();
+      getTranscript().forEach(function (turn) { state.liveOrder.append(turn.speaker, turn.text); });
       // Send the local transcript tail so the fresh realtime session resumes
       // the conversation instead of restarting the interview from scratch.
       // The tail alone cannot distinguish "still in the audio check" from
