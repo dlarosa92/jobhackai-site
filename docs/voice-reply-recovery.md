@@ -27,6 +27,7 @@ on the old client.
   offers recovery. Audio-setup failure behavior remains unchanged.
 - A connected transport cannot hide reply recovery. If delayed audio actually
   begins before the candidate reconnects, clear the recovery state and continue.
+  Legacy transports also clear recovery when the matching reply completes.
 - Reconnect replaces the provider attempt within the same interview, retains
   captured transcript text, removes unresolved caption placeholders from the
   retired connection, and requests the current question again without spending
@@ -42,11 +43,12 @@ specific waits reproduced here.
 
 ## Validation
 
-- Twelve new regression cases cover terminal empty/final captions, echo versus
+- Thirteen new regression cases cover terminal empty/final captions, echo versus
   real answers, missing input/caption events, connected-call replacement,
   managed session/deadline continuity, continued speech, normal legacy
-  completion, late audible replies, active request timeout, and Finish.
-- The turn-budget and managed-client suites pass all 107 tests together.
+  completion, late audible and legacy replies, active request timeout, and Finish.
+- The turn-budget and managed-client suites pass all 108 tests together. The
+  additional delayed-legacy regression failed before the review correction.
 - The broader `npm --prefix app run test:voice` suite and app build pass.
 - Native Safari local fixture: a missing input transcript produced the recovery
   message and Reconnect button. Reconnect restored Live interview, retained the

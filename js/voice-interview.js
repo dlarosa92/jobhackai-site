@@ -1183,15 +1183,19 @@
     state.turnWait = wait;
   }
 
-  // The interviewer's audio began: that is the human-perceived turn start.
-  function noteTurnStarted() {
-    // A delayed reply can arrive before the candidate chooses Reconnect.
-    // Actual playback is stronger evidence of recovery than WebRTC's status.
+  function clearTurnRecovery() {
     if (state.turnRecovery && !state.reconnecting && lifecycle().is(PHASES.ACTIVE_INTERVIEW)) {
       state.turnRecovery = false;
       hideReconnect();
       setStatus('Live. The interviewer can hear you.', 'vi-live');
     }
+  }
+
+  // The interviewer's audio began: that is the human-perceived turn start.
+  function noteTurnStarted() {
+    // A delayed reply can arrive before the candidate chooses Reconnect.
+    // Actual playback is stronger evidence of recovery than WebRTC's status.
+    clearTurnRecovery();
     var wait = state.turnWait;
     if (!wait) return;
     clearTurnWait();
@@ -1523,6 +1527,9 @@
         turnControl.requestId = '';
         if (response.status === 'failed') turnControlFailed();
         else {
+          // Without buffer events, successful generation is the supported
+          // playback fallback. Release recovery before draining queued input.
+          if (!state.audioEventsSeen && response.status === 'completed') clearTurnRecovery();
           drainTurn();
           // Legacy transports use response.done as the playback fallback.
           // Clear only an idle wait, never a queued input/caption dependency.

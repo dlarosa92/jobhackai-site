@@ -439,6 +439,19 @@ test('an active response timeout offers recovery without closing the interview',
   assert.equal(h.completeBodies().length,0);
 });
 
+test('a completed delayed legacy reply clears recovery and permits the following answer',async t=>{
+  const h=await live(t,{timerDelay:ms=>ms===15000?1:ms});begin(h);
+  answer(h,'answer','I verified the result against our baseline.');
+  await new Promise(r=>setTimeout(r,20));await h.settle();
+  assert.match(h.el('vi-status').textContent,/not responding/i);
+  assistant(h,'late-legacy','How did you verify that result?');
+  assert.doesNotMatch(h.el('vi-status').textContent,/not responding/i);
+  assert.equal(h.el('vi-reconnect-btn').style.display,'none');
+  const n=requests(h).length;
+  answer(h,'next','I checked the following week with the team.');
+  assert.equal(requests(h).length,n+1);
+});
+
 test('Finish cancels a pending reply recovery and late snapshots cannot reopen the interview',async t=>{
   const h=await live(t,{timerDelay:ms=>ms===15000?10:ms});begin(h);
   commit(h,'missing');await h.endInterview();
