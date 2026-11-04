@@ -455,7 +455,7 @@ function audioFixture(t,options={}) {
       f.h.event({type:'response.created',response:{id}});
       f.h.event({type:'response.done',response:{id,status:'completed'}});await f.h.settle();
     },
-    async acknowledge(){f.h.event({type:'session.updated',session:{instructions}});await f.h.settle();}
+    async acknowledge(){f.h.event({type:'session.updated',session:f.h.sends.filter(x=>x.type==='session.update').at(-1).session});await f.h.settle();}
   };
 }
 
@@ -528,6 +528,74 @@ test('silent microphone cannot pass readiness even when playback succeeds',async
   const f=audioFixture(t);await f.check();
   f.h.event({type:'conversation.item.input_audio_transcription.completed',item_id:'silence',transcript:'  '});
   await f.h.click('vi-audio-confirm');assert.equal(f.activations().length,0);assert.equal(f.h.el('vi-audio-confirm').disabled,true);
+});
+
+test('audio samples wait for noninterrupting VAD acknowledgement and keep microphone readiness',async t=>{
+  const f=audioFixture(t,{autoTurnConfig:false});await f.check();
+  const config=f.h.sends.find(x=>x.type==='session.update').session;
+  const detection=config.audio.input.turn_detection;
+  assert.equal(detection.interrupt_response,false,'microphone speech must not cut off the test sample');
+  f.h.event({type:'session.updated',session:{audio:{input:{turn_detection:{...detection,interrupt_response:true}}}}});
+  assert.equal(f.h.sends.filter(x=>x.type==='response.create').length,0);
+  await f.acknowledge();
+  f.h.event({type:'response.created',response:{id:'sample'}});
+  f.h.event({type:'output_audio_buffer.started',response_id:'sample'});
+  f.h.event({type:'input_audio_buffer.speech_started',item_id:'checking'});
+  f.h.event({type:'input_audio_buffer.speech_stopped',item_id:'checking'});
+  f.speech('checking');
+  assert.match(f.h.el('vi-audio-mic-status').textContent,/Microphone checked/);
+  assert.equal(f.h.sends.filter(x=>x.type==='response.cancel'||x.type==='output_audio_buffer.clear').length,0);
+  f.h.event({type:'response.done',response:{id:'sample',status:'completed'}});
+  f.h.event({type:'output_audio_buffer.stopped',response_id:'sample'});
+  await f.h.click('vi-mute-btn');await f.h.click('vi-audio-retry');
+  assert.equal(f.h.sends.filter(x=>x.type==='response.create').length,2,'muted replay still works');
+  assert.equal(f.activations().length,0);
+});
+
+test('start requires normal interview interruptions to be acknowledged before consuming credit',async t=>{
+  const f=audioFixture(t);await f.check();await f.greetingDone();f.speech();
+  await f.h.click('vi-audio-confirm');
+  const config=f.h.sends.filter(x=>x.type==='session.update').at(-1).session;
+  assert.equal(config.audio?.input?.turn_detection?.interrupt_response,true);
+  f.h.event({type:'session.updated',session:{...config,audio:{input:{turn_detection:{type:'semantic_vad',create_response:false,interrupt_response:false}}}}});
+  await f.h.settle();assert.equal(f.activations().length,0);
+  await f.acknowledge();assert.equal(f.activations().length,1);
+  assert.equal(f.h.sends.filter(x=>x.type==='response.create').at(-1).response.metadata.jobhackai_purpose,'new_topic');
+});
+
+test('lost Start configuration receipt restores sample protection before replay',async t=>{
+  const f=audioFixture(t,{timerDelay:ms=>ms===8000?20:ms});await f.check();await f.greetingDone();f.speech();
+  await f.h.click('vi-audio-confirm');
+  const activation=f.h.sends.filter(x=>x.type==='session.update').at(-1).session;
+  await new Promise(r=>setTimeout(r,35));await f.h.settle();
+  const count=f.h.sends.filter(x=>x.type==='response.create').length;
+  await f.h.click('vi-audio-retry');
+  assert.equal(f.h.sends.filter(x=>x.type==='response.create').length,count,'no sample until protection is acknowledged');
+  const replay=f.h.sends.filter(x=>x.type==='session.update').at(-1).session;
+  assert.equal(replay.audio.input.turn_detection.interrupt_response,false);
+  f.h.event({type:'session.updated',session:activation});await f.h.settle();
+  assert.equal(f.activations().length,0,'a late Start acknowledgement cannot charge');
+  assert.equal(f.h.sends.filter(x=>x.type==='response.create').length,count);
+  await f.acknowledge();
+  assert.equal(f.h.sends.filter(x=>x.type==='response.create').length,count+1);
+});
+
+for (const active of [false,true]) test('reconnect restores '+(active?'interview interruptions':'sample protection')+' without another activation',async t=>{
+  let paid=false;
+  const f=audioFixture(t,{routes:{'/api/voice/connection':(url,init)=>{
+    const body=JSON.parse(init.body);
+    if(body.action==='close')return {connectionClosed:true,sessionReserved:paid};
+    if(body.action==='activate'){paid=true;return {...body,activated:true,deadlineAt:new Date(Date.now()+1200000).toISOString()};}
+    return {...f.answer(body),requiresAudioCheck:!paid,interviewInstructions:paid?null:f.instructions};
+  }}});
+  await f.check();await f.greetingDone();f.speech();
+  if(active){await f.h.click('vi-audio-confirm');await f.acknowledge();}
+  await f.h.click('vi-reconnect-btn');await f.h.openDataChannel();
+  const config=f.h.sends.filter(x=>x.type==='session.update').at(-1).session;
+  assert.equal(config.audio.input.turn_detection.interrupt_response,active);
+  assert.equal(config.audio.input.turn_detection.create_response,false);
+  assert.equal(f.activations().length,active?1:0);
+  assert.equal(new Set(f.opens().map(x=>x.body.sessionId)).size,1);
 });
 
 test('each audio sample ignores prior microphone-test conversation while the interview keeps its context',async t=>{
