@@ -34,6 +34,7 @@ import {
 import { createVoiceUsage } from '../../../../../js/voice-usage.js';
 import { createVoiceTurnPlan } from '../../../../../js/voice-turn-plan.js';
 import { createTranscriptOrder } from '../../../../../js/voice-transcript-order.js';
+import { createVoiceAudioDiagnostics } from '../../../../../js/voice-audio-diagnostics.js';
 
 const CLIENT_SRC = new URL('../../../../../js/voice-interview.js', import.meta.url);
 
@@ -147,6 +148,7 @@ export function createVoiceClientHarness(options = {}) {
   const wrapEl = makeElement('__vi-wrap');
   const documentStub = {
     readyState: 'loading',
+    body: makeElement('__body'),
     getElementById: (id) => elements[id] || null,
     createElement: (tag) => makeElement('__' + tag),
     querySelector: (selector) => (selector === '.vi-wrap' ? wrapEl : null),
@@ -214,7 +216,7 @@ export function createVoiceClientHarness(options = {}) {
   const win = {
     JHA: { analytics: { track: (name, params) => analyticsEvents.push({ name, params }) } },
     crypto: webcrypto,
-    location: { search, href: 'https://app.jobhackai.io/voice-interview.html' + search, pathname: '/voice-interview.html' },
+    location: { search, hostname: options.hostname || 'app.jobhackai.io', href: 'https://app.jobhackai.io/voice-interview.html' + search, pathname: '/voice-interview.html' },
     navigator: { mediaDevices: { getUserMedia: options.getUserMedia || (async () => micStream()) } },
     FirebaseAuthManager: {
       waitForAuthReady: async () => ({ getIdToken: async () => 'test-id-token' }),
@@ -236,6 +238,11 @@ export function createVoiceClientHarness(options = {}) {
     createTranscriptOrder,
     createVoiceUsage,
     createVoiceTurnPlan,
+    createVoiceAudioDiagnostics: (env, readState) => {
+      const diagnostics = createVoiceAudioDiagnostics(env, readState);
+      if (options.onAudioDiagnostics) options.onAudioDiagnostics(diagnostics);
+      return diagnostics;
+    },
     addEventListener: (type, fn) => { (windowListeners[type] ||= []).push(fn); },
     removeEventListener: () => {}
   };
