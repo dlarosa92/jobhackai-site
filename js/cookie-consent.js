@@ -613,21 +613,20 @@
 
   // Helper: Remove banner if it exists
   function removeBanner() {
-    if (bannerElement) {
-      bannerElement.remove();
-      bannerElement = null;
-    } else {
-      // Fallback: try to find by ID
-      const existingBanner = document.getElementById('jha-cookie-banner');
-      if (existingBanner) {
-        existingBanner.remove();
-      }
-    }
+    // Also retire any duplicate left by an earlier initialization.
+    document.querySelectorAll('#jha-cookie-banner').forEach(banner => banner.remove());
+    bannerElement = null;
   }
 
   // Create banner
   function createBanner() {
-    if (hasConsent()) return; // Already has consent
+    if (hasConsent()) {
+      removeBanner(); // A restored account decision can arrive after the early banner.
+      return;
+    }
+    // DOMContentLoaded and restored Firebase auth both initialize consent.
+    // Keep the first banner so a second, unwired copy cannot cover its buttons.
+    if (bannerElement) return;
 
     bannerElement = document.createElement('div');
     bannerElement.id = 'jha-cookie-banner';
@@ -646,13 +645,13 @@
     document.body.appendChild(bannerElement);
 
     // Event handlers
-    document.getElementById('jha-accept-all').onclick = () => {
+    bannerElement.querySelector('#jha-accept-all').onclick = () => {
       setConsent({ version: 1, analytics: true, updatedAt: new Date().toISOString() });
       removeBanner();
       loadGAScript(); // Load GA now
     };
 
-    document.getElementById('jha-reject-all').onclick = () => {
+    bannerElement.querySelector('#jha-reject-all').onclick = () => {
       _pendingGtagCalls.length = 0;
       _pendingClarityIdentify.length = 0;
       setConsent({ version: 1, analytics: false, updatedAt: new Date().toISOString() });
@@ -666,7 +665,7 @@
       }
     };
 
-    document.getElementById('jha-manage').onclick = () => {
+    bannerElement.querySelector('#jha-manage').onclick = () => {
       openPreferencesModal();
     };
   }
