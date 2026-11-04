@@ -105,6 +105,29 @@ test('managed reconnect carries the expected attempt and transcript without star
   assert.equal(f.h.requests.filter(r=>r.url==='/api/voice/session').length,0);
 });
 
+test('a reply stall on a connected managed call replaces only the attempt and preserves the deadline',async t=>{
+  const f=fixture(t,{timerDelay:ms=>ms===15000?1:ms});await live(f);
+  const h=f.h,old=h.peerConnection();old.connectionState='connected';
+  // Finalize the reply, then lose one committed input's transcript.
+  h.event({type:'response.done',response:{id:'followup',status:'completed'}});
+  h.event({type:'input_audio_buffer.committed',item_id:'missing'});
+  h.event({type:'input_audio_buffer.committed',item_id:'later'});
+  h.event({type:'conversation.item.input_audio_transcription.completed',item_id:'later',transcript:'I checked the results with the business owner.'});
+  await new Promise(r=>setTimeout(r,20));await h.settle();
+  assert.match(h.el('vi-status').textContent,/not responding/i);
+  const time=h.el('vi-timer').textContent;
+  await h.click('vi-reconnect-btn');await h.openDataChannel();
+  assert.equal(old.connectionState,'closed');
+  assert.equal(f.opens().length,2);
+  assert.equal(f.opens()[1].body.sessionId,f.opens()[0].body.sessionId);
+  assert.equal(f.opens()[1].body.replacesAttemptId,'attempt-1');
+  assert.ok(f.opens()[1].body.transcript.some(x=>x.text.includes('business owner')));
+  assert.equal(h.requests.filter(r=>r.body?.action==='activate').length,0);
+  assert.equal(h.sends.filter(x=>x.type==='response.create').at(-1).response.metadata.jobhackai_purpose,'audio_recovery');
+  assert.equal(h.el('vi-timer').textContent,time);
+  assert.equal(h.completeBodies().length,0);
+});
+
 test('End during a delayed managed reconnect cannot reopen its new microphone or change the done view',async t=>{
   const answer=deferred();let count=0,body;
   const f=fixture(t,{routes:{'/api/voice/connection':(url,init)=>{

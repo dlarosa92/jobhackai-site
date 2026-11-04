@@ -329,3 +329,135 @@ test('a request that never completes is saved and closed instead of leaving a si
   assert.equal(h.completeBodies()[0].reason,'connection_lost');
   assert.equal(h.peerConnection().connectionState,'closed');
 });
+
+test('a terminal empty output item releases an interrupted caption without a separate transcript event',async t=>{
+  const h=await live(t);begin(h);answer(h,'first','Yes.');
+  h.event({type:'response.created',response:{id:'interrupted'}});
+  h.event({type:'conversation.item.created',item:{id:'interrupted-item',role:'assistant'}});
+  h.event({type:'response.done',response:{id:'interrupted',status:'cancelled'}});
+  const n=requests(h).length;
+  answer(h,'continued','I also checked the outcome with the team.');
+  assert.equal(requests(h).length,n);
+  h.event({type:'response.output_item.done',response_id:'interrupted',item:{id:'interrupted-item',type:'message',role:'assistant',content:[]}});
+  assert.equal(requests(h).length,n+1);
+});
+
+for (const echo of [true,false]) test('final response output settles missing caption while retaining echo filtering: '+echo,async t=>{
+  const h=await live(t);begin(h);answer(h,'first','Yes.');
+  const question='Tell me about a time when you influenced a stakeholder who disagreed.';
+  h.event({type:'response.created',response:{id:'next'}});
+  h.event({type:'conversation.item.created',item:{id:'next-item',role:'assistant'}});
+  const n=requests(h).length;
+  answer(h,'candidate',echo?question:'I compared customer research with our baseline and agreed on a pilot.');
+  h.event({type:'response.done',response:{id:'next',status:'completed',output:[{id:'next-item',type:'message',role:'assistant',content:[{type:'audio',transcript:question}]}]}});
+  assert.equal(requests(h).length,n+(echo?0:1));
+  assert.equal(h.sends.some(x=>x.type==='conversation.item.delete'&&x.item_id==='candidate'),echo);
+});
+
+test('missing input transcription offers recovery without ending or spending another interview',async t=>{
+  const h=await live(t,{timerDelay:ms=>ms===15000?1:ms});begin(h);
+  commit(h,'missing');answer(h,'later','I verified the result against our baseline.');
+  const n=requests(h).length;
+  await new Promise(r=>setTimeout(r,20));await h.settle();
+  assert.match(h.el('vi-status').textContent,/not responding/i);
+  assert.equal(h.el('vi-reconnect-btn').style.display,'');
+  assert.equal(h.completeBodies().length,0);
+  assert.equal(requests(h).length,n,'no forced response over unresolved input');
+  assert.equal(h.requests.filter(r=>r.url==='/api/voice/session'&&r.method==='POST').length,1);
+});
+
+test('a stalled connected call can reconnect, replay the question, and retain captured answers',async t=>{
+  const h=await live(t,{timerDelay:ms=>ms===15000?1:ms});begin(h);
+  h.peerConnection().connectionState='connected';
+  commit(h,'missing');answer(h,'kept','I verified the result against our baseline.');
+  await new Promise(r=>setTimeout(r,20));await h.settle();
+  const old=h.peerConnection();old.onconnectionstatechange();
+  assert.equal(h.el('vi-reconnect-btn').style.display,'','a transport-connected event cannot hide reply recovery');
+  assert.match(h.el('vi-status').textContent,/not responding/i);
+  await h.click('vi-reconnect-btn');
+  assert.notEqual(h.peerConnection(),old,'healthy transport does not hide a stalled reply');
+  await h.openDataChannel();
+  assert.equal(requests(h).at(-1).response.metadata.jobhackai_purpose,'audio_recovery');
+  const resume=h.requests.filter(r=>r.url==='/api/voice/session').at(-1).body;
+  assert.equal(resume.resumeSessionId,'budget-test');
+  assert.ok(resume.transcript.some(x=>x.text==='I verified the result against our baseline.'));
+  assistant(h,'replay','Tell me about a process improvement you led.');
+  answer(h,'recovered','The rollout reduced turnaround by two days.');
+  assert.equal(requests(h).at(-1).response.metadata.jobhackai_purpose,'follow_up');
+  assert.equal(h.completeBodies().length,0);
+});
+
+test('a missing assistant caption cannot silently block replies until the session deadline',async t=>{
+  const h=await live(t,{timerDelay:ms=>ms===15000?1:ms});begin(h);answer(h,'first','Yes.');
+  h.event({type:'response.created',response:{id:'lost-caption'}});
+  h.event({type:'conversation.item.created',item:{id:'lost-caption-item',role:'assistant'}});
+  h.event({type:'response.done',response:{id:'lost-caption',status:'cancelled'}});
+  answer(h,'continued','I also checked the outcome with the team.');
+  await new Promise(r=>setTimeout(r,20));await h.settle();
+  assert.match(h.el('vi-status').textContent,/not responding/i);
+  assert.equal(h.completeBodies().length,0);
+});
+
+test('continued speech cancels the recovery timer instead of interrupting an answer',async t=>{
+  const h=await live(t,{timerDelay:ms=>ms===15000?1:ms});begin(h);
+  commit(h,'fragment');h.event({type:'input_audio_buffer.speech_started',item_id:'continued'});
+  await new Promise(r=>setTimeout(r,20));await h.settle();
+  assert.doesNotMatch(h.el('vi-status').textContent,/not responding/i);
+  assert.equal(h.completeBodies().length,0);
+});
+
+test('normal legacy playback completion does not offer a false reply recovery',async t=>{
+  const h=await live(t,{timerDelay:ms=>ms===15000?1:ms});begin(h);
+  answer(h,'answer','I checked the outcome with the business owner.');
+  assistant(h,'reply','How did you verify the change?');
+  await new Promise(r=>setTimeout(r,20));await h.settle();
+  assert.doesNotMatch(h.el('vi-status').textContent,/not responding/i);
+});
+
+test('a delayed audible reply clears recovery and permits the following answer',async t=>{
+  const h=await live(t,{timerDelay:ms=>ms===15000?1:ms});begin(h);
+  answer(h,'answer','I verified the result against our baseline.');
+  await new Promise(r=>setTimeout(r,20));await h.settle();
+  assert.match(h.el('vi-status').textContent,/not responding/i);
+  h.event({type:'response.created',response:{id:'late-reply'}});
+  h.event({type:'output_audio_buffer.started',response_id:'late-reply'});
+  assert.doesNotMatch(h.el('vi-status').textContent,/not responding/i);
+  assert.equal(h.el('vi-reconnect-btn').style.display,'none');
+  h.event({type:'response.output_audio_transcript.done',item_id:'late-reply-item',response_id:'late-reply',transcript:'How did you verify that result?'});
+  h.event({type:'response.done',response:{id:'late-reply',status:'completed'}});
+  h.event({type:'output_audio_buffer.stopped',response_id:'late-reply'});
+  const n=requests(h).length;
+  answer(h,'next','I checked the following week with the team.');
+  assert.equal(requests(h).length,n+1);
+});
+
+test('an active response timeout offers recovery without closing the interview',async t=>{
+  const h=await live(t,{timerDelay:ms=>ms===45000?1:ms});begin(h);
+  answer(h,'answer','I verified the result against our baseline.');
+  await new Promise(r=>setTimeout(r,20));await h.settle();
+  assert.match(h.el('vi-status').textContent,/not responding/i);
+  assert.equal(h.completeBodies().length,0);
+});
+
+test('a completed delayed legacy reply clears recovery and permits the following answer',async t=>{
+  const h=await live(t,{timerDelay:ms=>ms===15000?1:ms});begin(h);
+  answer(h,'answer','I verified the result against our baseline.');
+  await new Promise(r=>setTimeout(r,20));await h.settle();
+  assert.match(h.el('vi-status').textContent,/not responding/i);
+  assistant(h,'late-legacy','How did you verify that result?');
+  assert.doesNotMatch(h.el('vi-status').textContent,/not responding/i);
+  assert.equal(h.el('vi-reconnect-btn').style.display,'none');
+  const n=requests(h).length;
+  answer(h,'next','I checked the following week with the team.');
+  assert.equal(requests(h).length,n+1);
+});
+
+test('Finish cancels a pending reply recovery and late snapshots cannot reopen the interview',async t=>{
+  const h=await live(t,{timerDelay:ms=>ms===15000?10:ms});begin(h);
+  commit(h,'missing');await h.endInterview();
+  h.event({type:'response.output_item.done',response_id:'late',item:{id:'late-item',type:'message',role:'assistant',content:[]}});
+  await new Promise(r=>setTimeout(r,20));await h.settle();
+  assert.equal(h.completeBodies().length,1);
+  assert.doesNotMatch(h.el('vi-status').textContent,/not responding/i);
+  assert.equal(h.peerConnection().connectionState,'closed');
+});
