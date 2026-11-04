@@ -314,9 +314,8 @@ export function createVoiceClientHarness(options = {}) {
       await dataChannel.onopen();
       // The real server acknowledges the effective configuration. Tests for
       // missing/rejected acknowledgements opt out explicitly.
-      if (options.autoTurnConfig !== false) this.event({ type: 'session.updated', session: { audio: { input: {
-        turn_detection: { type: 'semantic_vad', create_response: false, interrupt_response: true }
-      } } } });
+      if (options.autoTurnConfig !== false) this.event({ type: 'session.updated',
+        session: this.sends.filter(x => x.type === 'session.update').at(-1).session });
       await settle(2);
     },
     /** Deliver one realtime event over the data channel. */

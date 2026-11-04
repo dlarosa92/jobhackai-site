@@ -34,6 +34,8 @@ test('provider call ID is durably owned before SDP returns; no reusable secret l
     assert.equal(init.body.get('sdp'),SDP);
     const config=JSON.parse(init.body.get('session'));assert.equal(config.model,'gpt-realtime-mini');assert.equal(config.audio.output.voice,'marin');
     assert.equal(config.instructions,'Fixture interview instructions');
+    assert.deepEqual(config.audio.input.turn_detection,{type:'semantic_vad',create_response:false,interrupt_response:false},
+      'a managed call cannot emit or interrupt audio before the browser configures its phase');
     return new Response(SDP,{status:201,headers:{Location:'/v1/realtime/calls/rtc_owned'}});
   });
   const result=await f.create();const row=await f.row();assert.equal(row.state,'active');assert.equal(row.provider_call_id,'rtc_owned');

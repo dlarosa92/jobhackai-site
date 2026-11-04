@@ -110,9 +110,10 @@
     analyticsReportSessionId: null
   };
 
-  // Semantic VAD still detects turns and interrupts playback. The app requests
-  // replies explicitly so it can apply a turn budget before audio is generated.
+  // VAD detects microphone speech during setup without interrupting the sample.
+  // The official interview restores barge-in; replies stay application-owned.
   var turnControl = { plan: null, ready: false, setupTimer: null, pending: null,
+    interruptResponse: null, expectedInterrupt: null,
     busy: false, speaking: false, serial: 0, seen: Object.create(null), start: null,
     inputs: [], transcribed: Object.create(null),
     responseId: '', requestId: '', finished: Object.create(null), responseTimer: null };
@@ -128,6 +129,8 @@
     turnControl.requestId = '';
     turnControl.setupTimer = null;
     turnControl.ready = false;
+    turnControl.interruptResponse = null;
+    turnControl.expectedInterrupt = null;
     turnControl.pending = null;
     turnControl.inputs = [];
     turnControl.transcribed = Object.create(null);
@@ -143,9 +146,31 @@
     endInterview('connection_lost');
   }
 
+  function turnDetection(interrupt) {
+    return { type: 'semantic_vad', create_response: false, interrupt_response: interrupt };
+  }
+
+  function matchesTurnDetection(session, interrupt) {
+    var detection = session && session.audio && session.audio.input && session.audio.input.turn_detection;
+    return detection && detection.type === 'semantic_vad' && detection.create_response === false && detection.interrupt_response === interrupt;
+  }
+
+  function configureTurnControl(interrupt, start) {
+    clearTimeout(turnControl.setupTimer);
+    turnControl.ready = false;
+    turnControl.expectedInterrupt = interrupt;
+    turnControl.start = start;
+    updateAudioReadiness();
+    turnControl.setupTimer = setTimeout(turnControlFailed, 8000);
+    if (!sendRealtime({ type: 'session.update', session: { type: 'realtime', audio: { input: {
+      turn_detection: turnDetection(interrupt)
+    } } } })) turnControlFailed();
+  }
+
   function drainTurn() {
     if (!turnControl.ready || turnControl.busy || turnControl.speaking || state.audioPlaying ||
-        state.ending || state.conductEnd || state.turnRecovery || state.playbackBlocked || state.microphoneLost || lifecycle().is(PHASES.CLOSING)) return;
+        state.ending || state.conductEnd || state.turnRecovery || state.playbackBlocked || state.microphoneLost ||
+        (state.audioSetup && state.activating) || lifecycle().is(PHASES.CLOSING)) return;
     if (!turnControl.pending && turnControl.inputs.length) {
       // Wait for every committed fragment, including a possible spoken Finish.
       // Late ASR must neither interrupt continued speech nor generate separate
@@ -171,6 +196,12 @@
       if (!turnControl.pending) clearTurnWait();
     }
     if (!turnControl.pending) return;
+    // Start may have changed provider settings even if its receipt was lost.
+    // A replay must restore sample protection before requesting any audio.
+    if (state.audioSetup && turnControl.interruptResponse !== false) {
+      configureTurnControl(false, drainTurn);
+      return;
+    }
     var pending = turnControl.pending;
     turnControl.pending = null;
     if (state.audioSetup && !pending.greeting) return;
@@ -1316,7 +1347,8 @@
     if (state.usage && type === 'response.done') state.usage.add('response', evt.response && evt.response.id, evt.response && evt.response.usage);
     if (state.usage && type === 'conversation.item.input_audio_transcription.completed') state.usage.add('transcription', evt.item_id, evt.usage);
     if (state.activationEvent && type === 'session.updated' && evt.session &&
-        evt.session.instructions === state.activationInstructions) {
+        evt.session.instructions === state.activationInstructions && matchesTurnDetection(evt.session, true)) {
+      turnControl.interruptResponse = true;
       if (!state.ending) activateAudioReady();
       return;
     }
@@ -1336,13 +1368,14 @@
       }
     }
     if (type === 'session.updated' && !turnControl.ready && turnControl.start) {
-      var detection = evt.session && evt.session.audio && evt.session.audio.input && evt.session.audio.input.turn_detection;
-      if (!detection || detection.type !== 'semantic_vad' || detection.create_response !== false || detection.interrupt_response !== true) return;
+      if (!matchesTurnDetection(evt.session, turnControl.expectedInterrupt)) return;
       clearTimeout(turnControl.setupTimer);
       turnControl.setupTimer = null;
       turnControl.ready = true;
+      turnControl.interruptResponse = turnControl.expectedInterrupt;
       var start = turnControl.start;
       turnControl.start = null;
+      updateAudioReadiness();
       start();
       return;
     }
@@ -1696,8 +1729,10 @@
     // Configure the interviewer before spending credit. A missing/rejected
     // provider acknowledgement remains an uncharged setup failure.
     state.activationEvent = 'jha_activate_' + crypto.randomUUID();
+    turnControl.interruptResponse = null;
     if (!sendRealtime({ type:'session.update', event_id:state.activationEvent,
-      session:{type:'realtime',instructions:state.activationInstructions} })) {
+      session:{type:'realtime',instructions:state.activationInstructions,
+        audio:{input:{turn_detection:turnDetection(true)}}} })) {
       state.activating = false; state.activationEvent = null; updateAudioReadiness(); return;
     }
     state.activationTimer = setTimeout(function () {
@@ -1938,10 +1973,7 @@
           turnControl.pending = { greeting: true };
           drainTurn();
         };
-        turnControl.setupTimer = setTimeout(turnControlFailed, 8000);
-        if (!sendRealtime({ type: 'session.update', session: { type: 'realtime', audio: { input: {
-          turn_detection: { type: 'semantic_vad', create_response: false, interrupt_response: true }
-        } } } })) turnControlFailed();
+        configureTurnControl(!state.audioSetup, turnControl.start);
       };
 
       pc.onconnectionstatechange = function () {
