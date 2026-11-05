@@ -24,6 +24,36 @@ function fixture(){
  const call=async(action,input,identity=owner,loadBoard=board)=>{const response=await workApi(new Request(`https://dashboard.jobhackai.io/api/work-items/${action}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)}),env,identity,loadBoard);return {status:response.status,body:await response.json()};};
  return {sql,db,env,board,call};
 }
+test('durable lessons remain readable beyond recent huddles and paginate without duplicate or lost history',async()=>{
+ const c=fixture();
+ const insert=(id,cadence,created)=>c.sql.prepare('INSERT INTO coordination_runs(id,cadence,period,document,created_at) VALUES(?,?,?,?,?)')
+  .run(id,cadence,id,JSON.stringify({adjustments:`Apply ${id} on the next relevant item.`}),created);
+ for(let i=0;i<5;i++)insert(`lesson-${i}`,'lesson','2026-11-01T00:00:00Z');
+ for(let i=0;i<25;i++)insert(`huddle-${i}`,'daily','2026-11-02T00:00:00Z');
+ assert.equal((await c.board()).coordination.some(r=>r.cadence==='lesson'),false);
+ const read=async(query)=>{
+  const r=await workApi(new Request(`https://dashboard.jobhackai.io/api/work-items/lessons${query}`),c.env,owner,()=>{throw new Error('Native board is unavailable');});
+  assert.equal(r.status,200);assert.equal(r.headers.get('Cache-Control'),'no-store');return r.json();
+ };
+ const first=await read('?limit=2');
+ assert.deepEqual(first.lessons.map(r=>r.id),['lesson-4','lesson-3']);
+ insert('concurrent-new-lesson','lesson','2026-11-03T00:00:00Z');
+ const all=[...first.lessons];let cursor=first.nextCursor;
+ while(cursor){const page=await read(`?limit=2&cursor=${cursor}`);all.push(...page.lessons);cursor=page.nextCursor;}
+ assert.deepEqual(all.map(r=>r.id),['lesson-4','lesson-3','lesson-2','lesson-1','lesson-0']);
+ assert.equal(new Set(all.map(r=>r.id)).size,5);
+ assert.equal(all.at(-1).document.adjustments,'Apply lesson-0 on the next relevant item.');
+ assert.equal((await read('?limit=1')).lessons[0].id,'concurrent-new-lesson');
+});
+test('lesson reads are bounded and reject malformed cursors and ambiguous query parameters',async()=>{
+ const c=fixture();
+ for(const query of ['?limit=0','?limit=51','?limit=1e2','?limit=2&limit=3','?cursor=0','?cursor=9007199254740992','?cursor=2&cursor=3','?cursor=','?cursor=1%20OR%201=1','?unexpected=1']){
+  const r=await workApi(new Request(`https://dashboard.jobhackai.io/api/work-items/lessons${query}`),c.env,owner,c.board);
+  assert.equal(r.status,400,query);
+ }
+ const r=await workApi(new Request('https://dashboard.jobhackai.io/api/work-items/lessons'),c.env,owner,c.board);
+ assert.deepEqual(await r.json(),{lessons:[],nextCursor:null});
+});
 const doc=(overrides={})=>({title:'Source-backed product improvement',department:'product',product:'core',preparation:'ready',channel:'Product',contributors:['marketing'],expectedValue:'Reliable measurement of software signups',effort:'Small',dependencies:[],nextAction:'Review the exact change',completionCriteria:'Verified signup source and deployed behavior',reason:'Measurement supports the 250-user goal',impact:'growth',sourceRefs:[{id:'issue-1',url:'https://github.com/example/repo/issues/1'}],...overrides});
 const snapshot=(overrides={})=>({complete:true,conflict:false,sourceRevision:'native-v1',checkedAt:new Date().toISOString(),verifiedBy:'Independent source check',text:'The complete draft with exact link.',html:'',destination:'JobHackAI company Facebook',subject:'',timing:'After owner release',media:[],links:['https://jobhackai.io/?utm_source=facebook&utm_medium=organic_social&utm_campaign=test&utm_content=one'],evidence:[{id:'native-v1',url:'https://example.com/draft/1',fact:'Complete saved copy verified'}],...overrides});
 async function ready(c,id='one',overrides={}){
