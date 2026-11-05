@@ -50,7 +50,7 @@ export function applyReceipts(item,receipts) {
   item.detail=latest.summary;
   item.reviewUrl=latest.evidence_url;
   item.checkedAt=latest.occurred_at;
-  item.nextAction=({dev_deployed:'Development deployment verified. Complete acceptance testing before QA promotion.',qa_deployed:'QA deployment verified. Complete QA acceptance before production promotion.',production_deployed:'Production deployment verified. Complete production checks before closing this release.',dev_verified:'Development checks passed. Complete QA acceptance for this same candidate.',qa_verified:'QA checks passed. Promote this accepted candidate through the production checks.',production_verified:'Production checks passed. No release action remains.',published:'Publication verified. No publishing action remains.',sent:'Delivery verified. No sending action remains.'})[latest.stage];
+  item.nextAction=({dev_deployed:'Development deployment verified. Complete acceptance testing before QA promotion.',qa_deployed:'QA deployment verified. Complete QA acceptance before production promotion.',production_deployed:'Production deployment verified. Complete production checks before closing this release.',dev_verified:'Development checks passed. Complete QA acceptance for this same candidate.',qa_verified:'QA checks passed. Promote this accepted candidate through the production checks.',production_verified:'Production checks passed. No release action remains.',published:'Publication verified. No publishing action remains.',sent:'Send verified. Inbox delivery and replies are separate checks. No repeat send is needed.'})[latest.stage];
   item.canApprove=false;
   if(terminal.includes(latest.stage)){
     item.state=item.nativeState=latest.stage==='production_verified'?'closed':latest.stage;

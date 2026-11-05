@@ -22,6 +22,129 @@ function fixture(){
   return {sql,db,env,flow,work,board,now,request};
 }
 const requiredSources=['marblism','campaign','gmail','directory','github'];
+test('retired workflows stop new starts and false deadline alerts without erasing receipts',async()=>{
+  const c=fixture(),run=(await c.flow('start',{workflow:'preparation'})).body;
+  await c.flow('finish',{id:run.id,outcome:'failed',summary:'Historical source failure'});
+  const before=c.sql.prepare('SELECT * FROM workflow_runs').all();
+  await checkWorkflowDeadlines(c.env,c.now);
+  assert.ok(c.sql.prepare("SELECT * FROM workflow_alerts WHERE id='workflow-preparation'").get());
+  c.env.DASHBOARD_WORKFLOW_POLICIES=JSON.stringify({preparation:{mode:'retired',reason:'Replaced by reviewed owner execution',scheduleLabel:'Retired local publisher'}});
+  assert.equal((await c.flow('start',{workflow:'preparation'})).status,409);
+  const status=await checkWorkflowDeadlines(c.env,c.now);
+  assert.equal(status.workflows.find(w=>w.id==='preparation').status,'retired');
+  assert.ok(!status.alerts.some(a=>a.id==='workflow-preparation'));
+  assert.ok(c.sql.prepare("SELECT resolved_at FROM workflow_alerts WHERE id='workflow-preparation'").get().resolved_at);
+  assert.deepEqual(c.sql.prepare('SELECT * FROM workflow_runs').all(),before);
+  const board=await workRecords(c.db,{items:[]},c.now,c.env.DASHBOARD_WORKFLOW_POLICIES);
+  assert.equal(board.workflow.workflows.find(w=>w.id==='preparation').status,'retired');
+});
+test('configured monitoring interval changes the exact missing-run boundary without rewriting policy or history',async()=>{
+  const c=fixture(),time=new Date('2026-11-05T10:00:00Z'),run=(await c.flow('start',{workflow:'preparation'},machine,time)).body;
+  c.sql.prepare("UPDATE workflow_runs SET status='checked',finished_at=?,result='{}' WHERE id=?").run(time.toISOString(),run.id);
+  const before=c.sql.prepare('SELECT * FROM workflow_runs').all(),spec=c.sql.prepare("SELECT * FROM workflow_policies WHERE id='preparation'").get();
+  c.env.DASHBOARD_WORKFLOW_POLICIES=JSON.stringify({preparation:{mode:'active',reason:'Reviewed two-hour operating cadence',maxAgeMinutes:150,scheduleLabel:'Every two hours, 30-minute allowance'}});
+  const read=async minutes=>{
+    const r=await workflowApi(new Request('https://dashboard.jobhackai.io/api/workflow'),c.env,machine,new Date(time.getTime()+minutes*60000));
+    return (await r.json()).workflows.find(w=>w.id==='preparation');
+  };
+  assert.equal((await read(150)).status,'current');
+  assert.equal((await read(150.01)).status,'missing');
+  assert.match((await read(150)).scheduleLabel,/two hours/);
+  assert.deepEqual(c.sql.prepare('SELECT * FROM workflow_runs').all(),before);
+  assert.deepEqual(c.sql.prepare("SELECT * FROM workflow_policies WHERE id='preparation'").get(),spec);
+});
+test('pausing future starts retains in-flight failure and overdue owner handoff alerts',async()=>{
+  const c=fixture();await decision(c);
+  const run=(await c.flow('start',{workflow:'preparation'})).body;
+  c.env.DASHBOARD_WORKFLOW_POLICIES=JSON.stringify({preparation:{mode:'paused',reason:'Investigating executor reliability'}});
+  const due=c.sql.prepare('SELECT due_at FROM work_handoffs').get().due_at;
+  const later=new Date(Math.max(c.now.getTime()+3600001,Date.parse(due)+1)),state=await checkWorkflowDeadlines(c.env,later);
+  assert.equal(state.workflows.find(w=>w.id==='preparation').status,'stalled');
+  assert.ok(state.alerts.some(a=>a.id==='workflow-preparation'));
+  assert.ok(state.alerts.some(a=>a.id.startsWith('handoff-')));
+  assert.equal(c.sql.prepare('SELECT status FROM workflow_runs WHERE id=?').get(run.id).status,'running');
+});
+test('invalid deployment policies fail closed without starting work or resolving alerts',async()=>{
+  for(const config of ['{', '[]', '{"unknown":{"mode":"retired","reason":"bad"}}',
+    '{"preparation":{"mode":"retired"}}',
+    '{"preparation":{"mode":"active","reason":"bad interval","maxAgeMinutes":0}}',
+    '{"preparation":{"mode":"active","reason":"missing label","maxAgeMinutes":150}}']){
+    const c=fixture();c.env.DASHBOARD_WORKFLOW_POLICIES=config;
+    assert.equal((await c.flow('start',{workflow:'preparation'})).status,500);
+    assert.equal(c.sql.prepare('SELECT count(*) n FROM workflow_runs').get().n,0);
+    await assert.rejects(checkWorkflowDeadlines(c.env,c.now),/workflow policy|schedule label/);
+  }
+});
+test('retirement cannot strand actionable owner handoffs or clear their saved alert',async()=>{
+  const c=fixture();
+  c.env.DASHBOARD_WORKFLOW_POLICIES=JSON.stringify({preparation:{mode:'retired',reason:'Initially no handoffs'}});
+  await decision(c);
+  const due=c.sql.prepare('SELECT due_at FROM work_handoffs').get().due_at;
+  const later=new Date(Date.parse(due)+1);await checkWorkflowDeadlines(c.env,later);
+  const before=c.sql.prepare('SELECT * FROM work_handoffs').all();
+  c.env.DASHBOARD_WORKFLOW_POLICIES=JSON.stringify({preparation:{mode:'retired',reason:'No successor yet'}});
+  const response=await c.flow('start',{workflow:'preparation'},machine,later);
+  assert.equal(response.status,500);assert.match(response.body.error,/actionable owner handoffs/);
+  const status=await checkWorkflowDeadlines(c.env,later);
+  assert.equal(status.workflows.find(w=>w.id==='preparation').status,'retirement_conflict');
+  assert.match(status.alerts.find(a=>a.id==='workflow-preparation').detail,/Restore its reviewed active executor/);
+  const responseRead=await workflowApi(new Request('https://dashboard.jobhackai.io/api/workflow'),c.env,machine,later);
+  assert.equal(responseRead.status,200);assert.equal((await responseRead.json()).handoffs.length,1);
+  const board=await workRecords(c.db,{items:[]},later,c.env.DASHBOARD_WORKFLOW_POLICIES);
+  assert.equal(board.items.length,1);assert.equal(board.workflow.handoffs.length,1);
+  for(const workflow of ['coordination','reconciliation'])assert.equal((await c.flow('start',{workflow},machine,later)).status,200);
+  assert.deepEqual(c.sql.prepare('SELECT * FROM work_handoffs').all(),before);
+  assert.ok(c.sql.prepare("SELECT 1 FROM workflow_alerts WHERE id LIKE 'handoff-%' AND resolved_at IS NULL").get());
+});
+test('older expired attempts remain visible through retirement beyond the latest eight runs',async()=>{
+  const c=fixture(),begin=Date.parse('2026-11-05T00:00:00Z');
+  const original=(await c.flow('start',{workflow:'preparation'},machine,new Date(begin))).body;
+  for(let i=1;i<=10;i++){
+    const run=(await c.flow('start',{workflow:'preparation'},machine,new Date(begin+i*7200000))).body;
+    c.sql.prepare("UPDATE workflow_runs SET status='failed',finished_at=?,result=? WHERE id=?").run(new Date(begin+i*7200000).toISOString(),JSON.stringify({summary:'Later attempt failed'}),run.id);
+  }
+  c.env.DASHBOARD_WORKFLOW_POLICIES=JSON.stringify({preparation:{mode:'retired',reason:'Stopped repeat failures'}});
+  const state=await checkWorkflowDeadlines(c.env,new Date(begin+22*3600000)),workflow=state.workflows.find(w=>w.id==='preparation');
+  assert.equal(workflow.status,'stalled');assert.equal(workflow.mode,'retired');
+  assert.equal(workflow.outstandingAttempts.count,1);assert.equal(workflow.outstandingAttempts.stalled,1);
+  assert.notEqual(workflow.lastRun.id,original.id);
+  assert.match(state.alerts.find(a=>a.id==='workflow-preparation').detail,/unfinished attempt.*expired leases/);
+  assert.equal(c.sql.prepare('SELECT status FROM workflow_runs WHERE id=?').get(original.id).status,'running');
+});
+test('Eastern slots detect a missed midday cycle at grace without an overnight false alarm',async()=>{
+  const c=fixture(),started=new Date('2026-11-05T14:00:00Z'); // 09:00 EST
+  const run=(await c.flow('start',{workflow:'preparation'},machine,started)).body;
+  c.sql.prepare("UPDATE workflow_runs SET status='checked',finished_at=?,result='{}' WHERE id=?").run('2026-11-05T14:10:00Z',run.id);
+  c.env.DASHBOARD_WORKFLOW_POLICIES=JSON.stringify({preparation:{mode:'active',reason:'Three scheduled owner cycles',dailySlots:['09:00','13:00','18:00'],graceMinutes:30,scheduleLabel:'09:00, 13:00, 18:00 Eastern'}});
+  const status=async at=>{
+    const r=await workflowApi(new Request('https://dashboard.jobhackai.io/api/workflow'),c.env,machine,new Date(at));
+    return (await r.json()).workflows.find(w=>w.id==='preparation');
+  };
+  assert.equal((await status('2026-11-05T18:29:59Z')).status,'current');
+  assert.equal((await status('2026-11-05T18:30:00Z')).status,'missing');
+  assert.equal((await status('2026-11-05T18:30:00Z')).schedule.expectedSlotAt,'2026-11-05T18:00:00.000Z');
+  // A previous slot's long run finishing now cannot satisfy the new slot.
+  c.sql.prepare('UPDATE workflow_runs SET finished_at=? WHERE id=?').run('2026-11-05T18:31:00Z',run.id);
+  assert.equal((await status('2026-11-05T18:32:00Z')).status,'missing');
+  const evening=(await c.flow('start',{workflow:'preparation'},machine,new Date('2026-11-05T23:00:00Z'))).body;
+  c.sql.prepare("UPDATE workflow_runs SET status='checked',finished_at=?,result='{}' WHERE id=?").run('2026-11-05T23:10:00Z',evening.id);
+  assert.equal((await status('2026-11-06T14:29:59Z')).status,'current');
+  assert.equal((await status('2026-11-06T14:30:00Z')).status,'missing');
+  c.sql.prepare("UPDATE workflow_runs SET status='failed',result=? WHERE id=?").run(JSON.stringify({summary:'Native read failed'}),evening.id);
+  assert.equal((await status('2026-11-06T14:30:00Z')).status,'failed');
+});
+test('Eastern slot deadlines follow both daylight-saving transitions instead of 24-hour offsets',async()=>{
+  for(const [evening,morning] of [['2026-03-07T23:00:00Z','2026-03-08T13:00:00Z'],['2026-10-31T22:00:00Z','2026-11-01T14:00:00Z']]){
+    const c=fixture(),run=(await c.flow('start',{workflow:'preparation'},machine,new Date(evening))).body;
+    c.sql.prepare("UPDATE workflow_runs SET status='checked',finished_at=?,result='{}' WHERE id=?").run(new Date(Date.parse(evening)+600000).toISOString(),run.id);
+    c.env.DASHBOARD_WORKFLOW_POLICIES=JSON.stringify({preparation:{mode:'active',reason:'DST-safe schedule',dailySlots:['09:00','13:00','18:00'],graceMinutes:30,scheduleLabel:'Eastern owner cycles'}});
+    const get=async offset=>{
+      const r=await workflowApi(new Request('https://dashboard.jobhackai.io/api/workflow'),c.env,machine,new Date(Date.parse(morning)+offset));return (await r.json()).workflows.find(w=>w.id==='preparation');
+    };
+    assert.equal((await get(1799999)).status,'current');assert.equal((await get(1800000)).status,'missing');
+    assert.equal((await get(1800000)).schedule.expectedSlotAt,new Date(morning).toISOString());
+  }
+});
 test('later audit failures invalidate a completed run without rewriting its history, across three sources',async()=>{
   for(const source of ['marblism','campaign','github']){
     const c=fixture(),run=(await c.flow('start',{workflow:'reconciliation'})).body;

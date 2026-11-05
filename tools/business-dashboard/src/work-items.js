@@ -1,5 +1,5 @@
 import { digest, OWNER } from './outreach-policy.js';
-import { workflowStatus, verifyRunWrite, recordRunWrite } from './workflow.js';
+import { workflowStatus, workflowPolicyOverrides, verifyRunWrite, recordRunWrite } from './workflow.js';
 import { saveReceipt, applyReceipts } from './work-receipts.js';
 
 export const departments = ['marketing', 'sales', 'product'];
@@ -149,8 +149,8 @@ export async function cacheNativeSources(db,base) {
     .bind(JSON.stringify(items),base.directorySource.checkedAt).run();
   return {saved:result.meta.changes>0};
 }
-export async function workRecords(db, base, now=new Date()) {
-  const workflow=await workflowStatus(db,now);
+export async function workRecords(db, base, now=new Date(),workflowPolicies) {
+  const workflow=await workflowStatus(db,now,workflowPolicyOverrides(workflowPolicies));
   if(base.directorySource?.status==='unavailable'){
     const cached=await db.prepare("SELECT * FROM source_cache WHERE source='directory'").first();
     if(cached)base={...base,items:[...base.items,...parse(cached.payload).map(i=>({...i,staleSource:true}))],directorySource:{...base.directorySource,lastSuccessfulCheckAt:cached.checked_at}};

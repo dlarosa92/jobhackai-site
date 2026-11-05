@@ -2,6 +2,50 @@
 const policies = {preparation:'prepare', reconciliation:'reconcile', coordination:'coordinate'};
 const reconciliationSources = ['marblism','campaign','gmail','directory','github'];
 const openStates = ['pending','claimed','blocked'];
+const defaultScheduleLabels = {preparation:'Hourly · Codex on the Mac',reconciliation:'Every 30 minutes · Codex on the Mac',coordination:'Daily · Codex on the Mac'};
+// Deployment configuration changes monitoring expectations, never receipts or execution authority.
+export function workflowPolicyOverrides(raw) {
+  if(raw===undefined||raw==='')return {};
+  let value;try{value=JSON.parse(raw);}catch{fail('Invalid workflow policy configuration.',500);}
+  if(!value||typeof value!=='object'||Array.isArray(value))fail('Invalid workflow policy configuration.',500);
+  for(const [id,p] of Object.entries(value)){
+    if(!Object.hasOwn(policies,id)||!p||typeof p!=='object'||Array.isArray(p)||
+      Object.keys(p).some(k=>!['mode','reason','maxAgeMinutes','scheduleLabel','dailySlots','graceMinutes'].includes(k))||
+      !['active','paused','retired'].includes(p.mode)||typeof p.reason!=='string'||!p.reason.trim()||p.reason.length>1000||
+      (p.maxAgeMinutes!==undefined&&(!Number.isInteger(p.maxAgeMinutes)||p.maxAgeMinutes<15||p.maxAgeMinutes>10080))||
+      (p.scheduleLabel!==undefined&&(typeof p.scheduleLabel!=='string'||!p.scheduleLabel.trim()||p.scheduleLabel.length>200)))fail('Invalid workflow policy configuration.',500);
+    if(p.maxAgeMinutes!==undefined&&!p.scheduleLabel)fail('Changed workflow interval requires its schedule label.',500);
+    if(p.dailySlots!==undefined){
+      if(!Array.isArray(p.dailySlots)||!p.dailySlots.length||p.dailySlots.length>24||new Set(p.dailySlots).size!==p.dailySlots.length||
+        !p.dailySlots.every(s=>typeof s==='string'&&/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(s))||
+        !Number.isInteger(p.graceMinutes)||p.graceMinutes<0||p.graceMinutes>120||!p.scheduleLabel)fail('Invalid Eastern workflow slots or grace.',500);
+      const minutes=p.dailySlots.map(s=>Number(s.slice(0,2))*60+Number(s.slice(3))).sort((a,b)=>a-b);
+      if(minutes.some((m,i)=>i&&m-minutes[i-1]<60)||1440-minutes.at(-1)+minutes[0]<60)fail('Workflow slots must be at least one hour apart.',500);
+      if(id==='coordination'&&p.dailySlots.length!==1)fail('Daily coordination requires exactly one daily slot.',500);
+    }else if(p.graceMinutes!==undefined)fail('Workflow grace requires daily slots.',500);
+  }
+  return value;
+}
+const easternParts=new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
+function localParts(date){return Object.fromEntries(easternParts.formatToParts(date).filter(p=>p.type!=='literal').map(p=>[p.type,p.value]));}
+export function expectedWorkflowSlot(policy,now){
+  if(!policy?.dailySlots)return null;
+  const local=localParts(now),midnight=Date.UTC(Number(local.year),Number(local.month)-1,Number(local.day)),slots=[];
+  // Match possible Eastern UTC offsets against Intl, rather than assuming a 24-hour day.
+  // Repeated fall-back local slots run once (earliest occurrence); nonexistent spring slots are skipped.
+  for(let day=-2;day<=1;day++){
+    const date=new Date(midnight+day*86400000),ymd=date.toISOString().slice(0,10);
+    for(const slot of policy.dailySlots){
+      const candidates=[4,5].map(offset=>new Date(Date.parse(`${ymd}T${slot}:00Z`)+offset*3600000)).filter(candidate=>{
+        const p=localParts(candidate);return `${p.year}-${p.month}-${p.day}`===ymd&&`${p.hour}:${p.minute}`===slot;
+      });
+      if(candidates.length)slots.push(candidates[0].getTime());
+    }
+  }
+  slots.sort((a,b)=>a-b);
+  const grace=policy.graceMinutes*60000,due=slots.filter(time=>time+grace<=now.getTime()).at(-1),next=slots.find(time=>time+grace>now.getTime());
+  return {timeZone:'America/New_York',graceMinutes:policy.graceMinutes,expectedSlotAt:due===undefined?null:new Date(due).toISOString(),nextExpectedSlotAt:next===undefined?null:new Date(next).toISOString()};
+}
 const parse = value => value ? JSON.parse(value) : null;
 function fail(message, status=400) { throw Object.assign(new Error(message), {status}); }
 function text(value,max=4000) { if(typeof value!=='string'||!value.trim()||value.length>max)fail('A bounded, nonempty explanation is required.');return value; }
@@ -44,8 +88,15 @@ function periodFor(workflow,now) {
   if(workflow==='reconciliation')return `${now.slice(0,14)}${Number(now.slice(14,16))<30?'00':'30'}`;
   return workflow==='coordination'?new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now)):now.slice(0,13);
 }
-async function start(db,input,identity,now) {
+async function retirementPreflight(db,overrides) {
+  if(overrides.preparation?.mode!=='retired')return;
+  const open=await db.prepare("SELECT 1 AS found FROM work_handoffs h JOIN work_items w ON w.id=h.item_id WHERE h.status IN ('pending','claimed','blocked') AND w.native_state NOT IN ('sent','published','closed','scheduled') LIMIT 1").first();
+  if(open)fail('Preparation cannot be retired while actionable owner handoffs remain. Keep it paused or active until the handoffs are resolved through their existing owner.',500);
+}
+async function start(db,input,identity,now,overrides={}) {
   if(!canRun(identity,input.workflow))fail('Workflow capability required.',403);
+  if(input.workflow==='preparation')await retirementPreflight(db,overrides);
+  if(overrides[input.workflow]&&overrides[input.workflow].mode!=='active')fail('This workflow is paused or retired. Follow its recorded replacement instead of restarting it.',409);
   const workflow=input.workflow,period=periodFor(workflow,now);
   let old=await db.prepare('SELECT id,actor,status,lease_until FROM workflow_runs WHERE workflow=? AND period=?').bind(workflow,period).first();
   // Preserve an hourly receipt created before the cadence change in its actual half-hour slot.
@@ -159,16 +210,19 @@ export function handoffNextAction(h) {
   if(h.action==='changes')return `${h.department}: revise the saved packet from the owner's feedback: ${h.note}`;
   return h.note?`${h.department}: resolve the approval note, verify the final packet and preserve the exact decision: ${h.note}`:`${h.department}: verify release prerequisites for the approved revision. Release still requires its separate authorization.`;
 }
-export async function workflowStatus(db,now=new Date()) {
+export async function workflowStatus(db,now=new Date(),overrides={}) {
   const stamp=now.toISOString();
-  const [specs,runs,handoffs,alerts,health]=await Promise.all([
+  const [specs,runs,handoffs,alerts,health,unfinished]=await Promise.all([
     db.prepare('SELECT * FROM workflow_policies ORDER BY id').all(),
     db.prepare('SELECT * FROM workflow_runs WHERE id IN (SELECT id FROM (SELECT id,ROW_NUMBER() OVER(PARTITION BY workflow ORDER BY started_at DESC) AS n FROM workflow_runs) WHERE n<=8) ORDER BY started_at DESC').all(),
     db.prepare("SELECT h.*,w.document FROM work_handoffs h JOIN work_items w ON w.id=h.item_id WHERE h.status IN ('pending','claimed','blocked') AND w.native_state NOT IN ('sent','published','closed','scheduled') ORDER BY h.due_at").all(),
     db.prepare('SELECT * FROM workflow_alerts WHERE resolved_at IS NULL ORDER BY first_seen_at').all(),
     db.prepare('SELECT source,status,checked_at FROM source_health').all(),
+    db.prepare("SELECT workflow,COUNT(*) AS count,SUM(CASE WHEN lease_until<=? THEN 1 ELSE 0 END) AS stalled,MIN(started_at) AS oldest FROM workflow_runs WHERE status='running' GROUP BY workflow").bind(stamp).all(),
   ]);
-  const workflows=specs.results.map(spec=>{
+  const workflows=specs.results.map(savedSpec=>{
+    const override=overrides[savedSpec.id],spec={...savedSpec,max_age_minutes:override?.maxAgeMinutes??savedSpec.max_age_minutes};
+    const schedule=expectedWorkflowSlot(override,now);
     const run=runs.results.find(r=>r.workflow===spec.id),result=parse(run?.result);
     const lastFinished=runs.results.find(r=>r.workflow===spec.id&&['advanced','checked'].includes(r.status)&&(spec.id!=='reconciliation'||completeReconciliation(parse(r.result))));
     // Keep immutable run history, but a subsequent audit failure supersedes its health claim.
@@ -178,18 +232,24 @@ export async function workflowStatus(db,now=new Date()) {
     else if(run?.status==='failed')status='failed';
     else if(run?.status==='blocked')status=result?.nextCheckAt>stamp?'blocked':'overdue';
     else if(spec.id==='reconciliation'&&run&&(!completeReconciliation(result)||disputedSources.length))status='incomplete';
-    else if(now.getTime()-Date.parse(lastFinished?.finished_at||spec.created_at)>spec.max_age_minutes*60000)status='missing';
+    else if(schedule?.expectedSlotAt?(!lastFinished||lastFinished.started_at<schedule.expectedSlotAt):now.getTime()-Date.parse(lastFinished?.finished_at||spec.created_at)>spec.max_age_minutes*60000)status='missing';
     else if(lastFinished)status='current';
-    return {...spec,status,disputedSources,requiredSources:spec.id==='reconciliation'?reconciliationSources:[],lastRun:run?{id:run.id,status:run.status,startedAt:run.started_at,finishedAt:run.finished_at,result}:null,lastSuccessAt:lastFinished?.finished_at||null};
+    const outstanding=unfinished.results.find(row=>row.workflow===spec.id);
+    if(outstanding)status=outstanding.stalled?'stalled':'running';
+    // Pausing future work cannot hide an unfinished attempt or an overdue owner handoff.
+    if(override&&override.mode!=='active'&&!['running','stalled'].includes(status))status=override.mode;
+    const retirementConflict=spec.id==='preparation'&&override?.mode==='retired'&&handoffs.results.length>0;
+    if(retirementConflict)status='retirement_conflict';
+    return {...spec,status,mode:override?.mode||'active',policyReason:override?.reason||null,scheduleLabel:override?.scheduleLabel||defaultScheduleLabels[spec.id],schedule,outstandingAttempts:outstanding?{count:outstanding.count,stalled:outstanding.stalled,oldestStartedAt:outstanding.oldest}:null,disputedSources,requiredSources:spec.id==='reconciliation'?reconciliationSources:[],lastRun:run?{id:run.id,status:run.status,startedAt:run.started_at,finishedAt:run.finished_at,result}:null,lastSuccessAt:lastFinished?.finished_at||null};
   });
   const jobs=handoffs.results.map(h=>{const {document,...rest}=h;return {...rest,title:parse(document).title,nextAction:handoffNextAction(h),overdue:(h.status==='blocked'?h.next_check_at:h.due_at)<=stamp};});
   // Derive immediately on reads as well as persisting on cron; a late cron cannot make stale work green.
-  const active=[...workflows.filter(w=>['missing','stalled','failed','blocked','overdue','incomplete'].includes(w.status)).map(w=>({id:`workflow-${w.id}`,detail:`${w.label}: ${w.status}. ${w.disputedSources.length?`Later source checks invalidate the saved success: ${w.disputedSources.join(', ')}.`:w.status==='incomplete'?'The saved run did not verify all required sources.':w.lastRun?.result?.blocker||w.lastRun?.result?.summary||'No completed run receipt within the expected interval.'}`})),
+  const active=[...workflows.filter(w=>['missing','stalled','failed','blocked','overdue','incomplete','retirement_conflict'].includes(w.status)).map(w=>({id:`workflow-${w.id}`,detail:`${w.label}: ${w.status}. ${w.status==='retirement_conflict'?'Actionable owner handoffs require preparation. Restore its reviewed active executor and policy before claiming those handoffs; do not discard them. ':''}${w.outstandingAttempts?.stalled?`${w.outstandingAttempts.stalled} unfinished attempt(s) have expired leases; oldest started ${w.outstandingAttempts.oldestStartedAt}. Inspect side effects before recovery.`:w.status==='missing'&&w.schedule?.expectedSlotAt?`No completed run began at or after the expected ${w.schedule.expectedSlotAt} slot; its ${w.schedule.graceMinutes}-minute grace has elapsed.`:w.disputedSources.length?`Later source checks invalidate the saved success: ${w.disputedSources.join(', ')}.`:w.status==='incomplete'?'The saved run did not verify all required sources.':w.lastRun?.result?.blocker||w.lastRun?.result?.summary||'No completed run receipt within the expected interval.'}`})),
     ...jobs.filter(h=>h.overdue).map(h=>({id:`handoff-${h.decision_id}`,detail:`${h.title}: ${h.department} follow-up is overdue. ${h.nextAction}`}))];
   return {checkedAt:stamp,workflows,handoffs:jobs,alerts:active.map(a=>({...a,firstSeenAt:alerts.results.find(old=>old.id===a.id)?.first_seen_at||stamp}))};
 }
 export async function checkWorkflowDeadlines(env,now=new Date()) {
-  const db=env.DASHBOARD_DB,status=await workflowStatus(db,now),stamp=now.toISOString();
+  const db=env.DASHBOARD_DB,status=await workflowStatus(db,now,workflowPolicyOverrides(env.DASHBOARD_WORKFLOW_POLICIES)),stamp=now.toISOString();
   // No external messages or mutations: the independent monitor only updates dashboard alerts.
   const statements=status.alerts.map(a=>db.prepare(`INSERT INTO workflow_alerts(id,detail,first_seen_at,last_seen_at) VALUES(?,?,?,?)
     ON CONFLICT(id) DO UPDATE SET detail=excluded.detail,last_seen_at=excluded.last_seen_at,
@@ -203,16 +263,16 @@ export async function checkWorkflowDeadlines(env,now=new Date()) {
 }
 export async function workflowApi(request,env,identity,now=new Date(),loadBoard) {
   try {
-    const path=new URL(request.url).pathname,db=env.DASHBOARD_DB;
+    const path=new URL(request.url).pathname,db=env.DASHBOARD_DB,overrides=workflowPolicyOverrides(env.DASHBOARD_WORKFLOW_POLICIES);
     if(request.method==='GET'&&path==='/api/workflow'){
-      const status=await workflowStatus(db,now);
+      const status=await workflowStatus(db,now,overrides);
       if(loadBoard)status.preparationQueue=preparationQueue(await loadBoard());
       return Response.json(status,{headers:{'Cache-Control':'no-store'}});
     }
     if(request.method!=='POST')fail('Method not allowed.',405);
     const input=await readBody(request),stamp=now.toISOString();let result;
     if(!input||typeof input!=='object'||Array.isArray(input))fail('A JSON object is required.');
-    if(path==='/api/workflow/start')result=await start(db,input,identity,stamp);
+    if(path==='/api/workflow/start')result=await start(db,input,identity,stamp,overrides);
     else if(path==='/api/workflow/finish')result=await finish(db,input,identity,stamp,loadBoard);
     else if(path==='/api/workflow/handoff')result=await handoff(db,input,identity,stamp);
     else fail('Not found.',404);
