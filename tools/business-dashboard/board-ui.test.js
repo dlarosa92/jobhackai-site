@@ -24,6 +24,33 @@ function ui(options = {}) {
 const item = (id, channel, state, extra = {}) => ({ id, channel, state, title: id, detail: 'Saved draft details', evidence: 'Source checked', impact: 'campaign', reviewUrl: 'https://chatgpt.com/space/example', updatedAt: '2026-10-17 23:00:00', ...extra });
 const data = items => ({ items, asOf: '2026-10-18T02:00:00Z', gmailSync: { status: 'current', lastSuccessfulSyncAt: '2026-10-18T01:59:00Z', trackedCount: 1 } });
 
+test('native feed freshness stays distinct from stale audit records in both directions',()=>{
+ const view=ui(),state=data([]);
+ state.directorySource={status:'current',checkedAt:'2026-11-05T22:40:00Z'};
+ state.sources=['gmail','directory'].map(source=>({source,status:'stale',checked_at:'2026-11-04T04:00:00Z'}));
+ view.render(state);
+ const card=name=>text(view.nodes.get('source-health').children.find(c=>c.attributes['data-disclosure-key']===name));
+ for(const name of ['Gmail','Directory requests']){
+   assert.match(card(name),/Up to date/);assert.match(card(name),/Separate team audit: stale/);
+   assert.match(card(name),/audit time does not change the native feed status/);
+ }
+ state.gmailSync.status='stale';state.directorySource.status='unavailable';
+ state.sources.forEach(s=>s.status='current');view.render(state);
+ for(const name of ['Gmail','Directory requests']){
+   assert.match(card(name),/Needs attention/);assert.match(card(name),/Separate team audit: current/);
+   assert.doesNotMatch(card(name),/Up to date/);
+ }
+});
+test('retired schedules are visible history and configured cadence replaces fixed UI claims',()=>{
+ const view=ui(),state=data([]);
+ state.workflow={alerts:[],workflows:[{id:'preparation',status:'retired',mode:'retired',policyReason:'Replaced by owner execution',scheduleLabel:'Retired local publisher',max_age_minutes:150,lastRun:{result:{summary:'Historical failed run'}}}]};
+ view.render(state);
+ assert.match(text(view.nodes.get('workflow-runs')),/Retired.*Replaced by owner execution.*Retired local publisher/s);
+ assert.doesNotMatch(text(view.nodes.get('workflow-runs')),/Hourly · Codex/);
+ assert.doesNotMatch(text(view.nodes.get('data-brief')),/rerun|Replaced by owner/);
+ assert.match(text(view.nodes.get('workflow-runs')),/Historical failed run/);
+});
+
 test('zero decisions is calm, real decisions are highlighted, and a failed read cannot claim none',()=>{
  const view=ui();view.render(data([]));
  assert.equal(view.nodes.get('attention').className,'attention');
@@ -290,7 +317,7 @@ test('open details reflect completion without another click and changed copy can
 
 test('the source-check panel names missing Marblism coverage even when a run note claims success',()=>{
  const {render,nodes}=ui();const state=data([]);
- state.workflow={alerts:[],workflows:[{id:'reconciliation',status:'incomplete',requiredSources:['marblism','campaign','gmail','directory','github'],lastSuccessAt:null,lastRun:{result:{summary:'Checked GitHub',coverage:{verified:['github']}}}}]};
+ state.workflow={alerts:[],workflows:[{id:'reconciliation',status:'incomplete',scheduleLabel:'Every 30 minutes · Codex on the Mac',max_age_minutes:45,requiredSources:['marblism','campaign','gmail','directory','github'],lastSuccessAt:null,lastRun:{result:{summary:'Checked GitHub',coverage:{verified:['github']}}}}]};
  render(state);
  assert.match(text(nodes.get('workflow-runs')),/Every 30 minutes/);
  assert.match(text(nodes.get('workflow-runs')),/Verified in the last run: github/);
