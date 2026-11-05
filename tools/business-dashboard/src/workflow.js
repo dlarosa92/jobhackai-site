@@ -1,3 +1,4 @@
+import {notificationsEnabled,briefStatement,alertStatements,notificationStatus,flushOwnerNotifications} from './owner-notifications.js';
 // Receipts and deadlines are separate from source freshness and external release authority.
 const policies = {preparation:'prepare', reconciliation:'reconcile', coordination:'coordinate'};
 const reconciliationSources = ['marblism','campaign','gmail','directory','github'];
@@ -141,7 +142,7 @@ function sourceCoverage(writes) {
 function completeReconciliation(result) {
   return reconciliationSources.every(source=>result?.coverage?.verified?.includes(source));
 }
-async function finish(db,input,identity,now,loadBoard) {
+async function finish(db,input,identity,now,loadBoard,env) {
   const run=await activeRun(db,input.id,identity,now);
   if(!['advanced','checked','blocked','failed'].includes(input.outcome))fail('Invalid run outcome.');
   const result={summary:text(input.summary),evidence:input.outcome==='failed'?[]:evidence(input.evidence)};
@@ -166,8 +167,10 @@ async function finish(db,input,identity,now,loadBoard) {
     if(handoffs.some(h=>h.status!=='blocked'||h.next_check_at<=now))fail('A decision handoff still needs follow-up. Resolve it or record its specific blocker and checkpoint before closing this run.');
   }
   if(run.workflow==='coordination'&&['advanced','checked'].includes(input.outcome)&&!result.coordination.length)fail('Record the department assessment before completing coordination.');
-  const saved=await db.prepare("UPDATE workflow_runs SET status=?,finished_at=?,result=? WHERE id=? AND status='running' AND lease_until>?")
-    .bind(input.outcome,now,JSON.stringify(result),run.id,now).run();
+  const update=db.prepare("UPDATE workflow_runs SET status=?,finished_at=?,result=? WHERE id=? AND status='running' AND lease_until>?")
+    .bind(input.outcome,now,JSON.stringify(result),run.id,now);
+  const notice=notificationsEnabled(env)&&input.outcome==='advanced'?briefStatement(db,run,result,now,env):null;
+  const [saved]=await db.batch(notice?[update,notice]:[update]);
   if(!saved.meta?.changes)fail('Run changed.',409);
   return {saved:true,id:run.id,status:input.outcome,...result};
 }
@@ -256,9 +259,12 @@ export async function checkWorkflowDeadlines(env,now=new Date()) {
       first_seen_at=CASE WHEN workflow_alerts.resolved_at IS NULL THEN workflow_alerts.first_seen_at ELSE excluded.first_seen_at END,resolved_at=NULL`)
     .bind(a.id,a.detail,stamp,stamp));
   const ids=status.alerts.map(a=>a.id);
+  if(notificationsEnabled(env))statements.push(...alertStatements(db,ids,stamp,env));
   statements.push(db.prepare(`UPDATE workflow_alerts SET resolved_at=? WHERE resolved_at IS NULL AND id NOT IN (SELECT value FROM json_each(?))`).bind(stamp,JSON.stringify(ids)));
   await db.batch(statements);
   console.log(JSON.stringify({event:'workflow_deadlines_checked',checkedAt:stamp,alerts:ids}));
+  status.ownerNotifications=await flushOwnerNotifications(env,now);
+  console.log(JSON.stringify({event:'owner_notifications_checked',...status.ownerNotifications}));
   return status;
 }
 export async function workflowApi(request,env,identity,now=new Date(),loadBoard) {
@@ -266,6 +272,7 @@ export async function workflowApi(request,env,identity,now=new Date(),loadBoard)
     const path=new URL(request.url).pathname,db=env.DASHBOARD_DB,overrides=workflowPolicyOverrides(env.DASHBOARD_WORKFLOW_POLICIES);
     if(request.method==='GET'&&path==='/api/workflow'){
       const status=await workflowStatus(db,now,overrides);
+      status.ownerNotifications=await notificationStatus(env);
       if(loadBoard)status.preparationQueue=preparationQueue(await loadBoard());
       return Response.json(status,{headers:{'Cache-Control':'no-store'}});
     }
@@ -273,7 +280,7 @@ export async function workflowApi(request,env,identity,now=new Date(),loadBoard)
     const input=await readBody(request),stamp=now.toISOString();let result;
     if(!input||typeof input!=='object'||Array.isArray(input))fail('A JSON object is required.');
     if(path==='/api/workflow/start')result=await start(db,input,identity,stamp,overrides);
-    else if(path==='/api/workflow/finish')result=await finish(db,input,identity,stamp,loadBoard);
+    else if(path==='/api/workflow/finish')result=await finish(db,input,identity,stamp,loadBoard,env);
     else if(path==='/api/workflow/handoff')result=await handoff(db,input,identity,stamp);
     else fail('Not found.',404);
     return Response.json(result,{headers:{'Cache-Control':'no-store'}});
