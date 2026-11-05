@@ -5,6 +5,7 @@
   "compatibility_date": "2026-10-16",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": false,
+  "vars": {"OWNER_NOTIFICATIONS_ENABLED":"false","OWNER_NOTIFICATION_ENVIRONMENT":"prod"},
   "triggers": { "crons": ["*/15 * * * *"] },
   "routes": [{ "pattern": "dashboard.jobhackai.io", "custom_domain": true }],
   "d1_databases": [
@@ -26,7 +27,9 @@
         "crons": []
       },
       "vars": {
-        "OUTREACH_SENDER_ENABLED": "false"
+        "OUTREACH_SENDER_ENABLED": "false",
+        "OWNER_NOTIFICATIONS_ENABLED": "false",
+        "OWNER_NOTIFICATION_ENVIRONMENT": "dev"
       },
       "d1_databases": [
         {
@@ -54,7 +57,9 @@
         "crons": []
       },
       "vars": {
-        "OUTREACH_SENDER_ENABLED": "false"
+        "OUTREACH_SENDER_ENABLED": "false",
+        "OWNER_NOTIFICATIONS_ENABLED": "false",
+        "OWNER_NOTIFICATION_ENVIRONMENT": "qa"
       },
       "d1_databases": [
         {

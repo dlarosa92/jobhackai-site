@@ -16,6 +16,10 @@ If preparation is marked retired while actionable owner handoffs remain, the API
 
 The API and UI expose the actual effective interval, mode, reason and label. Gmail and directory cards separately show native-feed freshness and saved team-audit age. An old audit does not imply a stopped native feed, and a current audit cannot hide a failed native feed.
 
+## Owner notification transport
+
+The optional fixed-owner notification outbox is disabled by default. It reuses the existing deadline cron, preserves provider IDs and separates acceptance from delivery. See [owner notification controls and activation prerequisites](OWNER-NOTIFICATIONS.md). This change does not install a credential, enable sending or establish mobile delivery.
+
 ## Sources and refresh
 
 - Payment and user numbers are read from production D1. User records do not mean paying customers. Owner-entered monthly costs live in separate dashboard D1; income is an estimate, not reconciled accounting.
