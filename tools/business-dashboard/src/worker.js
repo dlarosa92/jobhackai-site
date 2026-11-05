@@ -146,13 +146,13 @@ export default {
       if(request.method!=='GET' && (request.headers.get('content-type')?.split(';')[0]!=='application/json' || (identity.role==='owner' && request.headers.get('origin')!==url.origin)))return json({error:'Invalid request origin or type'},403);
       if(request.method==='GET'&&url.pathname==='/api/session')return json({role:identity.role,capabilities:identity.capabilities||[]});
       if(request.method==='GET'&&url.pathname==='/api/operating-guide')return json({version:'2026-10-31',text:GUIDE});
-      if(url.pathname==='/api/workflow'||url.pathname.startsWith('/api/workflow/'))return workflowApi(request,env,identity,new Date(),async()=>workRecords(env.DASHBOARD_DB,await campaignRecords(env)));
+      if(url.pathname==='/api/workflow'||url.pathname.startsWith('/api/workflow/'))return workflowApi(request,env,identity,new Date(),async()=>workRecords(env.DASHBOARD_DB,await campaignRecords(env),new Date(),env.DASHBOARD_WORKFLOW_POLICIES));
       if(url.pathname==='/api/stripe-check')return stripeCheckApi(request,env);
       if(url.pathname==='/api/analytics')return analyticsApi(request,env);
       if(request.method==='POST'&&url.pathname==='/api/work-items/capture-native')return json(await cacheNativeSources(env.DASHBOARD_DB,await campaignRecords(env)));
       if(url.pathname==='/api/work-items'||url.pathname.startsWith('/api/work-items/'))return workApi(request,env,identity,async()=>{
         const [base,analytics]=await Promise.all([campaignRecords(env),analyticsReport(env.DASHBOARD_DB)]);
-        return workRecords(env.DASHBOARD_DB,{...base,analytics});
+        return workRecords(env.DASHBOARD_DB,{...base,analytics},new Date(),env.DASHBOARD_WORKFLOW_POLICIES);
       });
       if(identity.role==='machine'&&url.pathname==='/api/outreach/prepare'){
         const headers=new Headers(request.headers);headers.set('origin',url.origin);
