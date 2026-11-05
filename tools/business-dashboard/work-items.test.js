@@ -5,9 +5,18 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { generateKeyPair, exportJWK, createLocalJWKSet, SignJWT } from 'jose';
 import { workApi, workRecords } from './src/work-items.js';
+import { applyReceipts } from './src/work-receipts.js';
 import { accessIdentity, allowed, ACCESS_AUD, ACCESS_ISSUER } from './src/access.js';
 
 const owner={role:'owner'};
+test('native sent evidence preserves terminal send state without claiming inbox delivery',()=>{
+ const receipt={stage:'sent',candidate:'gmail-sent-message',summary:'Native Gmail SENT verified',evidence_url:'https://mail.google.com/mail/u/0/#sent/message',occurred_at:'2026-11-05T12:00:00Z'};
+ const projected=applyReceipts({state:'draft',canApprove:true},[receipt]);
+ assert.equal(projected.state,'sent');assert.equal(projected.canApprove,false);
+ assert.deepEqual(projected.receipts,[receipt]);
+ assert.match(projected.nextAction,/Inbox delivery and replies are separate checks/);
+ assert.doesNotMatch(projected.nextAction,/Delivery verified/);
+});
 function fixture(){
  const sql=new DatabaseSync(':memory:');sql.exec(readFileSync(new URL('./schema.sql',import.meta.url),'utf8'));
  const db={prepare(query){return {args:[],bind(...args){this.args=args;return this;},async first(){return sql.prepare(query).get(...this.args)||null;},async all(){return {results:sql.prepare(query).all(...this.args)};},async run(){return d1Run(sql,query,this.args);},query};},async batch(statements){sql.exec('BEGIN');try{const r=statements.map(s=>d1Run(sql,s.query,s.args));sql.exec('COMMIT');return r;}catch(e){sql.exec('ROLLBACK');throw e;}}};
