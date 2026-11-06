@@ -1,5 +1,5 @@
 import { digest, OWNER } from './outreach-policy.js';
-import { workflowStatus, verifyRunWrite, recordRunWrite } from './workflow.js';
+import { workflowStatus, workflowPolicyOverrides, verifyRunWrite, recordRunWrite } from './workflow.js';
 import { saveReceipt, applyReceipts } from './work-receipts.js';
 
 export const departments = ['marketing', 'sales', 'product'];
@@ -149,8 +149,8 @@ export async function cacheNativeSources(db,base) {
     .bind(JSON.stringify(items),base.directorySource.checkedAt).run();
   return {saved:result.meta.changes>0};
 }
-export async function workRecords(db, base, now=new Date()) {
-  const workflow=await workflowStatus(db,now);
+export async function workRecords(db, base, now=new Date(),workflowPolicies) {
+  const workflow=await workflowStatus(db,now,workflowPolicyOverrides(workflowPolicies));
   if(base.directorySource?.status==='unavailable'){
     const cached=await db.prepare("SELECT * FROM source_cache WHERE source='directory'").first();
     if(cached)base={...base,items:[...base.items,...parse(cached.payload).map(i=>({...i,staleSource:true}))],directorySource:{...base.directorySource,lastSuccessfulCheckAt:cached.checked_at}};
@@ -240,6 +240,21 @@ export async function workApi(request,env,identity,loadBoard) {
   const db=env.DASHBOARD_DB,path=new URL(request.url).pathname,now=stamp();
   try {
     if(request.method==='GET'){
+      if(path==='/api/work-items/lessons'){
+        const params=new URL(request.url).searchParams;
+        if([...params.keys()].some(k=>!['cursor','limit'].includes(k))||params.getAll('cursor').length>1||params.getAll('limit').length>1)fail('Invalid lesson query.');
+        const rawLimit=params.get('limit')??'20',rawCursor=params.get('cursor');
+        if(!/^[1-9][0-9]*$/.test(rawLimit)||Number(rawLimit)>50)fail('Lesson limit must be from 1 through 50.');
+        if(rawCursor!==null&&(!/^[1-9][0-9]{0,15}$/.test(rawCursor)||!Number.isSafeInteger(Number(rawCursor))))fail('Invalid lesson cursor.');
+        const limit=Number(rawLimit),args=rawCursor===null?[limit+1]:[Number(rawCursor),limit+1];
+        // Immutable lessons page by insertion order, independent of newer daily huddles
+        // and native-source availability. Concurrent inserts cannot duplicate older pages.
+        const result=await db.prepare(`SELECT rowid AS sequence,id,cadence,period,document,created_at FROM coordination_runs
+          WHERE cadence='lesson' ${rawCursor===null?'':'AND rowid < ?'} ORDER BY rowid DESC LIMIT ?`).bind(...args).all();
+        const page=result.results.slice(0,limit);
+        return reply({lessons:page.map(({sequence,document,...row})=>({...row,document:parse(document)})),
+          nextCursor:result.results.length>limit?String(page.at(-1).sequence):null});
+      }
       if(path==='/api/work-items/changes')return reply(await db.prepare('SELECT revision FROM board_revision WHERE id=1').first());
       const board=await loadBoard();
       if(path==='/api/work-items')return reply(board);
