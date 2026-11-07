@@ -3,15 +3,15 @@
 //
 // The dropdown itself is DOM-bound and verified manually; these cover the
 // pure pieces the fix extracted so they stay testable: the suggestion
-// filter, the match highlighting (with HTML escaping), and the category
-// label. Keyboard navigation and positioning live in the browser component.
+// filter, the match highlighting (with HTML escaping), and the analytics
+// category. Keyboard navigation and positioning live in the browser component.
 
 import assert from 'node:assert/strict';
 import {
   filterRoles,
   escapeHtmlText,
   highlightRoleMatch,
-  prettyCategory
+  roleEventCategory
 } from '../../../../js/role-selector.js';
 
 let passed = 0;
@@ -72,10 +72,17 @@ test('escapeHtmlText covers the five specials and rejects non-strings', () => {
   assert.equal(escapeHtmlText(42), '');
 });
 
-test('prettyCategory turns snake_case into readable text', () => {
-  assert.equal(prettyCategory('software_engineering'), 'software engineering');
-  assert.equal(prettyCategory('general'), 'general');
-  assert.equal(prettyCategory(null), '');
+test('roleEventCategory tags role_selected with the page it fired on', () => {
+  assert.equal(roleEventCategory('/voice-interview.html'), 'voice_interview');
+  assert.equal(roleEventCategory('/voice-interview'), 'voice_interview');
+  assert.equal(roleEventCategory('/resume-feedback-pro'), 'resume_feedback');
+  assert.equal(roleEventCategory('/mock-interview.html'), 'mock_interview');
+  assert.equal(roleEventCategory('/cover-letter-generator/'), 'cover_letter');
+  assert.equal(roleEventCategory('/interview-questions'), 'interview_questions');
+  // A page outside the map keeps its own slug rather than borrowing another tool's.
+  assert.equal(roleEventCategory('/new-tool.html'), 'new_tool');
+  assert.equal(roleEventCategory('/'), 'unknown');
+  assert.equal(roleEventCategory(undefined), 'unknown');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

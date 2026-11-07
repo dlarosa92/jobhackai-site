@@ -225,10 +225,14 @@ export function isExplicitEndRequest(text) {
   if (typeof text !== 'string') return false;
   var lower = text.toLowerCase().replace(/[‘’]/g, "'");
   if (lower.length < 8 || lower.length > END_REQUEST_MAX_CHARS) return false;
-  // Live QA: "I'd like to end this now." refers to the current session
-  // without naming it. Accept only this complete, immediate request form;
-  // a quoted story, hypothetical, or continuation must remain an answer.
-  if (/^(?:(?:ok|okay|alright|all right)[, ]+)?i(?: would|'d) like to (?:end|stop|finish) this (?:right now|now|here)(?: please)?[.!]?$/i.test(lower.trim())) return true;
+  // Recorded QA: "I gotta go. Bye-bye." is an immediate departure plus a
+  // farewell. Require the whole utterance; a quoted story, bare goodbye,
+  // future departure or "I'm all done" answer must not end a paid session.
+  if (/^(?:(?:ok|okay|alright|all right|sorry)[, ]+)?i (?:gotta|have to|need to) (?:go|leave)(?: now)?[,.!\s]+(?:bye(?:[- ]bye)?|goodbye)[.!]?$/i.test(lower.trim())) return true;
+  // Live QA: "I'd like to end this now." and "I'd like to finish this, please."
+  // refer to the current session without naming it. Require the whole request
+  // and an immediate marker or please; stories and continuations stay answers.
+  if (/^(?:(?:ok|okay|alright|all right)[, ]+)?i(?: would|'d) like to (?:end|stop|finish) this(?: (?:right now|now|here)(?:,? please)?|,? please)[.!?]?$/i.test(lower.trim())) return true;
   // A short, standalone stop command observed in live QA. Do not broaden
   // this to future-tense stories or instructions about how to finish.
   if (/^(?:(?:ok|okay|alright|all right)[, ]+)?i(?:'ll| will) end (?:this|the) interview(?: now| here| please)*[.!]?$/i.test(lower.trim())) return true;
@@ -351,9 +355,14 @@ export function createInterviewLifecycle() {
    * interview. A response whose transcript was seen and was NOT the hearing
    * question does not arm anything.
    */
-  function noteGreetingDone() {
+  function noteGreetingDone(confirmedAudioCheck) {
     if (phase !== LIFECYCLE.AUDIO_CHECK) return;
-    if (!spokeThisResponse) greetingDone = true;
+    // The app tags its requested audio check. A completed tagged response
+    // is authoritative even when the model paraphrases the hearing question.
+    if (confirmedAudioCheck === true) {
+      greetingDone = true;
+      greetingContentConfirmed = true;
+    } else if (!spokeThisResponse) greetingDone = true;
     spokeThisResponse = false;
   }
 
