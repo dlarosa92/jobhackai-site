@@ -846,6 +846,51 @@ test('audio recovery during the interview neither spends another credit nor adva
   assert.deepEqual(turns,['audio_check','new_topic','audio_recovery']);
 });
 
+test('audio help pauses waiting cues while preserving an answer for resumed playback',async t=>{
+  const f=audioFixture(t,{timerDelay:ms=>ms===4000?5:ms===15000?10:ms});
+  await f.check();await f.greetingDone();f.speech();await f.h.click('vi-audio-confirm');await f.acknowledge();
+  f.h.event({type:'response.created',response:{id:'question-one'}});
+  f.h.event({type:'response.done',response:{id:'question-one',status:'completed'}});
+  await f.h.click('vi-mute-btn');await f.h.click('vi-audio-help');
+  assert.equal(f.h.el('vi-audio-confirm').hidden,true);
+  assert.doesNotMatch(f.h.el('vi-audio-mic-status').textContent,/before starting/);
+  assert.match(f.h.el('vi-audio-note').textContent,/Choose Enable audio/);
+  assert.match(f.h.el('vi-audio-output-status').textContent,/Audio is paused/);
+  await f.h.click('vi-mute-btn');
+  const before=f.h.sends.filter(x=>x.type==='response.create').length;
+  f.h.event({type:'conversation.item.created',item:{id:'paused-answer',role:'user'}});
+  f.h.event({type:'input_audio_buffer.committed',item_id:'paused-answer'});
+  f.h.event({type:'conversation.item.input_audio_transcription.completed',item_id:'paused-answer',transcript:'I checked the project results with the team before choosing the next priority.'});
+  await new Promise(r=>setTimeout(r,30));await f.h.settle();
+  assert.match(f.h.el('vi-caption').textContent,/Enable audio/);
+  assert.doesNotMatch(f.h.el('vi-caption').textContent,/thinking/);
+  assert.doesNotMatch(f.h.el('vi-status').textContent,/not responding/);
+  assert.equal(f.h.sends.filter(x=>x.type==='response.create').length,before);
+  await f.h.click('vi-audio-retry');
+  assert.equal(f.h.el('vi-audio-check').hidden,true);
+  assert.equal(f.activations().length,1);assert.equal(f.opens().length,1);
+  await f.h.endInterview();
+  assert.ok(f.h.completeBodies().at(-1).transcript.some(x=>x.text.includes('project results')));
+});
+
+test('audio replay anchors the exact displayed follow-up instead of an earlier topic question',async t=>{
+  const f=audioFixture(t);await f.check();await f.greetingDone();f.speech();await f.h.click('vi-audio-confirm');await f.acknowledge();
+  const followup='How did you verify the reported improvement?';
+  for(const [id,text] of [['topic','Tell me about a process improvement.'],['followup',followup]]){
+    f.h.event({type:'response.created',response:{id}});
+    f.h.event({type:'conversation.item.created',item:{id:id+'-item',role:'assistant'}});
+    f.h.event({type:'response.output_audio_transcript.done',response_id:id,item_id:id+'-item',transcript:text});
+    f.h.event({type:'response.done',response:{id,status:'completed'}});
+  }
+  assert.equal(f.h.el('vi-question').textContent,followup);
+  await f.h.click('vi-audio-help');await f.h.click('vi-audio-retry');
+  const context=f.h.sends.filter(x=>x.type==='conversation.item.create').at(-1).item.content[0].text;
+  assert.ok(context.includes(JSON.stringify(followup)));
+  assert.ok(!context.includes('Tell me about a process improvement.'));
+  assert.equal(f.h.sends.filter(x=>x.type==='response.create').at(-1).response.metadata.jobhackai_purpose,'audio_recovery');
+  assert.equal(f.activations().length,1);
+});
+
 test('a muted or disconnected microphone cannot activate, and reconnect rechecks the replacement device',async t=>{
   const streams=[];
   const f=audioFixture(t,{getUserMedia:async()=>{const stream=mic();streams.push(stream);return stream;}});

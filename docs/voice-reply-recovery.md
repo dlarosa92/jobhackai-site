@@ -66,14 +66,21 @@ Open `http://127.0.0.1:8780/voice-interview.html?stall=1`, choose a role, click
 answer and reply delay, select **Reconnect**. The yellow fixture notice must
 remain visible throughout this synthetic check.
 
-## Development acceptance still needed
+## November 7 development acceptance update
 
-Run a recorded quiet-room Safari interview with real audio, complete at least
-three answers, and verify responsive follow-ups, saved report, reopening, and
-one-session accounting. Repeat the controlled background-speech and reconnect
-case separately so noise does not confound the baseline. Reuse an authorized
-paid test account; the completed free account's allowance is already used.
-Do not label these simulated checks as live audio acceptance.
+On development revision `6f01a110d5209d7baf5131b1eab2400412d49e70`, the
+recorded quiet Safari interview completed naturally, saved and reopened its
+report, used one credit and closed the provider call. The owner confirmed all
+questions and the closing played clearly.
 
-Development deployment is the next stage. QA (`develop`) acceptance and
-production (`main`) promotion remain separate stages.
+The separate low-volume background-speech and Audio help exercise retained
+the captured answer and resumed after Enable audio. The reported silence
+followed a second manual Audio help click. It exposed confusing live-recovery
+controls and a replay that selected an earlier question. See
+[the Audio help correction](voice-audio-help-acceptance-20261107.md).
+
+Real device replacement and network reconnect are still unverified. The older
+independent uncertain provider-closure record remains open. These observations
+do not establish full release acceptance. The new correction requires
+development CI and deployed verification before QA (`develop`); production
+(`main`) remains a separate promotion after QA acceptance.
