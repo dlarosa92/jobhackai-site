@@ -1693,6 +1693,12 @@
       sample.generated = response.status === 'completed';
       if (!sample.generated) sample.failed = true;
     }
+    updateAudioSampleCompletion();
+  }
+
+  function updateAudioSampleCompletion() {
+    var sample = state.audioSample;
+    if (!state.audioSetup || !sample || state.ending) return;
     sample.complete = sample.generated && sample.stopped && !sample.failed && state.playbackReady && !state.playbackBlocked;
     if (sample.complete || sample.failed) {
       sample.pending = false;
@@ -1769,6 +1775,7 @@
       if (state.pc !== pc || state.ending || state.playbackAttempt !== playbackAttempt) return false;
       state.playbackReady = true;
       state.playbackBlocked = false;
+      updateAudioSampleCompletion();
       updateAudioReadiness();
       if (!state.microphoneLost) setStatus(state.audioSetup ? 'Check your audio before starting.' : 'Live interview', state.audioSetup ? 'vi-connecting' : 'vi-live');
       return true;

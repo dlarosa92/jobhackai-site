@@ -633,6 +633,19 @@ test('missing playback completion closes the uncharged check and late events can
   assert.equal(stream.track.enabled,false);
 });
 
+test('late successful playback confirmation releases a completed sample for microphone testing',async t=>{
+  const playing=deferred(),stream=mic(),f=audioFixture(t,{getUserMedia:async()=>stream});
+  f.h.el('vi-remote-audio').play=()=>playing.promise;
+  await f.check();await f.greetingDone();
+  assert.equal(stream.track.enabled,false);
+  playing.resolve();await f.h.settle();
+  assert.equal(stream.track.enabled,true,'playback readiness must also reevaluate completed sample receipts');
+  assert.match(f.h.el('vi-audio-mic-status').textContent,/Say a few words/);
+  f.speech();assert.equal(f.h.el('vi-audio-confirm').disabled,false);
+  assert.equal(f.activations().length,0);
+  assert.equal(f.h.sends.filter(x=>x.type==='response.create').length,1);
+});
+
 test('audio samples wait for noninterrupting VAD acknowledgement and keep microphone readiness',async t=>{
   const f=audioFixture(t,{autoTurnConfig:false});await f.check();
   const config=f.h.sends.find(x=>x.type==='session.update').session;
