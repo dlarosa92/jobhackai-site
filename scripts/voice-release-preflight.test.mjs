@@ -50,7 +50,7 @@ test('environment drift, disabled scheduler and absent secret fail closed', () =
 
 
 test('actual CLI checks the current target and backup before any remote mutation', () => {
-  for (const scenario of ['success','stale','partial','binding','backup','post-stale','wrong-account','missing-token']) {
+  for (const scenario of ['success','stale','partial','binding','backup','post-stale','wrong-account','missing-token','api-error']) {
     const dir = mkdtempSync(join(tmpdir(),'voice-release-test-'));
     try {
       for (const name of ['scripts','workers/voice-deadlines','app/db/migrations']) mkdirSync(join(dir,name),{recursive:true});
@@ -68,6 +68,7 @@ test('actual CLI checks the current target and backup before any remote mutation
             heads++;
             return Response.json({object:{sha:scenario==='stale'||(scenario==='post-stale'&&heads>1)?'b'.repeat(40):'a'.repeat(40)}});
           }
+          if(url.endsWith('/settings') && scenario==='api-error') return Response.json({success:false,errors:[{code:10000,message:'private-provider-message'},{code:'private-value'}]},{status:403});
           if(url.endsWith('/settings')) result={bindings:[
             {name:'DB',type:'d1',id:scenario==='binding'?'wrong':'80d87a73-6615-4823-b7a4-19a8821b4f87'},
             {name:'ENVIRONMENT',text:'qa'},
@@ -103,6 +104,10 @@ test('actual CLI checks the current target and backup before any remote mutation
       } else {
         assert.notEqual(result.status,0,scenario);
         assert.equal(calls.includes('mutation'),false,scenario);
+        if(scenario==='api-error') {
+          assert.match(result.stderr,/403; codes 10000/);
+          assert.doesNotMatch(result.stderr,/private-provider-message|private-value/);
+        }
       }
     } finally {rmSync(dir,{recursive:true,force:true});}
   }
