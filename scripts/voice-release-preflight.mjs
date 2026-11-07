@@ -64,7 +64,11 @@ async function main() {
     });
     const data = await response.json();
     if (!response.ok || !data.success || data.result?.some?.(r => r.success === false)) {
-      throw Error(`Cloudflare release check failed (${response.status}) for ${path.split('/').at(-1)}.`);
+      // Numeric API codes distinguish authentication, scope and request
+      // failures without printing provider messages, headers or credentials.
+      const codes = (Array.isArray(data.errors) ? data.errors : [])
+        .map(error => error.code).filter(Number.isSafeInteger).slice(0, 8);
+      throw Error(`Cloudflare release check failed (${response.status}; codes ${codes.join(',') || 'none'}) for ${path.split('/').at(-1)}.`);
     }
     return data.result;
   }
