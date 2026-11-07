@@ -606,6 +606,21 @@ test('mute toggles during the sample cannot enable transmission and replay recov
   assert.equal(f.h.el('vi-audio-confirm').disabled,false);
 });
 
+test('an old playback stop cannot release a queued replay while the current sample is still playing',async t=>{
+  const f=audioFixture(t);await f.check();await f.greetingDone();
+  await f.h.click('vi-audio-retry');
+  f.h.event({type:'response.created',response:{id:'current-sample'}});
+  f.h.event({type:'output_audio_buffer.started',response_id:'current-sample'});
+  f.h.event({type:'response.done',response:{id:'current-sample',status:'completed'}});
+  await f.h.click('vi-audio-retry');
+  const requests=()=>f.h.sends.filter(x=>x.type==='response.create').length;
+  assert.equal(requests(),2);
+  f.h.event({type:'output_audio_buffer.stopped',response_id:'test-greeting-1'});
+  assert.equal(requests(),2,'an old receipt cannot overlap samples');
+  f.h.event({type:'output_audio_buffer.stopped',response_id:'current-sample'});
+  assert.equal(requests(),3,'the current sample releases the queued replay once');
+});
+
 test('missing playback completion closes the uncharged check and late events cannot reopen its microphone',async t=>{
   const stream=mic(),f=audioFixture(t,{getUserMedia:async()=>stream,timerDelay:ms=>ms===45000?20:ms});await f.check();
   f.h.event({type:'response.created',response:{id:'sample'}});
