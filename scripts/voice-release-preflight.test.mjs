@@ -40,10 +40,12 @@ test('partial migrations and missing indexes stop for review', () => {
 
 test('environment drift, disabled scheduler and absent secret fail closed', () => {
   const target = targets.develop;
-  const bindings = [{ name:'DB', database_id:target.database }, { name:'ENVIRONMENT',text:'qa' }, { name:'VOICE_DEADLINES',namespace_id:target.namespace,class_name:'VoiceDeadline' }, { name:'VOICE_DEADLINES_ENABLED',text:'true' }, { name:'OPENAI_API_KEY',type:'secret_text' }];
+  const bindings = [{ name:'DB', type:'d1', id:target.database }, { name:'ENVIRONMENT',text:'qa' }, { name:'VOICE_DEADLINES',namespace_id:target.namespace,class_name:'VoiceDeadline' }, { name:'VOICE_DEADLINES_ENABLED',text:'true' }, { name:'OPENAI_API_KEY',type:'secret_text' }];
   assert.doesNotThrow(() => verifyBindings({ bindings },target));
   for (let index=0;index<bindings.length;index++) assert.throws(() => verifyBindings({ bindings:bindings.filter((_,i)=>i!==index) },target));
   assert.throws(() => verifyBindings({ bindings },targets.main));
+  assert.doesNotThrow(() => verifyBindings({ bindings: [{ ...bindings[0],database_id:target.database },...bindings.slice(1)] },target));
+  assert.throws(() => verifyBindings({ bindings: [{ ...bindings[0],database_id:targets.main.database },...bindings.slice(1)] },target));
 });
 
 
@@ -67,7 +69,7 @@ test('actual CLI checks the current target and backup before any remote mutation
             return Response.json({object:{sha:scenario==='stale'||(scenario==='post-stale'&&heads>1)?'b'.repeat(40):'a'.repeat(40)}});
           }
           if(url.endsWith('/settings')) result={bindings:[
-            {name:'DB',database_id:scenario==='binding'?'wrong':'80d87a73-6615-4823-b7a4-19a8821b4f87'},
+            {name:'DB',type:'d1',id:scenario==='binding'?'wrong':'80d87a73-6615-4823-b7a4-19a8821b4f87'},
             {name:'ENVIRONMENT',text:'qa'},
             {name:'VOICE_DEADLINES',class_name:'VoiceDeadline',namespace_id:'0af6247a41cb45deaab5337d813d93e7'},
             {name:'VOICE_DEADLINES_ENABLED',text:'true'},

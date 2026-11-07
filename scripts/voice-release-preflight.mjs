@@ -36,7 +36,10 @@ export function planMigrations(schema) {
 
 export function verifyBindings(settings, target) {
   const get = name => settings.bindings.find(b => b.name === name);
-  if (get('DB')?.database_id !== target.database || get('ENVIRONMENT')?.text !== target.env ||
+  const db = get('DB');
+  // The Workers settings API identifies D1 with id. Some responses also
+  // include the configuration alias; reject disagreement when both exist.
+  if (db?.id !== target.database || (db.database_id !== undefined && db.database_id !== target.database) || get('ENVIRONMENT')?.text !== target.env ||
       get('VOICE_DEADLINES')?.namespace_id !== target.namespace || get('VOICE_DEADLINES')?.class_name !== 'VoiceDeadline' ||
       get('VOICE_DEADLINES_ENABLED')?.text !== 'true' || get('OPENAI_API_KEY')?.type !== 'secret_text') {
     throw Error('Existing voice worker bindings or enablement differ from the reviewed target.');
