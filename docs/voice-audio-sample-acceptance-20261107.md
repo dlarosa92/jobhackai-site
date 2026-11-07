@@ -28,20 +28,22 @@ kept outside this repository.
 5. Update both copies of the spoken instructions and the page status text so
    the user listens first and speaks afterward.
 
-## Development acceptance still required
+## November 7 deployed development results
 
-Automated regression coverage is not listening acceptance. Promote through
-the ordinary development CI path, then capture the exact deployed candidate:
+PR #1165 deployed through development CI at revision
+`6f01a110d5209d7baf5131b1eab2400412d49e70`. Recorded Safari initial sample,
+replay and mute/unmute checks passed with owner-confirmed complete playback
+and a working microphone afterward. Setup expired without activation or a
+credit charge, and provider closure was verified. The recorded mute/replay
+run establishes timeout closure, not manual cancellation.
 
-- Listen to a complete Safari sample, speak only after the microphone prompt,
-  and confirm that setup does not spend a credit.
-- Repeat with speech during the sample and with replay/mute toggles. The full
-  sentence must play, and the microphone must work afterward.
-- Cancel setup and verify provider closure. No official interview is needed
-  for those checks.
-- Complete the outstanding quiet Safari interview, report reopening and
-  controlled background-speech/recovery checks from the current human record.
+A subsequent quiet interview completed naturally, saved and reopened its
+report, used one credit and closed its provider call. The owner confirmed
+clear questions and closing. The separate background-speech/Audio help test
+identified recovery UI and replay-target defects, documented in
+[the Audio help correction](voice-audio-help-acceptance-20261107.md).
 
-Development acceptance precedes QA promotion. Production remains a separate
-release decision. This change does not resolve the earlier independent
-uncertain provider-closure record.
+Physical device replacement, network reconnect and broader acceptance cases
+remain open. Development acceptance precedes QA promotion. Production remains
+a separate release decision. This change does not resolve the earlier
+independent uncertain provider-closure record.

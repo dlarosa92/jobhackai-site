@@ -210,7 +210,13 @@
     var pending = turnControl.pending;
     turnControl.pending = null;
     if (state.audioSetup && !pending.greeting) return;
-    var plan = pending.greeting ? null : pending.repeat ? { kind: 'audio_recovery', instruction: 'Repeat the current interview question in the same words. Do not add a new question or follow-up.' } : turnControl.plan.next({ opening: pending.opening, wrapUp: state.wrapUpNoted });
+    var repeatQuestion = pending.repeat && $('vi-question') && $('vi-question').textContent;
+    var plan = pending.greeting ? null : pending.repeat ? {
+      kind: 'audio_recovery',
+      instruction: repeatQuestion
+        ? 'Repeat only this interviewer question, verbatim: ' + JSON.stringify(repeatQuestion) + '. Do not answer it or add any other words.'
+        : 'Repeat the current interview question in the same words. Do not add a new question or follow-up.'
+    } : turnControl.plan.next({ opening: pending.opening, wrapUp: state.wrapUpNoted });
     var id = 'jha_turn_' + (++turnControl.serial);
     turnControl.requestId = id;
     if (state.audioSetup) beginAudioSample(id);
@@ -1201,8 +1207,10 @@
   // one truthful cue waits WAITING_CUE_MS and a 2-2.5s pause never triggers
   // anything: no cue, no reprompt, no forced turn.
   function beginTurnWait() {
-    if (state.turnRecovery) return;
     clearTurnWait();
+    // Audio help intentionally pauses replies. Keep captured input queued,
+    // without calling that pause thinking or a stalled connection.
+    if (state.turnRecovery || state.playbackBlocked || state.microphoneLost) return;
     var wait = { committedAtMs: Date.now(), cueTimer: null, recoveryTimer: null };
     wait.cueTimer = setTimeout(function () {
       // Re-check the world before touching UI: the session may have ended,
@@ -1726,7 +1734,7 @@
         ? 'Your interview start is being confirmed. Retry Start recovers this same interview without using another.'
         : 'This audio check does not use an interview. Listen to the sample first, then test your microphone.'
       : state.microphoneLost ? 'Microphone disconnected. Questions are paused. Choose Reconnect to use an available microphone.'
-      : 'Audio needs attention. Questions are paused. Retry audio to hear the current question again.';
+      : 'Questions are paused. Choose Enable audio to hear the current question again.';
     var confirm = $('vi-audio-confirm');
     if (confirm) {
       confirm.hidden = !state.audioSetup;
@@ -1734,9 +1742,12 @@
       confirm.textContent = state.activating ? 'Starting your interview...' : state.activationUnconfirmed ? 'Retry start' : 'I can hear you. Start interview';
     }
     var mic = $('vi-audio-mic-status');
-    if (mic) mic.textContent = state.microphoneLost ? 'Microphone disconnected. Choose Reconnect.' : state.micMuted ? 'Unmute your microphone before starting.' : sampleHoldsMicrophone() ? 'Listen first. Your microphone is paused during the sample.' : state.microphoneConfirmed ? 'Microphone checked. We received your words.' : 'Say a few words to check your microphone.';
+    if (mic) mic.textContent = state.microphoneLost ? 'Microphone disconnected. Choose Reconnect.'
+      : state.micMuted ? (state.audioSetup ? 'Unmute your microphone before starting.' : 'Unmute your microphone when you are ready to continue.')
+      : sampleHoldsMicrophone() ? 'Listen first. Your microphone is paused during the sample.'
+      : state.microphoneConfirmed ? 'Microphone checked. We received your words.' : 'Say a few words to check your microphone.';
     var output = $('vi-audio-output-status');
-    if (output) output.textContent = state.playbackBlocked ? 'Sound could not play. Choose Enable audio, then check your volume and output device.'
+    if (output) output.textContent = state.playbackBlocked ? 'Audio is paused. Choose Enable audio, then check your volume and output device.'
       : state.audioSetup && state.audioSample && state.audioSample.failed ? 'The sample was interrupted. Choose Play again to hear it completely.'
       : state.audioSetup && sampleHoldsMicrophone() ? 'Listen to the full sample before testing your microphone.'
       : state.playbackReady ? 'Can you hear the voice clearly?' : 'Waiting for the test voice...';
@@ -1752,6 +1763,10 @@
     state.playbackAttempt = (state.playbackAttempt || 0) + 1;
     state.playbackReady = false;
     state.playbackBlocked = true;
+    clearTurnWait();
+    if (!state.audioSetup && $('vi-caption')) {
+      $('vi-caption').textContent = 'Audio is paused. Choose Enable audio to continue. Your captured answers are kept.';
+    }
     if (state.audioSetup && state.audioSample) {
       state.audioSample.complete = false;
       state.audioSample.failed = true;
