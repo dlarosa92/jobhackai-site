@@ -453,7 +453,9 @@ function audioFixture(t,options={}) {
     async greetingDone(){
       const id='test-greeting-'+(++greeting);
       f.h.event({type:'response.created',response:{id}});
-      f.h.event({type:'response.done',response:{id,status:'completed'}});await f.h.settle();
+      f.h.event({type:'output_audio_buffer.started',response_id:id});
+      f.h.event({type:'response.done',response:{id,status:'completed'}});
+      f.h.event({type:'output_audio_buffer.stopped',response_id:id});await f.h.settle();
     },
     async acknowledge(){f.h.event({type:'session.updated',session:f.h.sends.filter(x=>x.type==='session.update').at(-1).session});await f.h.settle();}
   };
@@ -530,6 +532,92 @@ test('silent microphone cannot pass readiness even when playback succeeds',async
   await f.h.click('vi-audio-confirm');assert.equal(f.activations().length,0);assert.equal(f.h.el('vi-audio-confirm').disabled,true);
 });
 
+test('an interrupted sample cannot unlock Start even after successful generation and microphone speech',async t=>{
+  const f=audioFixture(t);await f.check();
+  f.h.event({type:'response.created',response:{id:'sample'}});
+  f.h.event({type:'output_audio_buffer.started',response_id:'sample'});
+  f.h.event({type:'response.done',response:{id:'sample',status:'completed'}});
+  f.h.event({type:'output_audio_buffer.cleared',response_id:'sample'});
+  f.speech();
+  assert.equal(f.h.el('vi-audio-confirm').disabled,true);
+  await f.h.click('vi-audio-confirm');await f.acknowledge();
+  assert.equal(f.activations().length,0);
+});
+
+test('sample playback pauses microphone transmission without changing the user mute choice',async t=>{
+  const stream=mic(),f=audioFixture(t,{getUserMedia:async()=>stream});await f.check();
+  assert.equal(stream.track.enabled,false,'the microphone cannot interrupt the sample');
+  await f.greetingDone();
+  assert.equal(stream.track.enabled,true,'microphone testing follows completed playback');
+  await f.h.click('vi-mute-btn');await f.h.click('vi-audio-retry');await f.greetingDone();
+  assert.equal(stream.track.enabled,false,'replay must preserve the user mute choice');
+});
+
+for(const order of ['generation-first','playback-first']) test('Start waits for generation and full playback: '+order,async t=>{
+  const stream=mic(),f=audioFixture(t,{getUserMedia:async()=>stream});await f.check();
+  f.h.event({type:'response.created',response:{id:'sample'}});
+  f.h.event({type:'output_audio_buffer.started',response_id:'sample'});
+  const done={type:'response.done',response:{id:'sample',status:'completed'}};
+  const stopped={type:'output_audio_buffer.stopped',response_id:'sample'};
+  f.h.event(order==='generation-first'?done:stopped);
+  assert.equal(stream.track.enabled,false);
+  assert.equal(f.h.el('vi-audio-confirm').disabled,true);
+  f.h.event(order==='generation-first'?stopped:done);
+  assert.equal(stream.track.enabled,true);
+  assert.equal(f.h.el('vi-audio-confirm').disabled,true,'a microphone check is still required');
+  f.speech();
+  assert.equal(f.h.el('vi-audio-confirm').disabled,false);
+  assert.equal(f.activations().length,0,'readiness never starts the interview automatically');
+});
+
+test('late sample-period speech and previous playback receipts cannot approve the next sample',async t=>{
+  const stream=mic(),f=audioFixture(t,{getUserMedia:async()=>stream});await f.check();
+  f.h.event({type:'input_audio_buffer.speech_started',item_id:'too-early'});
+  f.h.event({type:'input_audio_buffer.speech_stopped',item_id:'too-early'});
+  await f.greetingDone();f.speech('too-early');
+  assert.equal(f.h.el('vi-audio-confirm').disabled,true,'delayed words from the sample period are excluded');
+  f.speech('after-sample');await f.h.click('vi-audio-retry');
+  f.h.event({type:'response.created',response:{id:'new-sample'}});
+  f.h.event({type:'output_audio_buffer.started',response_id:'new-sample'});
+  f.h.event({type:'output_audio_buffer.stopped',response_id:'test-greeting-1'});
+  f.h.event({type:'response.done',response:{id:'test-greeting-1',status:'completed'}});
+  assert.equal(stream.track.enabled,false);
+  assert.equal(f.h.el('vi-audio-confirm').disabled,true);
+  f.h.event({type:'response.done',response:{id:'new-sample',status:'completed'}});
+  f.h.event({type:'output_audio_buffer.stopped',response_id:'new-sample'});
+  assert.equal(f.h.el('vi-audio-confirm').disabled,false);
+});
+
+test('mute toggles during the sample cannot enable transmission and replay recovers an interrupted sample',async t=>{
+  const stream=mic(),f=audioFixture(t,{getUserMedia:async()=>stream});await f.check();
+  await f.h.click('vi-mute-btn');await f.h.click('vi-mute-btn');
+  assert.equal(stream.track.enabled,false);
+  f.h.event({type:'response.created',response:{id:'cutoff'}});
+  f.h.event({type:'output_audio_buffer.started',response_id:'cutoff'});
+  f.h.event({type:'response.done',response:{id:'cutoff',status:'completed'}});
+  f.h.event({type:'output_audio_buffer.cleared',response_id:'cutoff'});
+  assert.equal(stream.track.enabled,true,'an interrupted sample does not leave the microphone held');
+  assert.match(f.h.el('vi-audio-output-status').textContent,/interrupted/);
+  f.speech();await f.h.click('vi-audio-retry');
+  assert.equal(stream.track.enabled,false);
+  f.h.event({type:'output_audio_buffer.stopped',response_id:'cutoff'});
+  assert.equal(f.h.el('vi-audio-confirm').disabled,true);
+  await f.greetingDone();
+  assert.equal(f.h.el('vi-audio-confirm').disabled,false);
+});
+
+test('missing playback completion closes the uncharged check and late events cannot reopen its microphone',async t=>{
+  const stream=mic(),f=audioFixture(t,{getUserMedia:async()=>stream,timerDelay:ms=>ms===45000?20:ms});await f.check();
+  f.h.event({type:'response.created',response:{id:'sample'}});
+  f.h.event({type:'output_audio_buffer.started',response_id:'sample'});
+  f.h.event({type:'response.done',response:{id:'sample',status:'completed'}});
+  await new Promise(resolve=>setTimeout(resolve,40));await f.h.settle();
+  assert.equal(f.closes().length,1);
+  assert.equal(f.activations().length,0);
+  f.h.event({type:'output_audio_buffer.stopped',response_id:'sample'});
+  assert.equal(stream.track.enabled,false);
+});
+
 test('audio samples wait for noninterrupting VAD acknowledgement and keep microphone readiness',async t=>{
   const f=audioFixture(t,{autoTurnConfig:false});await f.check();
   const config=f.h.sends.find(x=>x.type==='session.update').session;
@@ -543,7 +631,8 @@ test('audio samples wait for noninterrupting VAD acknowledgement and keep microp
   f.h.event({type:'input_audio_buffer.speech_started',item_id:'checking'});
   f.h.event({type:'input_audio_buffer.speech_stopped',item_id:'checking'});
   f.speech('checking');
-  assert.match(f.h.el('vi-audio-mic-status').textContent,/Microphone checked/);
+  assert.match(f.h.el('vi-audio-mic-status').textContent,/microphone is paused/);
+  assert.equal(f.h.el('vi-audio-confirm').disabled,true);
   assert.equal(f.h.sends.filter(x=>x.type==='response.cancel'||x.type==='output_audio_buffer.clear').length,0);
   f.h.event({type:'response.done',response:{id:'sample',status:'completed'}});
   f.h.event({type:'output_audio_buffer.stopped',response_id:'sample'});
@@ -643,8 +732,8 @@ test('click recovery replays the check without consuming a question and activati
   const f=audioFixture(t);let blocked=true;
   f.h.el('vi-remote-audio').play=async()=>{if(blocked)throw Error('blocked');};
   await f.check();await f.greetingDone();f.speech();blocked=false;await f.h.click('vi-audio-retry');
-  assert.equal(f.h.el('vi-audio-confirm').disabled,false);
-  await f.greetingDone();await f.h.click('vi-audio-confirm');await f.h.click('vi-audio-confirm');
+  assert.equal(f.h.el('vi-audio-confirm').disabled,true,'recovery still requires a complete sample');
+  await f.greetingDone();f.speech('after-replay');await f.h.click('vi-audio-confirm');await f.h.click('vi-audio-confirm');
   assert.equal(f.activations().length,0,'provider readiness is acknowledged before credit activation');
   assert.equal(f.h.sends.filter(x=>x.type==='response.create'&&x.response.metadata.jobhackai_purpose==='new_topic').length,0);
   f.h.event({type:'session.updated',session:{instructions:'unrelated acknowledgement'}});
@@ -659,7 +748,7 @@ test('click recovery replays the check without consuming a question and activati
 
 test('late setup transcripts remain excluded after activation and later words are preserved',async t=>{
   const f=audioFixture(t,{routes:{'/api/voice/session/':()=>({status:'completed',saved:true,connectionClosed:true})}});
-  await f.check();f.speech();await f.greetingDone();await f.h.click('vi-audio-confirm');await f.acknowledge();
+  await f.check();await f.greetingDone();f.speech();await f.h.click('vi-audio-confirm');await f.acknowledge();
   f.h.event({type:'conversation.item.input_audio_transcription.completed',item_id:'mic-test',transcript:'Late setup words must not be scored.'});
   f.h.event({type:'conversation.item.created',item:{id:'real-answer',role:'user'}});
   f.h.event({type:'input_audio_buffer.committed',item_id:'real-answer'});
@@ -670,7 +759,7 @@ test('late setup transcripts remain excluded after activation and later words ar
 });
 
 test('managed activation does not let empty audio or late setup commits spend an interview question',async t=>{
-  const f=audioFixture(t);await f.check();f.speech();await f.greetingDone();
+  const f=audioFixture(t);await f.check();await f.greetingDone();f.speech();
   await f.h.click('vi-audio-confirm');await f.acknowledge();const h=f.h;
   h.event({type:'response.created',response:{id:'opening'}});
   h.event({type:'conversation.item.created',item:{id:'question',role:'assistant'}});
@@ -699,14 +788,14 @@ test('cancel during activation ignores its late success and never requests a que
     if(body.action==='activate'){activateBody=body;return pending.promise;}
     return {...f.answer(body),requiresAudioCheck:true,interviewInstructions:f.instructions};
   }}});
-  await f.check();f.speech();await f.greetingDone();await f.h.click('vi-audio-confirm');await f.acknowledge();
+  await f.check();await f.greetingDone();f.speech();await f.h.click('vi-audio-confirm');await f.acknowledge();
   await f.h.endInterview();pending.resolve({...activateBody,activated:true,instructions:f.instructions,deadlineAt:new Date(Date.now()+1200000).toISOString()});await f.h.settle();
   assert.equal(f.h.peerConnection().connectionState,'closed');
   assert.equal(f.h.sends.filter(x=>x.type==='response.create'&&x.response.metadata.jobhackai_purpose==='new_topic').length,0);
 });
 
 test('a missing provider configuration acknowledgement leaves setup uncharged and retryable',async t=>{
-  const f=audioFixture(t,{timerDelay:ms=>ms===8000?10:ms});await f.check();f.speech();await f.greetingDone();
+  const f=audioFixture(t,{timerDelay:ms=>ms===8000?10:ms});await f.check();await f.greetingDone();f.speech();
   await f.h.click('vi-audio-confirm');await new Promise(resolve=>setTimeout(resolve,25));await f.h.settle();
   assert.equal(f.activations().length,0);assert.equal(f.h.el('vi-audio-confirm').disabled,false);
   assert.match(f.h.el('vi-status').textContent,/No interview has started/);
@@ -718,7 +807,7 @@ test('a missing provider configuration acknowledgement leaves setup uncharged an
 });
 
 test('audio recovery during the interview neither spends another credit nor advances the question budget',async t=>{
-  const f=audioFixture(t);await f.check();f.speech();await f.greetingDone();await f.h.click('vi-audio-confirm');await f.acknowledge();
+  const f=audioFixture(t);await f.check();await f.greetingDone();f.speech();await f.h.click('vi-audio-confirm');await f.acknowledge();
   f.h.event({type:'response.created',response:{id:'question-one'}});
   f.h.event({type:'response.done',response:{id:'question-one'}});
   await f.h.click('vi-audio-help');
@@ -732,7 +821,7 @@ test('audio recovery during the interview neither spends another credit nor adva
 test('a muted or disconnected microphone cannot activate, and reconnect rechecks the replacement device',async t=>{
   const streams=[];
   const f=audioFixture(t,{getUserMedia:async()=>{const stream=mic();streams.push(stream);return stream;}});
-  await f.check();f.speech();await f.greetingDone();await f.h.click('vi-mute-btn');
+  await f.check();await f.greetingDone();f.speech();await f.h.click('vi-mute-btn');
   await f.h.click('vi-audio-confirm');assert.equal(f.activations().length,0);assert.equal(f.h.el('vi-audio-confirm').disabled,true);
   await f.h.click('vi-mute-btn');streams[0].track.onended();f.h.peerConnection().connectionState='connected';
   assert.equal(f.h.el('vi-audio-confirm').disabled,true);
@@ -743,7 +832,7 @@ test('a muted or disconnected microphone cannot activate, and reconnect rechecks
 
 test('microphone loss while configuration is being acknowledged cannot activate an interview',async t=>{
   const stream=mic(),f=audioFixture(t,{getUserMedia:async()=>stream});
-  await f.check();f.speech();await f.greetingDone();await f.h.click('vi-audio-confirm');
+  await f.check();await f.greetingDone();f.speech();await f.h.click('vi-audio-confirm');
   stream.track.onended();await f.acknowledge();
   assert.equal(f.activations().length,0);
   assert.equal(f.h.el('vi-audio-confirm').disabled,true);
@@ -753,7 +842,7 @@ test('microphone loss while configuration is being acknowledged cannot activate 
 test('a delayed playback rejection cannot undo a newer successful click recovery',async t=>{
   const oldPlay=deferred(),f=audioFixture(t);let plays=0;
   f.h.el('vi-remote-audio').play=()=>++plays===1?oldPlay.promise:Promise.resolve();
-  await f.check();f.speech();await f.greetingDone();await f.h.click('vi-audio-retry');
+  await f.check();await f.greetingDone();f.speech();await f.h.click('vi-audio-retry');await f.greetingDone();f.speech('after-replay');
   assert.equal(f.h.el('vi-audio-confirm').disabled,false);
   oldPlay.reject(Error('stale playback failure'));await f.h.settle();
   assert.equal(f.h.el('vi-audio-confirm').disabled,false);
@@ -775,7 +864,7 @@ for (const lost of [false,true]) test('setup expiry cannot close an activation w
       return {...f.answer(body),requiresAudioCheck:true,interviewInstructions:f.instructions,deadlineAt:new Date(now+120000).toISOString()};
     }
   }});
-  await f.check();f.speech();await f.greetingDone();await f.h.click('vi-audio-confirm');await f.acknowledge();
+  await f.check();await f.greetingDone();f.speech();await f.h.click('vi-audio-confirm');await f.acknowledge();
   now+=121000;tick();await f.h.settle();
   assert.equal(f.closes().length,0,'the obsolete setup deadline cannot close a potentially charged interview');
   assert.equal(f.h.completeBodies().length,0);
@@ -801,7 +890,7 @@ test('a stalled activation request times out to a retry without closing a potent
       return {...f.answer(body),requiresAudioCheck:true,interviewInstructions:f.instructions};
     }
   }});
-  await f.check();f.speech();await f.greetingDone();await f.h.click('vi-audio-confirm');await f.acknowledge();
+  await f.check();await f.greetingDone();f.speech();await f.h.click('vi-audio-confirm');await f.acknowledge();
   await new Promise(resolve=>setTimeout(resolve,25));await f.h.settle();
   assert.equal(f.activations()[0].signal.aborted,true);
   assert.equal(f.h.el('vi-audio-confirm').disabled,false);
@@ -821,7 +910,7 @@ for (const reason of ['voice_connection_paywall','voice_connection_limit_reached
         return {...f.answer(body),requiresAudioCheck:true,interviewInstructions:f.instructions};
       }
     }});
-    await f.check();f.speech();await f.greetingDone();const pc=f.h.peerConnection();
+    await f.check();await f.greetingDone();f.speech();const pc=f.h.peerConnection();
     await f.h.click('vi-audio-confirm');await f.acknowledge();
     assert.equal(plans,2);assert.equal(f.h.el('vi-setup-view').style.display,'');
     assert.equal(f.h.el('vi-live-view').style.display,'none');
@@ -850,7 +939,7 @@ test('a late activation receipt cannot act while reconnect is acquiring a replac
       return {...f.answer(body),requiresAudioCheck:true,interviewInstructions:f.instructions};
     }
   }});
-  await f.check();f.speech();await f.greetingDone();await f.h.click('vi-audio-confirm');await f.acknowledge();
+  await f.check();await f.greetingDone();f.speech();await f.h.click('vi-audio-confirm');await f.acknowledge();
   f.h.peerConnection().connectionState='disconnected';const reconnecting=f.h.click('vi-reconnect-btn');await f.h.settle();
   activation.resolve({...f.activations()[0].body,activated:true,deadlineAt:new Date(Date.now()+1200000).toISOString()});await f.h.settle();
   assert.equal(f.closes().length,0);
