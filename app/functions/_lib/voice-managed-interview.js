@@ -6,7 +6,7 @@ import { armVoiceDeadline } from './voice-deadline.js';
 
 export const MANAGED_INTERVIEW_MINUTES = 20;
 export const AUDIO_CHECK_SECONDS = 120;
-const AUDIO_CHECK_INSTRUCTIONS = 'This is a brief audio setup check, not an interview. Say only: "Can you hear this clearly? Say a few words to check your microphone, then choose I can hear you on the page." Do not ask interview questions, evaluate answers or continue a conversation. Wait for the application to activate the interview.';
+const AUDIO_CHECK_INSTRUCTIONS = 'This is a brief audio setup check, not an interview. Say only: "Can you hear this clearly? When this sample finishes, say a few words to check your microphone, then choose I can hear you on the page." Do not ask interview questions, evaluate answers or continue a conversation. Wait for the application to activate the interview.';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function validateOwner(uid, sessionId) {

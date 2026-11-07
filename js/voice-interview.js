@@ -60,6 +60,8 @@
     microphoneLost: false,
     playbackReady: false,
     playbackBlocked: false,
+    audioSample: null,
+    sampleSpeechItems: Object.create(null),
     activating: false,
     activationEvent: null,
     audioContext: null,
@@ -112,7 +114,8 @@
 
   var audioDiagnostics = null;
 
-  // VAD detects microphone speech during setup without interrupting the sample.
+  // Setup separates sample playback from microphone testing. VAD protection
+  // alone did not prevent a provider-side buffer clear in Safari.
   // The official interview restores barge-in; replies stay application-owned.
   var turnControl = { plan: null, ready: false, setupTimer: null, pending: null,
     interruptResponse: null, expectedInterrupt: null,
@@ -210,6 +213,7 @@
     var plan = pending.greeting ? null : pending.repeat ? { kind: 'audio_recovery', instruction: 'Repeat the current interview question in the same words. Do not add a new question or follow-up.' } : turnControl.plan.next({ opening: pending.opening, wrapUp: state.wrapUpNoted });
     var id = 'jha_turn_' + (++turnControl.serial);
     turnControl.requestId = id;
+    if (state.audioSetup) beginAudioSample(id);
     if (plan) {
       lifecycle().excludeItem(id);
       if (!sendRealtime({ type: 'conversation.item.create', event_id: id + '_context', item: {
@@ -226,7 +230,7 @@
       // Each sample starts with empty input. Microphone-test speech and prior
       // replays must not turn the next sample into a conversational reply.
       // The override also survives a lost interview-configuration receipt.
-      ...(state.audioSetup ? {input:[],instructions:'This is only an audio check. Say only: "Can you hear this clearly? Say a few words to check your microphone, then choose I can hear you on the page." Do not ask interview questions, evaluate answers or continue the conversation.'} : {}),
+      ...(state.audioSetup ? {input:[],instructions:'This is only an audio check. Say only: "Can you hear this clearly? When this sample finishes, say a few words to check your microphone, then choose I can hear you on the page." Do not ask interview questions, evaluate answers or continue the conversation.'} : {}),
       metadata: {
       jobhackai_purpose: pending.greeting ? 'audio_check' : plan.kind,
       jobhackai_turn: id,
@@ -707,7 +711,7 @@
 
   function setInputStatus(text) {
     var label = $('vi-input-status');
-    if (label) label.textContent = state.micMuted ? 'Microphone muted' : text;
+    if (label) label.textContent = state.micMuted ? 'Microphone muted' : sampleHoldsMicrophone() ? 'Microphone paused while the sample plays' : text;
   }
 
   function clearUncapturedAnswer(itemId, message) {
@@ -1356,6 +1360,10 @@
       return;
     }
     if (state.audioSetup) {
+      // Do not count delayed transcripts from the listening step as a later
+      // microphone check, even if they arrive after playback has finished.
+      var setupItemId = evt.item_id || (evt.item && evt.item.role === 'user' && evt.item.id);
+      if (setupItemId && sampleHoldsMicrophone()) state.sampleSpeechItems[setupItemId] = true;
       if ((type === 'conversation.item.created' || type === 'conversation.item.added') && evt.item) {
         lifecycle().excludeItem(evt.item.id);
         (state.audioSetupItems || (state.audioSetupItems = [])).push(evt.item.id);
@@ -1364,6 +1372,7 @@
       if (type === 'input_audio_buffer.committed') { lifecycle().excludeItem(evt.item_id); return; }
       if (type === 'conversation.item.input_audio_transcription.completed') {
         lifecycle().excludeItem(evt.item_id);
+        if (state.ending || state.sampleSpeechItems[evt.item_id]) return;
         if (handleSpokenEndRequest(evt.transcript, evt.item_id)) return;
         if (String(evt.transcript || '').trim() && !state.micMuted) state.microphoneConfirmed = true;
         updateAudioReadiness();
@@ -1534,6 +1543,7 @@
     // picked up here on API versions that only surface it in the output, and
     // only then does the closing turn count as complete.
     if (type === 'response.done') {
+      noteAudioSampleEvent(evt);
       var output = evt.response && evt.response.output;
       if (Array.isArray(output)) output.forEach(function (item) { settleAssistantOutput(item, evt.response.id); });
       handleToolCall(readToolCall(evt));
@@ -1584,6 +1594,7 @@
         return;
       }
       if (evt.response && turnControl.finished[evt.response.id]) return;
+      noteAudioSampleEvent(evt);
       turnControl.busy = true;
       turnControl.responseId = evt.response && evt.response.id || '';
       if (evt.response && evt.response.id) state.lastAssistantResponseId = evt.response.id;
@@ -1599,6 +1610,9 @@
     }
     if (type === 'output_audio_buffer.started') {
       if (state.ending) { stopRemotePlayback(); return; }
+      if (state.audioSetup && state.audioSample && state.audioSample.responseId &&
+          evt.response_id !== state.audioSample.responseId) return;
+      noteAudioSampleEvent(evt);
       if (evt.response_id) state.lastAssistantResponseId = evt.response_id;
       state.audioPlaying = true;
       // Which response is speaking, not merely that something is. A bare
@@ -1617,6 +1631,9 @@
     // truncates the turn and no `stopped` follows. Without handling it, the
     // playing flag stayed true for the rest of the session.
     if (type === 'output_audio_buffer.stopped' || type === 'output_audio_buffer.cleared') {
+      if (state.audioSetup && state.audioSample && state.audioSample.responseId &&
+          evt.response_id !== state.audioSample.responseId) return;
+      noteAudioSampleEvent(evt);
       state.audioPlaying = false;
       state.audioResponseId = '';
       setSpeaking(false);
@@ -1634,6 +1651,70 @@
 
   // ---------- audio readiness ----------
 
+  function sampleHoldsMicrophone() {
+    return state.audioSetup && (!state.audioSample || state.audioSample.pending);
+  }
+
+  function syncMicrophoneTransmission() {
+    if (!state.micStream || state.ending) return;
+    state.micStream.getAudioTracks().forEach(function (track) {
+      track.enabled = !state.micMuted && !sampleHoldsMicrophone();
+    });
+  }
+
+  function beginAudioSample(requestId) {
+    if (state.audioSample) clearTimeout(state.audioSample.timer);
+    var sample = { requestId: requestId, responseId: '', pending: true,
+      started: false, stopped: false, generated: false, failed: false, complete: false };
+    state.audioSample = sample;
+    // Generation can finish long before playback. Missing playback events
+    // must not leave a microphone held indefinitely or imply success.
+    sample.timer = setTimeout(function () {
+      if (state.audioSample === sample && sample.pending) turnControlFailed();
+    }, 45000);
+    syncMicrophoneTransmission();
+    setInputStatus('Listening when you speak');
+    updateAudioReadiness();
+  }
+
+  function noteAudioSampleEvent(evt) {
+    var sample = state.audioSample;
+    if (!state.audioSetup || !sample || state.ending) return;
+    var response = evt.response || {};
+    if (evt.type === 'response.created' && !sample.responseId && sample.pending &&
+        (!response.metadata || !response.metadata.jobhackai_turn || response.metadata.jobhackai_turn === sample.requestId)) {
+      sample.responseId = response.id || '';
+    }
+    if (!sample.responseId || (response.id || evt.response_id) !== sample.responseId) return;
+    if (evt.type === 'output_audio_buffer.started') sample.started = true;
+    if (evt.type === 'output_audio_buffer.stopped' && sample.started) sample.stopped = true;
+    if (evt.type === 'output_audio_buffer.cleared') sample.failed = true;
+    if (evt.type === 'response.done') {
+      sample.generated = response.status === 'completed';
+      if (!sample.generated) sample.failed = true;
+    }
+    updateAudioSampleCompletion();
+  }
+
+  function updateAudioSampleCompletion() {
+    var sample = state.audioSample;
+    if (!state.audioSetup || !sample || state.ending) return;
+    sample.complete = sample.generated && sample.stopped && !sample.failed && state.playbackReady && !state.playbackBlocked;
+    if (sample.complete || sample.failed) {
+      sample.pending = false;
+      clearTimeout(sample.timer);
+      syncMicrophoneTransmission();
+      setInputStatus('Listening when you speak');
+    }
+    updateAudioReadiness();
+  }
+
+  function audioReadyForStart() {
+    return !state.micMuted && !state.microphoneLost && state.microphoneConfirmed &&
+      state.playbackReady && !state.playbackBlocked && state.audioSample && state.audioSample.complete &&
+      !turnControl.pending;
+  }
+
   function updateAudioReadiness() {
     var wrap = document.querySelector('.vi-wrap');
     if (wrap && wrap.classList) wrap.classList.toggle('vi-mode-audio-setup', state.audioSetup);
@@ -1643,19 +1724,21 @@
     if (note) note.textContent = state.audioSetup
       ? state.activationUnconfirmed
         ? 'Your interview start is being confirmed. Retry Start recovers this same interview without using another.'
-        : 'This audio check does not use an interview. Say a few words, then confirm you can hear the voice.'
+        : 'This audio check does not use an interview. Listen to the sample first, then test your microphone.'
       : state.microphoneLost ? 'Microphone disconnected. Questions are paused. Choose Reconnect to use an available microphone.'
       : 'Audio needs attention. Questions are paused. Retry audio to hear the current question again.';
     var confirm = $('vi-audio-confirm');
     if (confirm) {
       confirm.hidden = !state.audioSetup;
-      confirm.disabled = state.activating || state.micMuted || state.microphoneLost || !state.microphoneConfirmed || !state.playbackReady || state.playbackBlocked || !turnControl.ready;
+      confirm.disabled = state.activating || !audioReadyForStart() || !turnControl.ready;
       confirm.textContent = state.activating ? 'Starting your interview...' : state.activationUnconfirmed ? 'Retry start' : 'I can hear you. Start interview';
     }
     var mic = $('vi-audio-mic-status');
-    if (mic) mic.textContent = state.microphoneLost ? 'Microphone disconnected. Choose Reconnect.' : state.micMuted ? 'Unmute your microphone before starting.' : state.microphoneConfirmed ? 'Microphone checked. We received your words.' : 'Say a few words to check your microphone.';
+    if (mic) mic.textContent = state.microphoneLost ? 'Microphone disconnected. Choose Reconnect.' : state.micMuted ? 'Unmute your microphone before starting.' : sampleHoldsMicrophone() ? 'Listen first. Your microphone is paused during the sample.' : state.microphoneConfirmed ? 'Microphone checked. We received your words.' : 'Say a few words to check your microphone.';
     var output = $('vi-audio-output-status');
     if (output) output.textContent = state.playbackBlocked ? 'Sound could not play. Choose Enable audio, then check your volume and output device.'
+      : state.audioSetup && state.audioSample && state.audioSample.failed ? 'The sample was interrupted. Choose Play again to hear it completely.'
+      : state.audioSetup && sampleHoldsMicrophone() ? 'Listen to the full sample before testing your microphone.'
       : state.playbackReady ? 'Can you hear the voice clearly?' : 'Waiting for the test voice...';
     var retry = $('vi-audio-retry');
     if (retry) retry.textContent = state.playbackBlocked ? 'Enable audio' : 'Play again';
@@ -1669,6 +1752,13 @@
     state.playbackAttempt = (state.playbackAttempt || 0) + 1;
     state.playbackReady = false;
     state.playbackBlocked = true;
+    if (state.audioSetup && state.audioSample) {
+      state.audioSample.complete = false;
+      state.audioSample.failed = true;
+      state.audioSample.pending = false;
+      clearTimeout(state.audioSample.timer);
+      syncMicrophoneTransmission();
+    }
     updateAudioReadiness();
     setStatus('Sound needs attention.', 'vi-error');
     track('voice_audio_playback_blocked', { setup: state.audioSetup });
@@ -1685,6 +1775,7 @@
       if (state.pc !== pc || state.ending || state.playbackAttempt !== playbackAttempt) return false;
       state.playbackReady = true;
       state.playbackBlocked = false;
+      updateAudioSampleCompletion();
       updateAudioReadiness();
       if (!state.microphoneLost) setStatus(state.audioSetup ? 'Check your audio before starting.' : 'Live interview', state.audioSetup ? 'vi-connecting' : 'vi-live');
       return true;
@@ -1702,6 +1793,7 @@
     if (state.audioContext) state.audioContext.resume().catch(function () {});
     if (!await playRemoteAudio() || state.ending || state.activating) return;
     turnControl.pending = state.audioSetup ? { greeting: true } : { repeat: true };
+    updateAudioReadiness();
     drainTurn();
   }
 
@@ -1729,7 +1821,7 @@
   }
 
   function confirmAudioReady() {
-    if (!state.audioSetup || state.activating || state.micMuted || state.microphoneLost || !state.microphoneConfirmed || !state.playbackReady || state.playbackBlocked || !turnControl.ready || state.ending) return;
+    if (!state.audioSetup || state.activating || !audioReadyForStart() || !turnControl.ready || state.ending) return;
     if (!state.activationInstructions) { setStatus('Refresh this page to load the audio check.', 'vi-error'); return; }
     state.activating = true;
     updateAudioReadiness();
@@ -1755,7 +1847,7 @@
     if (!state.activationEvent || state.activationRequestPending) return;
     // The device can disappear while the configuration acknowledgement is in
     // flight. Require a fresh confirmation before sending a chargeable start.
-    if (!state.audioSetup || state.ending || state.micMuted || state.microphoneLost || !state.microphoneConfirmed || !state.playbackReady || state.playbackBlocked) {
+    if (!state.audioSetup || state.ending || !audioReadyForStart()) {
       clearTimeout(state.activationTimer);
       state.activating = false; state.activationEvent = null;
       updateAudioReadiness();
@@ -1832,6 +1924,7 @@
     state.activating = false;
     state.activationUnconfirmed = false;
     state.audioSetup = false;
+    syncMicrophoneTransmission();
     state.audioConfirmed = true;
     stopMicMeter();
     lifecycle().to(PHASES.ACTIVE_INTERVIEW);
@@ -1870,6 +1963,9 @@
     cancelConnectionAttempt();
     state.playbackReady = false;
     state.playbackBlocked = false;
+    if (state.audioSample) clearTimeout(state.audioSample.timer);
+    state.audioSample = null;
+    state.sampleSpeechItems = Object.create(null);
     if (state.audioSetup) {
       state.microphoneConfirmed = false;
       state.activating = false;
@@ -1894,6 +1990,7 @@
       state.microphoneLost = false;
       if (state.audioSetup) startMicMeter(stream);
       state.micMuted = false;
+      syncMicrophoneTransmission();
       if ($('vi-mute-btn')) {
         $('vi-mute-btn').textContent = 'Mute mic';
         $('vi-mute-btn').setAttribute('aria-pressed', 'false');
@@ -2042,6 +2139,7 @@
         if (details.requiresAudioCheck === true && typeof details.interviewInstructions !== 'string') throw new Error('invalid_audio_setup');
         state.activationInstructions = details.interviewInstructions || null;
         state.audioSetup = details.requiresAudioCheck === true;
+        syncMicrophoneTransmission();
         updateAudioReadiness();
         state.providerAttemptId = details.attemptId;
         state.model = details.model;
@@ -2122,6 +2220,8 @@
     try { if (state.dc) state.dc.close(); } catch (_) {}
     try { if (state.pc) state.pc.close(); } catch (_) {}
     stopMicrophone();
+    if (state.audioSample) clearTimeout(state.audioSample.timer);
+    state.audioSample = null;
     stopMicMeter();
     clearTimeout(state.activationTimer);
     state.pc = null; state.dc = null; state.connected = false;
@@ -2526,16 +2626,12 @@
     if (!state.micStream) return;
     if (audioDiagnostics) audioDiagnostics.mark('mute-toggle');
     var btn = $('vi-mute-btn');
-    var enabled = null;
-    state.micStream.getAudioTracks().forEach(function (t) {
-      t.enabled = !t.enabled;
-      enabled = t.enabled;
-    });
-    if (btn && enabled !== null) {
-      btn.textContent = enabled ? 'Mute mic' : 'Unmute mic';
-      btn.setAttribute('aria-pressed', String(!enabled));
+    state.micMuted = !state.micMuted;
+    syncMicrophoneTransmission();
+    if (btn) {
+      btn.textContent = state.micMuted ? 'Unmute mic' : 'Mute mic';
+      btn.setAttribute('aria-pressed', String(state.micMuted));
     }
-    state.micMuted = enabled === false;
     updateAudioReadiness();
     setInputStatus('Listening when you speak');
   }
