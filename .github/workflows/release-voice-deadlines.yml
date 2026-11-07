@@ -64,7 +64,9 @@ jobs:
     timeout-minutes: 15
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      # Account identity is public configuration and pinned to the reviewed
+      # Workers/D1 targets. Do not inherit an unrelated legacy account secret.
+      CLOUDFLARE_ACCOUNT_ID: 'fabf4409ef32f8c64354a1a099bef2a2'
       GITHUB_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4

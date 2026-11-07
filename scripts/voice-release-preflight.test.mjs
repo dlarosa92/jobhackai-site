@@ -50,7 +50,7 @@ test('environment drift, disabled scheduler and absent secret fail closed', () =
 
 
 test('actual CLI checks the current target and backup before any remote mutation', () => {
-  for (const scenario of ['success','stale','partial','binding','backup','post-stale']) {
+  for (const scenario of ['success','stale','partial','binding','backup','post-stale','wrong-account','missing-token']) {
     const dir = mkdtempSync(join(tmpdir(),'voice-release-test-'));
     try {
       for (const name of ['scripts','workers/voice-deadlines','app/db/migrations']) mkdirSync(join(dir,name),{recursive:true});
@@ -93,7 +93,7 @@ test('actual CLI checks the current target and backup before any remote mutation
       `);
       const log=join(dir,'calls.log');writeFileSync(log,'');
       const result=spawnSync(process.execPath,['--import',join(dir,'mock.mjs'),join(dir,'scripts/voice-release-preflight.mjs'),'--apply-schema'],{
-        encoding:'utf8',env:{...process.env,GITHUB_EVENT_NAME:'push',GITHUB_REF:'refs/heads/develop',GITHUB_SHA:'a'.repeat(40),GITHUB_REPOSITORY:'dlarosa92/jobhackai-site',GITHUB_TOKEN:'fixture',CLOUDFLARE_API_TOKEN:'fixture',CLOUDFLARE_ACCOUNT_ID:'fabf4409ef32f8c64354a1a099bef2a2',RELEASE_CASE:scenario,CALL_LOG:log,RECEIPT:join(dir,'voice-release-receipt.json')}
+        encoding:'utf8',env:{...process.env,GITHUB_EVENT_NAME:'push',GITHUB_REF:'refs/heads/develop',GITHUB_SHA:'a'.repeat(40),GITHUB_REPOSITORY:'dlarosa92/jobhackai-site',GITHUB_TOKEN:'fixture',CLOUDFLARE_API_TOKEN:scenario==='missing-token'?'':'fixture',CLOUDFLARE_ACCOUNT_ID:scenario==='wrong-account'?'other':'fabf4409ef32f8c64354a1a099bef2a2',RELEASE_CASE:scenario,CALL_LOG:log,RECEIPT:join(dir,'voice-release-receipt.json')}
       });
       const calls=readFileSync(log,'utf8');
       if(scenario==='success') {

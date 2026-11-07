@@ -55,7 +55,8 @@ async function main() {
   const verifyOnly = process.argv.includes('--verify-only') || verifyDeployment;
   if (apply && verifyOnly) throw Error('Choose apply or verify, not both.');
   const token = process.env.CLOUDFLARE_API_TOKEN;
-  if (!token || process.env.CLOUDFLARE_ACCOUNT_ID !== account) throw Error('Missing or mismatched Cloudflare CI credentials.');
+  if (!token) throw Error('Missing Cloudflare CI token.');
+  if (process.env.CLOUDFLARE_ACCOUNT_ID !== account) throw Error('Cloudflare CI account differs from the reviewed target.');
   async function cf(path, body) {
     const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}/${path}`, {
       method: body ? 'POST' : 'GET', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
