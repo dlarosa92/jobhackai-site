@@ -115,10 +115,14 @@ button. PR #1178 fixes both app navigation builders. The exact development
 revision and served JavaScript are verified, and native Safari confirms the
 named expanded/collapsed state, Return opening, Escape with focus returned,
 and tabbing through Account and Logout out to Role with the menu closed.
-Neither link was activated. The separate mouse-dismissal check hit a native
-capture error, and Chrome automation is blocked by an open extension UI;
-that mouse check and full screen-reader speech remain unaccepted. No new
-interview, recording or credit use occurred. The scoped QA app build passes.
+Neither link was activated. After the owner restored Safari input, mouse
+opening and outside-click dismissal also passed, leaving the menu collapsed.
+All three development post-deployment UI smoke tests passed in run 42457484409.
+Chrome automation still reports an open extension UI on the follow-up attempt;
+Chrome-specific and full screen-reader speech remain unaccepted. The menu
+checks used no interview credit. A separate voice recording later stopped
+without activation; credits remained 28 and history 23, so it supplies no new
+voice acceptance. The scoped QA app build passes.
 
 Before this app PR merges:
 
