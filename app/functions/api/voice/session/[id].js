@@ -67,8 +67,13 @@ export async function onRequest(context) {
       return successResponse({ success: true }, 200, origin, env, requestId);
     }
 
+    // Match history: legacy safety-ended rows may still contain a scorecard,
+    // but a safety ending must never become a performance assessment.
+    const safetyEnded = session.end_reason === 'ended_for_safety';
     let scorecard = null;
-    try { scorecard = session.scorecard_json ? JSON.parse(session.scorecard_json) : null; } catch (_) {}
+    if (!safetyEnded) {
+      try { scorecard = session.scorecard_json ? JSON.parse(session.scorecard_json) : null; } catch (_) {}
+    }
 
     const ent = await getVoiceEntitlement(env, uid, {managed:env.VOICE_MANAGED_CALLS_ENABLED === 'true'});
 
@@ -153,7 +158,7 @@ export async function onRequest(context) {
       createdAt: session.started_at,
       endedAt: session.ended_at,
       durationSeconds: session.duration_seconds,
-      scorecardReady: !!scorecard,
+      scorecardReady: safetyEnded || !!scorecard,
       endReason: session.end_reason || null,
       fullAccess,
       questionCount: interviewerQuestionCount(storedTranscript),
