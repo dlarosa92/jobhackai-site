@@ -26,6 +26,20 @@
   // How long to wait after the closing response completes for its audio to
   // begin, before concluding there is no closing audio at all.
   var CONDUCT_END_AUDIO_GRACE_MS = 750;
+  // Includes response generation and complete spoken guidance, with a hard
+  // stop if the provider never responds. The written guidance appears first.
+  var SAFETY_END_MAX_WAIT_MS = 30000;
+  var SAFETY_GUIDANCE = 'Your safety comes first. Please contact local emergency services now, or ask someone you trust to stay with you and help you reach urgent support. This interview is ending.';
+
+  // A narrow backstop for an explicit, standalone present-danger disclosure.
+  // This is not a general crisis classifier. Other cases still use the model's
+  // safety tool/referral path. Whole-utterance anchoring deliberately excludes
+  // quotations, past experiences, negation and hypothetical work examples.
+  function isImmediateSafetyStatement(text) {
+    var statement = String(text || '').trim().toLowerCase().replace(/[’‘]/g, "'").replace(/\s+/g, ' ');
+    return /^(?:i'm|i am) in immediate danger(?: of (?:hurting|harming|killing) myself|(?:[,.]? and|[.!]) i (?:want|intend|plan) to (?:hurt|harm|kill) myself)?(?: (?:right )?now)?[.!]*$/.test(statement) ||
+      /^i (?:want|intend|plan) to (?:hurt|harm|kill) myself (?:right )?now[.!]*$/.test(statement);
+  }
 
   // A genuine processing delay this long earns one truthful waiting cue.
   // This is an app-level prompt about OUR pipeline being slow, deliberately
@@ -96,6 +110,7 @@
     audioResponseId: '',       // which response that audio belongs to
     answeredCalls: null,       // call_id -> true; each tool call answered exactly once
     conduct: null,             // escalation gate (voice-conduct.js); survives a reconnect
+    safetyRequest: null,       // app-owned guidance response; ignores stale playback receipts
     conductEnd: null,          // pending end, waiting for the closing turn
     endCause: null,            // 'conduct' | 'safety' | 'closing' — which reason the pending end carries
     lifecycle: null,           // interview lifecycle (voice-lifecycle.js); owns commit boundaries
@@ -213,7 +228,12 @@
     turnControl.pending = null;
     if (state.audioSetup && !pending.greeting) return;
     var repeatQuestion = pending.repeat && $('vi-question') && $('vi-question').textContent;
-    var plan = pending.greeting ? null : pending.repeat ? {
+    var safety = !state.audioSetup && !pending.repeat &&
+      (pending.candidateTexts || []).some(isImmediateSafetyStatement);
+    var plan = safety ? {
+      kind: 'safety',
+      instruction: 'The interview has ended for safety. Say only this urgent-help guidance, with no question or interview advice: ' + JSON.stringify(SAFETY_GUIDANCE)
+    } : pending.greeting ? null : pending.repeat ? {
       kind: 'audio_recovery',
       instruction: repeatQuestion
         ? 'Repeat only this interviewer question, verbatim: ' + JSON.stringify(repeatQuestion) + '. Do not answer it or add any other words.'
@@ -223,6 +243,18 @@
       currentQuestion: $('vi-question') && $('vi-question').textContent });
     var id = 'jha_turn_' + (++turnControl.serial);
     turnControl.requestId = id;
+    if (safety) {
+      state.safetyRequest = { requestId: id, responseId: '' };
+      // The app owns the terminal reason before contacting the model. Stop
+      // collecting speech and freeze the countdown while guidance plays.
+      stopMicrophone();
+      if (state.timerInterval) { clearInterval(state.timerInterval); state.timerInterval = null; }
+      if ($('vi-question')) $('vi-question').textContent = SAFETY_GUIDANCE;
+      setInputStatus('Interview ending for safety');
+      clearTurnWait();
+      requestGuardedEnd('safety', '', SAFETY_END_MAX_WAIT_MS);
+      track('voice_safety_end', { via: 'explicit_current_danger' });
+    }
     if (state.audioSetup) beginAudioSample(id);
     if (plan) {
       lifecycle().excludeItem(id);
@@ -240,6 +272,7 @@
       // Each sample starts with empty input. Microphone-test speech and prior
       // replays must not turn the next sample into a conversational reply.
       // The override also survives a lost interview-configuration receipt.
+      ...(safety ? { input: [], instructions: plan.instruction } : {}),
       ...(state.audioSetup ? {input:[],instructions:'This is only an audio check. Say only: "Can you hear this clearly? When this sample finishes, say a few words to check your microphone, then choose I can hear you on the page." Do not ask interview questions, evaluate answers or continue the conversation.'} : {}),
       metadata: {
       jobhackai_purpose: pending.greeting ? 'audio_check' : plan.kind,
@@ -700,7 +733,7 @@
 
   function showQuestion(text) {
     var question = $('vi-question');
-    if (question) question.textContent = text;
+    if (question) question.textContent = state.safetyRequest ? SAFETY_GUIDANCE : text;
     var caption = $('vi-caption');
     if (caption) caption.textContent = '';
   }
@@ -721,7 +754,7 @@
 
   function setInputStatus(text) {
     var label = $('vi-input-status');
-    if (label) label.textContent = state.microphoneLost ? 'Microphone disconnected. Choose Reconnect.'
+    if (label) label.textContent = state.safetyRequest ? 'Interview ending for safety' : state.microphoneLost ? 'Microphone disconnected. Choose Reconnect.'
       : state.micMuted ? 'Microphone muted' : sampleHoldsMicrophone() ? 'Microphone paused while the sample plays' : text;
   }
 
@@ -745,7 +778,7 @@
     draft = (draft + evt.delta).slice(0, 12000);
     state.captionDrafts[id] = draft;
     var el = $(speaker === 'assistant' ? 'vi-question' : 'vi-your-answer');
-    if (el) el.textContent = draft;
+    if (el) el.textContent = speaker === 'assistant' && state.safetyRequest ? SAFETY_GUIDANCE : draft;
     if (speaker === 'user') {
       state.userCaptionItemId = id;
       setInputStatus('Transcribing your answer…');
@@ -1102,31 +1135,43 @@
   // response's token usage, and lose the utterance that triggered the end.
   // So: record the intent, then wait for the turn to actually finish
   // (js/voice-conduct.js owns that timing).
-  function newClosingTurnGate() {
+  function newClosingTurnGate(timeoutMs) {
     if (typeof window.createClosingTurnGate === 'function') {
       return window.createClosingTurnGate({
-        timeoutMs: CONDUCT_END_MAX_WAIT_MS,
+        timeoutMs: timeoutMs || CONDUCT_END_MAX_WAIT_MS,
+        setTimeout: setTimeout, clearTimeout: clearTimeout,
         graceMs: CONDUCT_END_AUDIO_GRACE_MS,
         onDone: finishConductEnd
       });
     }
-    // Degraded: end after the response completes rather than never ending.
+    var timer, grace, generated = false, playing = false, stopped = false, active = false;
+    function finish() {
+      if (!active) return;
+      active = false;
+      clearTimeout(timer); clearTimeout(grace);
+      finishConductEnd('fallback');
+    }
+    function settle() {
+      if (!active || !generated) return;
+      if (stopped) finish();
+      else if (!playing && !grace) grace = setTimeout(finish, CONDUCT_END_AUDIO_GRACE_MS);
+    }
     return {
-      start: function () { return true; },
-      noteResponseDone: function () { finishConductEnd('no_module'); },
-      noteAudioStarted: function () {},
-      noteAudioStopped: function () {},
-      cancel: function () {},
-      isActive: function () { return false; }
+      start: function (audioLive) { active = true; playing = !!audioLive; timer = setTimeout(finish, timeoutMs || CONDUCT_END_MAX_WAIT_MS); return true; },
+      noteResponseDone: function () { generated = true; settle(); },
+      noteAudioStarted: function () { playing = true; stopped = false; clearTimeout(grace); grace = null; },
+      noteAudioStopped: function () { if (playing) stopped = true; playing = false; settle(); },
+      cancel: function () { active = false; clearTimeout(timer); clearTimeout(grace); },
+      isActive: function () { return active; }
     };
   }
 
   // cause is 'conduct', 'safety', or 'closing' — it decides the reason and the
-  // wording, not the timing, which is identical for all three.
-  function requestGuardedEnd(cause, responseId) {
+  // wording. App-requested safety guidance allows time for generation too.
+  function requestGuardedEnd(cause, responseId, timeoutMs) {
     if (state.ending || state.conductEnd) return;
     state.endCause = cause;
-    state.conductEnd = newClosingTurnGate();
+    state.conductEnd = newClosingTurnGate(timeoutMs);
     if (cause === 'closing') {
       setStatus('Wrapping up. Your report is on its way.', 'vi-live');
     } else {
@@ -1366,6 +1411,18 @@
     // Setup is uncharged to the customer but still uses provider resources.
     if (state.usage && type === 'response.done') state.usage.add('response', evt.response && evt.response.id, evt.response && evt.response.usage);
     if (state.usage && type === 'conversation.item.input_audio_transcription.completed') state.usage.add('transcription', evt.item_id, evt.usage);
+    if (state.safetyRequest && (type.indexOf('response.') === 0 || type.indexOf('output_audio_buffer.') === 0)) {
+      var safetyResponse = evt.response || {};
+      var safetyResponseId = evt.response_id || safetyResponse.id || '';
+      var ownSafetyResponse = safetyResponse.metadata &&
+        safetyResponse.metadata.jobhackai_turn === state.safetyRequest.requestId;
+      if (ownSafetyResponse && safetyResponseId) state.safetyRequest.responseId = safetyResponseId;
+      if (!safetyResponseId || safetyResponseId !== state.safetyRequest.responseId) {
+        // Do not let a late previous response stop the new guidance early.
+        if (type === 'response.created' && safetyResponseId) sendRealtime({ type: 'response.cancel', response_id: safetyResponseId });
+        return;
+      }
+    }
     if (state.activationEvent && type === 'session.updated' && evt.session &&
         evt.session.instructions === state.activationInstructions && matchesTurnDetection(evt.session, true)) {
       turnControl.interruptResponse = true;
@@ -2422,6 +2479,7 @@
       state.conduct = newConductGate();
       state.conductEnd = null;
       state.endCause = null;
+      state.safetyRequest = null;
       // Fresh lifecycle: CONNECTING until realtime is ready, then the audio
       // check. Nothing is committed to transcript or scoring before the
       // official interview begins.
@@ -2486,6 +2544,7 @@
       state.conduct = newConductGate();
       state.conductEnd = null;
       state.endCause = null;
+      state.safetyRequest = null;
       state.lifecycle = newInterviewLifecycle();
       state.lastAssistantResponseId = '';
       clearTurnWait();
