@@ -667,7 +667,12 @@ test('a delayed audible reply clears recovery and permits the following answer',
 });
 
 test('an active response timeout offers recovery without closing the interview',async t=>{
-  const h=await live(t,{timerDelay:ms=>ms===45000?1:ms});begin(h);
+  // Compress only the response under test. Compressing the setup greeting as
+  // well can close the attempt before begin() on a loaded CI runner.
+  let expireActiveResponse=false;
+  const h=await live(t,{timerDelay:ms=>expireActiveResponse&&ms===45000?1:ms});
+  await new Promise(r=>setTimeout(r,10));begin(h);
+  expireActiveResponse=true;
   answer(h,'answer','I verified the result against our baseline.');
   await new Promise(r=>setTimeout(r,20));await h.settle();
   assert.match(h.el('vi-status').textContent,/not responding/i);
