@@ -1,5 +1,26 @@
 # Verified voice-call recovery
 
+## November 8: durable diagnosis for new unconfirmed 404 responses
+
+New ambiguous hangup 404s retain their safe diagnostic in
+`voice_provider_calls.last_error_code` as
+`close_http_404:<bodyFormat>:<errorCode-or-none>:<errorType-or-none>:<messageClass>`.
+Every component comes from the existing bounded, allowlisted diagnostic reader.
+For example, `close_http_404:empty:none:none:unclassified` establishes an empty
+body, whereas `close_http_404:unavailable:none:none:unclassified` means the body
+could not be read within its size/time limits. Neither establishes closure.
+This avoids depending on a temporary log connection during network-loss tests.
+Raw responses, messages, credentials, SDP and interview content are not saved.
+
+The hold, request correlation token and existing no-replay rules are unchanged.
+The recognized exact absence response still uses `close_call_id_not_found`.
+Older records containing only `close_http_404` have unknown body details and
+must not be retroactively classified. No migration or historical rewrite is
+required. This change improves diagnosis; it does not accept network recovery
+or resolve OpenAI support case 19425445.
+
+## Earlier findings and recovery procedure
+
 **September 29 controlled QA finding:** provider-first finish returned200.
 Closing the browser transport and then reconnecting reproduced404 with the
 structured provider error `call_id_not_found` / `invalid_request_error`.

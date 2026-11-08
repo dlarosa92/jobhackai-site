@@ -109,9 +109,12 @@ describe('durable interview deadlines in the actual Workers runtime',()=>{
   });
   it('a provider 404 retains uncertainty and alarm redelivery cannot repeat hangup',async()=>{
     await open();vi.mocked(fetch).mockImplementation(async(input)=>{requests.push(String(input));return new Response(null,{status:404});});
-    await due();await runDurableObjectAlarm(stub);expect((await call())?.state).toBe('uncertain');
+    await due();await runDurableObjectAlarm(stub);
+    expect(await call()).toMatchObject({state:'uncertain',closed_at:null,
+      last_error_code:'close_http_404:empty:none:none:unclassified'});
     expect((await state()).saved).toMatchObject({status:'review'});expect((await state()).alarm).toBeGreaterThan(Date.now());
     await runInDurableObject(stub,(instance)=>instance.alarm());expect(requests.filter(x=>x.endsWith('/hangup'))).toHaveLength(1);
+    expect((await call())?.last_error_code).toBe('close_http_404:empty:none:none:unclassified');
   });
   it('the exact provider call absence response closes at deadline and removes the alarm',async()=>{
     await open();vi.mocked(fetch).mockImplementation(async(input,init)=>{
