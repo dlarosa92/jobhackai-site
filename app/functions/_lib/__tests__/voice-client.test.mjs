@@ -713,8 +713,8 @@ test('spoken stop silences playback immediately while a late answer still flushe
   } finally { h.dispose(); }
 });
 
-test('a natural wrap-up keeps its audio until playback finishes, then releases it', async () => {
-  const h = await liveInterviewWithOneAnswer();
+test('a natural wrap-up longer than six seconds keeps audio until playback finishes', async () => {
+  const h = await liveInterviewWithOneAnswer({ timerDelay: ms => ms === 6000 ? 5 : ms });
   try {
     const audio = h.el('vi-remote-audio');
     const stream = { id: 'closing-audio' };
@@ -725,6 +725,7 @@ test('a natural wrap-up keeps its audio until playback finishes, then releases i
     h.event({ type: 'output_audio_buffer.started', response_id: 'closing-response' });
     h.event({ type: 'response.output_audio_transcript.done', item_id: 'closing-item', response_id: 'closing-response', transcript: 'Thank you for your time. Your written feedback report is being prepared and will appear on this page.' });
     h.event({ type: 'response.done', response: { id: 'closing-response' } });
+    await new Promise(resolve => setTimeout(resolve, 25));
     assert.equal(audio.srcObject, stream, 'do not cut off the natural closing line');
     assert.equal(h.completeBodies().length, 0);
     h.event({ type: 'output_audio_buffer.stopped', response_id: 'closing-response' });
@@ -734,6 +735,28 @@ test('a natural wrap-up keeps its audio until playback finishes, then releases i
     assert.equal(audio.srcObject, null);
   } finally { h.dispose(); }
 });
+
+for (const withoutModules of [[], ['createClosingTurnGate']]) {
+  test('a missing normal closing playback receipt is still bounded: '+JSON.stringify(withoutModules), async () => {
+    const h = await liveInterviewWithOneAnswer({ withoutModules, timerDelay: ms => ms === 30000 ? 10 : ms });
+    try {
+      h.event({ type: 'response.created', response: { id: 'closing-response' } });
+      h.event({ type: 'conversation.item.created', item: { id: 'closing-item' } });
+      h.event({ type: 'output_audio_buffer.started', response_id: 'closing-response' });
+      h.event({ type: 'response.output_audio_transcript.done', item_id: 'closing-item', response_id: 'closing-response',
+        transcript: 'Thank you for your time. Your feedback report is being prepared and will appear on this page shortly.' });
+      h.event({ type: 'response.done', response: { id: 'closing-response' } });
+      assert.equal(h.completeBodies().length, 0);
+      await new Promise(resolve => setTimeout(resolve, 30));
+      await h.settle();
+      assert.equal(h.completeBodies().length, 1);
+      assert.equal(h.completeBodies()[0].reason, 'completed');
+      h.event({ type: 'output_audio_buffer.stopped', response_id: 'closing-response' });
+      await h.settle();
+      assert.equal(h.completeBodies().length, 1,'a late playback receipt cannot save twice');
+    } finally { h.dispose(); }
+  });
+}
 
 
 // Connection setup can settle after End, or after a replacement connection.

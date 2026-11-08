@@ -233,12 +233,47 @@ test('a candidate asking to start an example at the final invitation gets to spe
   assert.equal(p.next({candidateText:'I compared the records, fixed intake and cut the delay by two days.'}).kind,'close');
 });
 
+test('the recorded compound clarification preserves the current question at a topic boundary',async t=>{
+  const h=await live(t);begin(h);
+  for(let i=0;i<5;i++) {
+    answer(h,'answer-'+i,'I compared the records, discussed the evidence with the team and agreed on a pilot.');
+    assistant(h,'question-'+i,i===4
+      ? 'How did you ensure that the trust you built translated into improved collaboration on the project?'
+      : 'What happened next?');
+  }
+  const clarification='What do you mean exactly? Could you elaborate on the question?';
+  answer(h,'clarification',clarification);
+  assert.equal(requests(h).at(-1).response.metadata.jobhackai_purpose,'rephrase');
+  assert.equal(requests(h).at(-1).response.metadata.jobhackai_topic,'1');
+  const context=h.sends.filter(x=>x.type==='conversation.item.create'&&x.item.role==='system').at(-1).item.content[0].text;
+  assert.match(context,/trust you built translated into improved collaboration/);
+  assert.match(context,/Do not add a new question or change the topic/);
+  assistant(h,'clarified','How did that trust help you work together on the project?');
+  answer(h,'real-answer','We reviewed the handoff failures together and agreed on the next change.');
+  assert.equal(requests(h).at(-1).response.metadata.jobhackai_purpose,'new_topic');
+  assert.equal(requests(h).at(-1).response.metadata.jobhackai_topic,'2');
+  await h.endInterview();
+  assert.ok(h.completeBodies()[0].transcript.some(x=>x.text===clarification),'retain the actual conversation');
+});
+
 for (const [text,kind] of [
   ['Could you repeat that, please?','repeat'], ['Say that again.','repeat'],
   ['Could you please repeat that question?','repeat'],
   ['Could you repeat or rephrase that question?','rephrase'],
   ['Could you put that another way?','rephrase'], ["I don't understand the question.",'rephrase'],
   ['What do you mean by that?','rephrase'], ["Let's move on.",'change_question'],
+  ['What do you mean exactly? Could you elaborate on the question?','rephrase'],
+  ['What do you mean exactly could you elaborate on the question','rephrase'],
+  ['What exactly do you mean?','rephrase'],
+  ['Could you elaborate on that?','rephrase'],
+  ['Could you explain what you mean by that?','rephrase'],
+  ["I don't understand the question. Could you repeat it?",'rephrase'],
+  ['Could you repeat that? Could you rephrase it more simply?','rephrase'],
+  ['What do you mean exactly? I compared our records and reduced the delay.',null],
+  ['Could you elaborate on the question? I chose the project with the largest return.',null],
+  ['During training, I asked, "What do you mean exactly? Could you elaborate on the question?"',null],
+  ['Could you elaborate on the question of how I measured savings?',null],
+  ['Could you repeat that? Next question, please.',null],
   ['Could you reframe that more simply, please?','rephrase'],
   ["No, no, I'm sorry, I'm sorry, could you rephrase that?",'rephrase'],
   ['Can you hear me?','hearing_check'], ["I couldn't hear the question.",'hearing_check'],
