@@ -730,8 +730,16 @@ test('curly apostrophes from whisper are handled like straight ones', () => {
   assert.equal(isExplicitEndRequest('Let’s stop the interview here.'), true);
 });
 
-test('live QA pronoun requests end only as complete immediate requests', () => {
-  for (const request of ["I'd like to end this now.", 'I’d like to stop this here please.', 'Okay, I would like to finish this right now.']) {
+test('live QA pronoun requests end only as complete immediate or polite requests', () => {
+  for (const request of [
+    "I'd like to end this now.",
+    'I’d like to stop this here please.',
+    'Okay, I would like to finish this right now.',
+    "I'd like to finish this, please.",
+    "I'd like to finish this please.",
+    "I'd like to finish this now, please.",
+    'I would like to stop this, please.'
+  ]) {
     assert.equal(isExplicitEndRequest(request), true, request);
   }
   for (const answer of [
@@ -745,8 +753,45 @@ test('live QA pronoun requests end only as complete immediate requests', () => {
     'I would like to end this now, but first I would ask the customer.',
     'The customer said, "I would like to leave."',
     '"I would like to leave."',
-    'I would like to leave tomorrow.'
+    'I would like to leave tomorrow.',
+    "I'd like to finish this.",
+    "If we had more time, I'd like to finish this, please.",
+    "The customer said, I'd like to finish this, please.",
+    '"I would like to finish this, please."',
+    "I'd like to finish this, please, before we start the next project.",
+    "I'd like to finish this please. That is what the customer said.",
+    "I'd like to finish this project, please.",
+    "I'd like to finish this now, please, with a summary."
   ]) assert.equal(isExplicitEndRequest(answer), false, answer);
+});
+
+
+test('a direct departure plus goodbye ends the session without matching stories or answer completion', () => {
+  for (const request of ['I gotta go. Bye-bye.', 'I have to go, goodbye.', 'Sorry, I need to leave now. Bye bye!', 'Okay, I gotta go bye.']) {
+    assert.equal(isExplicitEndRequest(request), true, request);
+  }
+  for (const answer of [
+    'I gotta go.', 'Bye.', "Nope, I'm all done.",
+    'I have to go through the report. Goodbye.',
+    'I have to go tomorrow. Goodbye.',
+    'I said I gotta go. Bye-bye.',
+    'The customer said, "I gotta go. Bye-bye."',
+    'If I have to go, goodbye.',
+    'I gotta go. Bye-bye. That is what the customer said.',
+    'I need to leave my current job. Goodbye.'
+  ]) assert.equal(isExplicitEndRequest(answer), false, answer);
+});
+
+test('a completed app-requested audio check arms even when its wording is paraphrased',()=>{
+  const lc=createInterviewLifecycle();lc.to(LIFECYCLE.AUDIO_CHECK);
+  lc.noteAudioCheckTranscript('How does my audio sound today?');
+  lc.noteGreetingDone(true);
+  lc.noteAudioCheckTranscript('How does my audio sound today?');
+  assert.equal(lc.isGreetingDone(),true,'late delivery cannot revoke the tagged check');
+  assert.equal(lc.noteUserCommitted('ack','greet'),'begin_interview');
+  assert.equal(lc.shouldCommit('ack'),false);
+  assert.equal(lc.noteAssistantTurn('q','Tell me about a project you led.','opening'),'confirmed');
+  assert.equal(lc.shouldCommit('q'),true);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

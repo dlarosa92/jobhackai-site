@@ -12,6 +12,7 @@ import { callOpenAI } from './openai-client.js';
 import { getDb } from './db.js';
 import { scorecardUsageEvidence } from './voice-usage.js';
 import { isExplicitEndRequest } from '../../../js/voice-lifecycle.js';
+import { classifyVoiceTurnControl } from '../../../js/voice-turn-plan.js';
 
 export const SCORECARD_SCHEMA = {
   name: 'voice_interview_scorecard',
@@ -108,16 +109,21 @@ export function groundedCompetencies(competencies, transcript) {
   });
 }
 
-// Old clients and reconnects can submit session controls as candidate turns.
-// Keep those out of both the model input and quote validation. Whole-turn
-// matches preserve real answers that describe audio issues or ending a call.
+// Use the live interview's control classification for assessment too. Controls
+// do not contribute words, trigger an assessment call, or support report quotes.
+// Whole-turn matching preserves stories and controls followed by real answers.
 export function interviewEvidenceTranscript(transcript) {
   return (Array.isArray(transcript) ? transcript : []).filter(turn => {
     if (turn?.speaker !== 'user') return true;
     const text = String(turn.text || '').trim().replace(/[‘’]/g, "'");
-    if (isExplicitEndRequest(text)) return false;
-    return !/^(?:(?:hello|hi|hey|sorry)[, ]+)?(?:(?:can|could) you hear me(?: (?:now|okay|ok|clearly))?|i (?:can't|cannot) hear you(?: (?:now|clearly))?)[?!.]*$/i.test(text);
+    return !isExplicitEndRequest(text) && !classifyVoiceTurnControl(text);
   });
+}
+
+/** Interviewer turns that asked something, for the report's meta line. */
+export function interviewerQuestionCount(transcript) {
+  return interviewEvidenceTranscript(transcript)
+    .filter(t => t?.speaker === 'assistant' && String(t.text || '').includes('?')).length;
 }
 
 export function transcriptToText(transcript) {
@@ -128,9 +134,40 @@ export function transcriptToText(transcript) {
     .join('\n');
 }
 
-// Below this many characters of candidate-only formatted text, sessions get the
+// Below this many characters of candidate speech, sessions get the
 // fixed "too short" scorecard instead of a model call.
 export const MIN_SCOREABLE_CHARS = 200;
+
+// A feedback threshold is not a grading threshold. Merge transcription chunks
+// belonging to the same answer and ignore repeated answers; neither splitting
+// speech into items nor waiting out the clock can manufacture grading evidence.
+export const MIN_GRADED_WORDS = 300;
+export const MIN_SUBSTANTIVE_ANSWERS = 3;
+export const MIN_ANSWER_WORDS = 40;
+export function scoreEvidence(transcript) {
+  const answers = [];
+  let current = [];
+  const flush = () => { if (current.length) answers.push(quoteWords(current.join(' '))); current = []; };
+  for (const turn of interviewEvidenceTranscript(transcript)) {
+    if (turn?.speaker === 'assistant') flush();
+    else if (turn?.speaker === 'user' && String(turn.text || '').trim()) current.push(String(turn.text).trim());
+  }
+  flush();
+  const counts = [...new Set(answers)].filter(Boolean).map(answer => answer.split(/\s+/).length);
+  const candidateWords = counts.reduce((sum, count) => sum + count, 0);
+  const substantiveAnswers = counts.filter(count => count >= MIN_ANSWER_WORDS).length;
+  return { candidateWords, substantiveAnswers,
+    eligible: candidateWords >= MIN_GRADED_WORDS && substantiveAnswers >= MIN_SUBSTANTIVE_ANSWERS };
+}
+
+// Ask for qualitative feedback only when the deterministic evidence gate fails.
+// Also strip numerical fields after generation, even if a provider/cache returns
+// them despite the schema. Existing saved reports are not silently regraded.
+const FEEDBACK_SCHEMA = JSON.parse(JSON.stringify(SCORECARD_SCHEMA));
+FEEDBACK_SCHEMA.name = 'voice_interview_feedback';
+for (const key of ['overall', 'dimensions', 'saoBalance']) {
+  FEEDBACK_SCHEMA.schema.properties[key] = { type: 'null', description: 'No numerical assessment for this limited sample.' };
+}
 
 function tooShortScorecard() {
   // Too short to score meaningfully (mic failure, instant hangup)
@@ -164,10 +201,11 @@ function tooShortScorecard() {
 export async function scoreVoiceTranscript({ role, seniority, transcript, jd = null, priorFocus = null }, env) {
   transcript = interviewEvidenceTranscript(transcript);
   const text = transcriptToText(transcript);
-  const candidateText = transcriptToText((Array.isArray(transcript) ? transcript : []).filter(t => t?.speaker === 'user'));
+  const candidateText = transcript.filter(t => t?.speaker === 'user').map(t => String(t.text || '').trim()).join(' ');
   if (candidateText.length < MIN_SCOREABLE_CHARS) {
     return { scorecard: tooShortScorecard(), usage: null, model: null };
   }
+  const evidence = scoreEvidence(transcript);
 
   const promptParts = [
     "You are the candidate's interview coach at JobHackAI. Give warm, direct, evidence-based feedback on this practice sample.",
@@ -188,8 +226,10 @@ export async function scoreVoiceTranscript({ role, seniority, transcript, jd = n
     'State the assessment scope and important untested areas, especially for short interviews. A job-description match reflects this practice evidence, not qualification verification or a hiring prediction.',
     'Give exactly two concise saoCoaching practice steps under 120 characters each. Make topImprovement one achievable priority. Suggested practice must not invent accomplishments, metrics or experience for the candidate.',
     'Write directly to the candidate using you, plain language and short sentences. Explain uncertainty without hiding useful criticism. End the summary with a specific next practice focus, not a sales pitch.',
+    'Keep numerical grades and content percentages only in their structured numeric fields, never in feedback prose. Evidence eligibility may withhold those numeric fields after generation.',
     'FINAL AUDIT: For every needs_practice item, verify the quote establishes an actual problem under the evidence decision rules. Change missing or unasked evidence to not_assessed, and sound limited evidence to demonstrated. Remove any criticism elsewhere that depends on those rejected gaps. Check scores, topImprovement, summary and moments agree with the final statuses. Do not diagnose job readiness from one answer.'
   ];
+  if (!evidence.eligible) promptParts.push('LIMITED SAMPLE: Give useful qualitative feedback, with grounded strengths and one next practice step. Do not assign or mention any numerical score, grade, rating, percentage, or readiness band. overall, dimensions and saoBalance must be null. Explain that more substantive answers are needed for a practice score; choosing to finish is not a performance defect.');
   if (jd) {
     promptParts.push('A job description excerpt is provided: score roleFit against it specifically, and cite the most relevant match or gap in a moment or the summary.');
   }
@@ -212,7 +252,7 @@ export async function scoreVoiceTranscript({ role, seniority, transcript, jd = n
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userParts.join('\n\n') }
     ],
-    responseFormat: SCORECARD_SCHEMA,
+    responseFormat: evidence.eligible ? SCORECARD_SCHEMA : FEEDBACK_SCHEMA,
     maxTokens: 2400,
     // Low temperature: the same performance should get the same score.
     temperature: 0.1,
@@ -228,8 +268,33 @@ export async function scoreVoiceTranscript({ role, seniority, transcript, jd = n
     : result.content;
 
   scorecard.methodologyVersion = 2;
+  const proposedMoments = Array.isArray(scorecard.moments) ? scorecard.moments : [];
+  const proposedCompetencies = Array.isArray(scorecard.competencies) ? scorecard.competencies : [];
   scorecard.moments = groundedMoments(scorecard.moments, transcript);
   scorecard.competencies = groundedCompetencies(scorecard.competencies, transcript);
+  const rejectedEvidence = scorecard.moments.length !== proposedMoments.length ||
+    proposedCompetencies.slice(0, 5).some((c, i) =>
+      c.status !== 'not_assessed' && scorecard.competencies[i].status === 'not_assessed');
+  if (rejectedEvidence) {
+    // Global narrative and numbers have no per-claim evidence links. Once an
+    // asserted quote fails verification we cannot safely retain dependent
+    // praise or criticism, even when other competency quotes are valid.
+    scorecard.evidenceLimited = true;
+    scorecard.assessmentScope = 'Some supporting excerpts could not be verified against the captured answers. This report contains limited feedback and no numerical assessment.';
+    scorecard.topStrength = '';
+    scorecard.topImprovement = 'For your next practice, choose one example and explain your own actions and the result.';
+    scorecard.saoCoaching = [];
+    scorecard.summary = 'We could not verify all of the supporting evidence for this report, so no practice score is shown. This is a report limitation, not a judgment of your ability.';
+  }
+  // Even a long transcript needs grounded assessments before numbers may show.
+  const assessed = scorecard.competencies.filter(c => c.status !== 'not_assessed');
+  scorecard.scoreEligibility = { ...evidence, version: 1, eligible: !rejectedEvidence && evidence.eligible && assessed.length >= 3 };
+  if (!scorecard.scoreEligibility.eligible) {
+    scorecard.feedbackOnly = true;
+    scorecard.overall = null;
+    scorecard.dimensions = null;
+    scorecard.saoBalance = null;
+  }
   return { scorecard, usage: result.usage || null, model: result.model || null, fromCache: result.fromCache === true };
 }
 
@@ -303,13 +368,25 @@ export async function generateAndStoreScorecard(env, sessionId) {
   }
 }
 
+// Free reports show the overall practice score. The repositioning brief
+// limited the free view to one strength and one fix; this flag is the single
+// switch back to that.
+export const FREE_REPORT_SHOWS_SCORE = true;
+
+// Longest candidate quote the free report may tease.
+const TEASER_MAX_CHARS = 200;
+
 /**
- * Reduce a full scorecard to the free-taste partial view:
- * top strength + one improvement area. Everything else is withheld.
+ * Reduce a full scorecard to the free-taste partial view: top strength, one
+ * improvement area, the overall score (FREE_REPORT_SHOWS_SCORE), and at most
+ * one short quote of the candidate's own words, taken only from a moment
+ * grounded in the transcript. Dimension scores, moment feedback, the summary
+ * and the transcript are withheld. tooShort survives so the client never
+ * offers a full report that does not exist.
  */
-export function partialScorecard(scorecard) {
+export function partialScorecard(scorecard, { transcript = null } = {}) {
   if (!scorecard) return null;
-  return {
+  const partial = {
     partial: true,
     topStrength: scorecard.topStrength,
     topImprovement: scorecard.topImprovement,
@@ -318,4 +395,20 @@ export function partialScorecard(scorecard) {
     moments: null,
     summary: null
   };
+  if (scorecard.tooShort) {
+    partial.tooShort = true;
+    return partial;
+  }
+  if (scorecard.feedbackOnly) partial.feedbackOnly = true;
+  if (scorecard.evidenceLimited) partial.evidenceLimited = true;
+  const overall = Number(scorecard.overall);
+  if (!scorecard.feedbackOnly && FREE_REPORT_SHOWS_SCORE && scorecard.overall != null && Number.isFinite(overall)) {
+    partial.overall = Math.round(overall);
+    partial.methodologyVersion = scorecard.methodologyVersion || 1;
+  }
+  const teaser = transcript ? groundedMoments(scorecard.moments, transcript)
+    .map(m => String(m.quote || '').trim())
+    .find(q => q && q.length <= TEASER_MAX_CHARS) : null;
+  if (teaser) partial.teaserQuote = teaser;
+  return partial;
 }

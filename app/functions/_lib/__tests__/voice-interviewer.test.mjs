@@ -22,7 +22,9 @@ import {
   shouldGenerateScorecard,
   voiceFirstName,
   realtimeSessionConfig,
-  VOICE_OUTPUT_SPEED
+  VOICE_OUTPUT_SPEED,
+  MAX_FOLLOW_UPS_PER_QUESTION,
+  BANNED_PRAISE_WORDS
 } from '../voice-interviewer.js';
 
 let passed = 0;
@@ -216,14 +218,31 @@ test('conduct: ending requires the warning to have happened first', () => {
   assert.ok(out.indexOf('stage "warning"') < out.indexOf('stage "end"'));
 });
 
-test('distress: brief honest redirect, never a counselor or hotline dispenser', () => {
+test('distress: retrospective health and personal stories remain valid interview context', () => {
   const out = interviewerInstructions(BASE);
-  assert.ok(out.includes('do not become a counselor'));
-  assert.ok(out.includes('do not offer hotlines, therapists, or HR advice'));
-  assert.ok(out.includes('this is interview practice so it is not the right place for it'));
-  assert.ok(out.includes('deserve to talk to someone who can actually help'));
-  // Ordinary workplace distress is named, so the carve-out below cannot swallow it
-  assert.ok(out.includes('burnout, a manager grinding them down, feeling trapped'));
+  // A real retrospective stroke story was rejected as inappropriate. Keep
+  // health, caregiving and adversity context distinct from a present crisis.
+  assert.ok(out.includes('a past health event (including a past stroke), disability, caregiving, unemployment, adversity, or a difficult workplace story can be relevant interview content'));
+  assert.ok(out.includes('Acknowledge it briefly and respectfully without judging or shaming the candidate'));
+  assert.ok(out.includes('Never dismiss a disclosure as "not the right place"'));
+  assert.ok(out.includes('without treating the disclosure itself as a performance problem or a reason to end'));
+  assert.ok(!out.includes('this is interview practice so it is not the right place for it'));
+  assert.ok(!out.includes('close early if they are clearly not here to practice'));
+});
+
+test('distress: candidate controls disclosure without medical probing or unsolicited advice', () => {
+  const out = interviewerInstructions(BASE);
+  assert.ok(out.includes('they may continue with the relevant example, choose another example, or skip that question'));
+  assert.ok(out.includes('Never force disclosure or ask for medical or other private details'));
+  assert.ok(out.includes('offer that choice in one short sentence, then follow their preference'));
+  assert.ok(out.includes('Do not diagnose, do not become a counselor'));
+  assert.ok(out.includes('do not offer hotlines, therapists, or HR advice for a past story or non-imminent distress'));
+});
+
+test('distress: ordinary anxiety or a historical story alone is not misconduct or current danger', () => {
+  const out = interviewerInstructions(BASE);
+  assert.ok(out.includes('Ordinary interview anxiety, frustration, burnout, or non-imminent distress is not misconduct'));
+  assert.ok(out.includes('a past health or personal story, ordinary anxiety, frustration, or burnout alone does not establish current danger'));
 });
 
 test('distress: imminent danger is the one carve-out, and it is bounded', () => {
@@ -233,20 +252,31 @@ test('distress: imminent danger is the one carve-out, and it is bounded', () => 
   assert.ok(out.includes('contact emergency services now'));
   assert.ok(out.includes('call or text 988 if they are in the US'));
   assert.ok(out.includes('Do not press for details'));
-  // It must not reopen the door for ordinary distress
+  // Historical context or ordinary anxiety must not trigger crisis shutdown,
+  // while an explicit signal of current imminent danger still must do so.
   assert.ok(out.includes('This is for imminent danger only'));
-  assert.ok(out.includes('ordinary frustration, burnout, or a hard story about work is covered by the rule above'));
+  assert.ok(out.includes('follow the respectful acknowledgment and candidate-choice rules above'));
   // The general no-resources rule comes first; the exception narrows it
   assert.ok(out.indexOf('do not offer hotlines') < out.indexOf('One exception to that'));
 });
 
-test('the question-pushback rule no longer overrides conduct or distress', () => {
+test('the question-pushback rule cannot override conduct, distress or disclosure choice', () => {
   const out = interviewerInstructions(BASE);
   assert.ok(out.includes('challenges or refuses an interview question'));
-  assert.ok(out.includes('it never overrides the conduct and distress rules above'));
+  assert.ok(out.includes('This never overrides the conduct, distress, or personal-disclosure choice rules above'));
+  assert.ok(out.includes('Honor an explicit skip or example-change request without pressing'));
+  assert.ok(!out.includes('Do not drop the question'));
   // Ordering matters for "above" to be true
   assert.ok(out.indexOf('abusive, sexually explicit') < out.indexOf('challenges or refuses an interview question'));
   assert.ok(out.indexOf('do not become a counselor') < out.indexOf('challenges or refuses an interview question'));
+  assert.ok(out.indexOf('choose another example, or skip that question') < out.indexOf('challenges or refuses an interview question'));
+});
+
+test('the application owns the budget and conversation controls are not answers', () => {
+  const out = interviewerInstructions(BASE);
+  assert.ok(out.includes('The application owns the clock and question budget'));
+  assert.ok(out.includes('conversation controls, not answered questions'));
+  assert.ok(!out.includes('You own the clock'));
 });
 
 test('conduct_action is shaped for the Realtime API', () => {
@@ -421,12 +451,14 @@ test('a real transcript tail takes precedence over the early-resume block', () =
   assert.ok(!out.includes('AUDIO CHECK'));
 });
 
-test('the closing turn is mandated to be a statement, so the app can detect it deterministically', () => {
+test('the final answer opportunity precedes the application-owned terminal closing', () => {
   const out = interviewerInstructions(BASE);
-  assert.ok(out.includes('thanking them for their time'));
+  assert.ok(out.includes('wait for their answer'));
+  assert.ok(out.includes('use its supplied closing words exactly'));
+  assert.ok(out.includes('Do not add a name, reference to an answer, question, or invitation to continue'));
   assert.ok(out.includes('feedback report is being prepared and will appear on this page'));
-  assert.ok(out.includes('That closing turn is a statement only'));
-  assert.ok(out.includes('after it the interview is over'));
+  assert.ok(out.includes('The final invitation and the closing are separate turns'));
+  assert.ok(!out.includes('referencing one specific thing they said'));
 });
 
 test('voiceFirstName keeps real names', () => {
@@ -467,8 +499,9 @@ test('the resolved name is bound as a session fact, not just spoken in the greet
   const out = interviewerInstructions({ ...BASE, firstName: 'Dawn' });
   assert.ok(out.includes("The candidate's name is Dawn."));
   assert.ok(out.includes('That is their name for this whole session and the only one you may use'));
-  // Sound check, closing, and everything between are covered by one value...
-  assert.ok(out.includes('greet them by it in the audio check, use it again when you close'));
+  // Sound check and conversation use one value; the fixed closing omits it.
+  assert.ok(out.includes('greet them by it in the audio check and use it sparingly during the interview'));
+  assert.ok(out.includes('Do not add a name to a closing statement supplied by the application'));
   // ...and no other name may be substituted later, by drift or by invention.
   assert.ok(out.includes('Never call them by any other name'));
   assert.ok(out.includes('never switch to a different one part way through'));
@@ -617,6 +650,38 @@ test('acknowledgment is selective and never repetitive', () => {
   // The neutrality ban is preserved verbatim.
   assert.ok(out.includes('never "great", "excellent", or "that makes sense"'));
   assert.ok(!out.includes('Vary your acknowledgments'));
+});
+
+// ---- follow-up budget and praise (live QA: five follow-ups, then "Great.") ----
+
+test('follow-ups are capped at two per question, then the interviewer moves on', () => {
+  const out = interviewerInstructions(BASE);
+  assert.equal(MAX_FOLLOW_UPS_PER_QUESTION, 2);
+  assert.ok(out.includes('ask at most 2 follow-ups on any one question, and count them'));
+  assert.ok(out.includes('never ask a third'));
+  assert.ok(out.includes('"Let\'s try a different example."'));
+  assert.ok(out.includes('offer one scaffold, once'));
+  assert.ok(out.includes('then move on whatever they say'));
+  // The old soft wording is gone, so the two rules cannot disagree.
+  assert.ok(!out.includes('Push at most twice'));
+});
+
+test('praise words are banned outright, including as a one-word opener', () => {
+  const out = interviewerInstructions(BASE);
+  for (const word of ['great', 'awesome', 'excellent', 'perfect']) {
+    assert.ok(BANNED_PRAISE_WORDS.includes(word), word);
+    assert.ok(out.includes(`"${word}"`), `the prompt names "${word}"`);
+  }
+  assert.ok(out.includes('Never praise, not even as a one-word opener'));
+  assert.ok(out.includes('name one specific detail they gave, neutrally'));
+});
+
+test('the follow-up and praise rules reach every opening, including resumes', () => {
+  for (const extra of [{}, { interviewStarted: true }, { resumeContext: 'Interviewer: A question.\nCandidate: An answer.' }]) {
+    const out = interviewerInstructions({ ...BASE, ...extra });
+    assert.ok(out.includes('Follow-up limit, a hard rule'));
+    assert.ok(out.includes('Never praise'));
+  }
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -12,7 +12,7 @@ async function harness(responses, initialUser={getIdToken:async()=> 'test-only-t
     if (!nodes.has(id)) nodes.set(id, {disabled:true,textContent:'',addEventListener(type, fn) {this[type] = fn;}});
     return nodes.get(id);
   };
-  const timers = new Set();
+  const timers = new Set(), intervals = new Map();
   class AudioContext {
     state='suspended';
     resume() { order.push('resume'); this.state='running'; return Promise.resolve(); }
@@ -34,6 +34,8 @@ async function harness(responses, initialUser={getIdToken:async()=> 'test-only-t
     crypto:{randomUUID:()=> '11111111-1111-4111-8111-111111111111'},Date,AbortSignal,
     setTimeout(fn, ms) {const timer=setTimeout(fn,ms);timers.add(timer);return timer;},
     clearTimeout(timer) {clearTimeout(timer);timers.delete(timer);},
+    setInterval(fn,ms) {const key={};intervals.set(key,{fn,ms});return key;},
+    clearInterval(key) {intervals.delete(key);},
     addEventListener(type, fn) {events[type]=fn;},
     async fetch(path, init) {
       order.push('fetch'); const body=init.body ? JSON.parse(init.body) : null;
@@ -43,11 +45,11 @@ async function harness(responses, initialUser={getIdToken:async()=> 'test-only-t
     }
   });
   const flush=async()=>{for(let i=0;i<10;i++)await new Promise(resolve=>setImmediate(resolve));};
-  return {element,events,calls,peers,order,flush,
+  return {element,events,calls,peers,order,flush,intervals,
     async click(id) {assert.equal(element(id).disabled,false,id+' enabled');element(id).click();await flush();},
     cleanup() {for(const timer of timers)clearTimeout(timer);}};
 }
-const plan={voice:{transport:'managed'}}, opened={attemptId:'attempt-1',sdp:'v=0-answer'};
+const plan={voice:{transport:'managed'}}, opened={attemptId:'attempt-1',sdp:'v=0-answer',requiresAudioCheck:true,connectionWatch:true};
 test('pending authentication does not enable Start and a later user does', async t=>{
   const h=await harness([], {_authPending:true});t.after(h.cleanup);
   assert.equal(h.element('start').disabled,true);
@@ -71,10 +73,13 @@ test('saved but pending closure remains finishable and retains unload warning', 
   warned=false;h.events.beforeunload({preventDefault(){warned=true;}});assert.equal(warned,false);
 });
 test('successful reconnect completes normally using the original session and replacement attempt', async t=>{
-  const h=await harness([plan,opened,{attemptId:'attempt-2',sdp:'v=0-answer'},{},{saved:true,connectionClosed:true}]);t.after(h.cleanup);
+  const h=await harness([plan,opened,{...opened,attemptId:'attempt-2'},{},{status:'cancelled',saved:false,connectionClosed:true}]);t.after(h.cleanup);
   await h.click('start');await h.click('drop');await h.click('reconnect');await h.click('finish');
   assert.equal(h.calls[2].body.sessionId,h.calls[1].body.sessionId);
   assert.equal(h.calls[2].body.replacesAttemptId,'attempt-1');
+  assert.equal(h.calls[1].body.audioCheck,true);
+  assert.equal(h.calls[2].body.audioCheck,true);
+  assert.equal(h.calls.filter(call=>call.body?.action==='activate').length,0,'the silent diagnostic never activates a paid interview');
   assert.equal(h.calls.at(-1).body.reason,'user_ended');
 });
 test('failed reconnect requires Finish and does not replay an uncertain create', async t=>{
@@ -90,4 +95,19 @@ test('an open response arriving after Finish cannot reactivate a completed check
   await h.click('start');await h.click('finish');resolveOpen(opened);await h.flush();
   assert.equal(h.element('status').textContent,'Check finished.');
   assert.equal(h.element('drop').disabled,true);assert.equal(h.element('finish').disabled,true);
+});
+
+test('silent diagnostic watches only its connected attempt and stops after transport disconnect',async t=>{
+  const h=await harness([plan,opened,{connectionAlive:true},{...opened,attemptId:'attempt-2'}, {},
+    {status:'cancelled',connectionClosed:true}]);t.after(h.cleanup);
+  await h.click('start');assert.equal(h.calls[1].body.connectionWatch,true);
+  h.peers[0].connectionState='connected';h.peers[0].channel.readyState='open';
+  const pulse=[...h.intervals.values()][0].fn;await pulse();
+  assert.equal(h.calls.at(-1).body.action,'heartbeat');assert.equal(h.calls.at(-1).body.attemptId,'attempt-1');
+  await h.click('drop');assert.equal(h.intervals.size,0);
+  const count=h.calls.length;await pulse();assert.equal(h.calls.length,count);
+  await h.click('reconnect');assert.equal(h.calls.at(-1).body.replacesAttemptId,'attempt-1');
+  await pulse();assert.equal(h.calls.length,count+1);
+  await h.click('finish');assert.equal(h.intervals.size,0);
+  assert.equal(h.element('status').textContent,'Check finished.');
 });
