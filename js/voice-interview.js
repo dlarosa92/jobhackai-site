@@ -23,10 +23,11 @@
   // conduct end tears the session down. Generous enough for a spoken sentence,
   // hard enough that a dropped event cannot hold the session open.
   var CONDUCT_END_MAX_WAIT_MS = 6000;
-  // A normal closing includes a detail from the answer and report timing.
+  // A normal closing announces completion and report timing.
   // Generation can finish well before that audio. Keep a bounded wait without
   // applying the short conduct-warning limit to the longer normal closing.
   var NORMAL_CLOSING_MAX_WAIT_MS = 30000;
+  var NORMAL_CLOSING_INPUT_STATUS = 'Interview complete. Microphone off.';
   // How long to wait after the closing response completes for its audio to
   // begin, before concluding there is no closing audio at all.
   var CONDUCT_END_AUDIO_GRACE_MS = 750;
@@ -263,6 +264,7 @@
       state.closingRequest = { requestId: id, responseId: '' };
       lifecycle().to(PHASES.CLOSING);
       stopMicrophone();
+      setInputStatus(NORMAL_CLOSING_INPUT_STATUS);
       if (state.timerInterval) { clearInterval(state.timerInterval); state.timerInterval = null; }
       clearTurnWait();
       // The turn plan has already finished the interview. Wait for this
@@ -286,7 +288,10 @@
       // Each sample starts with empty input. Microphone-test speech and prior
       // replays must not turn the next sample into a conversational reply.
       // The override also survives a lost interview-configuration receipt.
-      ...(safety ? { input: [], instructions: plan.instruction } : {}),
+      // A terminal announcement must not continue the preceding invitation.
+      // Its words are supplied separately while the guarded playback still
+      // owns completion, transcript persistence and exactly one save.
+      ...(safety || (plan && plan.kind === 'close') ? { input: [], instructions: plan.instruction } : {}),
       ...(state.audioSetup ? {input:[],instructions:'This is only an audio check. Say only: "Can you hear this clearly? When this sample finishes, say a few words to check your microphone, then choose I can hear you on the page." Do not ask interview questions, evaluate answers or continue the conversation.'} : {}),
       metadata: {
       jobhackai_purpose: pending.greeting ? 'audio_check' : plan.kind,
@@ -774,7 +779,7 @@
 
   function setInputStatus(text) {
     var label = $('vi-input-status');
-    if (label) label.textContent = state.safetyRequest ? 'Interview ending for safety' : state.microphoneLost ? 'Microphone disconnected. Choose Reconnect.'
+    if (label) label.textContent = state.safetyRequest ? 'Interview ending for safety' : state.closingRequest ? NORMAL_CLOSING_INPUT_STATUS : state.microphoneLost ? 'Microphone disconnected. Choose Reconnect.'
       : state.micMuted ? 'Microphone muted' : sampleHoldsMicrophone() ? 'Microphone paused while the sample plays' : text;
   }
 

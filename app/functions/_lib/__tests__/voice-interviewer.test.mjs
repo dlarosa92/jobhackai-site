@@ -451,12 +451,14 @@ test('a real transcript tail takes precedence over the early-resume block', () =
   assert.ok(!out.includes('AUDIO CHECK'));
 });
 
-test('the closing turn is mandated to be a statement, so the app can detect it deterministically', () => {
+test('the final answer opportunity precedes the application-owned terminal closing', () => {
   const out = interviewerInstructions(BASE);
-  assert.ok(out.includes('thanking them for their time'));
+  assert.ok(out.includes('wait for their answer'));
+  assert.ok(out.includes('use its supplied closing words exactly'));
+  assert.ok(out.includes('Do not add a name, reference to an answer, question, or invitation to continue'));
   assert.ok(out.includes('feedback report is being prepared and will appear on this page'));
-  assert.ok(out.includes('That closing turn is a statement only'));
-  assert.ok(out.includes('after it the interview is over'));
+  assert.ok(out.includes('The final invitation and the closing are separate turns'));
+  assert.ok(!out.includes('referencing one specific thing they said'));
 });
 
 test('voiceFirstName keeps real names', () => {
@@ -497,8 +499,9 @@ test('the resolved name is bound as a session fact, not just spoken in the greet
   const out = interviewerInstructions({ ...BASE, firstName: 'Dawn' });
   assert.ok(out.includes("The candidate's name is Dawn."));
   assert.ok(out.includes('That is their name for this whole session and the only one you may use'));
-  // Sound check, closing, and everything between are covered by one value...
-  assert.ok(out.includes('greet them by it in the audio check, use it again when you close'));
+  // Sound check and conversation use one value; the fixed closing omits it.
+  assert.ok(out.includes('greet them by it in the audio check and use it sparingly during the interview'));
+  assert.ok(out.includes('Do not add a name to a closing statement supplied by the application'));
   // ...and no other name may be substituted later, by drift or by invention.
   assert.ok(out.includes('Never call them by any other name'));
   assert.ok(out.includes('never switch to a different one part way through'));

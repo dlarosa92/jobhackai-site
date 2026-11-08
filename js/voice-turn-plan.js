@@ -44,6 +44,7 @@ function classifyVoiceControlClause(text) {
 }
 
 const TURN_RULES = ' This application turn instruction replaces previous turn-budget instructions. Keep the interview, conduct, safety and closing rules. Never disclose the counter or coach during the interview.';
+const CLOSING_WORDS = 'Thank you for your time. This interview is now complete. Your feedback report is being prepared and will appear on this page.';
 
 export function createVoiceTurnPlan() {
   let questions = 0;
@@ -71,8 +72,8 @@ export function createVoiceTurnPlan() {
       if (wrapUp || topic >= TOPICS.length) {
         kind = finalInvitation ? 'close' : 'final_invitation';
         instruction = finalInvitation
-          ? 'Close now with your normal brief closing statement and report timing. Ask no further question.'
-          : 'Ask only whether the candidate has anything else they want to add. Do not start another topic or follow-up.';
+          ? 'Close now. Say only these exact words, verbatim: ' + JSON.stringify(CLOSING_WORDS) + '. Do not ask a question or invite another answer. Do not add an acknowledgment, condition, offer or other words.'
+          : 'Say: "We have reached the end of our questions. Is there anything else you would like to add before we finish?" Then wait for their answer. Do not start another topic or follow-up.';
         finalInvitation = true;
       } else if (opening || !followup) {
         kind = 'new_topic';
@@ -89,7 +90,9 @@ export function createVoiceTurnPlan() {
       // Charge the opportunity when requested, not when a potentially late or
       // duplicated transcript arrives. Interrupted turns cannot extend a topic.
       if (kind === 'new_topic' || kind === 'follow_up') questions++;
-      return { kind, topic, followup, instruction: instruction + TURN_RULES };
+      // Closing is a standalone announcement. Reusing the conversational
+      // rules can repeat the final invitation after capture has already ended.
+      return { kind, topic, followup, instruction: instruction + (kind === 'close' ? '' : TURN_RULES) };
     }
   };
 }
