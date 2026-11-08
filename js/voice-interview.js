@@ -115,6 +115,7 @@
     answeredCalls: null,       // call_id -> true; each tool call answered exactly once
     conduct: null,             // escalation gate (voice-conduct.js); survives a reconnect
     safetyRequest: null,       // app-owned guidance response; ignores stale playback receipts
+    closingRequest: null,      // app-owned final response; wording cannot decide completion
     conductEnd: null,          // pending end, waiting for the closing turn
     endCause: null,            // 'conduct' | 'safety' | 'closing' — which reason the pending end carries
     lifecycle: null,           // interview lifecycle (voice-lifecycle.js); owns commit boundaries
@@ -258,6 +259,15 @@
       clearTurnWait();
       requestGuardedEnd('safety', '', SAFETY_END_MAX_WAIT_MS);
       track('voice_safety_end', { via: 'explicit_current_danger' });
+    } else if (plan && plan.kind === 'close') {
+      state.closingRequest = { requestId: id, responseId: '' };
+      lifecycle().to(PHASES.CLOSING);
+      stopMicrophone();
+      if (state.timerInterval) { clearInterval(state.timerInterval); state.timerInterval = null; }
+      clearTurnWait();
+      // The turn plan has already finished the interview. Wait for this
+      // response's playback, not for the model to choose recognizable words.
+      requestGuardedEnd('closing', '', NORMAL_CLOSING_MAX_WAIT_MS);
     }
     if (state.audioSetup) beginAudioSample(id);
     if (plan) {
@@ -707,11 +717,15 @@
   // the official interview reach the stored transcript, history, or scoring.
   // The pinned question is ephemeral UI, so the audio-check greeting still
   // shows while it is happening; it just never persists.
-  function recordTurn(speaker, text, itemId) {
+  function recordTurn(speaker, text, itemId, responseId) {
     text = String(text || '').trim();
     if (!text) return;
     var lc = lifecycle();
-    var live = lc.is(PHASES.AUDIO_CHECK) || lc.is(PHASES.ACTIVE_INTERVIEW);
+    // The planned closing is the one new assistant turn allowed after the
+    // boundary. Candidate speech and unrelated responses remain excluded.
+    var plannedClosing = speaker === 'assistant' && lc.is(PHASES.CLOSING) &&
+      state.closingRequest && responseId && responseId === state.closingRequest.responseId;
+    var live = lc.is(PHASES.AUDIO_CHECK) || lc.is(PHASES.ACTIVE_INTERVIEW) || plannedClosing;
     // Whisper transcripts of the candidate routinely land after the next
     // question, so only the interviewer's own line can replace the pinned
     // question. Candidate turns join the recent conversation in item order.
@@ -728,7 +742,7 @@
       }
       if (itemId) delete state.captionDrafts[itemId];
     }
-    if (lc.shouldCommit(itemId || null)) {
+    if (plannedClosing || lc.shouldCommit(itemId || null)) {
       if (!state.order) state.order = newTranscriptOrder();
       state.order.setText(itemId || null, speaker, text);
     }
@@ -1306,8 +1320,8 @@
 
   // ---------- normal wrap-up ----------
 
-  // The interviewer announced the normal wrap-up (thanks + report being
-  // prepared). Same spoken-line pattern as the safety and conduct backstops,
+  // Backstop for a wrap-up spoken before the application requests its planned
+  // closing. Same spoken-line pattern as the safety and conduct backstops,
   // and for the same reason: lifecycle decisions cannot depend on the model
   // remembering a tool. The application owns the boundary from here:
   // entering CLOSING stops candidate speech from being committed or routed
@@ -1415,15 +1429,16 @@
     // Setup is uncharged to the customer but still uses provider resources.
     if (state.usage && type === 'response.done') state.usage.add('response', evt.response && evt.response.id, evt.response && evt.response.usage);
     if (state.usage && type === 'conversation.item.input_audio_transcription.completed') state.usage.add('transcription', evt.item_id, evt.usage);
-    if (state.safetyRequest && (type.indexOf('response.') === 0 || type.indexOf('output_audio_buffer.') === 0)) {
-      var safetyResponse = evt.response || {};
-      var safetyResponseId = evt.response_id || safetyResponse.id || '';
-      var ownSafetyResponse = safetyResponse.metadata &&
-        safetyResponse.metadata.jobhackai_turn === state.safetyRequest.requestId;
-      if (ownSafetyResponse && safetyResponseId) state.safetyRequest.responseId = safetyResponseId;
-      if (!safetyResponseId || safetyResponseId !== state.safetyRequest.responseId) {
-        // Do not let a late previous response stop the new guidance early.
-        if (type === 'response.created' && safetyResponseId) sendRealtime({ type: 'response.cancel', response_id: safetyResponseId });
+    var terminalRequest = state.safetyRequest || state.closingRequest;
+    if (terminalRequest && (type.indexOf('response.') === 0 || type.indexOf('output_audio_buffer.') === 0)) {
+      var terminalResponse = evt.response || {};
+      var terminalResponseId = evt.response_id || terminalResponse.id || '';
+      var ownTerminalResponse = terminalResponse.metadata &&
+        terminalResponse.metadata.jobhackai_turn === terminalRequest.requestId;
+      if (ownTerminalResponse && terminalResponseId && !terminalRequest.responseId) terminalRequest.responseId = terminalResponseId;
+      if (!terminalResponseId || terminalResponseId !== terminalRequest.responseId) {
+        // Bind once. Old or duplicate responses cannot finish this closing.
+        if (type === 'response.created' && terminalResponseId) sendRealtime({ type: 'response.cancel', response_id: terminalResponseId });
         return;
       }
     }
@@ -1582,7 +1597,7 @@
           for (var di = 0; di < dropIds.length; di++) state.order.drop(dropIds[di]);
         }
       }
-      recordTurn('assistant', evt.transcript, evt.item_id);
+      recordTurn('assistant', evt.transcript, evt.item_id, evt.response_id);
       if (opening === 'demoted') turnControl.plan = window.createVoiceTurnPlan();
       // During the audio check (initial or re-entered via demotion) the
       // greeting arms by CONTENT: only the spoken hearing question makes the
@@ -1672,10 +1687,10 @@
       turnControl.busy = true;
       turnControl.responseId = evt.response && evt.response.id || '';
       if (evt.response && evt.response.id) state.lastAssistantResponseId = evt.response.id;
-      // No new interviewer turns once the wrap-up is announced. Responses
-      // are serial, so anything created during CLOSING is a new turn racing
-      // the mic shutdown — cancel it before it speaks.
-      if (state.ending || lifecycle().is(PHASES.CLOSING)) {
+      // Only the app's bound final response may start during CLOSING.
+      var plannedClosingResponse = state.closingRequest && evt.response &&
+        evt.response.id === state.closingRequest.responseId;
+      if (state.ending || (lifecycle().is(PHASES.CLOSING) && !plannedClosingResponse)) {
         sendRealtime({ type: 'response.cancel' });
         return;
       }
@@ -2484,6 +2499,7 @@
       state.conductEnd = null;
       state.endCause = null;
       state.safetyRequest = null;
+      state.closingRequest = null;
       // Fresh lifecycle: CONNECTING until realtime is ready, then the audio
       // check. Nothing is committed to transcript or scoring before the
       // official interview begins.
@@ -2549,6 +2565,7 @@
       state.conductEnd = null;
       state.endCause = null;
       state.safetyRequest = null;
+      state.closingRequest = null;
       state.lifecycle = newInterviewLifecycle();
       state.lastAssistantResponseId = '';
       clearTurnWait();
