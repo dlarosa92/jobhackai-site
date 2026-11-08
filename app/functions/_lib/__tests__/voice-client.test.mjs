@@ -1242,6 +1242,74 @@ test('no delta when no earlier session shares the rubric, role and level', async
   } finally { h.dispose(); }
 });
 
+
+async function historyAccessHarness() {
+  const ids = ['vi-history-panel','vi-history-list','vi-history-empty',
+    'vi-history-manage','vi-history-cancel-manage','vi-history-delete-selected',
+    'vi-history-clear','vi-history-modal-backdrop','vi-history-delete-modal',
+    'vi-history-delete-cancel','vi-history-delete-confirm','fixture-checkbox'];
+  const h = createVoiceClientHarness({elementIds:ids,routes:{
+    '/api/plan/me':()=>PLAN_PAYLOAD,
+    '/api/voice/sessions':()=>({sessions:[{sessionId:'history-1',role:'QA "Engineer"',seniority:'Lead',
+      createdAt:'2026-11-07T12:00:00Z',durationSeconds:240,status:'ready',reportAvailable:true,fullAccess:true}]})
+  }});
+  await h.ready();return h;
+}
+
+test('saved interviews expose native links without nested selection controls',async()=>{
+  const h=await historyAccessHarness();
+  try {
+    const html=h.el('vi-history-list').innerHTML;
+    assert.match(html,/<a\b[^>]*href="voice-interview\.html\?session=history-1"/);
+    assert.doesNotMatch(html,/<input|tabindex="0"/);
+    assert.ok(html.includes('QA "Engineer"'));
+    assert.equal((h.el('vi-history-list')._listeners.keydown || []).length,0,'native links own keyboard activation');
+  } finally {h.dispose();}
+});
+
+test('manage mode uses native checkbox changes once and preserves focus',async()=>{
+  const h=await historyAccessHarness();
+  try {
+    await h.click('vi-history-manage');
+    assert.equal(h.activeElement().id,'vi-history-cancel-manage');
+    const html=h.el('vi-history-list').innerHTML;
+    assert.match(html,/<label\b/);assert.doesNotMatch(html,/<a\b/);
+    const checkbox=h.el('fixture-checkbox'),row=h.el('vi-history-panel');
+    checkbox.setAttribute('data-id','history-1');
+    checkbox.closest=s=>s==='[data-action="toggle-select"]'?checkbox:row;
+    checkbox.checked=true;checkbox.focus();
+    const handlers=h.el('vi-history-list')._listeners.change || [];
+    assert.equal(handlers.length,1);
+    handlers[0]({target:checkbox});
+    assert.equal(h.el('vi-history-delete-selected').disabled,false);
+    assert.equal(h.activeElement(),checkbox);
+    assert.equal(h.el('vi-history-list').innerHTML,html,'selection must not replace the focused checkbox');
+    assert.ok(row.classList.contains('is-selected'));
+    checkbox.checked=false;handlers[0]({target:checkbox});
+    assert.equal(h.el('vi-history-delete-selected').disabled,true);
+    assert.equal(row.classList.contains('is-selected'),false);
+    await h.click('vi-history-cancel-manage');
+    assert.equal(h.activeElement().id,'vi-history-manage');
+  } finally {h.dispose();}
+});
+
+test('history confirmation starts on Cancel and restores the trigger after Escape or cancellation',async()=>{
+  const h=await historyAccessHarness();
+  try {
+    await h.click('vi-history-clear');
+    assert.equal(h.activeElement().id,'vi-history-delete-cancel');
+    await h.click('vi-history-delete-cancel');
+    assert.equal(h.el('vi-history-delete-modal').hidden,true);
+    assert.equal(h.activeElement().id,'vi-history-clear');
+    await h.click('vi-history-clear');
+    const handlers=h.el('vi-history-delete-modal')._listeners.keydown;
+    handlers[0]({key:'Escape',preventDefault(){}});
+    assert.equal(h.activeElement().id,'vi-history-clear');
+    assert.ok(!h.requests.some(r=>r.method==='DELETE'||r.url==='/api/voice/sessions/clear'));
+  } finally {h.dispose();}
+});
+
+
 for (const t of pending) await t();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

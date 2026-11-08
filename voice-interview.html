@@ -246,6 +246,9 @@
     .vi-history-list { display: flex; flex-direction: column; gap: 12px; }
     .vi-history-item { position: relative; display: flex; align-items: center; gap: 12px; padding: 0.875rem 1rem; background: #fff; border-radius: var(--radius-md); border: 1px solid var(--color-divider); transition: background 0.18s ease, border-color 0.18s ease, outline 0.18s ease; cursor: pointer; min-height: 56px; }
     .vi-history-item:hover { background: var(--color-bg-light); }
+    a.vi-history-item { color: inherit; text-decoration: none; }
+    a.vi-history-item:focus-visible, label.vi-history-item:focus-within { outline: 2px solid var(--color-accent-blue); outline-offset: 3px; }
+    .vi-history-line1, .vi-history-line2 { display: block; }
     .vi-history-item.is-selected { outline: 2px solid var(--color-accent-blue); outline-offset: 0; border-color: var(--color-divider); background: #fff; }
     .vi-history-item--live { border-style: dashed; border-color: var(--color-warning); cursor: default; }
     .vi-history-item--live:hover { background: #fff; }
@@ -649,6 +652,6 @@
   <script src="js/voice-usage.js?v=20260920-1" type="module"></script>
   <script src="js/voice-turn-plan.js?v=20261025-1" type="module"></script>
   <script src="js/voice-audio-diagnostics.js?v=20261104-audio-trace-1" type="module"></script>
-  <script src="js/voice-interview.js?v=20261107-device-recovery-2" defer></script>
+  <script src="js/voice-interview.js?v=20261107-history-access-1" defer></script>
 </body>
 </html>
