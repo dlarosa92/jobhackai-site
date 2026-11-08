@@ -16,3 +16,22 @@ export async function armVoiceDeadline(env, { uid, sessionId, deadlineAt }) {
     throw Error('voice_connection_deadline_unavailable');
   }
 }
+
+export async function watchVoiceConnection(env,{uid,sessionId,attemptId}) {
+  try {
+    const result=await env.VOICE_DEADLINES?.getByName(sessionId).watchConnection({uid,sessionId,attemptId});
+    if (result?.watching!==true) throw Error();
+  } catch { throw Error('voice_connection_deadline_unavailable'); }
+}
+
+export async function pulseVoiceConnection(env,{uid,sessionId,attemptId}) {
+  const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (typeof uid!=='string' || !uid || uid.length>128 || !uuid.test(sessionId || '') || !uuid.test(attemptId || '')) {
+    throw Error('voice_connection_request_invalid');
+  }
+  try {
+    const result=await env.VOICE_DEADLINES?.getByName(sessionId).pulseConnection({uid,sessionId,attemptId});
+    if (typeof result?.alive!=='boolean') throw Error();
+    return {connectionAlive:result?.alive===true};
+  } catch { throw Error('voice_connection_deadline_unavailable'); }
+}

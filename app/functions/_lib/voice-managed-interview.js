@@ -2,7 +2,7 @@ import { getDb } from './db.js';
 import { getVoiceEntitlement, reserveVoiceSession } from './voice-entitlements.js';
 import { interviewerInstructions, buildResumeContext } from './voice-interviewer.js';
 import { createManagedVoiceCall, closeManagedVoiceCall } from './voice-provider-calls.js';
-import { armVoiceDeadline } from './voice-deadline.js';
+import { armVoiceDeadline, watchVoiceConnection } from './voice-deadline.js';
 
 export const MANAGED_INTERVIEW_MINUTES = 20;
 export const AUDIO_CHECK_SECONDS = 120;
@@ -33,7 +33,7 @@ async function stillOpen(db, uid, sessionId, attemptId, requireReservation = tru
  * verified authentication. Never return this answer until this function has
  * armed a bounded audio check and rechecked the saved close intent. New checks
  * do not reserve credit; activation is a separate authenticated operation. */
-export async function openManagedInterview(env,{uid,sessionId,sdp,role,seniority,jd,firstName='',transcript,interviewStarted=false,replacesAttemptId=null,audioCheck=true}) {
+export async function openManagedInterview(env,{uid,sessionId,sdp,role,seniority,jd,firstName='',transcript,interviewStarted=false,replacesAttemptId=null,audioCheck=true,connectionWatch=false}) {
   validateOwner(uid,sessionId);
   if (typeof sdp !== 'string' || !sdp.startsWith('v=0') || new TextEncoder().encode(sdp).length>65536) {
     throw Error('voice_connection_request_invalid');
@@ -118,7 +118,12 @@ export async function openManagedInterview(env,{uid,sessionId,sdp,role,seniority
         interviewStarted:interviewStarted===true
       }) : AUDIO_CHECK_INSTRUCTIONS});
     if (!await stillOpen(db,uid,sessionId,call.attemptId,!!existing)) throw Error('voice_connection_ended');
+    if (connectionWatch===true) {
+      await watchVoiceConnection(env,{uid,sessionId,attemptId:call.attemptId});
+      if (!await stillOpen(db,uid,sessionId,call.attemptId,!!existing)) throw Error('voice_connection_ended');
+    }
     return {sessionId,attemptId:call.attemptId,sdp:call.sdp,model,resumed:!!existing,
+      connectionWatch:connectionWatch===true,
       mode:existing?.entitlement_mode || entitlement?.mode,maxMinutes:MANAGED_INTERVIEW_MINUTES,
       deadlineAt:saved.deadline_at,requiresAudioCheck:!existing,
       interviewInstructions:existing ? null : interviewerInstructions({role,seniority,jd,firstName,maxMinutes:MANAGED_INTERVIEW_MINUTES,audioReady:true}),

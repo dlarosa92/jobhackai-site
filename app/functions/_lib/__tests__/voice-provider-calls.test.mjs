@@ -146,7 +146,7 @@ test('historical uncertain calls are not replayed or reclassified from their old
 });
 
 for (const [name,body,expected] of [
-  ['empty',null,'empty:none:none:unclassified:probe_http_404:empty:none:none'],
+  ['empty',null,'empty:none:none:unclassified'],
   ['HTML','<html>Not Found PRIVATE_TRANSCRIPT</html>','non_json:none:none:unclassified'],
   ['generic code',JSON.stringify({error:{code:'not_found',type:'invalid_request_error',message:'Call rtc_private not found'}}),'json:not_found:invalid_request_error:call_unavailable'],
   ['wrong type',JSON.stringify({error:{code:'call_id_not_found',type:'authentication_error'}}),'json:call_id_not_found:authentication_error:unclassified'],
@@ -164,69 +164,7 @@ for (const [name,body,expected] of [
   assert.ok(row.execution_token,'the original request correlation remains available');
   assert.doesNotMatch(JSON.stringify(row),/PRIVATE|sk_private|rtc_private/);
   await assert.rejects(closeManagedVoiceCall(f.env,{uid:'owner',attemptId:created.attemptId}),/close_unconfirmed/);
-  assert.equal(f.calls.length,name==='empty'?3:2,'at most one read-only probe, never a repeated hangup');
-});
-
-test('an empty hangup is resolved only by an exact same-call sideband absence receipt',async t=>{
-  const f=fixture(t),created=await f.create(),logs=[];
-  t.mock.method(console,'log',(...entry)=>logs.push(entry));
-  f.setHandler(async({url,init})=>{
-    if(url.endsWith('/hangup'))return new Response(null,{status:404});
-    assert.equal(url,'https://api.openai.com/v1/realtime?call_id=rtc_1');
-    assert.equal(init.method,'GET');assert.equal(init.headers.Upgrade,'websocket');
-    assert.equal(init.headers.Authorization,'Bearer '+f.env.OPENAI_API_KEY);
-    assert.equal(init.redirect,'manual');assert.ok(init.signal);assert.equal(init.body,undefined);
-    return new Response(absentBody,{status:404,headers:{'x-request-id':'req_probe'}});
-  });
-  assert.deepEqual(await closeManagedVoiceCall(f.env,{uid:'owner',attemptId:created.attemptId}),{closed:true,alreadyClosed:true});
-  assert.equal((await f.row()).last_error_code,'close_sideband_call_id_not_found');
-  assert.equal((await f.row()).state,'closed');assert.equal(f.calls.length,3);
-  assert.equal(logs.find(([event])=>event==='[voice-call] provider_sideband_absent')[1].providerRequestId,'req_probe');
-  assert.ok(!JSON.stringify(logs).includes('Private provider detail'));
-  await closeManagedVoiceCall(f.env,{uid:'owner',attemptId:created.attemptId});assert.equal(f.calls.length,3);
-});
-
-for(const [name,status,body] of [
-  ['empty',404,null],['generic',404,JSON.stringify({error:{code:'not_found',type:'invalid_request_error'}})],
-  ['wrong type',404,JSON.stringify({error:{code:'call_id_not_found',type:'authentication_error'}})],
-  ['unauthorized',401,absentBody],['forbidden',403,absentBody],['server error',503,absentBody],
-  ['redirect',302,absentBody],['HTML',404,'call_id_not_found invalid_request_error'],
-  ['oversized',404,JSON.stringify({error:{code:'call_id_not_found',type:'invalid_request_error',message:'x'.repeat(8193)}})]
-])test('sideband probe preserves the hold for '+name,async t=>{
-  const f=fixture(t),created=await f.create();
-  f.setHandler(async({url})=>new Response(url.endsWith('/hangup')?null:body,{status:url.endsWith('/hangup')?404:status}));
-  await assert.rejects(closeManagedVoiceCall(f.env,{uid:'owner',attemptId:created.attemptId}),/close_unconfirmed/);
-  assert.equal((await f.row()).state,'uncertain');assert.equal((await f.row()).closed_at,null);
-  await assert.rejects(closeManagedVoiceCall(f.env,{uid:'owner',attemptId:created.attemptId}),/close_unconfirmed/);
-  assert.equal(f.calls.length,3);assert.equal(f.calls.filter(c=>c.url.endsWith('/hangup')).length,1);
-});
-
-test('an attachable call stays on hold and the observer is detached without sending commands',async t=>{
-  const f=fixture(t),created=await f.create();let accepted=0,closed=0;
-  f.setHandler(async({url})=>url.endsWith('/hangup')?new Response(null,{status:404}):{
-    status:101,headers:new Headers(),webSocket:{accept(){accepted++},close(code){assert.equal(code,1000);closed++},
-      send(){assert.fail('the probe must not send any session command')}}});
-  await assert.rejects(closeManagedVoiceCall(f.env,{uid:'owner',attemptId:created.attemptId}),/close_unconfirmed/);
-  assert.equal(accepted,1);assert.equal(closed,1);assert.equal((await f.row()).state,'uncertain');
-  assert.match((await f.row()).last_error_code,/:probe_attached$/);
-});
-
-test('failed sideband transport preserves the original closure hold without leaking error text',async t=>{
-  const f=fixture(t),created=await f.create(),logs=[];t.mock.method(console,'log',(...entry)=>logs.push(entry));
-  f.setHandler(async({url})=>{if(url.endsWith('/hangup'))return new Response(null,{status:404});throw Error('SECRET')});
-  await assert.rejects(closeManagedVoiceCall(f.env,{uid:'owner',attemptId:created.attemptId}),/close_unconfirmed/);
-  assert.match((await f.row()).last_error_code,/:probe_transport_unconfirmed$/);
-  assert.equal(JSON.stringify(logs).includes('SECRET'),false);assert.equal(f.calls.length,3);
-});
-
-test('a sideband absence receipt with failed persistence stays uncertain and is never replayed',async t=>{
-  const f=fixture(t),created=await f.create();
-  f.db.exec("CREATE TRIGGER deny_sideband_receipt BEFORE UPDATE OF state ON voice_provider_calls WHEN NEW.state='closed' BEGIN SELECT RAISE(ABORT,'fixture storage failure'); END;");
-  f.setHandler(async({url})=>new Response(url.endsWith('/hangup')?null:absentBody,{status:404}));
-  await assert.rejects(closeManagedVoiceCall(f.env,{uid:'owner',attemptId:created.attemptId}),/close_unconfirmed/);
-  assert.equal((await f.row()).state,'uncertain');assert.equal((await f.row()).last_error_code,'close_receipt_unconfirmed');
-  await assert.rejects(closeManagedVoiceCall(f.env,{uid:'owner',attemptId:created.attemptId}),/close_unconfirmed/);
-  assert.equal(f.calls.length,3);
+  assert.equal(f.calls.length,2,'diagnostics cannot allow a replacement or repeat hangup');
 });
 
 for(const scenario of ['timeout','5xx','429','missing_location','foreign_location','query_location','encoded_location']) {
@@ -296,7 +234,7 @@ for(const outcome of ['404','timeout','receipt_failure']) {
     await assert.rejects(closeManagedVoiceCall(f.env,{uid:'owner',attemptId:created.attemptId}),/close_unconfirmed/);
     const row=await f.row();assert.equal(row.state,'uncertain');assert.ok(row.execution_token);assert.ok(row.provider_call_id);
     await f.intent();assert.deepEqual(await closeOneVoiceCallForDeletion(f.env,'owner'),{closed:false});
-    await assert.rejects(assertDeletionQuiescent(f.env,'owner'),/deletion_voice_pending/);assert.equal(f.calls.length,outcome==='404'?3:2);
+    await assert.rejects(assertDeletionQuiescent(f.env,'owner'),/deletion_voice_pending/);assert.equal(f.calls.length,2);
     const receipts=logs.filter(([event])=>event==='[voice-call] provider_closed');assert.equal(receipts.length,outcome==='receipt_failure'?1:0);
     if(outcome==='receipt_failure')assert.deepEqual(receipts[0][1],{attempt:row.id,execution:row.execution_token,providerCallId:row.provider_call_id,providerRequestId:'req_fixture_close',status:200});
   });

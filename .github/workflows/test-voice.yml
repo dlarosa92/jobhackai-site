@@ -39,3 +39,5 @@ jobs:
         working-directory: app
       - run: npm run test:voice
         working-directory: app
+      - run: node --test functions/_lib/__tests__/voice-managed-client.test.mjs functions/_lib/__tests__/voice-managed-interview.test.mjs functions/_lib/__tests__/voice-provider-calls.test.mjs functions/_lib/__tests__/voice-connection-check.test.mjs
+        working-directory: app

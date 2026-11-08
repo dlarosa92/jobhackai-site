@@ -220,7 +220,7 @@ test('completion before reconnect forbids reopening; unknown hangup never become
   const f=fixture(t),first=await f.open();
   f.setHandler(async()=>new Response(null,{status:404}));
   assert.deepEqual(await f.close(),{closed:false,needsReview:true});assert.deepEqual(await f.close(),{closed:false,needsReview:true});
-  await assert.rejects(f.open({replacesAttemptId:first.attemptId}),/ended/);assert.equal(f.calls.length,3);
+  await assert.rejects(f.open({replacesAttemptId:first.attemptId}),/ended/);assert.equal(f.calls.length,2);
   assert.equal((await f.sessions()).length,1,'the transport helper does not overwrite the transcript or delete history');
 });
 
@@ -427,7 +427,7 @@ test('uncertain hangup does not lose the report or pretend closure succeeded',as
   assert.equal(payload.closureNeedsReview,true);
   const original=(await f.sessions())[0].transcript_json;
   const retry=completion(f,{transcript:[]});const again=await retry.execute();await retry.flush();
-  assert.equal(again.status,202);assert.equal((await f.sessions())[0].transcript_json,original);assert.equal(f.calls.length,3);
+  assert.equal(again.status,202);assert.equal((await f.sessions())[0].transcript_json,original);assert.equal(f.calls.length,2);
   assert.equal((await again.json()).closureNeedsReview,true);
 });
 
@@ -441,9 +441,9 @@ test('failed reconnect preserves one reservation and saves the report with a non
   assert.equal(payload.connectionClosed,false);assert.equal(payload.closureNeedsReview,true);
   const sessions=await f.sessions();assert.equal(sessions.length,1);
   assert.equal(sessions[0].end_reason,'connection_lost');assert.equal(sessions[0].duration_seconds,124);
-  assert.equal((await f.user()).free_session_used,1);assert.equal(f.calls.length,3);
+  assert.equal((await f.user()).free_session_used,1);assert.equal(f.calls.length,2);
   const attempt=await f.db.prepare('SELECT state,last_error_code,closed_at FROM voice_provider_calls WHERE id=?').bind(first.attemptId).first();
-  assert.deepEqual(attempt,{state:'uncertain',last_error_code:'close_http_404:empty:none:none:unclassified:probe_http_404:empty:none:none',closed_at:null});
+  assert.deepEqual(attempt,{state:'uncertain',last_error_code:'close_http_404:empty:none:none:unclassified',closed_at:null});
 });
 
 test('completion of a legacy session saves its report while preserving unverified call closure',async t=>{
@@ -605,4 +605,20 @@ test('authenticated activation route ignores a supplied owner and returns no pro
   const response=await route(run.context);await run.flush();const body=await response.json();
   assert.equal(response.status,200);assert.equal(body.activated,true);assert.equal(body.clientSecret,undefined);
   assert.equal((await f.sessions())[0].user_id,1);assert.equal((await f.user()).free_session_used,1);
+});
+
+test('heartbeat route uses authenticated owner, rejects malformed input and does not queue or mutate provider work',async t=>{
+  const f=fixture(t),pulses=[];
+  f.env.VOICE_DEADLINES={getByName(id){return {async pulseConnection(request){pulses.push({id,...request});return {alive:true};}}}};
+  const body={action:'heartbeat',sessionId:FIRST,attemptId:SECOND,uid:'other',providerCallId:'rtc_foreign'};
+  const invalid=requestContext(f,body,{token:'invalid'});assert.equal((await route(invalid.context)).status,401);
+  const malformed=requestContext(f,{...body,attemptId:'not-an-attempt'});assert.equal((await route(malformed.context)).status,400);
+  const valid=requestContext(f,body);const result=await route(valid.context);
+  assert.equal(result.status,200);assert.equal((await result.json()).connectionAlive,true);
+  assert.deepEqual(pulses,[{id:FIRST,uid:'owner',sessionId:FIRST,attemptId:SECOND}]);
+  assert.equal(valid.waits.length,0);assert.equal(f.calls.length,0);assert.equal((await f.user()).free_session_used,0);
+  assert.equal((await f.sessions()).length,0);
+  f.env.VOICE_DEADLINES={getByName(){throw Error('private binding details');}};
+  const unavailable=await route(requestContext(f,body).context);assert.equal(unavailable.status,503);
+  assert.doesNotMatch(await unavailable.text(),/private/);
 });

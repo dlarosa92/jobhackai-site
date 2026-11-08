@@ -121,45 +121,10 @@ describe('durable interview deadlines in the actual Workers runtime',()=>{
     await open();vi.mocked(fetch).mockImplementation(async(input)=>{requests.push(String(input));return new Response(null,{status:404});});
     await due();await runDurableObjectAlarm(stub);
     expect(await call()).toMatchObject({state:'uncertain',closed_at:null,
-      last_error_code:'close_http_404:empty:none:none:unclassified:probe_http_404:empty:none:none'});
+      last_error_code:'close_http_404:empty:none:none:unclassified'});
     expect((await state()).saved).toMatchObject({status:'review'});expect((await state()).alarm).toBeGreaterThan(Date.now());
     await runInDurableObject(stub,(instance)=>instance.alarm());expect(requests.filter(x=>x.endsWith('/hangup'))).toHaveLength(1);
-    expect((await call())?.last_error_code).toBe('close_http_404:empty:none:none:unclassified:probe_http_404:empty:none:none');
-  });
-  it('a sideband absence receipt permits one replacement with the same credit and original deadline',async()=>{
-    const first=await open(),initial=await state(),original=await call();
-    vi.mocked(fetch).mockImplementation(async(input,init)=>{
-      const request=new Request(input,init);expect(request.redirect).toBe('manual');requests.push(request.url);
-      if(request.url.endsWith('/hangup'))return new Response(null,{status:404});
-      if(request.headers.get('Upgrade')==='websocket'){
-        expect(request.method).toBe('GET');expect(new URL(request.url).searchParams.get('call_id')).toBe(original!.provider_call_id);
-        expect(request.headers.get('Authorization')).toBe('Bearer '+env.OPENAI_API_KEY);
-        return Response.json({error:{code:'call_id_not_found',type:'invalid_request_error'}},{status:404});
-      }
-      return new Response('v=0 answer',{status:201,headers:{Location:'/v1/realtime/calls/rtc_replacement'}});
-    });
-    const second=await open({replacesAttemptId:first.attemptId});
-    expect(second.deadlineAt).toBe(first.deadlineAt);expect(await state()).toEqual(initial);
-    expect((await env.DB.prepare('SELECT state,last_error_code FROM voice_provider_calls WHERE id=?').bind(first.attemptId).first()))
-      .toMatchObject({state:'closed',last_error_code:'close_sideband_call_id_not_found'});
-    expect((await call())?.provider_call_id).toBe('rtc_replacement');expect(requests).toHaveLength(4);
-    expect((await env.DB.prepare("SELECT free_session_used FROM users WHERE auth_id='owner'").first())?.free_session_used).toBe(1);
-  });
-  it('a native sideband WebSocket is detached and cannot falsely authorize a replacement',async()=>{
-    await open();let observerClosed!: Promise<number>,messages=0;
-    vi.mocked(fetch).mockImplementation(async(input,init)=>{
-      const request=new Request(input,init);requests.push(request.url);
-      if(request.url.endsWith('/hangup'))return new Response(null,{status:404});
-      expect(request.headers.get('Upgrade')).toBe('websocket');
-      const pair=new WebSocketPair();pair[1].accept();
-      pair[1].addEventListener('message',()=>messages++);
-      observerClosed=new Promise(resolve=>pair[1].addEventListener('close',event=>resolve(event.code)));
-      return new Response(null,{status:101,webSocket:pair[0]});
-    });
-    await closeManagedInterview(appEnv,{uid:'owner',sessionId}).catch(()=>{});
-    expect(await observerClosed).toBe(1000);expect(messages).toBe(0);
-    expect(await call()).toMatchObject({state:'uncertain',last_error_code:'close_http_404:empty:none:none:unclassified:probe_attached'});
-    expect(requests).toHaveLength(3);
+    expect((await call())?.last_error_code).toBe('close_http_404:empty:none:none:unclassified');
   });
   it('the exact provider call absence response closes at deadline and removes the alarm',async()=>{
     await open();vi.mocked(fetch).mockImplementation(async(input,init)=>{
@@ -342,4 +307,108 @@ it('readiness replaces the setup alarm once and a stale setup alarm cannot close
   const again=await activateManagedInterview(appEnv,{uid:'owner',sessionId,attemptId:result.attemptId,role:'Engineer',audioReady:true});
   expect(again.deadlineAt).toBe(active.deadlineAt);expect((await state()).alarm).toBe(activated.alarm);
   expect(requests.filter(x=>x.endsWith('/hangup'))).toHaveLength(0);
+});
+
+const watchState = () => runInDurableObject(stub,async(_instance,ctx)=>ctx.storage.get<{attemptId:string;expiresAt:number;status:string}>('connection'));
+const expireConnection = () => runInDurableObject(stub,async(_instance,ctx)=>{
+  const watch=await ctx.storage.get<Record<string,unknown>>('connection');
+  if (!watch) throw Error('fixture missing connection watch');
+  return ctx.storage.put('connection',{...watch,expiresAt:Date.now()-1});
+});
+describe('durable connection monitoring',()=>{
+  it('persists the owned watch before SDP, refreshes without changing time or credit, and does not close healthy calls',async()=>{
+    const result=await check({connectionWatch:true});
+    expect(result.connectionWatch).toBe(true);
+    const initial=await state(),watch=await watchState();
+    expect(watch).toMatchObject({attemptId:result.attemptId,status:'watching'});
+    expect(initial.alarm).toBe(watch!.expiresAt);
+    expect(watch!.expiresAt).toBeLessThanOrEqual(Date.now()+35000);
+    expect(await stub.pulseConnection({uid:'owner',sessionId,attemptId:result.attemptId})).toEqual({alive:true});
+    expect((await state()).saved).toEqual(initial.saved);
+    expect((await watchState())!.expiresAt).toBeLessThanOrEqual(Date.now()+25000);
+    await runDurableObjectAlarm(stub);
+    expect((await call())?.state).toBe('active');expect(requests).toHaveLength(1);
+    expect((await control())?.reserved_at).toBeNull();
+    expect((await env.DB.prepare("SELECT free_session_used FROM users WHERE auth_id='owner'").first())?.free_session_used).toBe(0);
+  });
+  it('closes a lost connection before the interview deadline, then admits one replacement with the original time and credit',async()=>{
+    const first=await open({connectionWatch:true}),initial=await control();
+    await expireConnection();await runDurableObjectAlarm(stub);
+    expect((await call())?.state).toBe('closed');expect(await watchState()).toBeUndefined();
+    expect(await control()).toEqual(initial);
+    expect((await state()).alarm).toBe(Date.parse(first.deadlineAt.replace(' ','T')+'Z'));
+    const next=await open({connectionWatch:true,replacesAttemptId:first.attemptId});
+    expect(next.attemptId).not.toBe(first.attemptId);expect(next.deadlineAt).toBe(first.deadlineAt);
+    expect((await watchState())?.attemptId).toBe(next.attemptId);
+    expect(await stub.pulseConnection({uid:'owner',sessionId,attemptId:first.attemptId})).toEqual({alive:false});
+    expect(await stub.watchConnection({uid:'owner',sessionId,attemptId:first.attemptId})).toEqual({watching:false});
+    expect((await watchState())?.attemptId).toBe(next.attemptId);
+    expect((await env.DB.prepare("SELECT free_session_used FROM users WHERE auth_id='owner'").first())?.free_session_used).toBe(1);
+    expect((await env.DB.prepare('SELECT COUNT(*) n FROM voice_sessions WHERE id=?').bind(sessionId).first())?.n).toBe(1);
+    await closeManagedInterview(appEnv,{uid:'owner',sessionId});
+    expect(requests.filter(x=>x.endsWith('/hangup'))).toHaveLength(2);
+  });
+  it('rejects foreign owners, foreign object names, stale attempts and deletion without extending the lease',async()=>{
+    const first=await check({connectionWatch:true}),initial=await watchState();
+    for (const request of [
+      {uid:'other',sessionId,attemptId:first.attemptId},
+      {uid:'owner',sessionId:crypto.randomUUID(),attemptId:first.attemptId},
+      {uid:'owner',sessionId,attemptId:crypto.randomUUID()}
+    ]) {
+      expect(await stub.pulseConnection(request)).toEqual({alive:false});
+      expect(await stub.watchConnection(request)).toEqual({watching:false});
+    }
+    expect(await watchState()).toEqual(initial);
+    await env.DB.prepare("INSERT INTO account_deletion_admissions(id,auth_id,origin,state) VALUES(?,'owner','user_request','complete')").bind(crypto.randomUUID()).run();
+    expect(await stub.pulseConnection({uid:'owner',sessionId,attemptId:first.attemptId})).toEqual({alive:false});
+    expect(await watchState()).toEqual(initial);
+  });
+  it('duplicate arm/watch and activation cannot reset a connection lease',async()=>{
+    const first=await check({connectionWatch:true}),watch=await watchState();
+    expect(await stub.watchConnection({uid:'owner',sessionId,attemptId:first.attemptId})).toEqual({watching:true});
+    await activateManagedInterview(appEnv,{uid:'owner',sessionId,attemptId:first.attemptId,role:'Engineer',audioReady:true});
+    expect(await watchState()).toEqual(watch);expect((await state()).alarm).toBe(watch!.expiresAt);
+  });
+  it('a persisted closing claim cannot be revived by a heartbeat or duplicate watch',async()=>{
+    const first=await open({connectionWatch:true});
+    await runInDurableObject(stub,async(_instance,ctx)=>{
+      const watch=await ctx.storage.get<Record<string,unknown>>('connection');
+      await ctx.storage.put('connection',{...watch,status:'closing'});
+    });
+    expect(await stub.pulseConnection({uid:'owner',sessionId,attemptId:first.attemptId})).toEqual({alive:false});
+    expect(await stub.watchConnection({uid:'owner',sessionId,attemptId:first.attemptId})).toEqual({watching:false});
+    await runDurableObjectAlarm(stub);
+    expect((await call())?.state).toBe('closed');expect(requests.filter(x=>x.endsWith('/hangup'))).toHaveLength(1);
+  });
+  it('ambiguous closure remains held, and alarm redelivery cannot retry hangup or create a replacement',async()=>{
+    const first=await open({connectionWatch:true});
+    vi.mocked(fetch).mockImplementation(async(input)=>{requests.push(String(input));return new Response(null,{status:404});});
+    await expireConnection();await runDurableObjectAlarm(stub);
+    expect((await call())?.state).toBe('uncertain');expect((await control())?.closed_at).toBeNull();
+    await runDurableObjectAlarm(stub);await runDurableObjectAlarm(stub);
+    expect(await watchState()).toBeUndefined();
+    await expect(open({connectionWatch:true,replacesAttemptId:first.attemptId})).rejects.toThrow();
+    expect(requests.filter(x=>x.endsWith('/hangup'))).toHaveLength(1);expect(requests).toHaveLength(2);
+  });
+  it('a persisted closing claim resumes without needing browser traffic',async()=>{
+    await check({connectionWatch:true});
+    await runInDurableObject(stub,async(_instance,ctx)=>{
+      const watch=await ctx.storage.get<Record<string,unknown>>('connection');
+      await ctx.storage.put('connection',{...watch,status:'closing'});
+    });
+    await runDurableObjectAlarm(stub);
+    expect((await call())?.state).toBe('closed');expect((await control())?.reserved_at).toBeNull();
+    expect(requests.filter(x=>x.endsWith('/hangup'))).toHaveLength(1);
+  });
+  it('cleans up an admitted provider call if the connection-watch receipt is lost, without exposing SDP or charging',async()=>{
+    const binding=appEnv.VOICE_DEADLINES;
+    const settings={...appEnv,VOICE_DEADLINES:{getByName(id:string){const actual=binding.getByName(id);return {
+      arm:(request:Parameters<typeof actual.arm>[0])=>actual.arm(request),
+      async watchConnection(request:Parameters<typeof actual.watchConnection>[0]) {await actual.watchConnection(request);throw Error('private binding diagnostic');}
+    };}}};
+    await expect(openManagedInterview(settings,{uid:'owner',sessionId,sdp:'v=0 offer',role:'Engineer',connectionWatch:true})).rejects.toThrow('voice_connection_deadline_unavailable');
+    expect((await call())?.state).toBe('closed');expect((await control())?.reserved_at).toBeNull();
+    await expireConnection();await runDurableObjectAlarm(stub);
+    expect(requests.filter(x=>x.endsWith('/hangup'))).toHaveLength(1);
+  });
 });

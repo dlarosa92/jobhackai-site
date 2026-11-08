@@ -2057,6 +2057,40 @@
 
   // ---------- connection ----------
 
+  var connectionHeartbeat = null;
+  function stopConnectionHeartbeat() {
+    var watch=connectionHeartbeat; connectionHeartbeat=null;
+    if (!watch) return;
+    clearInterval(watch.timer);
+    if (watch.controller) watch.controller.abort();
+  }
+  function startConnectionHeartbeat(pc, attemptId) {
+    stopConnectionHeartbeat();
+    var watch={pc:pc,attemptId:attemptId,sessionId:state.sessionId,timer:null,controller:null};
+    connectionHeartbeat=watch;
+    async function pulse() {
+      // A restored Internet connection is not proof this peer recovered.
+      if (connectionHeartbeat!==watch || watch.controller || state.ending || state.pc!==pc ||
+          pc.connectionState!=='connected' || !state.dc || state.dc.readyState!=='open') return;
+      var controller=new AbortController();watch.controller=controller;
+      var timer=setTimeout(function () { controller.abort(); },5000);
+      try {
+        var result=await api('/api/voice/connection',{method:'POST',signal:controller.signal,
+          body:JSON.stringify({action:'heartbeat',sessionId:watch.sessionId,attemptId:attemptId})});
+        if (connectionHeartbeat!==watch || state.pc!==pc || state.ending) return;
+        if (result.ok && result.data && result.data.connectionAlive===false) {
+          stopConnectionHeartbeat();
+          state.connected=false;clearTurnWait();
+          setStatus('Connection lost. Choose Reconnect to continue.', 'vi-error');
+          offerReconnect();
+        }
+      } catch (_) { /* Missing heartbeats never extend the server lease. */ }
+      finally { clearTimeout(timer);if (watch.controller===controller) watch.controller=null; }
+    }
+    watch.timer=setInterval(pulse,8000);
+    pulse();
+  }
+
   function cancelConnectionAttempt() {
     var attempt = state.connectionAttempt;
     if (!attempt) return;
@@ -2067,6 +2101,7 @@
 
   async function connectRealtime(clientSecret, model, managedBody) {
     if (state.ending) return false;
+    stopConnectionHeartbeat();
     cancelConnectionAttempt();
     state.playbackReady = false;
     state.playbackBlocked = false;
@@ -2151,6 +2186,7 @@
       };
       dc.onopen = function () {
         if (state.pc !== pc || state.ending || state.conductEnd) return;
+        if (managedBody && attempt.watched) startConnectionHeartbeat(pc,state.providerAttemptId);
         resetTurnConnection();
         turnControl.start = function () {
           // Realtime is ready. Before the official interview there is an audio
@@ -2234,7 +2270,7 @@
       if (managedBody) {
         var connection = await api('/api/voice/connection', {
           method: 'POST',
-          body: JSON.stringify(Object.assign({}, managedBody, { action: 'open', sdp: offer.sdp, audioCheck: true })),
+          body: JSON.stringify(Object.assign({}, managedBody, { action: 'open', sdp: offer.sdp, audioCheck: true, connectionWatch: true })),
           signal: attempt.controller.signal
         }, function (stage) { connectionStage = stage; });
         if (!current()) return false;
@@ -2260,6 +2296,7 @@
         syncMicrophoneTransmission();
         updateAudioReadiness();
         state.providerAttemptId = details.attemptId;
+        attempt.watched = details.connectionWatch === true;
         state.model = details.model;
         state.maxMinutes = details.maxMinutes || 20;
         var deadline = String(details.deadlineAt || '');
@@ -2333,6 +2370,7 @@
   }
 
   function teardownConnection() {
+    stopConnectionHeartbeat();
     if (audioDiagnostics) audioDiagnostics.mark('teardown');
     resetTurnConnection();
     releaseRetiringConnection(state.retiringConnection);

@@ -4,13 +4,115 @@ import { closeManagedVoiceCall, voiceProviderKeyIdentity } from '../../../app/fu
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const RETRY_MS = 60_000;
 const REVIEW_MS = 5 * 60_000;
+const CONNECTION_LEASE_MS = 25_000;
+const CONNECTION_START_MS = 35_000;
 type Deadline = {sessionId: string; deadlineMs: number; status: 'armed' | 'waiting' | 'review'};
 type ArmRequest = {uid: string; sessionId: string; providerKeySha256: string};
+type ConnectionWatch = {attemptId:string; expiresAt:number; status:'watching'|'closing'};
+type PulseRequest = {uid:string; sessionId:string; attemptId:string};
 
 /** One SQLite-backed object per interview. Only server bindings can call arm.
  * D1 owns the deadline/owner/call identity. Object storage retains no key,
  * provider ID, UID, transcript, SDP, audio, email or report. */
 export class VoiceDeadline extends DurableObject<Env> {
+  #validPulse(request: PulseRequest) {
+    return UUID.test(request.sessionId || '') && UUID.test(request.attemptId || '') &&
+      typeof request.uid==='string' && !!request.uid && request.uid.length<=128 &&
+      this.ctx.id.equals(this.env.VOICE_DEADLINES.idFromName(request.sessionId));
+  }
+
+  async #activeConnection(request: PulseRequest) {
+    if (!this.#validPulse(request)) return null;
+    return this.env.DB.prepare(`SELECT p.auth_id,p.rowid AS generation FROM voice_interview_controls c
+      JOIN voice_provider_calls p ON p.id=c.current_attempt_id AND p.session_id=c.session_id AND p.auth_id=c.auth_id
+      WHERE c.session_id=? AND c.auth_id=? AND p.id=? AND p.state='active'
+        AND c.closed_at IS NULL AND julianday(c.deadline_at)>julianday('now')
+        AND NOT EXISTS(SELECT 1 FROM account_deletion_admissions WHERE auth_id=c.auth_id)`)
+      .bind(request.sessionId,request.uid,request.attemptId).first<{auth_id:string;generation:number}>();
+  }
+
+  // Opted-in clients must have this durable watch before receiving their SDP.
+  // Legacy clients keep their original server deadline during a staged rollout.
+  async watchConnection(request: PulseRequest) {
+    try {
+      if (this.env.VOICE_DEADLINES_ENABLED!=='true') return {watching:false};
+      const active=await this.#activeConnection(request);
+      if (!active) return {watching:false};
+      return await this.ctx.storage.transaction(async storage=>{
+        const deadline=await storage.get<Deadline>('deadline');
+        const previous=await storage.get<ConnectionWatch>('connection');
+        const generation=await storage.get<number>('connection-generation') || 0;
+        if (!deadline || deadline.sessionId!==request.sessionId || deadline.status!=='armed' || deadline.deadlineMs<=Date.now()) return {watching:false};
+        // D1 reads can finish out of order. Retain the greatest admitted row
+        // generation even after closure so a stale RPC cannot replace/revive it.
+        if (active.generation<generation || (active.generation===generation && previous?.attemptId!==request.attemptId)) return {watching:false};
+        // A retry cannot extend the initial lease or undo a closure already claimed.
+        if (previous?.attemptId===request.attemptId) return {watching:previous.status==='watching'};
+        const watch:ConnectionWatch={attemptId:request.attemptId,expiresAt:Date.now()+CONNECTION_START_MS,status:'watching'};
+        await storage.put('connection-generation',active.generation);
+        await storage.put('connection',watch);
+        await storage.setAlarm(Math.min(deadline.deadlineMs,watch.expiresAt));
+        return {watching:true};
+      });
+    } catch { throw Error('voice_deadline_unavailable'); }
+  }
+
+  async pulseConnection(request: PulseRequest) {
+    try {
+      if (!await this.#activeConnection(request)) return {alive:false};
+      return await this.ctx.storage.transaction(async storage=>{
+        const deadline=await storage.get<Deadline>('deadline');
+        const watch=await storage.get<ConnectionWatch>('connection');
+        if (!deadline || deadline.status!=='armed' || deadline.deadlineMs<=Date.now() ||
+            !watch || watch.attemptId!==request.attemptId || watch.status!=='watching') return {alive:false};
+        const expiresAt=Date.now()+CONNECTION_LEASE_MS;
+        await storage.put('connection',{...watch,expiresAt});
+        await storage.setAlarm(Math.min(deadline.deadlineMs,expiresAt));
+        return {alive:true};
+      });
+    } catch { throw Error('voice_deadline_unavailable'); }
+  }
+
+  async #connectionAlarm(saved: Deadline) {
+    // A durable claim, separate from the provider's exclusive close claim.
+    // No storage transaction or concurrency gate spans network I/O.
+    const claimed=await this.ctx.storage.transaction(async storage=>{
+      const watch=await storage.get<ConnectionWatch>('connection');
+      if (!watch) {
+        await storage.setAlarm(saved.deadlineMs); return null;
+      }
+      if (watch.status==='watching' && watch.expiresAt>Date.now()) {
+        await storage.setAlarm(Math.min(saved.deadlineMs,watch.expiresAt)); return null;
+      }
+      await storage.put('connection',{...watch,status:'closing'});
+      await storage.setAlarm(Math.min(saved.deadlineMs,Date.now()+5_000));
+      return watch;
+    });
+    if (!claimed) return;
+    let observed=false;
+    try {
+      const call=await this.env.DB.prepare(`SELECT p.auth_id FROM voice_provider_calls p
+        JOIN voice_interview_controls c ON c.session_id=p.session_id AND c.auth_id=p.auth_id AND c.current_attempt_id=p.id
+        WHERE p.id=? AND p.session_id=? AND p.state='active'`).bind(claimed.attemptId,saved.sessionId).first<{auth_id:string}>();
+      if (call) await closeManagedVoiceCall(this.env,{uid:call.auth_id,attemptId:claimed.attemptId});
+      observed=true;
+      console.log('[voice-connection-watch]',{session:saved.sessionId,attempt:claimed.attemptId,outcome:'close_checked'});
+    } catch {
+      // Never repeat an uncertain provider operation. The original interview
+      // deadline and existing ledger/reconciliation path remain authoritative.
+      console.log('[voice-connection-watch]',{session:saved.sessionId,attempt:claimed.attemptId,outcome:'closure_unconfirmed'});
+    } finally {
+      await this.ctx.storage.transaction(async storage=>{
+        const watch=await storage.get<ConnectionWatch>('connection');
+        if (observed && watch?.attemptId===claimed.attemptId) await storage.delete('connection');
+        const current=await storage.get<ConnectionWatch>('connection');
+        const deadline=await storage.get<Deadline>('deadline');
+        if (deadline?.status==='armed') await storage.setAlarm(current
+          ? Math.min(deadline.deadlineMs,current.status==='watching'?current.expiresAt:Date.now()+5_000) : deadline.deadlineMs);
+      });
+    }
+  }
+
   async arm(request: ArmRequest) {
     try { return await this.#arm(request); }
     catch (error) {
@@ -52,7 +154,8 @@ export class VoiceDeadline extends DurableObject<Env> {
         throw Error('voice_deadline_conflict');
       }
       await storage.put<Deadline>('deadline',{sessionId,deadlineMs,status:'armed'});
-      await storage.setAlarm(deadlineMs);
+      const watch=await storage.get<ConnectionWatch>('connection');
+      await storage.setAlarm(watch ? Math.min(deadlineMs,watch.status==='watching'?watch.expiresAt:Date.now()+5_000) : deadlineMs);
     });
     return {armed:true, sessionId, deadlineAt:control.deadline_at};
   }
@@ -80,7 +183,7 @@ export class VoiceDeadline extends DurableObject<Env> {
       return;
     }
     if (Date.now() < saved.deadlineMs) {
-      await this.ctx.storage.setAlarm(saved.deadlineMs);
+      await this.#connectionAlarm(saved);
       return;
     }
     // Arm a durable retry BEFORE external I/O. Cloudflare's limited automatic
