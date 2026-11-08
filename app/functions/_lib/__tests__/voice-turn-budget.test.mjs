@@ -235,6 +235,10 @@ test('a candidate asking to start an example at the final invitation gets to spe
 
 for (const [text,kind] of [
   ['Could you repeat that, please?','repeat'], ['Say that again.','repeat'],
+  ['Could you please repeat that question?','repeat'],
+  ['Could you repeat or rephrase that question?','rephrase'],
+  ['Could you put that another way?','rephrase'], ["I don't understand the question.",'rephrase'],
+  ['What do you mean by that?','rephrase'], ["Let's move on.",'change_question'],
   ['Could you reframe that more simply, please?','rephrase'],
   ["No, no, I'm sorry, I'm sorry, could you rephrase that?",'rephrase'],
   ['Can you hear me?','hearing_check'], ["I couldn't hear the question.",'hearing_check'],
