@@ -15,7 +15,45 @@ application-owned planned completion in PR #1181
 revision 4c7fec4974c0285688ebed02f19a6bc17947b761. This remains a draft candidate,
 not a statement that all development or QA acceptance is complete.
 
-## Current: November 8 accepted final invitation and closing
+## Current: November 8 physical network recovery accepted in development
+
+Includes the net application changes from development PR #1186 at
+5172327ce27513a8a412156ddf07026e0c082f74. Healthy connected clients pulse the
+private worker every eight seconds. The server admits opted-in connections
+only after persisting their watch; missing pulses trigger exclusive provider
+closure. Replacement still requires confirmed closure. Original time, credit,
+transcript and mute state survive reconnect. Old timers and heartbeats cannot
+affect a replacement. The failed sideband fallback is not included.
+
+The recorded physical Safari outage and delayed reconnect passed. The owner
+heard the entire current-question replay and a subsequent response. Finish
+saved one report that reopened after reload, consumed one credit and closed
+both provider attempts. The original deadline stayed fixed. Five historical
+development uncertain records remain held; none was reclassified. Evidence:
+safari-network-recovery-04-review.md and its local run manifest.
+
+This is the scoped network gate, not a complete coaching, free-account,
+near-deadline or supported-browser matrix. The sample has 55 candidate words
+and correctly receives feedback only. Recording finalized and decoded with
+21 timestamp warnings. Output transcription corroborates the replay and next
+response; raw candidate recording fidelity is not independently established.
+
+The refreshed app passes 223 focused checks, 40 native Workers tests, the
+full voice suite and the application build locally. Changed runtime files
+exactly match accepted development; QA layout references are preserved.
+
+The QA infrastructure prerequisite #1170 must deploy and verify first. This
+app candidate then integrates that exact develop revision, keeping QA's header,
+cookie references and infrastructure configuration. The disabled retry migration
+034 is source only and must not be applied. Refreshed app CI, exact QA assets,
+real audio, one-credit accounting, report persistence and provider closure must
+pass on QA before any main promotion. Historical sections below describe their
+original observation time. Broader unresolved product cases remain tracked;
+this recovery pass does not silently waive them or require restarting every
+accepted test. Any remaining production blocker needs resolution or an explicit
+release disposition before main promotion.
+
+## Historical: November 8 accepted final invitation and closing
 
 Includes PR #1184, merged to dev0 as
 d495d47f7f774b2a762efaba86b15bae82778032. The final invitation now clearly
@@ -221,7 +259,7 @@ unrelated dashboard, marketing, directory and retention changes are excluded.
 Migration 034 is included as source for the existing disabled retry tests.
 It must not be applied, and VOICE_RETRY_ENABLED stays off.
 
-## Validation and remaining gates
+## Historical validation and original broader matrix
 
 The earlier scoped candidate passed 391 Node test entries across the voice files,
 including the compiled follow-up Worker with intercepted providers. The app
@@ -293,7 +331,7 @@ checks used no interview credit. A separate voice recording later stopped
 without activation; credits remained 28 and history 23, so it supplies no new
 voice acceptance. The scoped QA app build passes.
 
-Before this app PR merges:
+Original broader acceptance checklist (retained as history; current scoped ordering is above):
 
 1. Complete or explicitly disposition the remaining network-loss, supported-
    browser, accessibility, free-account and other live acceptance cases in the

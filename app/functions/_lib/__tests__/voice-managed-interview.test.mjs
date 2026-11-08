@@ -606,3 +606,19 @@ test('authenticated activation route ignores a supplied owner and returns no pro
   assert.equal(response.status,200);assert.equal(body.activated,true);assert.equal(body.clientSecret,undefined);
   assert.equal((await f.sessions())[0].user_id,1);assert.equal((await f.user()).free_session_used,1);
 });
+
+test('heartbeat route uses authenticated owner, rejects malformed input and does not queue or mutate provider work',async t=>{
+  const f=fixture(t),pulses=[];
+  f.env.VOICE_DEADLINES={getByName(id){return {async pulseConnection(request){pulses.push({id,...request});return {alive:true};}}}};
+  const body={action:'heartbeat',sessionId:FIRST,attemptId:SECOND,uid:'other',providerCallId:'rtc_foreign'};
+  const invalid=requestContext(f,body,{token:'invalid'});assert.equal((await route(invalid.context)).status,401);
+  const malformed=requestContext(f,{...body,attemptId:'not-an-attempt'});assert.equal((await route(malformed.context)).status,400);
+  const valid=requestContext(f,body);const result=await route(valid.context);
+  assert.equal(result.status,200);assert.equal((await result.json()).connectionAlive,true);
+  assert.deepEqual(pulses,[{id:FIRST,uid:'owner',sessionId:FIRST,attemptId:SECOND}]);
+  assert.equal(valid.waits.length,0);assert.equal(f.calls.length,0);assert.equal((await f.user()).free_session_used,0);
+  assert.equal((await f.sessions()).length,0);
+  f.env.VOICE_DEADLINES={getByName(){throw Error('private binding details');}};
+  const unavailable=await route(requestContext(f,body).context);assert.equal(unavailable.status,503);
+  assert.doesNotMatch(await unavailable.text(),/private/);
+});
