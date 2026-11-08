@@ -220,7 +220,7 @@ test('completion before reconnect forbids reopening; unknown hangup never become
   const f=fixture(t),first=await f.open();
   f.setHandler(async()=>new Response(null,{status:404}));
   assert.deepEqual(await f.close(),{closed:false,needsReview:true});assert.deepEqual(await f.close(),{closed:false,needsReview:true});
-  await assert.rejects(f.open({replacesAttemptId:first.attemptId}),/ended/);assert.equal(f.calls.length,2);
+  await assert.rejects(f.open({replacesAttemptId:first.attemptId}),/ended/);assert.equal(f.calls.length,3);
   assert.equal((await f.sessions()).length,1,'the transport helper does not overwrite the transcript or delete history');
 });
 
@@ -427,7 +427,7 @@ test('uncertain hangup does not lose the report or pretend closure succeeded',as
   assert.equal(payload.closureNeedsReview,true);
   const original=(await f.sessions())[0].transcript_json;
   const retry=completion(f,{transcript:[]});const again=await retry.execute();await retry.flush();
-  assert.equal(again.status,202);assert.equal((await f.sessions())[0].transcript_json,original);assert.equal(f.calls.length,2);
+  assert.equal(again.status,202);assert.equal((await f.sessions())[0].transcript_json,original);assert.equal(f.calls.length,3);
   assert.equal((await again.json()).closureNeedsReview,true);
 });
 
@@ -441,9 +441,9 @@ test('failed reconnect preserves one reservation and saves the report with a non
   assert.equal(payload.connectionClosed,false);assert.equal(payload.closureNeedsReview,true);
   const sessions=await f.sessions();assert.equal(sessions.length,1);
   assert.equal(sessions[0].end_reason,'connection_lost');assert.equal(sessions[0].duration_seconds,124);
-  assert.equal((await f.user()).free_session_used,1);assert.equal(f.calls.length,2);
+  assert.equal((await f.user()).free_session_used,1);assert.equal(f.calls.length,3);
   const attempt=await f.db.prepare('SELECT state,last_error_code,closed_at FROM voice_provider_calls WHERE id=?').bind(first.attemptId).first();
-  assert.deepEqual(attempt,{state:'uncertain',last_error_code:'close_http_404:empty:none:none:unclassified',closed_at:null});
+  assert.deepEqual(attempt,{state:'uncertain',last_error_code:'close_http_404:empty:none:none:unclassified:probe_http_404:empty:none:none',closed_at:null});
 });
 
 test('completion of a legacy session saves its report while preserving unverified call closure',async t=>{
