@@ -121,10 +121,45 @@ describe('durable interview deadlines in the actual Workers runtime',()=>{
     await open();vi.mocked(fetch).mockImplementation(async(input)=>{requests.push(String(input));return new Response(null,{status:404});});
     await due();await runDurableObjectAlarm(stub);
     expect(await call()).toMatchObject({state:'uncertain',closed_at:null,
-      last_error_code:'close_http_404:empty:none:none:unclassified'});
+      last_error_code:'close_http_404:empty:none:none:unclassified:probe_http_404:empty:none:none'});
     expect((await state()).saved).toMatchObject({status:'review'});expect((await state()).alarm).toBeGreaterThan(Date.now());
     await runInDurableObject(stub,(instance)=>instance.alarm());expect(requests.filter(x=>x.endsWith('/hangup'))).toHaveLength(1);
-    expect((await call())?.last_error_code).toBe('close_http_404:empty:none:none:unclassified');
+    expect((await call())?.last_error_code).toBe('close_http_404:empty:none:none:unclassified:probe_http_404:empty:none:none');
+  });
+  it('a sideband absence receipt permits one replacement with the same credit and original deadline',async()=>{
+    const first=await open(),initial=await state(),original=await call();
+    vi.mocked(fetch).mockImplementation(async(input,init)=>{
+      const request=new Request(input,init);expect(request.redirect).toBe('manual');requests.push(request.url);
+      if(request.url.endsWith('/hangup'))return new Response(null,{status:404});
+      if(request.headers.get('Upgrade')==='websocket'){
+        expect(request.method).toBe('GET');expect(new URL(request.url).searchParams.get('call_id')).toBe(original!.provider_call_id);
+        expect(request.headers.get('Authorization')).toBe('Bearer '+env.OPENAI_API_KEY);
+        return Response.json({error:{code:'call_id_not_found',type:'invalid_request_error'}},{status:404});
+      }
+      return new Response('v=0 answer',{status:201,headers:{Location:'/v1/realtime/calls/rtc_replacement'}});
+    });
+    const second=await open({replacesAttemptId:first.attemptId});
+    expect(second.deadlineAt).toBe(first.deadlineAt);expect(await state()).toEqual(initial);
+    expect((await env.DB.prepare('SELECT state,last_error_code FROM voice_provider_calls WHERE id=?').bind(first.attemptId).first()))
+      .toMatchObject({state:'closed',last_error_code:'close_sideband_call_id_not_found'});
+    expect((await call())?.provider_call_id).toBe('rtc_replacement');expect(requests).toHaveLength(4);
+    expect((await env.DB.prepare("SELECT free_session_used FROM users WHERE auth_id='owner'").first())?.free_session_used).toBe(1);
+  });
+  it('a native sideband WebSocket is detached and cannot falsely authorize a replacement',async()=>{
+    await open();let observerClosed!: Promise<number>,messages=0;
+    vi.mocked(fetch).mockImplementation(async(input,init)=>{
+      const request=new Request(input,init);requests.push(request.url);
+      if(request.url.endsWith('/hangup'))return new Response(null,{status:404});
+      expect(request.headers.get('Upgrade')).toBe('websocket');
+      const pair=new WebSocketPair();pair[1].accept();
+      pair[1].addEventListener('message',()=>messages++);
+      observerClosed=new Promise(resolve=>pair[1].addEventListener('close',event=>resolve(event.code)));
+      return new Response(null,{status:101,webSocket:pair[0]});
+    });
+    await closeManagedInterview(appEnv,{uid:'owner',sessionId}).catch(()=>{});
+    expect(await observerClosed).toBe(1000);expect(messages).toBe(0);
+    expect(await call()).toMatchObject({state:'uncertain',last_error_code:'close_http_404:empty:none:none:unclassified:probe_attached'});
+    expect(requests).toHaveLength(3);
   });
   it('the exact provider call absence response closes at deadline and removes the alarm',async()=>{
     await open();vi.mocked(fetch).mockImplementation(async(input,init)=>{

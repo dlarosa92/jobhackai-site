@@ -46,6 +46,41 @@ function providerReceipt(event,response,{attempt,execution,callId}) {
     providerRequestId:/^req_[A-Za-z0-9_-]{1,180}$/.test(requestId || '')?requestId:null,status:response.status});
 }
 
+// A read-only attachment to the SAME owned call, never a new session. Some
+// disconnected calls produce an empty error from the hangup endpoint.
+// Only an independent, exact provider absence response can resolve that case.
+// https://developers.openai.com/api/docs/guides/voice-server-controls#with-webrtc
+async function probeCallAbsence(env, receipt) {
+  let socket;
+  try {
+    const response = await fetch('https://api.openai.com/v1/realtime?call_id=' + encodeURIComponent(receipt.callId), {
+      method:'GET', headers:{Authorization:`Bearer ${env.OPENAI_API_KEY}`, Upgrade:'websocket',
+        'X-Client-Request-Id':receipt.execution + '-probe'},
+      redirect:'manual', signal:AbortSignal.timeout(5000)
+    });
+    providerReceipt('provider_absence_probe_response',response,receipt);
+    socket = response.webSocket;
+    if (socket) {
+      socket.accept();
+      // Never send configuration, audio or generation commands. An attachment
+      // is not proof of closure, and incoming content is not read or retained.
+      return {confirmedAbsent:false, diagnostic:'attached'};
+    }
+    const diagnostic = await voiceProviderFailureDiagnostic(response);
+    console.log('[voice-call] provider_diagnostic',{attempt:receipt.attempt,execution:receipt.execution,
+      operation:'absence_probe',status:response.status,...diagnostic});
+    return {response, confirmedAbsent:response.status===404 && diagnostic.bodyFormat==='json' &&
+      diagnostic.errorCode==='call_id_not_found' && diagnostic.errorType==='invalid_request_error',
+      diagnostic:'http_' + response.status + ':' + [diagnostic.bodyFormat,diagnostic.errorCode || 'none',
+        diagnostic.errorType || 'none'].join(':')};
+  } catch {
+    return {confirmedAbsent:false, diagnostic:'transport_unconfirmed'};
+  } finally {
+    // Detach the observer, not the WebRTC call. No second hangup is attempted.
+    try { socket?.close(1000); } catch { /* Keep the original call on hold. */ }
+  }
+}
+
 /** Internal signalling only. The caller authenticates uid, checks entitlement
  * and reserves its interview before releasing the returned SDP to the client.
  * No API credential, SDP, instructions or transcript is stored in this ledger.
@@ -179,7 +214,7 @@ export async function closeManagedVoiceCall(env,{uid,attemptId}) {
       redirect:'manual',signal:AbortSignal.timeout(10000)
     });
     phase='response';
-    let confirmedAbsent=false;
+    let confirmedAbsent=false, absenceProbe=null, closureResponse=response;
     if (!response.ok) {
       providerReceipt('provider_close_response',response,{attempt:attemptId,execution,callId:before.provider_call_id});
       const diagnostic=await voiceProviderFailureDiagnostic(response);
@@ -191,6 +226,11 @@ export async function closeManagedVoiceCall(env,{uid,attemptId}) {
       // Never use a message match or HTTP 404 alone to establish absence.
       confirmedAbsent=response.status===404 && diagnostic.bodyFormat==='json' &&
         diagnostic.errorCode==='call_id_not_found' && diagnostic.errorType==='invalid_request_error';
+      if (response.status===404 && diagnostic.bodyFormat==='empty') {
+        absenceProbe=await probeCallAbsence(env,{attempt:attemptId,execution,callId:before.provider_call_id});
+        confirmedAbsent=absenceProbe.confirmedAbsent;
+        if (confirmedAbsent) closureResponse=absenceProbe.response;
+      }
       if (!confirmedAbsent) {
         failureCode='close_http_'+response.status;
         // A network-loss test can also interrupt the operator's log stream.
@@ -201,16 +241,18 @@ export async function closeManagedVoiceCall(env,{uid,attemptId}) {
         if (response.status===404) {
           failureCode += ':' + [diagnostic.bodyFormat,diagnostic.errorCode || 'none',
             diagnostic.errorType || 'none',diagnostic.messageClass].join(':');
+          if (absenceProbe) failureCode += ':probe_' + absenceProbe.diagnostic;
         }
         throw Error('voice_call_close_unconfirmed');
       }
     }
-    providerReceipt(confirmedAbsent?'provider_absent':'provider_closed',response,{attempt:attemptId,execution,callId:before.provider_call_id});
+    providerReceipt(absenceProbe?.confirmedAbsent?'provider_sideband_absent':confirmedAbsent?'provider_absent':'provider_closed',
+      closureResponse,{attempt:attemptId,execution,callId:before.provider_call_id});
     phase='persist';
     const saved=await db.prepare(`UPDATE voice_provider_calls SET state='closed',execution_token=NULL,
       closed_at=datetime('now'),updated_at=datetime('now'),last_error_code=?
       WHERE id=? AND auth_id=? AND state='closing' AND execution_token=? RETURNING id`)
-      .bind(confirmedAbsent?'close_call_id_not_found':null,attemptId,uid,execution).first();
+      .bind(absenceProbe?.confirmedAbsent?'close_sideband_call_id_not_found':confirmedAbsent?'close_call_id_not_found':null,attemptId,uid,execution).first();
     if (!saved) throw Error('voice_call_close_unconfirmed');
     return {closed:true,alreadyClosed:confirmedAbsent};
   } catch (error) {

@@ -1,5 +1,25 @@
 # Verified voice-call recovery
 
+## November 8: same-call absence check after an empty hangup response
+
+A new hangup that returns an empty HTTP404 now makes one bounded, read-only
+attachment request to the documented Realtime sideband endpoint, using the
+unchanged issuing key and the call ID saved from creation. Only HTTP404 with
+the exact JSON `call_id_not_found` / `invalid_request_error` response permits
+closure. The ledger records `close_sideband_call_id_not_found`, and the
+`provider_sideband_absent` receipt identifies the probe response before saving.
+
+An accepted WebSocket is immediately detached without sending commands or
+reading interview content. An empty, generic, unauthorized, redirected,
+unreadable or failed probe retains the hold. Bounded probe diagnostic categories
+are appended to the original empty404 diagnosis. The request does not create
+a call, repeat hangup, reset a deadline or consume another interview. Existing
+uncertain attempts are not retried or reclassified.
+
+This fallback still requires a controlled development reproduction before
+network recovery can be accepted. Unit/runtime fixtures do not prove what the
+live provider will return, and this does not resolve the historical support case.
+
 ## November 8: durable diagnosis for new unconfirmed 404 responses
 
 New ambiguous hangup 404s retain their safe diagnostic in
