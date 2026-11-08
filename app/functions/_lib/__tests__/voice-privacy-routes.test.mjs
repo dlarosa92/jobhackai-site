@@ -177,3 +177,18 @@ test('free report access cannot be upgraded with client parameters and historica
   assert.equal(paid.body.fullAccess, true); assert.deepEqual(paid.body.transcript, transcript);
   assert.equal(paid.body.scorecard.summary, scorecard.summary);
 });
+
+test('legacy safety-ended reports remain scoreless through direct access, history and paid unlock', async t => {
+  const f = setup(t); await f.add('safety', { user: 2, mode: 'free' });
+  await f.query("UPDATE voice_sessions SET end_reason='ended_for_safety' WHERE id='safety'").run();
+  for (const everPaid of [0, 1]) {
+    await f.query('UPDATE users SET has_ever_paid=? WHERE id=2', everPaid).run();
+    const r = await f.call(report, { id: 'safety', token: 'other' });
+    assert.equal(r.status, 200); assert.equal(r.body.endReason, 'ended_for_safety');
+    assert.equal(r.body.scorecard, null, 'a legacy score must not turn a safety ending into a performance report');
+    assert.equal(r.body.scorecardReady, true, 'the deliberately absent score is not still generating');
+    const rows = (await f.call(history, { token: 'other' })).body.sessions;
+    assert.equal(rows[0].status, 'safety'); assert.equal(rows[0].overall, null);
+    assert.equal(rows[0].topImprovement, null);
+  }
+});
