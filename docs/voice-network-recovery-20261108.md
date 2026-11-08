@@ -1,5 +1,34 @@
 # Network recovery follow-up, November 8
 
+## Current deployment and live retest
+
+PR #1183 merged through dev0 as 69a508227f109aeb1ca8bb82cbcc1c3a8c50c04a.
+Canonical development deployment and exact served assets were verified. All
+ten executed PR checks, five development branch checks and three authenticated
+post-deployment UI tests passed. The unchanged Worker required no release or
+migration. The scoped change is included in draft QA candidate #1168, whose
+101 focused tests, full voice suite and app build pass locally.
+
+The third recorded Safari run still FAILED network recovery. After a
+31.521-second outage, the owner requested Reconnect 147.432 seconds after
+the browser came online. This was not the planned immediate reconnect.
+The original deadline had more than 14 minutes left. Diagnostics now establish
+an application 409, voice_call_close_unconfirmed, and the durable provider
+category close_http_404:empty:none:none:unclassified. The delay is not proven
+to explain the provider response. No replacement was created, and the terminal
+review safeguard saved and ended the application interview. This did not
+exercise the new temporary-error retry branch.
+
+Both captured answers (71 words) and one feedback-only report saved and
+reopened; one credit was used. No unended application interview remains.
+The provider call is still uncertain, alongside three older uncertain
+attempts. Application completion is not proof of provider closure. The approved
+addendum was sent in OpenAI case 19425445. Immediate and mid-answer recovery
+remain unaccepted; QA and production are unpromoted. See the local evidence
+folder's safari-network-recovery-03-review.md and run manifest.
+
+## Original reproduction and correction
+
 The second controlled Safari network interruption did not resume. The captured
 conversation saved and reopened, one development credit was used, the original
 deadline was unchanged, and the provider call was confirmed closed. No
@@ -41,5 +70,5 @@ additional stale-timer cases, both reproduced before fixing retirement. The
 final browser/diagnostic suites pass 101 tests; the unchanged managed-interview
 and provider suites passed 116 tests. The full voice suite and application build
 pass. The built JavaScript matches the source.
-This is local evidence only until CI, exact development deployment checks and
-the live retest succeed. Promotion remains dev0, then develop/QA, then main.
+These automated checks do not override the failed live result above.
+Promotion remains dev0, then develop/QA, then main.

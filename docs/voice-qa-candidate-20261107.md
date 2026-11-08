@@ -15,7 +15,42 @@ application-owned planned completion in PR #1181
 revision 4c7fec4974c0285688ebed02f19a6bc17947b761. This remains a draft candidate,
 not a statement that all development or QA acceptance is complete.
 
-## November 8 durable network-failure evidence
+## Current: November 8 network retry candidate and live result
+
+Includes PR #1183, merged to dev0 as
+69a508227f109aeb1ca8bb82cbcc1c3a8c50c04a and verified on the canonical
+development deployment. Temporary reconnect errors preserve the existing
+interview, captured answers, mute choice, credit and original deadline. The
+user can explicitly retry or finish. Successful replacement requests the
+current question again. Retired configuration and greeting timers cannot
+close a later recovery attempt. No automatic replacement or provider-hold
+bypass is introduced. Safe diagnostics identify failure stage and category.
+
+The refreshed QA candidate passes all 101 managed-client/diagnostic tests,
+the full voice suite and the app build. Changed runtime modules match the
+development source; the voice page keeps QA's existing header and cookie
+asset references. Hosted candidate checks must pass on this new head.
+
+The third recorded Safari network run FAILED recovery on the deployed build.
+The browser was offline for 31.521 seconds, then Reconnect was requested
+147.432 seconds after it returned online. More than 14 minutes remained on
+the original deadline. The application returned 409,
+voice_call_close_unconfirmed, with stored provider category
+close_http_404:empty:none:none:unclassified. No replacement was created.
+This exercised the terminal review safeguard, not the temporary-error retry
+branch. The delay is observed; it is not established as the cause.
+
+Both captured answers (71 words total) and one feedback-only report saved and
+reopened. One credit was used, and no unended application session remains.
+Provider closure is a separate unresolved fact. Four development attempts
+now remain uncertain: three unconfirmed closures and the September 21
+unconfirmed creation attempt. None was cleared by age or a generic 404.
+The owner-approved addendum was sent in OpenAI case 19425445 on November 8.
+The immediate-reconnect and mid-answer cases remain unaccepted. Evidence is
+in safari-network-recovery-03-review.md and its run manifest in the Brighton
+preparation evidence folder. No QA or production promotion has occurred.
+
+## Historical: November 8 durable network-failure evidence
 
 Includes development PR #1182 (merge 7e0b70be3c02b5a842af90d0aa406bedcb1b3d3a).
 An unconfirmed hangup 404 now retains the bounded, allowlisted response category
@@ -218,15 +253,14 @@ Before this app PR merges:
 1. Complete or explicitly disposition the remaining network-loss, supported-
    browser, accessibility, free-account and other live acceptance cases in the
    original release plan. Physical AirPods recovery is now passed.
-2. Resolve the failed November 7 network recovery and provider evidence holds.
-   The audit includes two unconfirmed closures and the separate September 21
-   unconfirmed creation attempt. The network test saved one feedback-only report and used
-   one credit, but hangup returned HTTP 404 and no replacement was opened.
-   The new response body was not recovered; do not describe it as empty.
-   The separate mid-answer outage remains not run. OpenAI case 19425445 has
-   received the owner-approved organization/project identifiers and fresh
-   reproduction. Neither call's terminal state is verified. An elapsed
-   application deadline or a generic 404 does not establish provider closure.
+2. Resolve the failed network-recovery path and four provider evidence holds
+   described in the current section. The latest run preserves both answers
+   and its report but does not establish coherent recovery. Its stored error
+   identifies an empty 404; the older run's missing response body must not be
+   retroactively classified. The separate mid-answer outage remains not run.
+   OpenAI case 19425445 has the approved identifiers and latest reproduction.
+   An elapsed application deadline or a generic 404 does not establish
+   provider closure.
 3. Land the separate worker/schema promotion through the Voice Worker Release
    pipeline. Verify migrations 033 and 035, the existing QA namespace, matching
    worker and app credentials, and enabled scheduling before the app deploys.
