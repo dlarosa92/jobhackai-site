@@ -1,8 +1,9 @@
 # Scoped voice QA candidate, November 7, 2026
 
 Prepared from development revision 0571ea808878801f6e4d75168cbd4b5c56713e39,
-with the accepted physical-device recovery in 2ede5818013b3df4d608ebdad184932dddf97949
-and label-only follow-up in 19698b4ead5c77fe06b025a29875c1ce455a0b71, against QA
+with the accepted physical-device recovery in 2ede5818013b3df4d608ebdad184932dddf97949,
+label-only follow-up in 19698b4ead5c77fe06b025a29875c1ce455a0b71 and history
+accessibility fix in d7f79cfce0a9f39ff09544c5d91ce47852a3bf27, against QA
 revision 4c7fec4974c0285688ebed02f19a6bc17947b761. This remains a draft candidate,
 not a statement that all development or QA acceptance is complete.
 
@@ -19,6 +20,10 @@ not a statement that all development or QA acceptance is complete.
   controls stay truthful; connection status does not become stale on unmute.
 - Reports distinguish limited evidence from an eligible practice score and
   preserve grounded feedback, history access and retention redaction.
+- Saved reports expose native links. History selection uses labeled checkboxes
+  without replacing the focused control. The deletion dialog initially focuses
+  Cancel and returns focus after cancellation; mode changes focus a visible
+  control. Obsolete row navigation and duplicate keyboard handlers are removed.
 - The existing once-per-account early-end grace has matching schema support.
 - The silent connection diagnostic uses uncharged setup and never activates
   an interview. Its version matches the connection endpoint protocol.
@@ -33,7 +38,7 @@ It must not be applied, and VOICE_RETRY_ENABLED stays off.
 
 ## Validation and remaining gates
 
-The scoped candidate passes 391 Node test entries across the voice files,
+The earlier scoped candidate passed 391 Node test entries across the voice files,
 including the compiled follow-up Worker with intercepted providers. The app
 build passes and generated voice assets match source. These are local tests,
 not real microphone or provider acceptance. The development Safari setup,
@@ -49,15 +54,30 @@ with video timestamp warnings. The label-only follow-up passes the 89 current
 managed-client/diagnostic tests and does not change audio behavior. This
 physical-device pass does not establish the separate network-loss cases.
 
+The history fix passed 106 client checks and 89 managed-client/diagnostic
+checks after cherry-picking into this QA candidate, and its app build passes.
+The delivered development JavaScript exactly matches the accepted source.
+Canonical-host HTML differs only by Cloudflare's Rocket Loader transformation.
+Native Safari on development confirms labeled links and checkboxes, single
+Space toggles with retained focus, initial Cancel focus, Escape returning to
+Delete selected and mode exit returning to Manage. Local Chrome also verified
+Enter navigation, dialog Tab trapping and a 390px layout without overflow.
+No real data was deleted or new voice call started. Full Safari keyboard
+traversal, screen-reader speech and live 200% zoom remain outside this pass.
+
 Before this app PR merges:
 
 1. Complete or explicitly disposition the remaining network-loss, supported-
    browser, accessibility, free-account and other live acceptance cases in the
    original release plan. Physical AirPods recovery is now passed.
-2. Resolve the independent historical provider-closure evidence hold through
-   authoritative provider evidence. Support case 19425445 requests the API
-   organization/project identifiers and has not verified the call's terminal
-   state. Do not turn an empty 404 into a success.
+2. Resolve the failed November 7 network recovery and both provider-closure
+   evidence holds. The network test saved one feedback-only report and used
+   one credit, but hangup returned HTTP 404 and no replacement was opened.
+   The new response body was not recovered; do not describe it as empty.
+   The separate mid-answer outage remains not run. OpenAI case 19425445 has
+   received the owner-approved organization/project identifiers and fresh
+   reproduction. Neither call's terminal state is verified. An elapsed
+   application deadline or a generic 404 does not establish provider closure.
 3. Land the separate worker/schema promotion through the Voice Worker Release
    pipeline. Verify migrations 033 and 035, the existing QA namespace, matching
    worker and app credentials, and enabled scheduling before the app deploys.
