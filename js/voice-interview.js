@@ -185,10 +185,12 @@
       })) return;
       var inputs = turnControl.inputs;
       turnControl.inputs = [];
+      var candidateTexts = [];
       inputs.forEach(function (input) {
         if (!input.opening && !lifecycle().shouldCommit(input.id)) return;
         if (state.liveOrder && typeof state.liveOrder.hasUsableUserItem === 'function' && state.liveOrder.hasUsableUserItem(input.id)) {
-          turnControl.pending = { opening: input.opening };
+          candidateTexts.push(turnControl.transcribed[input.id].text || '');
+          turnControl.pending = { opening: input.opening, candidateTexts: candidateTexts };
         } else {
           // A filtered input must not become the last thing the model answers
           // when a real answer follows it. Retire it from both contexts.
@@ -216,7 +218,9 @@
       instruction: repeatQuestion
         ? 'Repeat only this interviewer question, verbatim: ' + JSON.stringify(repeatQuestion) + '. Do not answer it or add any other words.'
         : 'Repeat the current interview question in the same words. Do not add a new question or follow-up.'
-    } : turnControl.plan.next({ opening: pending.opening, wrapUp: state.wrapUpNoted });
+    } : turnControl.plan.next({ opening: pending.opening, wrapUp: state.wrapUpNoted,
+      candidateText: (pending.candidateTexts || []).join(' '),
+      currentQuestion: $('vi-question') && $('vi-question').textContent });
     var id = 'jha_turn_' + (++turnControl.serial);
     turnControl.requestId = id;
     if (state.audioSetup) beginAudioSample(id);
@@ -251,8 +255,8 @@
     drainTurn();
   }
 
-  function noteTranscriptionSettled(itemId) {
-    if (itemId) turnControl.transcribed[itemId] = true;
+  function noteTranscriptionSettled(itemId, transcript) {
+    if (itemId) turnControl.transcribed[itemId] = { text: String(transcript || '') };
     drainTurn();
   }
 
@@ -1451,7 +1455,7 @@
       // recorded, so it cannot reach the stored transcript or the evaluation.
       if (handleSpokenEndRequest(evt.transcript, evt.item_id)) return;
       recordTurn('user', evt.transcript, evt.item_id);
-      noteTranscriptionSettled(evt.item_id);
+      noteTranscriptionSettled(evt.item_id, evt.transcript);
       return;
     }
     if (type === 'input_audio_buffer.speech_started') {

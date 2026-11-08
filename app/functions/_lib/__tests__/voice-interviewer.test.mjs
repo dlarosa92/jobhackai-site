@@ -263,11 +263,20 @@ test('distress: imminent danger is the one carve-out, and it is bounded', () => 
 test('the question-pushback rule cannot override conduct, distress or disclosure choice', () => {
   const out = interviewerInstructions(BASE);
   assert.ok(out.includes('challenges or refuses an interview question'));
-  assert.ok(out.includes('it never overrides the conduct, distress, or personal-disclosure choice rules above'));
+  assert.ok(out.includes('This never overrides the conduct, distress, or personal-disclosure choice rules above'));
+  assert.ok(out.includes('Honor an explicit skip or example-change request without pressing'));
+  assert.ok(!out.includes('Do not drop the question'));
   // Ordering matters for "above" to be true
   assert.ok(out.indexOf('abusive, sexually explicit') < out.indexOf('challenges or refuses an interview question'));
   assert.ok(out.indexOf('do not become a counselor') < out.indexOf('challenges or refuses an interview question'));
   assert.ok(out.indexOf('choose another example, or skip that question') < out.indexOf('challenges or refuses an interview question'));
+});
+
+test('the application owns the budget and conversation controls are not answers', () => {
+  const out = interviewerInstructions(BASE);
+  assert.ok(out.includes('The application owns the clock and question budget'));
+  assert.ok(out.includes('conversation controls, not answered questions'));
+  assert.ok(!out.includes('You own the clock'));
 });
 
 test('conduct_action is shaped for the Realtime API', () => {
