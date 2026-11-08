@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createVoiceTurnPlan } from '../../../../js/voice-turn-plan.js';
+import { createVoiceTurnPlan, classifyVoiceTurnControl } from '../../../../js/voice-turn-plan.js';
 import { createVoiceClientHarness, PLAN_PAYLOAD, scoredSessionPayload } from './helpers/voice-client-harness.mjs';
 
 const config = { type: 'session.updated', session: { audio: { input: { turn_detection:
@@ -201,6 +201,105 @@ test('budget requests at most two follow-ups, changes competency, and eventually
   assert.match(plans[1].instruction,/do not presume a mismatch/);
   assert.equal(plans[9].kind,'final_invitation');
   assert.equal(plans[10].kind,'close');
+});
+
+test('repeat and rephrase controls do not spend interview questions or force a close',async t=>{
+  const h=await live(t);begin(h);
+  for (const [i,text] of [
+    'Could you repeat that, please?', 'Next question, please.',
+    'Could you reframe that more simply, please?', 'Next question, please.',
+    'Could we use a different example?', 'Can you hear me?',
+    "I'm sorry, could you rephrase that?", "No, no, I'm sorry, I'm sorry, could you rephrase that?",
+    'Could you repeat the question please?', 'Could you rephrase that more simply?'
+  ].entries()) {
+    answer(h,'control-'+i,text);
+    assert.ok(!['final_invitation','close'].includes(requests(h).at(-1).response.metadata.jobhackai_purpose),text);
+    assistant(h,'control-reply-'+i,'Tell me about a process improvement you led.');
+  }
+  answer(h,'actual-answer','I compared the intake records and reduced the turnaround by two days.');
+  assert.equal(requests(h).at(-1).response.metadata.jobhackai_purpose,'follow_up');
+  assert.equal(requests(h).at(-1).response.metadata.jobhackai_topic,'0');
+  const context=h.sends.filter(x=>x.type==='conversation.item.create'&&x.item.role==='system').at(-1);
+  assert.match(context.item.content[0].text,/follow-up opportunity 1 of 2/);
+  assert.equal(h.completeBodies().length,0);
+});
+
+test('a candidate asking to start an example at the final invitation gets to speak',()=>{
+  const p=createVoiceTurnPlan();
+  for(let i=0;i<10;i++)p.next();
+  const next=p.next({candidateText:'So I want to give example of something.'});
+  assert.equal(next.kind,'continue_answer');
+  assert.doesNotMatch(next.instruction,/Close now/);
+  assert.equal(p.next({candidateText:'I compared the records, fixed intake and cut the delay by two days.'}).kind,'close');
+});
+
+for (const [text,kind] of [
+  ['Could you repeat that, please?','repeat'], ['Say that again.','repeat'],
+  ['Could you please repeat that question?','repeat'],
+  ['Could you repeat or rephrase that question?','rephrase'],
+  ['Could you put that another way?','rephrase'], ["I don't understand the question.",'rephrase'],
+  ['What do you mean by that?','rephrase'], ["Let's move on.",'change_question'],
+  ['Could you reframe that more simply, please?','rephrase'],
+  ["No, no, I'm sorry, I'm sorry, could you rephrase that?",'rephrase'],
+  ['Can you hear me?','hearing_check'], ["I couldn't hear the question.",'hearing_check'],
+  ['Next question, please.','change_question'], ['Could we use a different example?','change_question'],
+  ['Can I skip this question?','change_question'], ['Let me finish my answer.','continue_answer'],
+  ["Yes, I'd like to add something.",'continue_answer'],
+  ['I have something to add.','continue_answer'], ['Can I give an example?','continue_answer'],
+  ['I asked the customer to repeat the question.',null],
+  ['During training, I said "could you repeat that?" to demonstrate the process.',null],
+  ['Could you rephrase that? I compared our records and reduced the delay by two days.',null],
+  ['I want to give an example of how I reduced the delay.',null],
+  ['Yes.',null], ['No.',null], ['I skipped the test because our manager approved the change.',null],
+  ["During a past training session I said let's end the interview here as part of a role-play.",null]
+]) test('standalone control classification: '+text,()=>assert.equal(classifyVoiceTurnControl(text),kind));
+
+test('yes to the final invitation invites the answer, while an ordinary yes still advances',()=>{
+  const p=createVoiceTurnPlan();p.next();
+  assert.equal(p.next({candidateText:'Yes.'}).kind,'follow_up');
+  for(let i=0;i<8;i++)p.next();
+  assert.equal(p.next({candidateText:'Yes, please.'}).kind,'continue_answer');
+  assert.equal(p.next({candidateText:'No.'}).kind,'close');
+});
+
+test('final-invitation rephrasing and continuation preserve the final answer opportunity',async t=>{
+  const h=await live(t);begin(h);
+  for(let i=0;i<9;i++) { answer(h,'normal-'+i);assistant(h,'normal-reply-'+i,'What else would you like to add?'); }
+  assert.equal(requests(h).at(-1).response.metadata.jobhackai_purpose,'final_invitation');
+  answer(h,'repeat-final','Could you repeat that please?');
+  assert.equal(requests(h).at(-1).response.metadata.jobhackai_purpose,'repeat');
+  assistant(h,'repeat-final-reply','What else would you like to add?');
+  answer(h,'preface','So I want to give example of something.');
+  assert.equal(requests(h).at(-1).response.metadata.jobhackai_purpose,'continue_answer');
+  assistant(h,'go-ahead','Go ahead.');
+  answer(h,'last-example','I compared the records and reduced the delay by two days.');
+  assert.equal(requests(h).at(-1).response.metadata.jobhackai_purpose,'close');
+});
+
+test('mixed answer fragments cannot be discarded as a standalone conversation control',async t=>{
+  const h=await live(t);begin(h);
+  commit(h,'first');commit(h,'second');
+  transcribe(h,'first','Could you repeat that?');
+  transcribe(h,'second','Actually I compared the records and reduced the delay.');
+  assert.equal(requests(h).at(-1).response.metadata.jobhackai_purpose,'follow_up');
+});
+
+test('control recovery stays on its topic after reconnect and duplicates do not spend a turn',async t=>{
+  const h=await live(t);begin(h);
+  answer(h,'repeat','Could you repeat that please?');
+  assistant(h,'repeated','Tell me about a process improvement you led.');
+  h.peerConnection().connectionState='disconnected';h.peerConnection().onconnectionstatechange();
+  await h.click('vi-reconnect-btn');await h.openDataChannel();
+  assistant(h,'reconnected','Tell me about a process improvement you led.');
+  const n=requests(h).length;
+  answer(h,'rephrase','Could you rephrase that?');
+  transcribe(h,'rephrase','Could you rephrase that?');
+  assert.equal(requests(h).length,n+1);
+  assert.equal(requests(h).at(-1).response.metadata.jobhackai_purpose,'rephrase');
+  assistant(h,'simpler','What process did you improve?');answer(h,'real');
+  assert.equal(requests(h).at(-1).response.metadata.jobhackai_topic,'0');
+  const context=h.sends.filter(x=>x.type==='conversation.item.create'&&x.item.role==='system').at(-1);
+  assert.match(context.item.content[0].text,/follow-up opportunity 1 of 2/);
 });
 
 test('no greeting or automatic reply before the effective turn configuration is acknowledged',async t=>{
