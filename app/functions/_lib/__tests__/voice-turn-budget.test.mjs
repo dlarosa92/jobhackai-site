@@ -303,6 +303,10 @@ test('final-invitation rephrasing and continuation preserve the final answer opp
   const h=await live(t);begin(h);
   for(let i=0;i<9;i++) { answer(h,'normal-'+i);assistant(h,'normal-reply-'+i,'What else would you like to add?'); }
   assert.equal(requests(h).at(-1).response.metadata.jobhackai_purpose,'final_invitation');
+  const invitation=h.sends.filter(x=>x.type==='conversation.item.create'&&x.item.role==='system').at(-1);
+  assert.match(invitation.item.content[0].text,/before we finish.*Then wait for their answer/);
+  assert.equal(h.completeBodies().length,0,'the final invitation does not end the interview');
+  assert.ok(h.peerConnection().tracks.every(track=>track.enabled===true),'the final answer opportunity keeps the microphone on');
   answer(h,'repeat-final','Could you repeat that please?');
   assert.equal(requests(h).at(-1).response.metadata.jobhackai_purpose,'repeat');
   assistant(h,'repeat-final-reply','What else would you like to add?');
@@ -331,6 +335,23 @@ async function plannedClosing(t, options = {}) {
   assert.equal(response.metadata.jobhackai_purpose,'close');
   return {h,response};
 }
+
+test('the terminal closing cannot reuse the previous invitation or answer as response context',async t=>{
+  const {h}=await plannedClosing(t);
+  const closing=requests(h).at(-1).response;
+  assert.deepEqual(closing.input,[],'the final closing has no conversational input to continue');
+  assert.match(closing.instructions,/Say only these exact words/);
+  assert.match(closing.instructions,/This interview is now complete/);
+  assert.match(closing.instructions,/Do not ask a question or invite another answer/);
+  assert.doesNotMatch(closing.instructions,/normal brief closing statement|Keep the interview, conduct, safety and closing rules/);
+  assert.equal(h.completeBodies().length,0,'the fixed closing still waits for playback');
+});
+
+test('the planned closing visibly explains that candidate capture has ended',async t=>{
+  const {h}=await plannedClosing(t);
+  assert.match(h.el('vi-input-status').textContent,/Interview complete\. Microphone off\./);
+  assert.ok(h.peerConnection().tracks.every(track=>track.enabled===false));
+});
 
 test('the planned closing ends on playback completion without recognizing its wording',async t=>{
   const {h,response}=await plannedClosing(t);

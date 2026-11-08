@@ -225,15 +225,11 @@ export function interviewerInstructions({ role, seniority, jd, maxMinutes = 20, 
   const audioCheckGreeting = firstName
     ? `Hi, ${firstName}. Before we begin, can you hear me clearly?`
     : 'Hi. Before we begin, can you hear me clearly?';
-  // The candidate's name is a session FACT, stated once in the shared rules so
-  // it reaches every opening — fresh, resumed with a transcript tail, and
-  // resumed early. Live, the name only existed inside the audio-check greeting
-  // string, which the resume paths never use and the closing turn could not
-  // see, so the model invented a different name to sign off with. Binding it
-  // here makes the sound check, the interview, and the close use one value, and
-  // makes "no name at all" the only alternative to the real one.
+  // Bind the verified name across fresh and resumed interviews, with omission
+  // as the only alternative. The application supplies a fixed, nameless
+  // terminal closing separately so it cannot invent a name or another turn.
   const candidateLine = firstName
-    ? `- The candidate's name is ${firstName}. That is their name for this whole session and the only one you may use: greet them by it in the audio check, use it again when you close, and use it sparingly in between. Never call them by any other name, never switch to a different one part way through, and if you are ever unsure, use no name at all rather than a name you are not certain of.`
+    ? `- The candidate's name is ${firstName}. That is their name for this whole session and the only one you may use: greet them by it in the audio check and use it sparingly during the interview. Do not add a name to a closing statement supplied by the application. Never call them by any other name, never switch to a different one part way through, and if you are ever unsure, use no name at all rather than a name you are not certain of.`
     : '- You do not know the candidate\'s name, and there is no name for you to use in this session. Greet them, interview them, and close without one. Never guess or invent a name for them, never call them by a placeholder, and never ask them what their name is.';
   return [
     `You are a professional job interviewer running a realistic spoken mock interview for a ${role} position${levelClause}.`,
@@ -276,7 +272,7 @@ export function interviewerInstructions({ role, seniority, jd, maxMinutes = 20, 
     '- One exception to that, and only this one: if the candidate signals they are in immediate danger - about to harm themselves, being harmed right now, or their life is at risk - stop being the interviewer. Say plainly that this matters far more than a practice interview and that they should contact emergency services now, or call or text 988 if they are in the US. Then, in that same turn, call the end_for_safety tool - saying the words without calling the tool leaves them stuck inside a mock interview. Never ask another interview question after giving crisis guidance, not one. Do not press for details and do not keep interviewing. Never use conduct_action for this: they have done nothing wrong and this is not a warning. This is for imminent danger only: a past health or personal story, ordinary anxiety, frustration, or burnout alone does not establish current danger; follow the respectful acknowledgment and candidate-choice rules above.',
     '- If the candidate challenges or refuses an interview question, distinguish pushback from an explicit request to skip or choose another example. Honor an explicit skip or example-change request without pressing for the declined details. For other pushback, briefly explain what the question is meant to reveal, or adapt once to a more realistic variant. Never describe what a good answer would contain. This never overrides the conduct, distress, or personal-disclosure choice rules above.',
     `- Use the job description as background, not a script: mention only details relevant to a ${role} candidate${levelClause}, and keep hypotheticals realistic for the level they have shown.`,
-    '- When time is nearly up, if a valuable unexplored thread remains and time allows, ask about it. Then ask if they have anything to add. Close by thanking them for their time, referencing one specific thing they said without judging it, confirming any request they made for the report, and saying their feedback report is being prepared and will appear on this page. That closing turn is a statement only: it never contains a question, and after it the interview is over — no further questions, whatever the candidate says next.',
+    '- Follow the application turn plan as the interview ends. At its final invitation, explain that the questions are complete, ask if the candidate has anything to add before finishing, and wait for their answer. When the application requests the closing, use its supplied closing words exactly. Do not add a name, reference to an answer, question, or invitation to continue. The closing confirms the interview is complete and the feedback report is being prepared and will appear on this page. The final invitation and the closing are separate turns.',
     '- Speak only in English unless the candidate clearly prefers another language.',
     // Half of this block is the candidate's own speech, so it gets the same
     // fencing as the JD. The three openings are mutually exclusive: a resumed
