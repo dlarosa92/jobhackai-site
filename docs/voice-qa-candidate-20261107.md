@@ -7,9 +7,38 @@ accessibility fix in d7f79cfce0a9f39ff09544c5d91ce47852a3bf27 and report privacy
 fix in 19644437698f5cb2066945b9f778b7777b92d0a6, conversation controls
 in c77200d8c9de728088c218896c28f72d4b079621 and report control filtering
 from PR #1177 candidate 22de0cd00093db47c205712d1b798a05204c3964 and
-account-menu accessibility in PR #1178 (14c6707d186bfad072e7a8e0462a535d427b876e), against QA
+account-menu accessibility in PR #1178 (14c6707d186bfad072e7a8e0462a535d427b876e), and the explicit-danger safety fix in PR #1179
+(d9d475638bf7eaf7e3182e038ca7fb1e9098c09b), against QA
 revision 4c7fec4974c0285688ebed02f19a6bc17947b761. This remains a draft candidate,
 not a statement that all development or QA acceptance is complete.
+
+## November 8 accepted safety follow-up
+
+The isolated development safety test first reproduced a failure: the model
+spoke supportive words but omitted both emergency guidance and its ending tool,
+leaving the interview live. The client now owns a bounded safety close for an
+explicit standalone current-danger statement. It stops the microphone and
+countdown, displays urgent-help guidance, requests a dedicated spoken response,
+waits for playback, and saves the safety reason without generating a scorecard.
+Stale playback receipts and manual Finish cannot replace the safety reason.
+The module-missing fallback also waits for playback and has a bounded exit.
+The existing model tool/referral path remains for other wording; this narrow
+backstop does not claim comprehensive crisis classification.
+
+Two failing regressions were reproduced before the fix. All 121 client tests,
+the full development voice suite, 15 report cases, build, development CI and
+post-deployment authenticated UI smoke passed. The owner then heard complete
+guidance and observed automatic closure in Safari without clicking Finish.
+The saved session has ended_for_safety and a NULL scorecard; the provider closed
+without error. Reopening the exact session shows the same scoreless safety
+page and Safety history label. One development credit was used. Recording is
+stopped. Output-audio capture, diagnostics, read-only database evidence and
+reopened screenshots are retained in safari-safety-02-review.md under the
+November 7 Brighton training-preparation evidence folder.
+
+This accepts the scoped safety case only. This refreshed QA draft still needs
+its own candidate checks and deployed QA acceptance; remaining original gates
+below are unchanged. It has not been merged or deployed to QA or production.
 
 ## Included behavior
 
