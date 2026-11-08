@@ -15,6 +15,27 @@ application-owned planned completion in PR #1181
 revision 4c7fec4974c0285688ebed02f19a6bc17947b761. This remains a draft candidate,
 not a statement that all development or QA acceptance is complete.
 
+## November 8 durable network-failure evidence
+
+Includes development PR #1182 (merge 7e0b70be3c02b5a842af90d0aa406bedcb1b3d3a).
+An unconfirmed hangup 404 now retains the bounded, allowlisted response category
+in its existing error field. This distinguishes an empty body, an unreadable
+body and structured provider errors if a network interruption also loses the
+operator's log stream. No raw body or interview content is added to the ledger.
+The exact absence rule, holds, credit behavior and no-replay protections remain.
+
+Seven persistence regressions failed before the fix. Development passed 122
+provider/diagnostic/managed-interview tests, 34 actual Worker runtime tests,
+type checking, release preflight, the app build and all nine executed PR checks.
+Both the app and deadline Worker deployed through development CI. This draft
+requires refreshed candidate checks and subsequent deployed QA verification.
+
+The read-only development audit still shows two unconfirmed hangup records,
+plus a separate unconfirmed creation attempt from September 21. All three
+remain unchanged. The support case has no newer received reply at this check.
+Better diagnostics do not establish successful network recovery or retroactively
+classify any historical attempt. The next controlled network retest is pending.
+
 ## November 8 accepted clarification and planned closing
 
 The first corrected-build Safari run kept both compound clarification requests
@@ -197,8 +218,9 @@ Before this app PR merges:
 1. Complete or explicitly disposition the remaining network-loss, supported-
    browser, accessibility, free-account and other live acceptance cases in the
    original release plan. Physical AirPods recovery is now passed.
-2. Resolve the failed November 7 network recovery and both provider-closure
-   evidence holds. The network test saved one feedback-only report and used
+2. Resolve the failed November 7 network recovery and provider evidence holds.
+   The audit includes two unconfirmed closures and the separate September 21
+   unconfirmed creation attempt. The network test saved one feedback-only report and used
    one credit, but hangup returned HTTP 404 and no replacement was opened.
    The new response body was not recovered; do not describe it as empty.
    The separate mid-answer outage remains not run. OpenAI case 19425445 has
