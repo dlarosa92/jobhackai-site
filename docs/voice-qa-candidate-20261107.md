@@ -6,7 +6,8 @@ label-only follow-up in 19698b4ead5c77fe06b025a29875c1ce455a0b71 and history
 accessibility fix in d7f79cfce0a9f39ff09544c5d91ce47852a3bf27 and report privacy
 fix in 19644437698f5cb2066945b9f778b7777b92d0a6, conversation controls
 in c77200d8c9de728088c218896c28f72d4b079621 and report control filtering
-from PR #1177 candidate 22de0cd00093db47c205712d1b798a05204c3964, against QA
+from PR #1177 candidate 22de0cd00093db47c205712d1b798a05204c3964 and
+account-menu accessibility in PR #1178 (14c6707d186bfad072e7a8e0462a535d427b876e), against QA
 revision 4c7fec4974c0285688ebed02f19a6bc17947b761. This remains a draft candidate,
 not a statement that all development or QA acceptance is complete.
 
@@ -31,6 +32,10 @@ not a statement that all development or QA acceptance is complete.
 - Direct reports suppress legacy safety-ending scores, matching History,
   including after a paid upgrade. Their deliberately absent score is ready,
   not still generating. Normal reports and transcript entitlement are unchanged.
+- Both app navigation builders share a named Account menu disclosure. Its
+  expanded state follows opening and closing; Escape returns focus to the
+  toggle, and tabbing out closes the menu. Duplicate toggle and per-render
+  document click handlers are removed.
 - Saved reports expose native links. History selection uses labeled checkboxes
   without replacing the focused control. The deletion dialog initially focuses
   Cancel and returns focus after cancellation; mode changes focus a visible
@@ -103,6 +108,17 @@ the main local voice command includes usage tests. The full voice suite and
 build pass in this scoped QA candidate. Four changed voice runtime modules
 are byte-identical to the development candidate. This does not establish a
 QA deployment or clear the remaining network, privacy or device gates.
+
+The November 8 native Safari setup audit verifies the Role, Seniority, Job
+Description and Check audio keyboard order. It exposed an unnamed account
+button. PR #1178 fixes both app navigation builders. The exact development
+revision and served JavaScript are verified, and native Safari confirms the
+named expanded/collapsed state, Return opening, Escape with focus returned,
+and tabbing through Account and Logout out to Role with the menu closed.
+Neither link was activated. The separate mouse-dismissal check hit a native
+capture error, and Chrome automation is blocked by an open extension UI;
+that mouse check and full screen-reader speech remain unaccepted. No new
+interview, recording or credit use occurred. The scoped QA app build passes.
 
 Before this app PR merges:
 
