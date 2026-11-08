@@ -186,6 +186,15 @@ export async function closeManagedVoiceCall(env,{uid,attemptId}) {
         diagnostic.errorCode==='call_id_not_found' && diagnostic.errorType==='invalid_request_error';
       if (!confirmedAbsent) {
         failureCode='close_http_'+response.status;
+        // A network-loss test can also interrupt the operator's log stream.
+        // Retain the bounded, allowlisted diagnosis with the durable hold so
+        // an empty body, failed read and structured error stay distinguishable.
+        // These are fixed categories from voiceProviderFailureDiagnostic,
+        // never the raw provider body/message or arbitrary error fields.
+        if (response.status===404) {
+          failureCode += ':' + [diagnostic.bodyFormat,diagnostic.errorCode || 'none',
+            diagnostic.errorType || 'none',diagnostic.messageClass].join(':');
+        }
         throw Error('voice_call_close_unconfirmed');
       }
     }
