@@ -1,42 +1,22 @@
 # Voice QA infrastructure prerequisite
 
-This candidate promotes the development voice deadline worker and its CI
-release procedure to QA before the separate voice application candidate.
-It is based on develop 4c7fec4974c0285688ebed02f19a6bc17947b761.
+Promote the development voice deadline worker and guarded release procedure to QA before app PR #1168. The baseline is develop 4c7fec4974c0285688ebed02f19a6bc17947b761. The worker implementation exactly matches the development-accepted candidate 5172327ce27513a8a412156ddf07026e0c082f74 (PR #1186).
 
-The November 8 refresh includes development PR #1182, which preserves only
-allowlisted response categories for future ambiguous hangup 404s. It uses the
-existing error field and adds no schema or raw-content retention. The existing
-QA provider-call creation behavior remains intact. The deadline alarm retains
-the same hold and does not retry the uncertain call. This is diagnostic evidence,
-not acceptance of network recovery. Two unconfirmed closures and one historical
-unconfirmed creation attempt remain in development; none were rewritten.
+Healthy opted-in clients renew a short private connection lease. When renewal stops, the worker attempts exclusive provider closure before a delayed reconnect. Only confirmed closure admits replacement. The original interview deadline, credit and transcript remain unchanged. Cached clients without the watch retain their existing deadline behavior. There is no new public endpoint, namespace or automatic clearing of uncertain calls.
 
-## Scope and ordering
+The recorded November 8 Safari physical network retest passed on development: two answers before outage, delayed reconnect after network restoration, same question replay with mute preserved, clear replay and a subsequent response confirmed by the owner, one saved and reopened report, one credit and both provider calls confirmed closed. This is a scoped recovery pass, not a complete browser or coaching matrix. Five historical development holds remain untouched.
 
-- Promote the deadline implementation already exercised in development,
-  including the one-time transition from audio setup to the interview timer.
-- Add only migrations 033 and 035 after recording a D1 recovery bookmark.
-- Keep the current QA application and its provider-call creation behavior.
-  Existing QA interview deadlines continue to work with null setup fields.
-- Preserve the existing Worker, D1 database, Durable Object namespace,
-  secrets, scheduler enablement, call records and unresolved operation holds.
-- Do not apply migration 034 or enable question retry.
+## Deployment order
 
-The Worker Release workflow verifies the current branch, exact target,
-schema, bindings and deployment identity. It must complete successfully on
-development before this candidate can merge to develop. The separate voice
-app PR must wait for this QA infrastructure release to finish, then rebase
-onto it. Pages and Worker deployments are independent.
+1. The guarded CI release records a D1 recovery bookmark, applies only missing migrations 033 and 035, then verifies exact bindings and deploys the worker with existing variables and secrets preserved.
+2. Keep the deployed QA application and provider call-creation behavior during this prerequisite. Migration 034 remains unapplied and question retry remains off.
+3. Verify the exact worker release, schema and canonical QA deployment. Rebase #1168 on this verified revision, then run its candidate checks and deploy the scoped app through develop.
+4. Complete QA acceptance before preparing the production candidate. No direct feature-to-main promotion is authorized by this prerequisite.
+
+The current QA read found both migrations missing, the correct existing database/namespace/secret binding and enabled scheduling. Four existing uncertain QA records remain unchanged.
 
 ## Validation
 
-The existing QA app with the promoted deadline worker passes 30 actual
-Workers runtime tests with intercepted provider requests, plus type checking.
-Five release-guard tests cover eight CLI scenarios and apply the two exact
-migrations to SQLite while preserving existing records and uncertain calls.
-The updated app's activation tests are part of its separate candidate.
+All 37 native Workers runtime compatibility and connection-watch tests pass with the existing QA application. The seven new private-RPC cases cover healthy renewal, closure/replacement ordering, foreign/stale requests, duplicate arming, persistent closing claims and ambiguous-result holds. New application readiness/admission tests belong to #1168; the prerequisite does not introduce that application behavior early. Type checking and all five release-guard tests pass. The exact development implementation separately passed 42 runtime tests and the recorded live recovery.
 
-These results do not replace the remaining live-device acceptance or provider
-closure evidence. No production release is included. The workflow uses the
-reviewed public account ID; the API credential remains in GitHub secrets.
+Hosted candidate checks and post-deployment verification must pass on the refreshed head. Local evidence and private recording remain in the Brighton preparation evidence folder; no account identifiers, transcript or recording are committed.
