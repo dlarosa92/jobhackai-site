@@ -64,7 +64,7 @@
           if (pc === next && !finishing && !finished && result.connectionAlive === false) {
             disconnect(); dropped = true;
             el('drop').disabled = true; el('reconnect').disabled = false;
-            status('The server closed the lost connection. Reconnect uses the same uncharged check.');
+            status('The connection is no longer available. Reconnect checks closure and uses the same uncharged check.');
           }
         } catch { log('heartbeat_unacknowledged'); }
         finally { pending = false; }
