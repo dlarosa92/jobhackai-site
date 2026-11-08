@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { scoreEvidence, scoreVoiceTranscript, partialScorecard } from '../voice-scorecard.js';
+import { scoreEvidence, scoreVoiceTranscript, partialScorecard, interviewEvidenceTranscript } from '../voice-scorecard.js';
 import { listVoiceSessions } from '../voice-history.js';
 import { createVoiceClientHarness, PLAN_PAYLOAD } from './helpers/voice-client-harness.mjs';
 
@@ -56,6 +56,54 @@ test('candidate labels cannot push a tiny answer across the model-call threshold
   const result = await scoreVoiceTranscript({ role: 'Analyst', transcript: [user('a'.repeat(190))] }, {});
   assert.equal(result.scorecard.tooShort, true);
   assert.equal(result.model, null);
+});
+
+const clarificationControls = [
+  'Could you repeat the question?', 'Could you repeat that question?',
+  'Could you rephrase it more simply?', 'Could you put that another way?',
+  "I don't understand the question.", 'What do you mean by that?',
+  'Could we use a different example?', 'Can I skip this question?',
+  'So, I want to give an example of something.', 'Let me finish my answer.',
+  'Hello, can you hear me okay?', "Hi, I can't hear you now."
+];
+
+test('standalone clarification, skip and continuation controls are not assessment evidence', () => {
+  const turns = clarificationControls.map(user);
+  assert.deepEqual(interviewEvidenceTranscript(turns), []);
+  assert.deepEqual(scoreEvidence(turns), { candidateWords: 0, substantiveAnswers: 0, eligible: false });
+});
+
+test('a controls-only interview cannot trigger a model assessment', async t => {
+  const request = mockScorer(t, numericCard);
+  const transcript = clarificationControls.flatMap(text => [question('What did you improve?'), user(text)]);
+  const result = await scoreVoiceTranscript({ role: 'Analyst', transcript }, { OPENAI_API_KEY: 'test-fixture' });
+  assert.equal(result.scorecard.tooShort, true);
+  assert.equal(result.model, null);
+  assert.equal(request(), undefined);
+});
+
+test('historical quotations and controls followed by substantive answers remain evidence', () => {
+  const story = "During a past training session, I said let's end the interview here as part of a role play. Afterward, I used the team's feedback to simplify our checklist.";
+  const mixed = 'Could you rephrase that? I compared our records and reduced the delay by two days.';
+  const turns = [user(story), user(mixed), user('I asked the customer to repeat the question.')];
+  assert.deepEqual(interviewEvidenceTranscript(turns), turns);
+  const run = [...clarificationControls.flatMap(text => [question('What did you improve?'), user(text)]),
+    question('Go ahead and share the example.'), user(story)];
+  assert.deepEqual(scoreEvidence(run), { candidateWords: 30, substantiveAnswers: 0, eligible: false });
+});
+
+test('assessment input and quote validation exclude clarification controls', async t => {
+  const control = clarificationControls[2];
+  const request = mockScorer(t, { ...numericCard,
+    moments: [{ quote: control, comment: 'Unsupported assessment of a clarification request.' }] });
+  const transcript = [...clarificationControls.flatMap(text => [question('Please clarify.'), user(text)]), ...enough];
+  const { scorecard } = await scoreVoiceTranscript({ role: 'Analyst', transcript }, { OPENAI_API_KEY: 'test-fixture' });
+  const prompt = request().messages.find(message => message.role === 'user').content;
+  for (const text of clarificationControls) assert.ok(!prompt.includes(text), text);
+  assert.ok(prompt.includes(words(100, 'first')));
+  assert.equal(scorecard.scoreEligibility.candidateWords, 300);
+  assert.deepEqual(scorecard.moments, []);
+  assert.equal(scorecard.evidenceLimited, true);
 });
 
 test('a limited sample requests qualitative feedback and strips unexpected provider numbers', async t => {
