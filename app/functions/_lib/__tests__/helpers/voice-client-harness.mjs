@@ -156,6 +156,11 @@ export function createVoiceClientHarness(options = {}) {
     addEventListener: (type, fn) => { if (type === 'DOMContentLoaded') domReadyHandler = fn; },
     removeEventListener: () => {}
   };
+  documentStub.activeElement = documentStub.body;
+  for (const el of Object.values(elements)) {
+    el.isConnected = true;
+    el.focus = () => { documentStub.activeElement = el; };
+  }
 
   async function respond(url, opts) {
     const key = Object.keys(routes).find((k) => String(url).includes(k));
@@ -283,6 +288,7 @@ export function createVoiceClientHarness(options = {}) {
     analyticsEvents,
     windowEvent: (type, event) => (windowListeners[type] || []).forEach(fn => fn(event)),
     el: (id) => elements[id],
+    activeElement: () => documentStub.activeElement,
     wrap: () => wrapEl,
     logs,
     requests,
@@ -298,6 +304,7 @@ export function createVoiceClientHarness(options = {}) {
     /** Click a button the client bound a handler to. */
     async click(id) {
       const el = elements[id];
+      if (el) el.focus();
       const handlers = (el && el._listeners.click) || [];
       if (!handlers.length) throw new Error(`#${id} has no click handler`);
       for (const fn of handlers) await fn({ type: 'click', preventDefault() {} });

@@ -3308,6 +3308,7 @@
     selectedIds: {},           // id -> true
     pendingDeleteIds: [],
     pendingClearAll: false,
+    deleteReturnFocus: null,
     bound: false
   };
 
@@ -3452,16 +3453,20 @@
     html += historyState.items.map(function (item) {
       var id = String(item.sessionId || '');
       var isSelected = !!historyState.selectedIds[id];
-      return '<div class="vi-history-item' + (isSelected ? ' is-selected' : '') + '" data-id="' + escapeHtml(id) + '" tabindex="0" data-history-row>' +
-        '<span class="vi-history-checkbox-wrap" aria-hidden="' + (historyState.manageMode ? 'false' : 'true') + '">' +
-        '<input class="vi-history-checkbox" type="checkbox" data-action="toggle-select" data-id="' + escapeHtml(id) + '" aria-label="Select ' + historyRowLine1(item.role, item.seniority) + '"' + (isSelected ? ' checked' : '') + '/>' +
+      var tag = historyState.manageMode ? 'label' : 'a';
+      var safeId = escapeHtml(id).replace(/"/g, '&quot;');
+      var href = historyState.manageMode ? '' : ' href="voice-interview.html?session=' + encodeURIComponent(id) + '"';
+      // Native links own navigation; a wrapping label owns checkbox selection.
+      // Do not nest selection inputs in a link or duplicate their key handling.
+      return '<' + tag + ' class="vi-history-item' + (isSelected ? ' is-selected' : '') + '" data-id="' + safeId + '"' + href + ' data-history-row>' +
+        (historyState.manageMode ? '<span class="vi-history-checkbox-wrap">' +
+          '<input class="vi-history-checkbox" type="checkbox" data-action="toggle-select" data-id="' + safeId + '"' + (isSelected ? ' checked' : '') + '/></span>' : '') +
+        '<span class="vi-history-text">' +
+        '<span class="vi-history-line1">' + historyRowLine1(item.role, item.seniority) + '</span>' +
+        '<span class="vi-history-line2">' + escapeHtml(historyMetaLine(item)) + '</span>' +
         '</span>' +
-        '<div class="vi-history-text">' +
-        '<div class="vi-history-line1">' + historyRowLine1(item.role, item.seniority) + '</div>' +
-        '<div class="vi-history-line2">' + escapeHtml(historyMetaLine(item)) + '</div>' +
-        '</div>' +
         historyChip(item) +
-        '</div>';
+        '</' + tag + '>';
     }).join('');
 
     listEl.innerHTML = html;
@@ -3513,6 +3518,8 @@
     if (!historyState.manageMode) historyState.selectedIds = {};
     syncBulkDeleteState();
     renderHistory();
+    var nextControl = $(historyState.manageMode ? 'vi-history-cancel-manage' : 'vi-history-manage');
+    if (nextControl) nextControl.focus();
   }
 
   function syncBulkDeleteState() {
@@ -3520,16 +3527,17 @@
     if (btn) btn.disabled = historySelectedCount() < 1;
   }
 
-  function openDeleteModalFor(ids, clearAll) {
+  function openDeleteModalFor(ids, clearAll, trigger) {
     historyState.pendingDeleteIds = ids.slice();
     historyState.pendingClearAll = !!clearAll;
+    historyState.deleteReturnFocus = trigger || document.activeElement;
     var backdrop = $('vi-history-modal-backdrop');
     var modal = $('vi-history-delete-modal');
     if (backdrop) backdrop.hidden = false;
     if (modal) {
       modal.hidden = false;
-      var confirmBtn = $('vi-history-delete-confirm');
-      if (confirmBtn) confirmBtn.focus();
+      var cancelBtn = $('vi-history-delete-cancel');
+      if (cancelBtn) cancelBtn.focus();
     }
   }
 
@@ -3540,6 +3548,9 @@
     var modal = $('vi-history-delete-modal');
     if (backdrop) backdrop.hidden = true;
     if (modal) modal.hidden = true;
+    var returnFocus = historyState.deleteReturnFocus;
+    historyState.deleteReturnFocus = null;
+    if (returnFocus && returnFocus.isConnected !== false && !returnFocus.disabled) returnFocus.focus();
   }
 
   async function handleDeleteConfirm() {
@@ -3600,7 +3611,7 @@
       e.preventDefault();
       var ids = Object.keys(historyState.selectedIds);
       if (!ids.length) return;
-      openDeleteModalFor(ids, false);
+      openDeleteModalFor(ids, false, deleteSelectedBtn);
     });
 
     var clearBtn = $('vi-history-clear');
@@ -3613,7 +3624,7 @@
       ids.forEach(function (id) { historyState.selectedIds[id] = true; });
       syncBulkDeleteState();
       renderHistory();
-      openDeleteModalFor(ids, true);
+      openDeleteModalFor(ids, true, clearBtn);
     });
 
     var retryBtn = $('vi-history-retry');
@@ -3624,28 +3635,24 @@
 
     var listEl = $('vi-history-list');
     if (listEl) listEl.addEventListener('click', function (e) {
-      var checkbox = e.target.closest ? e.target.closest('[data-action="toggle-select"]') : null;
+      if (historyState.manageMode) return;
       var row = e.target.closest ? e.target.closest('[data-history-row]') : null;
       if (!row) return;
       var id = row.getAttribute('data-id');
       if (!id) return;
-      if (historyState.manageMode) {
-        if (historyState.selectedIds[id]) delete historyState.selectedIds[id];
-        else historyState.selectedIds[id] = true;
-        if (!checkbox) renderHistory();
-        else row.classList.toggle('is-selected', !!historyState.selectedIds[id]);
-        syncBulkDeleteState();
-        return;
-      }
       track('voice_history_open', { session: id });
-      window.location = 'voice-interview.html?session=' + encodeURIComponent(id);
     });
-    if (listEl) listEl.addEventListener('keydown', function (e) {
-      if (e.key !== 'Enter' && e.key !== ' ') return;
-      var row = e.target.closest ? e.target.closest('[data-history-row]') : null;
-      if (!row) return;
-      e.preventDefault();
-      row.click();
+    if (listEl) listEl.addEventListener('change', function (e) {
+      if (!historyState.manageMode) return;
+      var checkbox = e.target.closest ? e.target.closest('[data-action="toggle-select"]') : null;
+      var row = checkbox && checkbox.closest('[data-history-row]');
+      if (!checkbox || !row) return;
+      var id = checkbox.getAttribute('data-id');
+      if (!id) return;
+      if (checkbox.checked) historyState.selectedIds[id] = true;
+      else delete historyState.selectedIds[id];
+      row.classList.toggle('is-selected', checkbox.checked);
+      syncBulkDeleteState();
     });
 
     var backdrop = $('vi-history-modal-backdrop');
