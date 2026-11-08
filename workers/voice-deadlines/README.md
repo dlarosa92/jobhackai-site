@@ -1,9 +1,38 @@
 # Managed voice deadline worker
 
-Draft only. Nothing in this folder deploys automatically. Managed voice and
-deadline scheduling remain disabled remotely; production release is held.
+## Current release procedure
 
-Staging update, September 20: migration028 is now applied and verified in dev
+The Voice Worker Release workflow validates pull requests without deployment.
+After a reviewed merge to dev0, develop or main, its release job targets only
+that branch's existing development, QA or production worker. It checks the
+current branch SHA, database and namespace identity, scheduler enablement and
+secret presence. It records a D1 Time Travel recovery bookmark before applying
+only missing migrations 033 and 035, then deploys the worker and verifies the
+schema and bindings again. Partial schema changes stop for investigation.
+Migration 034 and question retry are not activated by this workflow.
+
+Promote dev0 first, then develop after development acceptance, then main only
+after QA acceptance and release authorization. Prepare the worker/schema PR
+before the matching app PR when the target environment lacks these prerequisites.
+Pages deploys independently, so do not merge the app until the worker release
+has succeeded. CI does not replace live acceptance, provider proof or approval.
+
+The November 7 live inventory confirms all three existing schedulers are enabled.
+The checked-in QA setting now matches that fact; the production configuration
+names the existing worker, database and namespace class. No new namespace or
+secret is provisioned. Deployments retain existing variables and secrets.
+Do not run local worker deployments or blanket migrations as a release shortcut.
+
+Development audio readiness and the scoped Safari Audio help replay/continuation
+test passed on PR #1166. QA is missing migrations 033 and 035 and the newer worker.
+The independent historical uncertain provider calls remain held. See the
+[implementation procedure](../../docs/voice-audio-readiness.md) and
+[verified call recovery procedure](../../docs/voice-call-reconciliation.md).
+
+## Historical September 20 staging record
+
+The following records the original cutover, not the current release instructions.
+Migration028 was applied and verified in dev
 and QA, after private backups and tests against both database copies. It remains
 unapplied in production. Both staging workers are now installed with the owner-provided
 development key and scheduling disabled. Matching Pages namespace bindings and the
@@ -52,7 +81,7 @@ transcript and usage.
   Worker fetch handler returns 404. Alarm logs contain an interview UUID and
   coarse outcome only; provider/SQL exceptions are not logged.
 
-## Development and QA cutover prerequisites
+## Historical initial development and QA cutover prerequisites
 
 1. Review the whole managed-call change and selective migration028. Neither
    the migration nor these workers has been applied by this increment.

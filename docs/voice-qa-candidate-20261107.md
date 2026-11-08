@@ -42,9 +42,13 @@ The refreshed app passes 223 focused checks, 40 native Workers tests, the
 full voice suite and the application build locally. Changed runtime files
 exactly match accepted development; QA layout references are preserved.
 
-The QA infrastructure prerequisite #1170 must deploy and verify first. This
-app candidate then integrates that exact develop revision, keeping QA's header,
-cookie references and infrastructure configuration. The disabled retry migration
+QA prerequisite #1170 is deployed and verified at develop revision
+bbed8419fd6f48f315a5b2a4ae0543edee427efd. The release recorded a recovery
+bookmark, applied only migrations 033/035 and verified the exact worker. Four
+prior QA uncertain records remain unchanged. This app candidate integrates
+that revision, keeping QA's header, cookie references and infrastructure
+configuration. After integration, all 40 native runtime tests, type checking
+and five release-guard tests pass; runtime files still match development. The disabled retry migration
 034 is source only and must not be applied. Refreshed app CI, exact QA assets,
 real audio, one-credit accounting, report persistence and provider closure must
 pass on QA before any main promotion. Historical sections below describe their
