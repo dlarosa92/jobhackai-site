@@ -321,6 +321,84 @@ test('mixed answer fragments cannot be discarded as a standalone conversation co
   assert.equal(requests(h).at(-1).response.metadata.jobhackai_purpose,'follow_up');
 });
 
+const RECORDED_CLOSING = "Thank you for sharing that detail. I'll note that, and your feedback report is being prepared and will appear on this page.";
+async function plannedClosing(t, options = {}) {
+  const h=await live(t, options);begin(h);
+  for(let i=0;i<9;i++) { answer(h,'planned-answer-'+i);assistant(h,'planned-question-'+i,'What else would you like to add?'); }
+  assert.equal(requests(h).at(-1).response.metadata.jobhackai_purpose,'final_invitation');
+  answer(h,'final-example','I documented the handoff and checked the result with the team.');
+  const response={id:'planned-closing',status:'completed',metadata:requests(h).at(-1).response.metadata};
+  assert.equal(response.metadata.jobhackai_purpose,'close');
+  return {h,response};
+}
+
+test('the planned closing ends on playback completion without recognizing its wording',async t=>{
+  const {h,response}=await plannedClosing(t);
+  assert.ok(h.peerConnection().tracks.every(track=>track.enabled===false),'stop candidate capture when the app requests its final closing');
+  h.event({type:'response.created',response});
+  assert.ok(!h.sends.some(x=>x.type==='response.cancel'),'allow the planned closing to play');
+  h.event({type:'output_audio_buffer.started',response_id:response.id});
+  h.event({type:'conversation.item.created',item:{id:'planned-closing-item',role:'assistant'}});
+  h.event({type:'response.output_audio_transcript.done',response_id:response.id,item_id:'planned-closing-item',transcript:RECORDED_CLOSING});
+  h.event({type:'response.done',response});
+  await h.settle();
+  assert.equal(h.completeBodies().length,0,'generation is not playback completion');
+  const n=requests(h).length;
+  answer(h,'late-chatter','I would like to add a different example.');
+  assert.equal(requests(h).length,n,'closing cannot start another interview question');
+  h.event({type:'output_audio_buffer.stopped',response_id:response.id});
+  await h.settle();
+  assert.equal(h.completeBodies().length,1);
+  assert.equal(h.completeBodies()[0].reason,'completed');
+  assert.ok(h.completeBodies()[0].transcript.some(x=>x.text===RECORDED_CLOSING));
+  assert.ok(!h.completeBodies()[0].transcript.some(x=>x.text.includes('different example')));
+  h.event({type:'output_audio_buffer.stopped',response_id:response.id});
+  h.event({type:'response.done',response});
+  await h.settle();
+  assert.equal(h.completeBodies().length,1,'duplicate receipts never save twice');
+});
+
+test('previous and duplicate responses cannot cut off a planned closing',async t=>{
+  const {h,response}=await plannedClosing(t);
+  h.event({type:'response.created',response:{id:'late-previous'}});
+  h.event({type:'response.done',response:{id:'late-previous',status:'completed'}});
+  h.event({type:'output_audio_buffer.stopped',response_id:'late-previous'});
+  assert.ok(h.sends.some(x=>x.type==='response.cancel'&&x.response_id==='late-previous'));
+  h.event({type:'response.created',response});
+  h.event({type:'output_audio_buffer.started',response_id:response.id});
+  h.event({type:'response.done',response:{id:'planned-question-8',status:'completed'}});
+  h.event({type:'output_audio_buffer.stopped',response_id:'planned-question-8'});
+  h.event({type:'response.created',response:{...response,id:'unexpected-copy'}});
+  h.event({type:'response.done',response:{...response,id:'unexpected-copy'}});
+  h.event({type:'output_audio_buffer.stopped',response_id:'unexpected-copy'});
+  await h.settle();
+  assert.equal(h.completeBodies().length,0);
+  assert.ok(h.sends.some(x=>x.type==='response.cancel'&&x.response_id==='unexpected-copy'));
+  h.event({type:'response.done',response});
+  h.event({type:'output_audio_buffer.stopped',response_id:response.id});
+  await h.settle();
+  assert.equal(h.completeBodies().length,1);
+  assert.equal(h.completeBodies()[0].reason,'completed');
+});
+
+for(const withoutModules of [[],['createClosingTurnGate']]) {
+  test('an absent planned closing response is bounded: '+JSON.stringify(withoutModules),async t=>{
+    const {h}=await plannedClosing(t,{withoutModules,timerDelay:ms=>ms===30000?5:ms});
+    await new Promise(resolve=>setTimeout(resolve,20));await h.settle();
+    assert.equal(h.completeBodies().length,1);
+    assert.equal(h.completeBodies()[0].reason,'completed');
+  });
+}
+
+test('a planned closing without buffer events uses its own response completion',async t=>{
+  const {h,response}=await plannedClosing(t,{timerDelay:ms=>ms===750?5:ms});
+  h.event({type:'response.created',response});
+  h.event({type:'response.done',response});
+  await new Promise(resolve=>setTimeout(resolve,20));await h.settle();
+  assert.equal(h.completeBodies().length,1);
+  assert.equal(h.completeBodies()[0].reason,'completed');
+});
+
 test('control recovery stays on its topic after reconnect and duplicates do not spend a turn',async t=>{
   const h=await live(t);begin(h);
   answer(h,'repeat','Could you repeat that please?');
