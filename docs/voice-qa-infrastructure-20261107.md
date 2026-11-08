@@ -4,6 +4,14 @@ This candidate promotes the development voice deadline worker and its CI
 release procedure to QA before the separate voice application candidate.
 It is based on develop 4c7fec4974c0285688ebed02f19a6bc17947b761.
 
+The November 8 refresh includes development PR #1182, which preserves only
+allowlisted response categories for future ambiguous hangup 404s. It uses the
+existing error field and adds no schema or raw-content retention. The existing
+QA provider-call creation behavior remains intact. The deadline alarm retains
+the same hold and does not retry the uncertain call. This is diagnostic evidence,
+not acceptance of network recovery. Two unconfirmed closures and one historical
+unconfirmed creation attempt remain in development; none were rewritten.
+
 ## Scope and ordering
 
 - Promote the deadline implementation already exercised in development,
