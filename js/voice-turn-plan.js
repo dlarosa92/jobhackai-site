@@ -12,14 +12,30 @@ const TOPICS = [
 // containing the same words, or a control followed by an answer, remains an
 // answer. The independent server deadline still bounds every interview.
 export function classifyVoiceTurnControl(text) {
+  const single = classifyVoiceControlClause(text);
+  if (single) return single;
+  // ASR may punctuate two requests separately or join them. Accept a compound
+  // clarification only when every clause is itself an unambiguous control.
+  // A quoted story or a request followed by a substantive answer stays evidence.
+  const clauses = String(text || '').trim()
+    .split(/[.!?;]+|\s+(?=(?:can|could|would|will) you\b)/i)
+    .map(clause => clause.trim()).filter(Boolean);
+  if (clauses.length < 2) return null;
+  const controls = clauses.map(classifyVoiceControlClause);
+  if (!controls.every(kind => ['repeat', 'rephrase', 'hearing_check'].includes(kind))) return null;
+  return controls.includes('rephrase') ? 'rephrase'
+    : controls.includes('repeat') ? 'repeat' : 'hearing_check';
+}
+
+function classifyVoiceControlClause(text) {
   let value = String(text || '').trim().toLowerCase().replace(/[\u2018\u2019]/g, "'")
     .replace(/[.,!?;:]/g, ' ').replace(/\s+/g, ' ').trim();
   value = value.replace(/^(?:(?:hello|hi|hey|no|sorry|i'm sorry|i am sorry|please|yes|yeah|so|well|okay)\s+)+/, '')
     .replace(/(?:\s+(?:please|thanks|thank you))+$/, '');
   const request = value.replace(/^(?:can|could|would|will) you\s+(?:please\s+)?/, '');
   if (/^(?:repeat (?:that|this|it|(?:the|your|that|this) question)(?: again)?|say (?:that|it) again)$/.test(request)) return 'repeat';
-  if (/^(?:rephrase|reframe|simplify|clarify|explain|reword|repeat or rephrase) (?:that|this|it|(?:the|your|that|this) question)(?: (?:more simply|in simpler terms|more clearly|again))?$/.test(request)) return 'rephrase';
-  if (/^(?:(?:put|ask) (?:that|it|the question) (?:another way|in a different way)|what do you mean(?: by that)?|i (?:don't|do not|didn't|did not) understand (?:that|the question))$/.test(request)) return 'rephrase';
+  if (/^(?:rephrase|reframe|simplify|clarify|explain|reword|repeat or rephrase|elaborate on) (?:that|this|it|(?:the|your|that|this) question)(?: (?:more simply|in simpler terms|more clearly|again))?$/.test(request)) return 'rephrase';
+  if (/^(?:(?:put|ask) (?:that|it|the question) (?:another way|in a different way)|what (?:(?:exactly )?do you mean|do you mean exactly)(?: by that)?|explain what you mean(?: by that)?|i (?:don't|do not|didn't|did not) understand (?:that|the question))$/.test(request)) return 'rephrase';
   if (/^(?:(?:can|could) you hear me(?: (?:now|okay|ok|clearly))?|i (?:can't|cannot|couldn't|could not|didn't|did not) hear (?:you|that|the question)(?: (?:now|clearly))?)$/.test(value)) return 'hearing_check';
   const choice = value.replace(/^(?:(?:can|could|may) (?:i|we|you)|let's|let us)\s+/, '');
   if (/^(?:next question|skip(?: (?:this|that|it|(?:this|that|the) question))?|move (?:on|to (?:the )?next question)|(?:use|try) (?:a |another )?different (?:example|question)|(?:use|try) another (?:example|question))$/.test(choice)) return 'change_question';

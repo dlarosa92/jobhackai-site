@@ -23,6 +23,10 @@
   // conduct end tears the session down. Generous enough for a spoken sentence,
   // hard enough that a dropped event cannot hold the session open.
   var CONDUCT_END_MAX_WAIT_MS = 6000;
+  // A normal closing includes a detail from the answer and report timing.
+  // Generation can finish well before that audio. Keep a bounded wait without
+  // applying the short conduct-warning limit to the longer normal closing.
+  var NORMAL_CLOSING_MAX_WAIT_MS = 30000;
   // How long to wait after the closing response completes for its audio to
   // begin, before concluding there is no closing audio at all.
   var CONDUCT_END_AUDIO_GRACE_MS = 750;
@@ -1329,7 +1333,7 @@
     clearTurnWait();
     console.log('[VOICE] wrap-up announced; closing the session');
     track('voice_closing_detected', {});
-    requestGuardedEnd('closing', responseId || '');
+    requestGuardedEnd('closing', responseId || '', NORMAL_CLOSING_MAX_WAIT_MS);
   }
 
   // ---------- explicit spoken end request ----------

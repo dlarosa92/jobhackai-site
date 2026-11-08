@@ -59,6 +59,9 @@ test('candidate labels cannot push a tiny answer across the model-call threshold
 });
 
 const clarificationControls = [
+  'What do you mean exactly? Could you elaborate on the question?',
+  'What do you mean exactly could you elaborate on the question',
+  'Could you explain what you mean by that?',
   'Could you repeat the question?', 'Could you repeat that question?',
   'Could you rephrase it more simply?', 'Could you put that another way?',
   "I don't understand the question.", 'What do you mean by that?',
