@@ -2683,6 +2683,7 @@
     var btn = $('vi-reconnect-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Reconnecting...'; }
     try {
+      var recoveringReply = state.turnRecovery;
       if (state.managedTransport) {
         // The server closes the old call before admitting a replacement. Keep
         // its transport alive until that exchange returns, just as End does.
@@ -2694,12 +2695,14 @@
         retiring = { pc: state.pc, dc: state.dc };
         state.retiringConnection = retiring;
         state.pc = null; state.dc = null; state.connected = false;
+        // Timers belong to the retired channel, not the next microphone or
+        // request. Clear them before either can wait or fail temporarily.
+        resetTurnConnection();
       } else {
         // teardown resets connection flags; retain the reason for this retry.
-        var recoveringReply = state.turnRecovery;
         teardownConnection();
-        state.turnRecovery = recoveringReply;
       }
+      state.turnRecovery = recoveringReply;
       // The retired channel can no longer deliver its missing captions. Keep
       // captured text but discard its unresolved echo-context placeholders.
       state.liveOrder = newTranscriptOrder();
