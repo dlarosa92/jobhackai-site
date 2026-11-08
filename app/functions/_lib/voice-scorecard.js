@@ -12,6 +12,7 @@ import { callOpenAI } from './openai-client.js';
 import { getDb } from './db.js';
 import { scorecardUsageEvidence } from './voice-usage.js';
 import { isExplicitEndRequest } from '../../../js/voice-lifecycle.js';
+import { classifyVoiceTurnControl } from '../../../js/voice-turn-plan.js';
 
 export const SCORECARD_SCHEMA = {
   name: 'voice_interview_scorecard',
@@ -108,15 +109,14 @@ export function groundedCompetencies(competencies, transcript) {
   });
 }
 
-// Old clients and reconnects can submit session controls as candidate turns.
-// Keep those out of both the model input and quote validation. Whole-turn
-// matches preserve real answers that describe audio issues or ending a call.
+// Use the live interview's control classification for assessment too. Controls
+// do not contribute words, trigger an assessment call, or support report quotes.
+// Whole-turn matching preserves stories and controls followed by real answers.
 export function interviewEvidenceTranscript(transcript) {
   return (Array.isArray(transcript) ? transcript : []).filter(turn => {
     if (turn?.speaker !== 'user') return true;
     const text = String(turn.text || '').trim().replace(/[‘’]/g, "'");
-    if (isExplicitEndRequest(text)) return false;
-    return !/^(?:(?:hello|hi|hey|sorry)[, ]+)?(?:(?:can|could) you hear me(?: (?:now|okay|ok|clearly))?|i (?:can't|cannot) hear you(?: (?:now|clearly))?)[?!.]*$/i.test(text);
+    return !isExplicitEndRequest(text) && !classifyVoiceTurnControl(text);
   });
 }
 

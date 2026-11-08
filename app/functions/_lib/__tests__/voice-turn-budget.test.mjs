@@ -242,6 +242,8 @@ for (const [text,kind] of [
   ['Could you reframe that more simply, please?','rephrase'],
   ["No, no, I'm sorry, I'm sorry, could you rephrase that?",'rephrase'],
   ['Can you hear me?','hearing_check'], ["I couldn't hear the question.",'hearing_check'],
+  ['Hello, can you hear me okay?','hearing_check'], ['Hey, could you hear me ok?','hearing_check'],
+  ["Hi, I can't hear you now.",'hearing_check'], ["Sorry, I cannot hear you clearly.",'hearing_check'],
   ['Next question, please.','change_question'], ['Could we use a different example?','change_question'],
   ['Can I skip this question?','change_question'], ['Let me finish my answer.','continue_answer'],
   ["Yes, I'd like to add something.",'continue_answer'],
