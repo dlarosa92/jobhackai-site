@@ -3,7 +3,8 @@
 Prepared from development revision 0571ea808878801f6e4d75168cbd4b5c56713e39,
 with the accepted physical-device recovery in 2ede5818013b3df4d608ebdad184932dddf97949,
 label-only follow-up in 19698b4ead5c77fe06b025a29875c1ce455a0b71 and history
-accessibility fix in d7f79cfce0a9f39ff09544c5d91ce47852a3bf27, against QA
+accessibility fix in d7f79cfce0a9f39ff09544c5d91ce47852a3bf27 and report privacy
+fix in 19644437698f5cb2066945b9f778b7777b92d0a6, against QA
 revision 4c7fec4974c0285688ebed02f19a6bc17947b761. This remains a draft candidate,
 not a statement that all development or QA acceptance is complete.
 
@@ -20,6 +21,9 @@ not a statement that all development or QA acceptance is complete.
   controls stay truthful; connection status does not become stale on unmute.
 - Reports distinguish limited evidence from an eligible practice score and
   preserve grounded feedback, history access and retention redaction.
+- Direct reports suppress legacy safety-ending scores, matching History,
+  including after a paid upgrade. Their deliberately absent score is ready,
+  not still generating. Normal reports and transcript entitlement are unchanged.
 - Saved reports expose native links. History selection uses labeled checkboxes
   without replacing the focused control. The deletion dialog initially focuses
   Cancel and returns focus after cancellation; mode changes focus a visible
@@ -64,6 +68,17 @@ Delete selected and mode exit returning to Manage. Local Chrome also verified
 Enter navigation, dialog Tab trapping and a 390px layout without overflow.
 No real data was deleted or new voice call started. Full Safari keyboard
 traversal, screen-reader speech and live 200% zoom remain outside this pass.
+
+The report privacy follow-up adds nine tests executing the real report,
+history, selected-delete and clear-history routes against SQLite. Only
+Firebase verification uses fixture identities. They cover ownership, forged
+IDs, deletion without credit/grace changes, live-session protection, expired
+content redaction, free/full report access and legacy safety scores. The
+legacy safety fixture failed before the fix. Removing the ownership guard
+also caused the expected regression failure; that mutation was restored.
+All nine cases, 15 report cases, 15 history cases and 106 client checks pass
+after cherry-picking into this candidate. These tests do not establish live
+account deletion, scheduled cleanup, provider closure or microphone behavior.
 
 Before this app PR merges:
 
