@@ -443,7 +443,7 @@ test('failed reconnect preserves one reservation and saves the report with a non
   assert.equal(sessions[0].end_reason,'connection_lost');assert.equal(sessions[0].duration_seconds,124);
   assert.equal((await f.user()).free_session_used,1);assert.equal(f.calls.length,2);
   const attempt=await f.db.prepare('SELECT state,last_error_code,closed_at FROM voice_provider_calls WHERE id=?').bind(first.attemptId).first();
-  assert.deepEqual(attempt,{state:'uncertain',last_error_code:'close_http_404',closed_at:null});
+  assert.deepEqual(attempt,{state:'uncertain',last_error_code:'close_http_404:empty:none:none:unclassified',closed_at:null});
 });
 
 test('completion of a legacy session saves its report while preserving unverified call closure',async t=>{
