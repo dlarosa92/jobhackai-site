@@ -442,6 +442,27 @@ test('real managed failure reports its safe request stage in the local diagnosti
   assert.doesNotMatch(JSON.stringify(trace.report()),/private backend|eighteen percent|v=0|attempt-1/);
 });
 
+for (const phase of ['configuration','greeting']) test('retired '+phase+' timer cannot end audio setup during a temporary reconnect failure',async t=>{
+  const permission=deferred();let micRequests=0,opens=0;
+  const f=fixture(t,{autoTurnConfig:phase!=='configuration',
+    timerDelay:ms=>ms===(phase==='configuration'?8000:45000)?30:ms,
+    getUserMedia:()=>++micRequests===1?Promise.resolve(mic()):permission.promise,
+    routes:{'/api/voice/connection':(url,init)=>{
+      const body=JSON.parse(init.body);if(body.action==='close')return {connectionClosed:true,sessionReserved:false};
+      return ++opens===1?f.answer(body):{__status:503};
+    }}});
+  await f.start();await f.h.openDataChannel();
+  f.h.peerConnection().connectionState='failed';f.h.peerConnection().onconnectionstatechange();
+  const retry=f.h.click('vi-reconnect-btn');await f.h.settle();
+  await new Promise(resolve=>setTimeout(resolve,60));
+  assert.equal(f.closes().length,0,'retired timer cannot close while microphone recovery is pending');
+  permission.resolve(mic());await retry;await new Promise(resolve=>setTimeout(resolve,40));
+  assert.equal(f.closes().length,0,'temporary failure must retain the setup retry');
+  assert.equal(f.h.completeBodies().length,0);assert.equal(f.h.el('vi-reconnect-btn').disabled,false);
+  assert.match(f.h.el('vi-status').textContent,/Reconnect/);
+  assert.equal(f.h.requests.filter(r=>r.body?.action==='activate').length,0);
+});
+
 // A server deadline `secondsLeft` from now, as the connection route returns it.
 function deadlineFixture(t,secondsLeft) {
   const deadlineAt=new Date(Date.now()+secondsLeft*1000).toISOString();

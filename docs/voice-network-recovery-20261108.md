@@ -25,6 +25,9 @@ server still refuses unresolved provider mutations, expired/deleted sessions
 and invalid ownership; known terminal or review errors still save and close.
 A recovered channel requests the displayed question once without advancing the
 question budget. Late failure responses cannot reopen a finished interview.
+Retiring a connection also invalidates its configuration and greeting timers
+before microphone acquisition or network I/O, so they cannot close a retrying
+audio check.
 
 Development diagnostics now retain only allowlisted request stage, status,
 failure category and network-state events. Raw error messages, credentials,
@@ -33,8 +36,10 @@ the development host and explicit local diagnostic flag. These diagnostics
 will distinguish the initiating request failure on a future run, rather than
 assuming a successful close identifies that earlier failure.
 
-Validation: seven regressions failed before the correction. The focused client,
-diagnostic, managed-interview and provider suites pass 215 tests. The full voice
-suite and application build pass. The built JavaScript matches the source.
+Validation: seven regressions failed before the correction. Review found two
+additional stale-timer cases, both reproduced before fixing retirement. The
+final browser/diagnostic suites pass 101 tests; the unchanged managed-interview
+and provider suites passed 116 tests. The full voice suite and application build
+pass. The built JavaScript matches the source.
 This is local evidence only until CI, exact development deployment checks and
 the live retest succeed. Promotion remains dev0, then develop/QA, then main.
