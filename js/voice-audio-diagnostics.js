@@ -36,7 +36,21 @@ export function createVoiceAudioDiagnostics(env, readState) {
       } catch (_) {}
     }
     function mark(name) {
-      if (['play-request', 'play-resolved', 'play-rejected', 'stop-playback', 'retry-audio', 'teardown', 'mute-toggle'].includes(name)) add(name, {});
+      if (['play-request', 'play-resolved', 'play-rejected', 'stop-playback', 'retry-audio', 'teardown', 'mute-toggle', 'reconnect-request'].includes(name)) add(name, {});
+    }
+    function connectionFailure(stage, error) {
+      error = error || {};
+      add('connection-failed', {
+        stage: choice(stage, ['microphone', 'offer', 'application_auth', 'application_request', 'remote_description']),
+        status: Number.isInteger(error.status) && error.status >= 100 && error.status <= 599 ? error.status : null,
+        reason: choice(error.reason, ['voice_connection_conflict', 'voice_connection_deadline_unavailable',
+          'voice_connection_pending', 'voice_connection_unconfirmed', 'voice_connection_ended', 'voice_connection_expired',
+          'voice_call_close_unconfirmed', 'voice_call_provider_changed', 'voice_connection_not_found',
+          'voice_connection_history_removed', 'voice_call_create_rejected']),
+        errorName: choice(error.name, ['TypeError', 'Error', 'AbortError', 'TimeoutError', 'NotAllowedError', 'NotFoundError', 'NotReadableError']),
+        authCode: choice(error.code, ['auth/network-request-failed', 'auth/user-token-expired', 'auth/user-disabled']),
+        online: typeof env.navigator.onLine === 'boolean' ? env.navigator.onLine : null
+      });
     }
     function watch(pc, el, stream) {
       cleanup();
@@ -79,6 +93,8 @@ export function createVoiceAudioDiagnostics(env, readState) {
       listen(env.document, 'visibilitychange', function () { snapshot('visibility'); });
       listen(env, 'focus', function () { snapshot('focus'); });
       listen(env, 'blur', function () { snapshot('blur'); });
+      listen(env, 'online', function () { add('network-online', {}); });
+      listen(env, 'offline', function () { add('network-offline', {}); });
       listen(env.navigator.audioSession, 'statechange', function () { snapshot('audio-session-change'); });
       listen(readState().audioContext, 'statechange', function () { snapshot('audio-context-change'); });
       var timer = env.setInterval(function () {
@@ -105,7 +121,7 @@ export function createVoiceAudioDiagnostics(env, readState) {
       snapshot('watch');
     }
     function report() {
-      return { version: '20261104-audio-trace-1', startedAt: new Date(started).toISOString(), dropped: dropped,
+      return { version: '20261108-network-recovery-1', startedAt: new Date(started).toISOString(), dropped: dropped,
         events: rows.map(function (row) { return { ...row }; }) };
     }
     function mount() {
@@ -129,6 +145,6 @@ export function createVoiceAudioDiagnostics(env, readState) {
       panel.appendChild(button);
       env.document.body.appendChild(panel);
     }
-    return { event: event, mark: mark, watch: watch, report: report, mount: mount, stop: function () { cleanup(); } };
+    return { event: event, mark: mark, connectionFailure: connectionFailure, watch: watch, report: report, mount: mount, stop: function () { cleanup(); } };
 }
 if (typeof window !== 'undefined') window.createVoiceAudioDiagnostics = createVoiceAudioDiagnostics;
