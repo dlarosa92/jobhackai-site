@@ -16,7 +16,7 @@ The separate hearing-check expression in the scorer is removed. Its greeting, ok
 
 - Four new report regressions failed before the fix.
 - All 95 focused report/turn-plan checks pass after the fix.
-- The full voice suite and application build pass.
+- The full voice suite and application build pass. CI exposed a VM-based usage test that omitted the newly imported classifier. The harness now receives the real classifier, and the local voice command includes the previously separate usage suite. The reproduced usage-harness failure and corrected full-suite result are retained.
 - Offline replay of the actual stored transcript retains the one 30-word answer, removes the ten standalone controls/preface turns and makes no provider request.
 - Existing saved reports are not silently regraded or changed.
 - The recorded live run verifies conversation controls on the preceding development revision. It does not establish an audible test of a later deployment.
