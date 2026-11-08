@@ -1,5 +1,6 @@
 import { COACHING_GUIDANCE, roleCompetencies } from '../voice-coaching.js';
 import { isExplicitEndRequest } from '../../../../js/voice-lifecycle.js';
+import { classifyVoiceTurnControl } from '../../../../js/voice-turn-plan.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import vm from 'node:vm';
@@ -73,7 +74,7 @@ test('real feedback-only generator persists returned usage without replacing rea
  const h=setup(t);
  await h.db.prepare("UPDATE voice_sessions SET transcript_json=?, usage_details_json=? WHERE id='own'").bind(JSON.stringify([{speaker:'user',text:'I led a checkout improvement project and reduced abandoned purchases by eighteen percent in one quarter. We tested three changes with customers and retained the best performing version. I coordinated the rollout across three teams and measured retention for six weeks afterward.'}]), JSON.stringify({version:1,realtime:{source:'client_reported'}})).run();
  const source=readFileSync(new URL('../voice-scorecard.js',import.meta.url),'utf8');
- const ctx={console:{log(){},warn(){},error(){}},getDb:()=>h.db,scorecardUsageEvidence,COACHING_GUIDANCE,roleCompetencies,isExplicitEndRequest,callOpenAI:async()=>({content:JSON.stringify({overall:70,moments:[]}),model:'gpt-4.1-mini',fromCache:true,usage:{promptTokens:500,completionTokens:100,cachedTokens:250,totalTokens:600}})};
+ const ctx={console:{log(){},warn(){},error(){}},getDb:()=>h.db,scorecardUsageEvidence,COACHING_GUIDANCE,roleCompetencies,isExplicitEndRequest,classifyVoiceTurnControl,callOpenAI:async()=>({content:JSON.stringify({overall:70,moments:[]}),model:'gpt-4.1-mini',fromCache:true,usage:{promptTokens:500,completionTokens:100,cachedTokens:250,totalTokens:600}})};
  vm.createContext(ctx);vm.runInContext(source.replace(/^import .*;\n/gm,'').replace(/^export /gm,'')+'\nglobalThis.generate=generateAndStoreScorecard;',ctx);
  const report=await ctx.generate({},'own');
  assert.equal(report.overall,null);assert.equal(report.feedbackOnly,true);
@@ -102,7 +103,7 @@ test('a short interview stores explicit no-request evidence and makes no provide
  await h.db.prepare("UPDATE voice_sessions SET transcript_json='[]', usage_details_json=? WHERE id='own'").bind(JSON.stringify({version:1,realtime:{source:'client_reported'}})).run();
  const source=readFileSync(new URL('../voice-scorecard.js',import.meta.url),'utf8');
  let calls=0;
- const ctx={console:{log(){},warn(){},error(){}},getDb:()=>h.db,scorecardUsageEvidence,COACHING_GUIDANCE,roleCompetencies,isExplicitEndRequest,callOpenAI:async()=>{calls++;throw Error('short interview must not call provider');}};
+ const ctx={console:{log(){},warn(){},error(){}},getDb:()=>h.db,scorecardUsageEvidence,COACHING_GUIDANCE,roleCompetencies,isExplicitEndRequest,classifyVoiceTurnControl,callOpenAI:async()=>{calls++;throw Error('short interview must not call provider');}};
  vm.createContext(ctx);vm.runInContext(source.replace(/^import .*;\n/gm,'').replace(/^export /gm,'')+'\nglobalThis.generate=generateAndStoreScorecard;',ctx);
  assert.equal((await ctx.generate({},'own')).tooShort,true);assert.equal(calls,0);
  const saved=JSON.parse(await h.db.prepare("SELECT usage_details_json FROM voice_sessions WHERE id='own'").first('usage_details_json'));
