@@ -717,7 +717,8 @@
 
   function setInputStatus(text) {
     var label = $('vi-input-status');
-    if (label) label.textContent = state.micMuted ? 'Microphone muted' : sampleHoldsMicrophone() ? 'Microphone paused while the sample plays' : text;
+    if (label) label.textContent = state.microphoneLost ? 'Microphone disconnected. Choose Reconnect.'
+      : state.micMuted ? 'Microphone muted' : sampleHoldsMicrophone() ? 'Microphone paused while the sample plays' : text;
   }
 
   function clearUncapturedAnswer(itemId, message) {
@@ -1752,7 +1753,10 @@
       : state.audioSetup && sampleHoldsMicrophone() ? 'Listen to the full sample before testing your microphone.'
       : state.playbackReady ? 'Can you hear the voice clearly?' : 'Waiting for the test voice...';
     var retry = $('vi-audio-retry');
-    if (retry) retry.textContent = state.playbackBlocked ? 'Enable audio' : 'Play again';
+    if (retry) {
+      retry.textContent = state.playbackBlocked ? 'Enable audio' : 'Play again';
+      retry.disabled = state.microphoneLost;
+    }
     if ($('vi-timer')) $('vi-timer').setAttribute('aria-label', state.audioSetup ? state.activationUnconfirmed ? 'Interview start status' : 'Audio setup time remaining' : 'Session time remaining');
     if ($('vi-timer-label')) $('vi-timer-label').textContent = state.audioSetup ? state.activationUnconfirmed ? 'Interview start' : 'Audio setup time left' : 'Session time left';
     if ($('vi-end-btn')) $('vi-end-btn').textContent = state.audioSetup ? 'Cancel audio check' : 'Finish interview';
@@ -1802,6 +1806,7 @@
   }
 
   async function retryAudio() {
+    if (state.microphoneLost || state.ending) return;
     if (audioDiagnostics) audioDiagnostics.mark('retry-audio');
     // The play call runs directly from a click. No settings changes or assumed
     // autoplay permission. Repeat uses no question opportunity.
@@ -1990,7 +1995,7 @@
       clearInterval(state.micMeterTimer);
     }
     updateAudioReadiness();
-    var attempt = { cancelled: false, controller: new AbortController(), repeatQuestion: state.turnRecovery };
+    var attempt = { cancelled: false, controller: new AbortController(), repeatQuestion: state.turnRecovery || state.microphoneLost };
     state.connectionAttempt = attempt;
     var stream = null, pc = null, dc = null, completed = false;
     function current() {
@@ -2004,11 +2009,12 @@
       state.micStream = stream;
       state.microphoneLost = false;
       if (state.audioSetup) startMicMeter(stream);
-      state.micMuted = false;
+      // A replacement device must keep the user's mute choice. Only starting
+      // a new interview resets it, in resetLiveView().
       syncMicrophoneTransmission();
       if ($('vi-mute-btn')) {
-        $('vi-mute-btn').textContent = 'Mute mic';
-        $('vi-mute-btn').setAttribute('aria-pressed', 'false');
+        $('vi-mute-btn').textContent = state.micMuted ? 'Unmute mic' : 'Mute mic';
+        $('vi-mute-btn').setAttribute('aria-pressed', String(state.micMuted));
       }
       setInputStatus('Listening when you speak');
 
@@ -2030,6 +2036,8 @@
           if (state.ending || state.pc !== pc) return;
           state.microphoneConfirmed = false;
           state.microphoneLost = true;
+          clearTurnWait();
+          setInputStatus('Microphone disconnected. Choose Reconnect.');
           updateAudioReadiness();
           setStatus('Microphone disconnected. Reconnect to choose an available microphone.', 'vi-error');
           offerReconnect();
@@ -2102,6 +2110,12 @@
         var s = pc.connectionState;
         if (s === 'connected') {
           state.connected = true;
+          // A healthy network connection does not restore a lost input device.
+          if (state.microphoneLost) {
+            setStatus('Microphone disconnected. Reconnect to choose an available microphone.', 'vi-error');
+            offerReconnect();
+            return;
+          }
           // Transport recovery does not resolve missing turn events. Keep the
           // explicit replacement action available until the candidate uses it.
           if (state.turnRecovery) return;
@@ -2109,7 +2123,7 @@
           // Truthful per phase: nothing is being scored yet during the audio
           // check, so the status must not claim the interview is running.
           if (lifecycle().is(PHASES.ACTIVE_INTERVIEW)) {
-            setStatus('Live. The interviewer can hear you.', 'vi-live');
+            setStatus(state.micMuted ? 'Live. Your microphone is muted.' : 'Live. The interviewer can hear you.', 'vi-live');
           } else if (!state.ending && !state.conductEnd) {
             setStatus('Connected. Quick audio check...', 'vi-connecting');
           }
