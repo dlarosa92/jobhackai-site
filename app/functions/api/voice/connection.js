@@ -4,6 +4,7 @@ import { voiceFeatureEnabled } from '../../_lib/voice-entitlements.js';
 import { voiceFirstName } from '../../_lib/voice-interviewer.js';
 import { openManagedInterview, activateManagedInterview, closeManagedInterview } from '../../_lib/voice-managed-interview.js';
 import { queueAccountWork } from '../../_lib/account-operation-scope.js';
+import { pulseVoiceConnection } from '../../_lib/voice-deadline.js';
 import { errorResponse, successResponse, generateRequestId } from '../../_lib/error-handler.js';
 
 async function connectionBody(request) {
@@ -49,8 +50,15 @@ export async function onRequest(context) {
   } catch (error) {
     return error?.message==='body_too_large' ? fail('Connection request is too large',413) : fail('Invalid connection request',400);
   }
-  if (!['open','activate','close'].includes(body.action)) return fail('Invalid connection action',400);
+  if (!['open','activate','close','heartbeat'].includes(body.action)) return fail('Invalid connection action',400);
   if (body.action==='open' && !env.OPENAI_API_KEY) return fail('Voice interviews are temporarily unavailable.',503);
+
+  if (body.action==='heartbeat') {
+    // No provider mutation, reservation or account activity write. The private
+    // RPC validates the authenticated owner and current active attempt in D1.
+    try { return ok(await pulseVoiceConnection(env,{uid:verified.uid,sessionId:body.sessionId,attemptId:body.attemptId})); }
+    catch (error) { return fail('Connection check unavailable.',error?.message==='voice_connection_request_invalid'?400:503); }
+  }
 
   // Register before starting provider work. A disconnected HTTP client must
   // not leave provider creation outside the account-operation lifetime.
@@ -74,7 +82,8 @@ export async function onRequest(context) {
       const result=await openManagedInterview(env,{uid,sessionId:body.sessionId,sdp:body.sdp,
         role:body.role,seniority:body.seniority,jd:body.jd,
         firstName:voiceFirstName(verified.payload?.name),transcript:body.transcript,
-        interviewStarted:body.interviewStarted,replacesAttemptId:body.replacesAttemptId,audioCheck:body.audioCheck===true});
+        interviewStarted:body.interviewStarted,replacesAttemptId:body.replacesAttemptId,audioCheck:body.audioCheck===true,
+        connectionWatch:body.connectionWatch===true});
       return ok(result);
     } catch (error) {
       const code=error?.message || '';

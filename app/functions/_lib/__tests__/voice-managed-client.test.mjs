@@ -1176,3 +1176,54 @@ test('a late activation receipt cannot act while reconnect is acquiring a replac
   permission.resolve(mic());await reconnecting;
   assert.equal(f.opens().length,2);
 });
+
+function monitored(t,respond) {
+  const ticks=[];
+  const f=fixture(t,{onInterval(fn,ms){if(ms===8000)ticks.push(fn);},routes:{
+    '/api/voice/connection':(url,init)=>{
+      const body=JSON.parse(init.body);
+      if(body.action==='heartbeat')return respond?respond(body):{connectionAlive:true};
+      if(body.action==='close')return {connectionClosed:true,sessionReserved:true};
+      return {...f.answer(body),connectionWatch:true};
+    }
+  }});
+  const connected=async()=>{f.h.peerConnection().connectionState='connected';await f.h.openDataChannel();};
+  const pulses=()=>f.h.requests.filter(r=>r.body?.action==='heartbeat');
+  return {...f,ticks,connected,pulses};
+}
+test('only the current healthy transport sends heartbeats, including while muted; End stops them',async t=>{
+  const f=monitored(t);await f.start();await f.connected();
+  assert.equal(f.opens()[0].body.connectionWatch,true);assert.equal(f.pulses().length,1);
+  assert.deepEqual(Object.keys(f.pulses()[0].body).sort(),['action','attemptId','sessionId']);
+  assert.equal(f.pulses()[0].body.attemptId,'attempt-1');
+  await f.h.click('vi-mute-btn');await f.ticks[0]();await f.h.settle();assert.equal(f.pulses().length,2);
+  f.h.peerConnection().connectionState='disconnected';await f.ticks[0]();assert.equal(f.pulses().length,2);
+  await f.h.click('vi-reconnect-btn');await f.connected();
+  const count=f.pulses().length;await f.ticks[0]();assert.equal(f.pulses().length,count);
+  assert.equal(f.pulses().at(-1).body.attemptId,'attempt-2');
+  assert.equal(f.pulses().at(-1).body.sessionId,f.pulses()[0].body.sessionId);
+  await f.h.endInterview();await f.ticks.at(-1)();assert.equal(f.pulses().length,count);
+});
+test('a late heartbeat from a replaced call cannot change the replacement status',async t=>{
+  const pending=deferred();let count=0;
+  const f=monitored(t,()=>++count===1?pending.promise:{connectionAlive:true});
+  await f.start();await f.connected();const request=f.pulses()[0];
+  await f.h.click('vi-reconnect-btn');await f.connected();const status=f.h.el('vi-status').textContent;
+  assert.equal(request.signal.aborted,true);
+  pending.resolve({connectionAlive:false});await f.h.settle();
+  assert.equal(f.h.el('vi-status').textContent,status);assert.equal(f.h.peerConnection().connectionState,'connected');
+  assert.equal(f.h.completeBodies().length,0);
+});
+test('a server-closed connection offers recovery and stops heartbeats without ending or recharging',async t=>{
+  const f=monitored(t,()=>({connectionAlive:false}));await f.start();await f.connected();
+  assert.match(f.h.el('vi-status').textContent,/Connection lost/);
+  assert.equal(f.h.el('vi-reconnect-btn').style.display,'');
+  await f.ticks[0]();assert.equal(f.pulses().length,1);
+  assert.equal(f.opens().length,1);assert.equal(f.h.completeBodies().length,0);
+});
+test('a transient heartbeat error does not invent closure and the next pulse can recover',async t=>{
+  let count=0;const f=monitored(t,()=>++count===1?{__status:503,error:'unavailable'}:{connectionAlive:true});
+  await f.start();await f.connected();const status=f.h.el('vi-status').textContent;
+  await f.ticks[0]();await f.h.settle();assert.equal(f.pulses().length,2);
+  assert.equal(f.h.el('vi-status').textContent,status);assert.equal(f.h.completeBodies().length,0);
+});

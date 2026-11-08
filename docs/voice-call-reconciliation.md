@@ -1,24 +1,30 @@
 # Verified voice-call recovery
 
-## November 8: same-call absence check after an empty hangup response
+## November 8: server connection monitoring
 
-A new hangup that returns an empty HTTP404 now makes one bounded, read-only
-attachment request to the documented Realtime sideband endpoint, using the
-unchanged issuing key and the call ID saved from creation. Only HTTP404 with
-the exact JSON `call_id_not_found` / `invalid_request_error` response permits
-closure. The ledger records `close_sideband_call_id_not_found`, and the
-`provider_sideband_absent` receipt identifies the probe response before saving.
+New clients opt into a durable connection watch before receiving their SDP.
+While the current peer connection and data channel are healthy, they send an
+authenticated heartbeat every eight seconds. The server validates the owner and
+current active application attempt. It closes that owned provider call after
+25 seconds without a heartbeat (35 seconds for initial connection setup).
 
-An accepted WebSocket is immediately detached without sending commands or
-reading interview content. An empty, generic, unauthorized, redirected,
-unreadable or failed probe retains the hold. Bounded probe diagnostic categories
-are appended to the original empty404 diagnosis. The request does not create
-a call, repeat hangup, reset a deadline or consume another interview. Existing
-uncertain attempts are not retried or reclassified.
+A missed heartbeat only triggers the existing exclusive hangup operation. It is
+never proof of closure. Only a successful hangup or the exact structured
+`call_id_not_found` / `invalid_request_error` HTTP404 response permits another
+call. Ambiguous responses retain the hold and are never automatically retried.
 
-This fallback still requires a controlled development reproduction before
-network recovery can be accepted. Unit/runtime fixtures do not prove what the
-live provider will return, and this does not resolve the historical support case.
+Confirmed closure leaves the interview open for reconnect until its original
+deadline. The original credit, transcript and time limit remain unchanged.
+Duplicate or stale heartbeats cannot revive a closing attempt or affect a
+replacement. Existing cached clients retain the original deadline behavior
+until they load the new client. No migration or historical reclassification is
+needed. The watch shares the existing private Durable Object and alarm.
+
+The previous same-call sideband fallback from PR1185 was removed: the live
+abandoned-setup test returned an empty HTTP503 after an empty hangup HTTP404.
+That did not establish closure. Its failed evidence and historical holds remain
+intact. The new monitoring still requires development network-loss acceptance
+before promotion; it does not resolve OpenAI support case 19425445.
 
 ## November 8: durable diagnosis for new unconfirmed 404 responses
 
