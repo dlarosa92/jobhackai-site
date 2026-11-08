@@ -15,7 +15,52 @@ application-owned planned completion in PR #1181
 revision 4c7fec4974c0285688ebed02f19a6bc17947b761. This remains a draft candidate,
 not a statement that all development or QA acceptance is complete.
 
-## Current: November 8 network retry candidate and live result
+## Current: November 8 accepted final invitation and closing
+
+Includes PR #1184, merged to dev0 as
+d495d47f7f774b2a762efaba86b15bae82778032. The final invitation now clearly
+asks for the last answer and waits. The subsequent terminal response has empty
+conversational input and fixed completion words. Superseded instructions to
+personalize that closing with a name or answer detail were removed, and its
+visible status says the interview is complete and the microphone is off.
+Playback waiting, final-answer clarification, once-only save, credit accounting
+and provider-closure safeguards remain in place.
+
+Two regressions failed before the fix. All 201 focused tests, the full voice
+suite and build pass after cherry-picking into this QA candidate. The three
+changed runtime modules exactly match accepted development, while the voice
+page retains the existing QA header and cookie assets. A pre-existing test
+race was reproduced and corrected by accelerating only the active response
+under test, not the setup greeting. No production timeout changed.
+
+Development passed 11 executed PR checks, six push workflows and three exact-
+deployment UI smoke tests. Both Pages and the deadline Worker are verified;
+no schema was pending or applied. Hosted checks must pass on the refreshed
+QA head. This remains a draft and has not deployed to QA or production.
+
+The recorded Safari closing retest passed. Its final invitation accepted and
+saved the owner's reply, then the exact closing played completely and the
+report opened automatically. The report reopened after full navigation. One
+credit and one history entry were used; the provider closed without error.
+The complete trace has 1,477 events and no drops, with 6.187 seconds of closing
+playback before stopping. The owner confirmed final answer accepted, clear
+closing and report. Recording is stopped and stays local. Full decoding
+passed with four audio timestamp warnings retained in the evidence.
+
+The final answer was a polite thank-you, and the short sample correctly has
+feedback only with 100 candidate words and zero substantive answers. This
+accepts the ending correction, not a substantive graded free-account interview
+or near-deadline behavior. The earlier free run's inappropriate conduct
+warning remains a separate unresolved issue. The original acceptance matrix,
+failed network path and four uncertain provider attempts remain required.
+A separately observed development Account Settings logout redirect to the
+production login host is unverified and not fixed by this change.
+
+Evidence: safari-closing-copy-01-review.md, its run manifest and
+closing-copy-release-evidence.json in the local Brighton preparation folder.
+Private transcript, recording and account identifiers are not included here.
+
+## Historical: November 8 network retry candidate and live result
 
 Includes PR #1183, merged to dev0 as
 69a508227f109aeb1ca8bb82cbcc1c3a8c50c04a and verified on the canonical

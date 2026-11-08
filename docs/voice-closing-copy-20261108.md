@@ -28,12 +28,16 @@ checks that the final invitation keeps the microphone available and does not
 save early. Existing stale-response, playback, final-answer continuation and
 single-save tests remain required.
 
-Live acceptance must confirm the final-answer invitation, complete closing,
-automatic report and provider closure on the deployed development build. Local
-tests cannot establish audible model adherence. The prior short free-account
-run passed accounting and saved-preview checks, but did not establish a graded
-substantive interview or the separate near-deadline case. Its inappropriate
-conduct warning is recorded as a separate unresolved conversation issue.
+The recorded Safari retest on the deployed development build passed the final
+invitation, preserved final reply, complete closing, automatic report, saved
+report reopening, one-credit accounting and provider closure. The owner
+confirmed the final answer was accepted and the full goodbye played. Local
+recording and the complete diagnostic trace are retained; recording is stopped.
+
+This was a short feedback-only test. It does not establish a graded substantive
+free interview or the separate near-deadline case. The prior free-account
+run's inappropriate conduct warning remains a separate unresolved conversation
+issue. See the current QA candidate document for evidence and retained gates.
 
 Promote through dev0, develop/QA, then main after the required checks. This
 change does not waive any remaining acceptance case or provider-closure hold.
