@@ -105,6 +105,50 @@ test('managed reconnect carries the expected attempt and transcript without star
   assert.equal(f.h.requests.filter(r=>r.url==='/api/voice/session').length,0);
 });
 
+for (const muted of [true,false]) test('physical microphone recovery preserves '+(muted?'muted':'unmuted')+' choice and replays the current question once',async t=>{
+  const streams=[];
+  const f=fixture(t,{getUserMedia:async()=>{const stream=mic();streams.push(stream);return stream;}});
+  await live(f);const h=f.h;
+  h.event({type:'response.done',response:{id:'followup',status:'completed'}});
+  const question=h.el('vi-question').textContent;
+  if(muted)await h.click('vi-mute-btn');
+  streams[0].track.onended();
+  const before=h.sends.filter(x=>x.type==='response.create').length;
+  await h.click('vi-reconnect-btn');
+  assert.equal(streams[1].track.enabled,!muted,'a replacement device must retain the microphone choice');
+  assert.equal(h.el('vi-mute-btn').textContent,muted?'Unmute mic':'Mute mic');
+  assert.equal(h.el('vi-mute-btn').getAttribute('aria-pressed'),String(muted));
+  assert.equal(h.sends.filter(x=>x.type==='response.create').length,before,'replay waits for the replacement channel');
+  assert.equal(h.el('vi-audio-retry').disabled,false,'replay becomes available after replacing the device');
+  await h.openDataChannel();
+  const replies=h.sends.filter(x=>x.type==='response.create');
+  assert.equal(replies.length,before+1);
+  assert.equal(replies.at(-1).response.metadata.jobhackai_purpose,'audio_recovery');
+  assert.ok(h.sends.filter(x=>x.type==='conversation.item.create').at(-1).item.content[0].text.includes(JSON.stringify(question)));
+  // Duplicate configuration receipts must not issue another question.
+  h.event({type:'session.updated',session:h.sends.filter(x=>x.type==='session.update').at(-1).session});
+  assert.equal(h.sends.filter(x=>x.type==='response.create').length,replies.length);
+  assert.equal(f.opens().length,2);
+  assert.equal(f.opens()[1].body.sessionId,f.opens()[0].body.sessionId);
+  assert.equal(h.requests.filter(x=>x.body?.action==='activate').length,0);
+  if(muted){await h.click('vi-mute-btn');assert.equal(streams[1].track.enabled,true);}
+});
+
+test('a disconnected microphone keeps a truthful status and only offers useful recovery controls',async t=>{
+  const stream=mic(),f=fixture(t,{getUserMedia:async()=>stream});await live(f);const h=f.h;
+  stream.track.onended();
+  assert.match(h.el('vi-input-status').textContent,/disconnected/i);
+  assert.equal(h.el('vi-audio-retry').disabled,true);
+  const before=h.sends.filter(x=>x.type==='response.create').length;
+  await h.click('vi-audio-retry');
+  assert.equal(h.sends.filter(x=>x.type==='response.create').length,before);
+  await h.click('vi-mute-btn');await h.click('vi-mute-btn');
+  assert.match(h.el('vi-input-status').textContent,/disconnected/i);
+  const pc=h.peerConnection();pc.connectionState='connected';pc.onconnectionstatechange();
+  assert.equal(h.el('vi-reconnect-btn').style.display,'');
+  assert.match(h.el('vi-status').textContent,/microphone disconnected/i);
+});
+
 test('a reply stall on a connected managed call replaces only the attempt and preserves the deadline',async t=>{
   const f=fixture(t,{timerDelay:ms=>ms===15000?1:ms});await live(f);
   const h=f.h,old=h.peerConnection();old.connectionState='connected';
