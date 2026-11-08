@@ -155,6 +155,10 @@ jobs:
         working-directory: app/functions/_lib/__tests__
         run: node voice-history.test.mjs
 
+      - name: Run voice route privacy acceptance (real SQLite)
+        working-directory: app/functions/_lib/__tests__
+        run: node --test voice-privacy-routes.test.mjs
+
 
 
       - name: Run voice scorecard grounding and evaluation tests
