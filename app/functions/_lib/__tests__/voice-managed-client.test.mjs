@@ -131,7 +131,11 @@ for (const muted of [true,false]) test('physical microphone recovery preserves '
   assert.equal(f.opens().length,2);
   assert.equal(f.opens()[1].body.sessionId,f.opens()[0].body.sessionId);
   assert.equal(h.requests.filter(x=>x.body?.action==='activate').length,0);
-  if(muted){await h.click('vi-mute-btn');assert.equal(streams[1].track.enabled,true);}
+  if(muted){
+    const pc=h.peerConnection();pc.connectionState='connected';pc.onconnectionstatechange();
+    await h.click('vi-mute-btn');assert.equal(streams[1].track.enabled,true);
+    assert.doesNotMatch(h.el('vi-status').textContent,/muted/i,'the connection banner must not retain an obsolete microphone state');
+  }
 });
 
 test('a disconnected microphone keeps a truthful status and only offers useful recovery controls',async t=>{

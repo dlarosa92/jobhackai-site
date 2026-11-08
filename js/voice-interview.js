@@ -2123,7 +2123,7 @@
           // Truthful per phase: nothing is being scored yet during the audio
           // check, so the status must not claim the interview is running.
           if (lifecycle().is(PHASES.ACTIVE_INTERVIEW)) {
-            setStatus(state.micMuted ? 'Live. Your microphone is muted.' : 'Live. The interviewer can hear you.', 'vi-live');
+            setStatus('Live interview', 'vi-live');
           } else if (!state.ending && !state.conductEnd) {
             setStatus('Connected. Quick audio check...', 'vi-connecting');
           }
