@@ -435,6 +435,107 @@ test('a session that ends live for safety shows the same visible, scoreless stat
   } finally { h.dispose(); }
 });
 
+// The November 8 live failure: supportive words, no tool, no safety end.
+const SUPPORT_ONLY_SAFETY_REPLY = "I'm really sorry you're feeling this way, but your safety is the most important thing. Please consider reaching out to a trusted friend, family member, or a mental health professional right now. You deserve support. Once you're safe, we can pick up from there.";
+
+function candidateStatement(h, text, id = 'danger-answer') {
+  h.event({ type: 'conversation.item.created', item: { id, role: 'user' } });
+  h.event({ type: 'input_audio_buffer.committed', item_id: id });
+  h.event({ type: 'conversation.item.input_audio_transcription.completed', item_id: id, transcript: text });
+}
+
+for (const text of [
+  "I'm in immediate danger and I want to hurt myself right now.",
+  "I'm in immediate danger of hurting myself right now."
+]) {
+  test(`explicit current danger closes without relying on model guidance or tool: ${text}`, async () => {
+    const h = await liveInterviewWithOneAnswer();
+    try {
+      // Settle the normal answer's response before the next candidate turn.
+      h.event({ type: 'response.done', response: { id: 'answer-response' } });
+      candidateStatement(h, text);
+      const request = h.sends.filter(s => s.type === 'response.create').at(-1);
+      assert.equal(request.response.metadata.jobhackai_purpose, 'safety');
+      assert.ok(h.el('vi-question').textContent.includes('emergency services'));
+      assert.ok(h.peerConnection().tracks.every(track => track.enabled === false));
+      h.event({ type: 'response.created', response: { id: 'safety-response', metadata: request.response.metadata } });
+      h.event({ type: 'output_audio_buffer.started', response_id: 'safety-response' });
+      h.event({ type: 'response.output_audio_transcript.done', response_id: 'safety-response', item_id: 'safety-words', transcript: SUPPORT_ONLY_SAFETY_REPLY });
+      h.event({ type: 'response.done', response: { id: 'safety-response', metadata: request.response.metadata } });
+      await h.settle();
+      assert.equal(h.completeBodies().length, 0, 'let the guidance audio finish');
+      h.event({ type: 'output_audio_buffer.stopped', response_id: 'safety-response' });
+      await h.settle();
+      assert.equal(h.completeBodies().length, 1);
+      assert.equal(h.completeBodies()[0].reason, 'ended_for_safety');
+      assert.ok(h.el('vi-scorecard').innerHTML.includes('No score is given'));
+      assert.ok(!h.el('vi-scorecard').innerHTML.includes('Your practice feedback'));
+    } finally { h.dispose(); }
+  });
+}
+
+for (const statement of [
+  "Last year I was in danger, but I am safe now.",
+  "I'm not in immediate danger of hurting myself right now.",
+  "I'm in immediate danger of missing my deadline right now.",
+  "If I were in immediate danger, I would call for help.",
+  "During training, the actor said, I'm in immediate danger and I want to hurt myself right now.",
+  '"I am in immediate danger" was a sentence in the training script.',
+  "I took a career break to care for a family member. I would rather not discuss personal details.",
+  "I'm anxious about this interview.",
+  "I used to want to hurt myself, but I am safe now."
+]) {
+  test(`safety backstop preserves normal context: ${statement}`, async () => {
+    const h = await liveInterviewWithOneAnswer();
+    try {
+      h.event({ type: 'response.done', response: { id: 'answer-response' } });
+      candidateStatement(h, statement);
+      await h.settle();
+      assert.equal(h.completeBodies().length, 0);
+      assert.notEqual(h.sends.filter(s => s.type === 'response.create').at(-1).response.metadata.jobhackai_purpose, 'safety');
+      assert.ok(h.peerConnection().tracks.some(track => track.enabled));
+    } finally { h.dispose(); }
+  });
+}
+
+for (const withoutModules of [[], ['createClosingTurnGate']]) {
+  test(`safety closes on missing provider response (${withoutModules.length ? 'fallback' : 'module'})`, async () => {
+    const h = await liveInterviewWithOneAnswer({ withoutModules, timerDelay: ms => ms === 30000 ? 5 : ms });
+    try {
+      h.event({ type: 'response.done', response: { id: 'answer-response' } });
+      candidateStatement(h, "I'm in immediate danger of hurting myself right now.");
+      await new Promise(resolve => setTimeout(resolve, 20));
+      await h.settle();
+      assert.equal(h.completeBodies().length, 1);
+      assert.equal(h.completeBodies()[0].reason, 'ended_for_safety');
+      assert.ok(h.el('vi-scorecard').innerHTML.includes('emergency services'));
+    } finally { h.dispose(); }
+  });
+
+  test(`stale audio and manual Finish cannot override a safety close (${withoutModules.length ? 'fallback' : 'module'})`, async () => {
+    const h = await liveInterviewWithOneAnswer({ withoutModules });
+    try {
+      h.event({ type: 'response.done', response: { id: 'answer-response' } });
+      candidateStatement(h, "I'm in immediate danger and I want to hurt myself right now.");
+      const response = { id: 'safety-response', metadata: h.sends.filter(s => s.type === 'response.create').at(-1).response.metadata };
+      h.event({ type: 'response.created', response });
+      h.event({ type: 'output_audio_buffer.started', response_id: response.id });
+      h.event({ type: 'response.output_audio_transcript.delta', response_id: response.id, item_id: 'safety-words', delta: 'Once you are safe, we can resume.' });
+      assert.ok(h.el('vi-question').textContent.includes('emergency services'), 'fixed guidance stays visible');
+      h.event({ type: 'response.done', response: { id: 'answer-response' } });
+      h.event({ type: 'output_audio_buffer.stopped', response_id: 'answer-response' });
+      await h.endInterview();
+      assert.equal(h.completeBodies().length, 0, 'neither stale events nor manual Finish cut off guidance');
+      h.event({ type: 'response.done', response });
+      assert.equal(h.completeBodies().length, 0);
+      h.event({ type: 'output_audio_buffer.stopped', response_id: response.id });
+      await h.settle();
+      assert.equal(h.completeBodies().length, 1);
+      assert.equal(h.completeBodies()[0].reason, 'ended_for_safety');
+    } finally { h.dispose(); }
+  });
+}
+
 // ------------------------------------------------------------- pace guards
 
 test('the client adds no fixed silence cutoff and no artificial turn delay', async () => {
