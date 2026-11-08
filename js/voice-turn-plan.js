@@ -14,13 +14,13 @@ const TOPICS = [
 export function classifyVoiceTurnControl(text) {
   let value = String(text || '').trim().toLowerCase().replace(/[\u2018\u2019]/g, "'")
     .replace(/[.,!?;:]/g, ' ').replace(/\s+/g, ' ').trim();
-  value = value.replace(/^(?:(?:no|sorry|i'm sorry|i am sorry|please|yes|yeah|so|well|okay)\s+)+/, '')
+  value = value.replace(/^(?:(?:hello|hi|hey|no|sorry|i'm sorry|i am sorry|please|yes|yeah|so|well|okay)\s+)+/, '')
     .replace(/(?:\s+(?:please|thanks|thank you))+$/, '');
   const request = value.replace(/^(?:can|could|would|will) you\s+(?:please\s+)?/, '');
   if (/^(?:repeat (?:that|this|it|(?:the|your|that|this) question)(?: again)?|say (?:that|it) again)$/.test(request)) return 'repeat';
   if (/^(?:rephrase|reframe|simplify|clarify|explain|reword|repeat or rephrase) (?:that|this|it|(?:the|your|that|this) question)(?: (?:more simply|in simpler terms|more clearly|again))?$/.test(request)) return 'rephrase';
   if (/^(?:(?:put|ask) (?:that|it|the question) (?:another way|in a different way)|what do you mean(?: by that)?|i (?:don't|do not|didn't|did not) understand (?:that|the question))$/.test(request)) return 'rephrase';
-  if (/^(?:(?:can|could) you hear me(?: (?:now|clearly))?|i (?:can't|cannot|couldn't|could not|didn't|did not) hear (?:you|that|the question))$/.test(value)) return 'hearing_check';
+  if (/^(?:(?:can|could) you hear me(?: (?:now|okay|ok|clearly))?|i (?:can't|cannot|couldn't|could not|didn't|did not) hear (?:you|that|the question)(?: (?:now|clearly))?)$/.test(value)) return 'hearing_check';
   const choice = value.replace(/^(?:(?:can|could|may) (?:i|we|you)|let's|let us)\s+/, '');
   if (/^(?:next question|skip(?: (?:this|that|it|(?:this|that|the) question))?|move (?:on|to (?:the )?next question)|(?:use|try) (?:a |another )?different (?:example|question)|(?:use|try) another (?:example|question))$/.test(choice)) return 'change_question';
   if (/^(?:(?:i want to|i would like to|i'd like to|let me|can i|could i) (?:give|share|add) (?:something|(?:an? )?example(?: of something)?|one more (?:thing|example))|i (?:have|have got) (?:something|one more thing|an example) to (?:add|share)|(?:let me|can i|could i) (?:finish|continue)(?: (?:my answer|my example))?)$/.test(value)) return 'continue_answer';
