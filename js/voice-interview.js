@@ -341,13 +341,15 @@
     return user.getIdToken(true);
   }
 
-  async function api(path, opts) {
+  async function api(path, opts, onStage) {
+    if (onStage) onStage('application_auth');
     var token = await getIdToken();
     opts = opts || {};
     opts.headers = Object.assign({
       'Content-Type': 'application/json',
       'Authorization': 'Bearer ' + token
     }, opts.headers || {});
+    if (onStage) onStage('application_request');
     var res = await fetch(path, opts);
     var data = null;
     try { data = await res.json(); } catch (_) {}
@@ -2075,9 +2077,10 @@
       clearInterval(state.micMeterTimer);
     }
     updateAudioReadiness();
-    var attempt = { cancelled: false, controller: new AbortController(), repeatQuestion: state.turnRecovery || state.microphoneLost };
+    var attempt = { cancelled: false, controller: new AbortController(), repeatQuestion: state.turnRecovery || state.microphoneLost ||
+      !!(managedBody && managedBody.replacesAttemptId && !state.audioSetup) };
     state.connectionAttempt = attempt;
-    var stream = null, pc = null, dc = null, completed = false;
+    var stream = null, pc = null, dc = null, completed = false, connectionStage = 'microphone';
     function current() {
       return !attempt.cancelled && state.connectionAttempt === attempt && !state.ending;
     }
@@ -2216,6 +2219,7 @@
         }
       };
 
+      connectionStage = 'offer';
       var offer = await pc.createOffer();
       if (!current()) return false;
       await pc.setLocalDescription(offer);
@@ -2227,7 +2231,7 @@
           method: 'POST',
           body: JSON.stringify(Object.assign({}, managedBody, { action: 'open', sdp: offer.sdp, audioCheck: true })),
           signal: attempt.controller.signal
-        });
+        }, function (stage) { connectionStage = stage; });
         if (!current()) return false;
         if (!connection.ok) {
           // After a lost answer the server can identify the existing owned
@@ -2274,12 +2278,15 @@
         answerSdp = await sdpRes.text();
       }
       if (!current()) return false;
+      connectionStage = 'remote_description';
       await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
       if (!current()) return false;
       completed = true;
       return attempt.result || true;
     } catch (error) {
       if (!current()) return false;
+      if (error && typeof error === 'object') error.connectionStage = connectionStage;
+      if (audioDiagnostics && typeof audioDiagnostics.connectionFailure === 'function') audioDiagnostics.connectionFailure(connectionStage, error);
       throw error;
     } finally {
       if (state.connectionAttempt === attempt) state.connectionAttempt = null;
@@ -2638,6 +2645,19 @@
     if (btn) btn.style.display = '';
   }
 
+  function canRetryConnection(error) {
+    if (!error) return false;
+    // Retrying is always an explicit request for the same owned session and
+    // attempt. Server admission still refuses uncertain provider mutations.
+    // Known terminal/closure-review reasons must retain the existing save path.
+    if (error.reason) return ['voice_connection_deadline_unavailable', 'voice_connection_pending',
+      'voice_connection_conflict', 'voice_connection_unconfirmed'].includes(error.reason);
+    if (error.status) return error.status === 408 || error.status === 429 || error.status >= 500;
+    if (error.connectionStage === 'microphone') return ['NotAllowedError', 'NotFoundError', 'NotReadableError'].includes(error.name);
+    return ['application_auth', 'application_request'].includes(error.connectionStage) &&
+      (error.name === 'TypeError' || error.name === 'TimeoutError' || error.code === 'auth/network-request-failed');
+  }
+
   async function reconnect() {
     if (state.ending || state.reconnecting) return;
     // A pending conduct or safety close survives the connection dropping. Its
@@ -2658,6 +2678,7 @@
       return;
     }
     state.reconnecting = true;
+    if (audioDiagnostics) audioDiagnostics.mark('reconnect-request');
     var retiring = null;
     var btn = $('vi-reconnect-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Reconnecting...'; }
@@ -2726,9 +2747,20 @@
       if (btn) { btn.style.display = 'none'; btn.disabled = false; btn.textContent = 'Reconnect'; }
     } catch (err) {
       if (state.ending) return;
-      console.error('[VOICE] reconnect failed:', err);
-      setStatus('Could not reconnect. Ending the session.', 'vi-error');
-      endInterview('connection_lost');
+      if (canRetryConnection(err)) {
+        // A temporary request failure is not an intent to finish. Keep the
+        // transcript, credit, original deadline and mute choice for a retry.
+        // Failed transports are released; no provider request is replayed here.
+        state.turnRecovery = true;
+        setStatus('Could not reconnect. Check your connection, then choose Reconnect or Finish interview.', 'vi-error');
+        setInputStatus('Microphone stopped while disconnected.');
+        offerReconnect();
+        if (btn) { btn.disabled = false; btn.textContent = 'Reconnect'; }
+      } else {
+        console.warn('[VOICE] reconnect could not safely continue; saving the interview');
+        setStatus('Could not reconnect. Ending the session.', 'vi-error');
+        endInterview('connection_lost');
+      }
     } finally {
       releaseRetiringConnection(retiring);
       state.reconnecting = false;
