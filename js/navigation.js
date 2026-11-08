@@ -2475,14 +2475,7 @@ function updateNavigation() {
     const userMenu = document.createElement('div');
     userMenu.className = 'nav-user-menu';
 
-    const userToggle = document.createElement('button');
-    userToggle.className = 'nav-user-toggle';
-    userToggle.innerHTML = `
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-        <circle cx="12" cy="7" r="4"/>
-      </svg>
-    `;
+    const userToggle = _createAccountMenuToggle(userMenu);
 
     const userDropdown = document.createElement('div');
     userDropdown.className = 'nav-user-dropdown';
@@ -2507,23 +2500,11 @@ function updateNavigation() {
     userMenu.appendChild(userDropdown);
     navActions.appendChild(userMenu);
 
-    userToggle.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      userMenu.classList.toggle('open');
-    });
   } else {
     navLog('debug', 'Skipping user navigation', { isAuthView, hasUserNav: !!navConfig?.userNav });
   }
 
-  document.addEventListener('click', (e) => {
-    if (!e.target.closest('.nav-dropdown') && !e.target.closest('.nav-user-menu')) {
-      const closedElements = document.querySelectorAll('.nav-dropdown.open, .nav-user-menu.open');
-      if (closedElements.length > 0) {
-        closedElements.forEach(d => d.classList.remove('open'));
-      }
-    }
-  });
+  _ensureDocClickHandler();
 
   // Setup event delegation for mobile nav triggers (works even after navigation rebuilds)
   // After the DOM build, ensure nav-actions carries plan and signature so plan-only patches can be validated
@@ -3146,7 +3127,10 @@ function _ensureDocClickHandler() {
   _verifiedNavDocClickRegistered = true;
   document.addEventListener('click', (e) => {
     if (!e.target.closest('.nav-dropdown') && !e.target.closest('.nav-user-menu')) {
-      document.querySelectorAll('.nav-dropdown.open, .nav-user-menu.open').forEach(d => d.classList.remove('open'));
+      document.querySelectorAll('.nav-dropdown.open, .nav-user-menu.open').forEach(d => {
+        d.classList.remove('open');
+        d.querySelector('.nav-user-toggle')?.setAttribute('aria-expanded', 'false');
+      });
     }
   });
 }
@@ -3236,6 +3220,42 @@ function _buildVerifiedNavItems(container, navConfig, wrapHref) {
   });
 }
 
+// Both navigation builders use the same named disclosure button and state.
+function _createAccountMenuToggle(userMenu) {
+  const userToggle = document.createElement('button');
+  userToggle.type = 'button';
+  userToggle.className = 'nav-user-toggle';
+  userToggle.setAttribute('aria-label', 'Account menu');
+  userToggle.setAttribute('aria-expanded', 'false');
+  userToggle.innerHTML = `
+    <svg aria-hidden="true" focusable="false" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+      <circle cx="12" cy="7" r="4"/>
+    </svg>
+  `;
+  const setOpen = (open) => {
+    userMenu.classList.toggle('open', open);
+    userToggle.setAttribute('aria-expanded', String(open));
+  };
+  userToggle.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setOpen(!userMenu.classList.contains('open'));
+  });
+  userMenu.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && userMenu.classList.contains('open')) {
+      e.preventDefault();
+      e.stopPropagation();
+      setOpen(false);
+      userToggle.focus();
+    }
+  });
+  userMenu.addEventListener('focusout', (e) => {
+    if (!userMenu.contains(e.relatedTarget)) setOpen(false);
+  });
+  return userToggle;
+}
+
 // Build a user menu (Account + Logout) with its own event listeners.
 // Returns the .nav-user-menu element, or null if no userNav config.
 function _buildUserMenu(navConfig, wrapHref) {
@@ -3244,14 +3264,7 @@ function _buildUserMenu(navConfig, wrapHref) {
   const userMenu = document.createElement('div');
   userMenu.className = 'nav-user-menu';
 
-  const userToggle = document.createElement('button');
-  userToggle.className = 'nav-user-toggle';
-  userToggle.innerHTML = `
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-      <circle cx="12" cy="7" r="4"/>
-    </svg>
-  `;
+  const userToggle = _createAccountMenuToggle(userMenu);
 
   const userDropdown = document.createElement('div');
   userDropdown.className = 'nav-user-dropdown';
@@ -3270,12 +3283,6 @@ function _buildUserMenu(navConfig, wrapHref) {
 
   userMenu.appendChild(userToggle);
   userMenu.appendChild(userDropdown);
-
-  userToggle.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    userMenu.classList.toggle('open');
-  });
 
   return userMenu;
 }
