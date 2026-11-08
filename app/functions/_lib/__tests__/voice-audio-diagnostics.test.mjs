@@ -52,6 +52,20 @@ test('trace memory is bounded and exported snapshots cannot mutate retained evid
   assert.equal(trace.report().events[0].kind, 'play-request');
 });
 
+test('connection failures retain only allowlisted stages and categories, never raw error details', () => {
+  const trace=createVoiceAudioDiagnostics(environment(),()=>({}));
+  trace.connectionFailure('application_request',{status:409,reason:'voice_connection_deadline_unavailable',
+    name:'Error',message:'private provider text',headers:{Authorization:'secret'},sdp:'private SDP'});
+  trace.connectionFailure('application_auth',{code:'auth/network-request-failed',name:'TypeError',message:'private auth'});
+  trace.connectionFailure('private stage',{status:'private status',reason:'private reason',name:'private name',code:'private code'});
+  const rows=trace.report().events;
+  assert.equal(rows[0].stage,'application_request');assert.equal(rows[0].status,409);
+  assert.equal(rows[0].reason,'voice_connection_deadline_unavailable');
+  assert.equal(rows[1].authCode,'auth/network-request-failed');
+  for(const k of ['stage','status','reason','errorName','authCode'])assert.equal(rows[2][k],null);
+  assert.doesNotMatch(JSON.stringify(rows),/private|secret|Authorization|SDP/);
+});
+
 test('media and stats stay allowlisted, listeners stop, and stale stats cannot enter a replacement trace', async () => {
   const env = environment();
   let resolveStats;

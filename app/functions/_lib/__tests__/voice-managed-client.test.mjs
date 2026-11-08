@@ -355,6 +355,114 @@ test('unconfirmed replacement closure cleans up both browser transports without 
   assert.equal(f.h.completeBodies()[0].reason,'connection_lost');
 });
 
+for (const failure of [
+  {name:'network fetch failure',error:()=>new TypeError('private network diagnostic')},
+  {name:'authentication network failure',error:()=>Object.assign(Error('private auth detail'),{code:'auth/network-request-failed'})},
+  {name:'temporary deadline failure',response:{__status:409,reason:'voice_connection_deadline_unavailable'}},
+  {name:'lost response conflict',response:{__status:409,reason:'voice_connection_conflict',currentAttemptId:'attempt-current'}},
+  {name:'temporary service failure',response:{__status:503}}
+]) test('recoverable '+failure.name+' preserves the interview for an explicit retry',async t=>{
+  let opens=0;
+  const f=fixture(t,{routes:{'/api/voice/connection':(url,init)=>{
+    const body=JSON.parse(init.body);
+    if(body.action==='close') return {connectionClosed:true,sessionReserved:true};
+    if(++opens===2){if(failure.error)throw failure.error();return failure.response;}
+    return f.answer(body);
+  }}});
+  await live(f);const h=f.h,old=h.peerConnection(),question=h.el('vi-question').textContent;
+  old.connectionState='failed';old.onconnectionstatechange();await h.click('vi-mute-btn');
+  const before=h.sends.filter(s=>s.type==='response.create').length;
+  await h.click('vi-reconnect-btn');
+  assert.equal(h.completeBodies().length,0,'a recoverable failure must not finalize the interview');
+  assert.equal(f.closes().length,0);assert.equal(f.opens().length,2,'no automatic provider retry');
+  assert.equal(old.connectionState,'closed');assert.equal(h.peerConnection().connectionState,'closed');
+  assert.equal(h.el('vi-reconnect-btn').disabled,false);assert.equal(h.el('vi-reconnect-btn').style.display,'');
+  assert.match(h.el('vi-status').textContent,/Reconnect/);assert.equal(h.el('vi-question').textContent,question);
+  await h.click('vi-reconnect-btn');await h.openDataChannel();
+  assert.equal(f.opens().length,3);
+  assert.equal(f.opens()[2].body.sessionId,f.opens()[0].body.sessionId);
+  assert.equal(f.opens()[2].body.replacesAttemptId,failure.response?.currentAttemptId || 'attempt-1');
+  assert.ok(f.opens()[2].body.transcript.some(turn=>turn.text.includes('eighteen percent')));
+  assert.ok(h.peerConnection().tracks.every(track=>!track.enabled),'mute survives the failed attempt');
+  assert.equal(h.sends.filter(s=>s.type==='response.create').length,before+1,'replay once after recovered channel');
+  assert.equal(h.sends.filter(s=>s.type==='response.create').at(-1).response.metadata.jobhackai_purpose,'audio_recovery');
+  assert.equal(h.requests.filter(r=>r.body?.action==='activate').length,0);
+});
+
+test('network replacement replays the current question without waiting for another candidate answer',async t=>{
+  const f=fixture(t);await live(f);const h=f.h;
+  h.event({type:'response.done',response:{id:'followup',status:'completed'}});
+  h.peerConnection().connectionState='failed';h.peerConnection().onconnectionstatechange();
+  const before=h.sends.filter(s=>s.type==='response.create').length;
+  await h.click('vi-reconnect-btn');await h.openDataChannel();
+  assert.equal(h.sends.filter(s=>s.type==='response.create').length,before+1);
+  assert.equal(h.sends.filter(s=>s.type==='response.create').at(-1).response.metadata.jobhackai_purpose,'audio_recovery');
+});
+
+test('the original server deadline still ends an interview waiting for retry',async t=>{
+  let now=Date.now(),tick,opens=0;
+  class Clock extends Date { static now(){return now;} }
+  const f=fixture(t,{Date:Clock,onInterval:(fn,ms)=>{if(ms===1000)tick=fn;},routes:{'/api/voice/connection':(url,init)=>{
+    const body=JSON.parse(init.body);if(body.action==='close')return {connectionClosed:true,sessionReserved:true};
+    if(++opens>1)throw new TypeError('offline');return f.answer(body);
+  }}});
+  await live(f);f.h.peerConnection().connectionState='failed';await f.h.click('vi-reconnect-btn');
+  assert.equal(f.h.completeBodies().length,0);
+  now+=21*60*1000;tick();await f.h.settle(30);
+  assert.equal(f.h.completeBodies().length,1);assert.equal(f.h.completeBodies()[0].reason,'time_up');
+  await f.h.click('vi-reconnect-btn');assert.equal(f.opens().length,2,'cannot reopen after deadline');
+});
+
+test('a late retryable failure cannot reopen a finished interview',async t=>{
+  const response=deferred();let opens=0;
+  const f=fixture(t,{routes:{'/api/voice/connection':(url,init)=>{
+    const body=JSON.parse(init.body);if(body.action==='close')return {connectionClosed:true,sessionReserved:true};
+    return ++opens===1?f.answer(body):response.promise;
+  }}});
+  await live(f);const h=f.h;
+  h.peerConnection().connectionState='failed';const retry=h.click('vi-reconnect-btn');await h.settle();
+  await h.endInterview();const status=h.el('vi-status').textContent,buttonDisplay=h.el('vi-reconnect-btn').style.display;
+  response.resolve({__status:503});await retry;
+  assert.equal(h.completeBodies().length,1);assert.equal(h.el('vi-status').textContent,status);
+  assert.equal(h.el('vi-reconnect-btn').style.display,buttonDisplay);
+  assert.equal(h.el('vi-live-view').style.display,'none');
+  assert.equal(h.peerConnection().connectionState,'closed');
+});
+
+test('real managed failure reports its safe request stage in the local diagnostic',async t=>{
+  let trace,opens=0;
+  const f=fixture(t,{hostname:'dev.jobhackai.io',search:'?voiceAudioDebug=1',onAudioDiagnostics:value=>{trace=value;},routes:{'/api/voice/connection':(url,init)=>{
+    const body=JSON.parse(init.body);if(body.action==='close')return {connectionClosed:true,sessionReserved:true};
+    return ++opens===1?f.answer(body):{__status:409,reason:'voice_connection_deadline_unavailable',error:'private backend details'};
+  }}});
+  await live(f);f.h.peerConnection().connectionState='failed';await f.h.click('vi-reconnect-btn');
+  const row=trace.report().events.find(e=>e.kind==='connection-failed');
+  assert.equal(row.stage,'application_request');assert.equal(row.status,409);
+  assert.equal(row.reason,'voice_connection_deadline_unavailable');
+  assert.doesNotMatch(JSON.stringify(trace.report()),/private backend|eighteen percent|v=0|attempt-1/);
+});
+
+for (const phase of ['configuration','greeting']) test('retired '+phase+' timer cannot end audio setup during a temporary reconnect failure',async t=>{
+  const permission=deferred();let micRequests=0,opens=0;
+  const f=fixture(t,{autoTurnConfig:phase!=='configuration',
+    timerDelay:ms=>ms===(phase==='configuration'?8000:45000)?30:ms,
+    getUserMedia:()=>++micRequests===1?Promise.resolve(mic()):permission.promise,
+    routes:{'/api/voice/connection':(url,init)=>{
+      const body=JSON.parse(init.body);if(body.action==='close')return {connectionClosed:true,sessionReserved:false};
+      return ++opens===1?f.answer(body):{__status:503};
+    }}});
+  await f.start();await f.h.openDataChannel();
+  f.h.peerConnection().connectionState='failed';f.h.peerConnection().onconnectionstatechange();
+  const retry=f.h.click('vi-reconnect-btn');await f.h.settle();
+  await new Promise(resolve=>setTimeout(resolve,60));
+  assert.equal(f.closes().length,0,'retired timer cannot close while microphone recovery is pending');
+  permission.resolve(mic());await retry;await new Promise(resolve=>setTimeout(resolve,40));
+  assert.equal(f.closes().length,0,'temporary failure must retain the setup retry');
+  assert.equal(f.h.completeBodies().length,0);assert.equal(f.h.el('vi-reconnect-btn').disabled,false);
+  assert.match(f.h.el('vi-status').textContent,/Reconnect/);
+  assert.equal(f.h.requests.filter(r=>r.body?.action==='activate').length,0);
+});
+
 // A server deadline `secondsLeft` from now, as the connection route returns it.
 function deadlineFixture(t,secondsLeft) {
   const deadlineAt=new Date(Date.now()+secondsLeft*1000).toISOString();
