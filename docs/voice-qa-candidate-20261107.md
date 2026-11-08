@@ -8,9 +8,48 @@ fix in 19644437698f5cb2066945b9f778b7777b92d0a6, conversation controls
 in c77200d8c9de728088c218896c28f72d4b079621 and report control filtering
 from PR #1177 candidate 22de0cd00093db47c205712d1b798a05204c3964 and
 account-menu accessibility in PR #1178 (14c6707d186bfad072e7a8e0462a535d427b876e), and the explicit-danger safety fix in PR #1179
-(d9d475638bf7eaf7e3182e038ca7fb1e9098c09b), against QA
+(d9d475638bf7eaf7e3182e038ca7fb1e9098c09b), compound clarification and longer
+closing playback in PR #1180 (2629fab2d8482d25c0b1c0a972409e68a30b7814), and
+application-owned planned completion in PR #1181
+(e031a6980fc5a321550857e5167a1c233b252e29), against QA
 revision 4c7fec4974c0285688ebed02f19a6bc17947b761. This remains a draft candidate,
 not a statement that all development or QA acceptance is complete.
+
+## November 8 accepted clarification and planned closing
+
+The first corrected-build Safari run kept both compound clarification requests
+on the current question and excluded them from assessment, but its final
+wording exposed another completion failure. The app had requested its final
+turn yet still relied on recognizing generated words. The owner saved that
+failed run manually; it remains recorded as a failure.
+
+The application now enters closing when its turn plan requests the final
+response. It stops new microphone input, freezes the countdown and waits for
+that response's playback before saving once. Response identity is bound once,
+so stale or duplicate responses cannot end it early. The 30-second fallback
+remains bounded, and the narrow text matcher is retained only as an earlier
+spoken-wrap backstop. Ordinary thanks do not gain a new ending trigger.
+The planned closing transcript persists while later candidate chatter stays
+excluded. Voice Regression now runs the existing suite at all promotion stages.
+
+Five regression cases failed before this fix. The full voice suite, build,
+ten executed PR checks, exact-head code review, five development workflow runs
+and three post-deployment UI tests passed. In the recorded November 8 Safari
+retest, closing audio played for 9.094 seconds and playback stopped only after
+the buffer-stop event. The owner confirmed the full final words and automatic
+report opening without clicking Finish or asking to stop. The session saved
+with reason completed and its provider closed without error. One credit and
+one history entry were used. The report reopened after full navigation.
+
+The short sample correctly produced feedback only: recalculated eligibility
+matches the saved 236 words and two substantive answers. All nine quoted
+feedback excerpts are grounded in the candidate answers. The complete trace
+has 2,211 events with none dropped. Local recording, output transcription,
+diagnostics, database evidence and report images are retained in
+safari-planned-closing-02-review.md in the Brighton preparation evidence folder.
+Recording is stopped. This accepts the scoped clarification and normal-ending
+fixes, not the remaining network, cross-browser or original release gates.
+The refreshed QA candidate still requires its own CI and deployed QA checks.
 
 ## November 8 accepted safety follow-up
 
