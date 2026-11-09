@@ -143,6 +143,28 @@ test('historical uncertain calls are not replayed or reclassified from their old
   assert.equal(f.calls.length,1);assert.equal((await f.row()).state,'uncertain');
 });
 
+for (const [name,body,expected] of [
+  ['empty',null,'empty:none:none:unclassified'],
+  ['HTML','<html>Not Found PRIVATE_TRANSCRIPT</html>','non_json:none:none:unclassified'],
+  ['generic code',JSON.stringify({error:{code:'not_found',type:'invalid_request_error',message:'Call rtc_private not found'}}),'json:not_found:invalid_request_error:call_unavailable'],
+  ['wrong type',JSON.stringify({error:{code:'call_id_not_found',type:'authentication_error'}}),'json:call_id_not_found:authentication_error:unclassified'],
+  ['missing type',JSON.stringify({error:{code:'call_id_not_found'}}),'json:call_id_not_found:none:unclassified'],
+  ['private fields',JSON.stringify({error:{code:'sk_private',type:'PRIVATE_TRANSCRIPT',message:'PRIVATE_SDP'}}),'json:other:other:unclassified'],
+  ['oversized',JSON.stringify({error:{code:'call_id_not_found',type:'invalid_request_error',message:'x'.repeat(8193)}}),'unavailable:none:none:unclassified']
+]) test('404 diagnosis survives loss of transient logs: '+name,async t=>{
+  const f=fixture(t),created=await f.create();
+  t.mock.method(console,'log',()=>{});
+  f.setHandler(async()=>new Response(body,{status:404}));
+  await assert.rejects(closeManagedVoiceCall(f.env,{uid:'owner',attemptId:created.attemptId}),{message:'voice_call_close_unconfirmed'});
+  const row=await f.row();
+  assert.equal(row.last_error_code,'close_http_404:'+expected);
+  assert.equal(row.state,'uncertain');assert.equal(row.closed_at,null);
+  assert.ok(row.execution_token,'the original request correlation remains available');
+  assert.doesNotMatch(JSON.stringify(row),/PRIVATE|sk_private|rtc_private/);
+  await assert.rejects(closeManagedVoiceCall(f.env,{uid:'owner',attemptId:created.attemptId}),/close_unconfirmed/);
+  assert.equal(f.calls.length,2,'diagnostics cannot allow a replacement or repeat hangup');
+});
+
 for(const scenario of ['timeout','5xx','429','missing_location','foreign_location','query_location','encoded_location']) {
   test('uncertain create is retained without releasing SDP or retrying: '+scenario,async t=>{
     const f=fixture(t);f.setHandler(async()=>{
@@ -256,7 +278,7 @@ for (const [scenario, expected] of [
 }
 
 for (const [scenario, expected] of [
-  ['404','close_http_404'],['429','close_http_429'],['503','close_http_503'],
+  ['404','close_http_404:non_json:none:none:unclassified'],['429','close_http_429'],['503','close_http_503'],
   ['timeout','close_timeout'],['abort','close_aborted'],
   ['network','close_transport_unconfirmed'],['receipt','close_receipt_unconfirmed']
 ]) {
