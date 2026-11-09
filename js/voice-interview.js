@@ -111,6 +111,7 @@
     savingCompletion: false,
     audioCheckCancelled: false,
     connected: false,
+    connectionRejected: false, // server closure outranks delayed WebRTC state
     audioPlaying: false,       // interviewer's audio is mid-playback
     audioResponseId: '',       // which response that audio belongs to
     answeredCalls: null,       // call_id -> true; each tool call answered exactly once
@@ -195,7 +196,7 @@
 
   function drainTurn() {
     if (!turnControl.ready || turnControl.busy || turnControl.speaking || state.audioPlaying ||
-        state.ending || state.conductEnd || state.turnRecovery || state.playbackBlocked || state.microphoneLost ||
+        state.ending || state.conductEnd || state.turnRecovery || state.connectionRejected || state.playbackBlocked || state.microphoneLost ||
         (state.audioSetup && state.activating) || lifecycle().is(PHASES.CLOSING)) return;
     if (!turnControl.pending && turnControl.inputs.length) {
       // Wait for every committed fragment, including a possible spoken Finish.
@@ -1285,7 +1286,7 @@
     clearTurnWait();
     // Audio help intentionally pauses replies. Keep captured input queued,
     // without calling that pause thinking or a stalled connection.
-    if (state.turnRecovery || state.playbackBlocked || state.microphoneLost) return;
+    if (state.turnRecovery || state.connectionRejected || state.playbackBlocked || state.microphoneLost) return;
     var wait = { committedAtMs: Date.now(), cueTimer: null, recoveryTimer: null };
     wait.cueTimer = setTimeout(function () {
       // Re-check the world before touching UI: the session may have ended,
@@ -1305,7 +1306,7 @@
   }
 
   function clearTurnRecovery() {
-    if (state.turnRecovery && !state.reconnecting && lifecycle().is(PHASES.ACTIVE_INTERVIEW)) {
+    if (state.turnRecovery && !state.connectionRejected && !state.reconnecting && lifecycle().is(PHASES.ACTIVE_INTERVIEW)) {
       state.turnRecovery = false;
       hideReconnect();
       setStatus('Live. The interviewer can hear you.', 'vi-live');
@@ -2080,6 +2081,7 @@
         if (connectionHeartbeat!==watch || state.pc!==pc || state.ending) return;
         if (result.ok && result.data && result.data.connectionAlive===false) {
           stopConnectionHeartbeat();
+          state.connectionRejected=true;
           state.connected=false;clearTurnWait();
           setStatus('Connection lost. Choose Reconnect to continue.', 'vi-error');
           offerReconnect();
@@ -2103,6 +2105,7 @@
     if (state.ending) return false;
     stopConnectionHeartbeat();
     cancelConnectionAttempt();
+    state.connectionRejected = false;
     state.playbackReady = false;
     state.playbackBlocked = false;
     if (state.audioSample) clearTimeout(state.audioSample.timer);
@@ -2233,6 +2236,7 @@
         if (state.pc !== pc) return;
         var s = pc.connectionState;
         if (s === 'connected') {
+          if (state.connectionRejected) return;
           state.connected = true;
           // A healthy network connection does not restore a lost input device.
           if (state.microphoneLost) {
@@ -2716,7 +2720,7 @@
     }
     // A brief network outage may recover without replacing the provider call.
     // A stale button click must not tear down that recovered connection.
-    if (!state.turnRecovery && !state.microphoneLost && state.pc && state.pc.connectionState === 'connected' && state.dc && state.dc.readyState === 'open') {
+    if (!state.turnRecovery && !state.connectionRejected && !state.microphoneLost && state.pc && state.pc.connectionState === 'connected' && state.dc && state.dc.readyState === 'open') {
       hideReconnect();
       return;
     }
