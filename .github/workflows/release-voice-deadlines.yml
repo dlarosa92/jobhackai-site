@@ -1,0 +1,102 @@
+name: Voice Worker Release
+
+on:
+  pull_request:
+    branches: [dev0, develop, main]
+    paths:
+      - '.github/workflows/release-voice-deadlines.yml'
+      - 'scripts/voice-release-preflight*'
+      - 'workers/voice-deadlines/**'
+      - 'app/functions/_lib/voice-provider-*.js'
+      - 'app/functions/_lib/voice-interviewer.js'
+      - 'app/functions/_lib/voice-coaching.js'
+      - 'app/functions/_lib/db.js'
+      - 'app/functions/_lib/consent-storage.js'
+      - 'app/db/migrations/033_voice_early_end_grace.sql'
+      - 'app/db/migrations/035_voice_audio_readiness.sql'
+  push:
+    branches: [dev0, develop, main]
+    paths:
+      - '.github/workflows/release-voice-deadlines.yml'
+      - 'scripts/voice-release-preflight*'
+      - 'workers/voice-deadlines/**'
+      - 'app/functions/_lib/voice-provider-*.js'
+      - 'app/functions/_lib/voice-interviewer.js'
+      - 'app/functions/_lib/voice-coaching.js'
+      - 'app/functions/_lib/db.js'
+      - 'app/functions/_lib/consent-storage.js'
+      - 'app/db/migrations/033_voice_early_end_grace.sql'
+      - 'app/db/migrations/035_voice_audio_readiness.sql'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: voice-worker-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: workers/voice-deadlines/package-lock.json
+      - run: npm ci --ignore-scripts
+        working-directory: workers/voice-deadlines
+      - run: node --test scripts/voice-release-preflight.test.mjs
+      - run: npm run typecheck && npm test
+        working-directory: workers/voice-deadlines
+      - name: Compile all three explicit environments without deploying
+        working-directory: workers/voice-deadlines
+        run: |
+          for target in dev qa prod; do
+            npx --no-install wrangler deploy --dry-run --env "$target" --outdir "$RUNNER_TEMP/voice-$target"
+          done
+
+  release:
+    needs: validate
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      # Account identity is public configuration and pinned to the reviewed
+      # Workers/D1 targets. Do not inherit an unrelated legacy account secret.
+      CLOUDFLARE_ACCOUNT_ID: 'fabf4409ef32f8c64354a1a099bef2a2'
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: workers/voice-deadlines/package-lock.json
+      - run: npm ci --ignore-scripts
+        working-directory: workers/voice-deadlines
+      - name: Verify current branch, existing bindings and recovery point; apply only missing voice schema
+        run: node scripts/voice-release-preflight.mjs --apply-schema
+      - name: Deploy the validated worker to the branch's existing environment
+        working-directory: workers/voice-deadlines
+        shell: bash
+        run: |
+          case "$GITHUB_REF_NAME" in
+            dev0) target=dev ;;
+            develop) target=qa ;;
+            main) target=prod ;;
+            *) exit 1 ;;
+          esac
+          node ../../scripts/voice-release-preflight.mjs --verify-only
+          npx --no-install wrangler deploy --env "$target" --keep-vars --message "Voice CI $GITHUB_SHA; run $GITHUB_RUN_ID"
+      - name: Verify schema and preserved bindings after deployment
+        run: node scripts/voice-release-preflight.mjs --verify-deployment
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: voice-release-${{ github.sha }}
+          path: voice-release-*.json
+          if-no-files-found: ignore
+          retention-days: 30
