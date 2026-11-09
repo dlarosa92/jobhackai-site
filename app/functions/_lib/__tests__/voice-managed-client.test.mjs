@@ -1221,6 +1221,32 @@ test('a server-closed connection offers recovery and stops heartbeats without en
   await f.ticks[0]();assert.equal(f.pulses().length,1);
   assert.equal(f.opens().length,1);assert.equal(f.h.completeBodies().length,0);
 });
+for (const active of [false,true]) test('server rejection overrides a locally connected peer during '+(active?'the interview':'audio setup'),async t=>{
+  let pulses=0;
+  const f=monitored(t,()=>({connectionAlive:++pulses>1}));
+  if(active)await live(f);else await f.start();
+  await f.connected();
+  const question=f.h.el('vi-question').textContent;
+  const old=f.h.peerConnection();
+  assert.equal(old.connectionState,'connected');
+  old.onconnectionstatechange();
+  assert.match(f.h.el('vi-status').textContent,/Connection lost/);
+  assert.equal(f.h.el('vi-reconnect-btn').style.display,'');
+  await f.h.click('vi-mute-btn');
+  await f.h.click('vi-reconnect-btn');
+  assert.equal(f.opens().length,2);
+  assert.equal(f.opens()[1].body.sessionId,f.opens()[0].body.sessionId);
+  assert.equal(f.opens()[1].body.replacesAttemptId,'attempt-1');
+  assert.equal(f.h.el('vi-question').textContent,question);
+  if(active)assert.ok(f.opens()[1].body.transcript.some(turn=>turn.text.includes('eighteen percent')));
+  assert.equal(f.h.el('vi-mute-btn').textContent,'Unmute mic');
+  assert.equal(f.h.completeBodies().length,0);
+  assert.equal(f.h.requests.filter(r=>r.body?.action==='activate').length,0);
+  await f.connected();
+  assert.equal(f.pulses().at(-1).body.attemptId,'attempt-2');
+  await f.h.click('vi-reconnect-btn');
+  assert.equal(f.opens().length,2,'a healthy replacement is not replaced by a stale click');
+});
 test('a transient heartbeat error does not invent closure and the next pulse can recover',async t=>{
   let count=0;const f=monitored(t,()=>++count===1?{__status:503,error:'unavailable'}:{connectionAlive:true});
   await f.start();await f.connected();const status=f.h.el('vi-status').textContent;
