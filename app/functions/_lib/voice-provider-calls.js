@@ -80,10 +80,17 @@ export async function createManagedVoiceCall(env, { uid, sessionId, sdp, instruc
   try {
     const form = new FormData();
     form.set('sdp',sdp);
-    form.set('session',JSON.stringify(realtimeSessionConfig({
+    const session = realtimeSessionConfig({
       model:env.OPENAI_MODEL_VOICE || 'gpt-realtime-mini', instructions,
       voice:env.VOICE_INTERVIEW_VOICE || 'marin'
-    })));
+    });
+    // Microphone audio can arrive before the data channel is configured.
+    // Start passive on every new/replacement call; the client acknowledges
+    // setup protection or official-interview barge-in before requesting audio.
+    session.audio.input.turn_detection = {
+      type:'semantic_vad',create_response:false,interrupt_response:false
+    };
+    form.set('session',JSON.stringify(session));
     phase = 'dispatch';
     // Workers rejects redirect:'error' before dispatch. Manual prevents
     // forwarding the bearer credential; any 3xx remains an uncertain result.
@@ -186,6 +193,15 @@ export async function closeManagedVoiceCall(env,{uid,attemptId}) {
         diagnostic.errorCode==='call_id_not_found' && diagnostic.errorType==='invalid_request_error';
       if (!confirmedAbsent) {
         failureCode='close_http_'+response.status;
+        // A network-loss test can also interrupt the operator's log stream.
+        // Retain the bounded, allowlisted diagnosis with the durable hold so
+        // an empty body, failed read and structured error stay distinguishable.
+        // These are fixed categories from voiceProviderFailureDiagnostic,
+        // never the raw provider body/message or arbitrary error fields.
+        if (response.status===404) {
+          failureCode += ':' + [diagnostic.bodyFormat,diagnostic.errorCode || 'none',
+            diagnostic.errorType || 'none',diagnostic.messageClass].join(':');
+        }
         throw Error('voice_call_close_unconfirmed');
       }
     }

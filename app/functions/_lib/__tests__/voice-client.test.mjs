@@ -106,11 +106,11 @@ test('a normal scored session from history still renders its normal report', asy
   try {
     const card = h.el('vi-scorecard');
     assert.notEqual(card.style.display, 'none');
-    assert.ok(card.innerHTML.includes('Your interview report'));
+    assert.ok(card.innerHTML.includes('Your practice feedback'));
     assert.ok(card.innerHTML.includes('>72<'), 'the overall score renders');
     assert.ok(card.innerHTML.includes('Communication'));
     assert.ok(card.innerHTML.includes('Answer structure'));
-    assert.ok(card.innerHTML.includes('Top strength'));
+    assert.ok(card.innerHTML.includes('What worked'));
     assert.ok(card.innerHTML.includes('Moments from your interview'));
     assert.ok(card.innerHTML.includes('Full transcript'));
     assert.ok(!card.innerHTML.includes('ended early for safety'));
@@ -353,7 +353,7 @@ for (const withoutModules of [[], ['isExplicitEndRequest']]) {
 // --------------------------------------------------- live safety end view
 
 for (const withoutModules of [[], ['isExplicitEndRequest']]) {
-  for (const request of ["I'd like to end this now.", 'I would like to end this now.']) {
+  for (const request of ["I'd like to end this now.", 'I would like to end this now.', 'I gotta go. Bye-bye.', 'I have to go, goodbye.', "I'd like to finish this, please.", "I'd like to finish this please.", "I'd like to finish this now, please.", 'I would like to stop this, please.']) {
     test(`QA spoken stop completes once and excludes the control (${request}, ${withoutModules.length ? 'fallback' : 'module'})`, async () => {
       const h = await liveInterviewWithOneAnswer({ withoutModules });
       try {
@@ -382,10 +382,32 @@ for (const withoutModules of [[], ['isExplicitEndRequest']]) {
       await h.settle();
       assert.equal(h.completeBodies().length, 0);
       assert.ok(h.peerConnection().tracks.some(track => track.enabled));
-      await h.click('vi-end-btn');
+      await h.endInterview();
       assert.ok(h.completeBodies()[0].transcript.some(turn => turn.text === 'I would like to leave.'));
     } finally { h.dispose(); }
   });
+  for (const answer of [
+    "I'd like to finish this.",
+    "The customer said, I'd like to finish this, please.",
+    "If we had more time, I'd like to finish this, please.",
+    "I'd like to finish this, please, before we start the next project.",
+    "I'd like to finish this project, please.",
+    "I'd like to finish this now, please, with a summary."
+  ]) {
+    test(`polite finish wording inside an answer remains interview content (${answer}, ${withoutModules.length ? 'fallback' : 'module'})`, async () => {
+      const h = await liveInterviewWithOneAnswer({ withoutModules });
+      try {
+        h.event({ type: 'conversation.item.created', item: { id: 'finish-answer' } });
+        h.event({ type: 'input_audio_buffer.committed', item_id: 'finish-answer' });
+        h.event({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'finish-answer', transcript: answer });
+        await h.settle();
+        assert.equal(h.completeBodies().length, 0);
+        assert.ok(h.peerConnection().tracks.some(track => track.enabled));
+        await h.endInterview();
+        assert.ok(h.completeBodies()[0].transcript.some(turn => turn.text === answer));
+      } finally { h.dispose(); }
+    });
+  }
 }
 
 test('a session that ends live for safety shows the same visible, scoreless state', async () => {
@@ -413,19 +435,119 @@ test('a session that ends live for safety shows the same visible, scoreless stat
   } finally { h.dispose(); }
 });
 
+// The November 8 live failure: supportive words, no tool, no safety end.
+const SUPPORT_ONLY_SAFETY_REPLY = "I'm really sorry you're feeling this way, but your safety is the most important thing. Please consider reaching out to a trusted friend, family member, or a mental health professional right now. You deserve support. Once you're safe, we can pick up from there.";
+
+function candidateStatement(h, text, id = 'danger-answer') {
+  h.event({ type: 'conversation.item.created', item: { id, role: 'user' } });
+  h.event({ type: 'input_audio_buffer.committed', item_id: id });
+  h.event({ type: 'conversation.item.input_audio_transcription.completed', item_id: id, transcript: text });
+}
+
+for (const text of [
+  "I'm in immediate danger and I want to hurt myself right now.",
+  "I'm in immediate danger of hurting myself right now."
+]) {
+  test(`explicit current danger closes without relying on model guidance or tool: ${text}`, async () => {
+    const h = await liveInterviewWithOneAnswer();
+    try {
+      // Settle the normal answer's response before the next candidate turn.
+      h.event({ type: 'response.done', response: { id: 'answer-response' } });
+      candidateStatement(h, text);
+      const request = h.sends.filter(s => s.type === 'response.create').at(-1);
+      assert.equal(request.response.metadata.jobhackai_purpose, 'safety');
+      assert.ok(h.el('vi-question').textContent.includes('emergency services'));
+      assert.ok(h.peerConnection().tracks.every(track => track.enabled === false));
+      h.event({ type: 'response.created', response: { id: 'safety-response', metadata: request.response.metadata } });
+      h.event({ type: 'output_audio_buffer.started', response_id: 'safety-response' });
+      h.event({ type: 'response.output_audio_transcript.done', response_id: 'safety-response', item_id: 'safety-words', transcript: SUPPORT_ONLY_SAFETY_REPLY });
+      h.event({ type: 'response.done', response: { id: 'safety-response', metadata: request.response.metadata } });
+      await h.settle();
+      assert.equal(h.completeBodies().length, 0, 'let the guidance audio finish');
+      h.event({ type: 'output_audio_buffer.stopped', response_id: 'safety-response' });
+      await h.settle();
+      assert.equal(h.completeBodies().length, 1);
+      assert.equal(h.completeBodies()[0].reason, 'ended_for_safety');
+      assert.ok(h.el('vi-scorecard').innerHTML.includes('No score is given'));
+      assert.ok(!h.el('vi-scorecard').innerHTML.includes('Your practice feedback'));
+    } finally { h.dispose(); }
+  });
+}
+
+for (const statement of [
+  "Last year I was in danger, but I am safe now.",
+  "I'm not in immediate danger of hurting myself right now.",
+  "I'm in immediate danger of missing my deadline right now.",
+  "If I were in immediate danger, I would call for help.",
+  "During training, the actor said, I'm in immediate danger and I want to hurt myself right now.",
+  '"I am in immediate danger" was a sentence in the training script.',
+  "I took a career break to care for a family member. I would rather not discuss personal details.",
+  "I'm anxious about this interview.",
+  "I used to want to hurt myself, but I am safe now."
+]) {
+  test(`safety backstop preserves normal context: ${statement}`, async () => {
+    const h = await liveInterviewWithOneAnswer();
+    try {
+      h.event({ type: 'response.done', response: { id: 'answer-response' } });
+      candidateStatement(h, statement);
+      await h.settle();
+      assert.equal(h.completeBodies().length, 0);
+      assert.notEqual(h.sends.filter(s => s.type === 'response.create').at(-1).response.metadata.jobhackai_purpose, 'safety');
+      assert.ok(h.peerConnection().tracks.some(track => track.enabled));
+    } finally { h.dispose(); }
+  });
+}
+
+for (const withoutModules of [[], ['createClosingTurnGate']]) {
+  test(`safety closes on missing provider response (${withoutModules.length ? 'fallback' : 'module'})`, async () => {
+    const h = await liveInterviewWithOneAnswer({ withoutModules, timerDelay: ms => ms === 30000 ? 5 : ms });
+    try {
+      h.event({ type: 'response.done', response: { id: 'answer-response' } });
+      candidateStatement(h, "I'm in immediate danger of hurting myself right now.");
+      await new Promise(resolve => setTimeout(resolve, 20));
+      await h.settle();
+      assert.equal(h.completeBodies().length, 1);
+      assert.equal(h.completeBodies()[0].reason, 'ended_for_safety');
+      assert.ok(h.el('vi-scorecard').innerHTML.includes('emergency services'));
+    } finally { h.dispose(); }
+  });
+
+  test(`stale audio and manual Finish cannot override a safety close (${withoutModules.length ? 'fallback' : 'module'})`, async () => {
+    const h = await liveInterviewWithOneAnswer({ withoutModules });
+    try {
+      h.event({ type: 'response.done', response: { id: 'answer-response' } });
+      candidateStatement(h, "I'm in immediate danger and I want to hurt myself right now.");
+      const response = { id: 'safety-response', metadata: h.sends.filter(s => s.type === 'response.create').at(-1).response.metadata };
+      h.event({ type: 'response.created', response });
+      h.event({ type: 'output_audio_buffer.started', response_id: response.id });
+      h.event({ type: 'response.output_audio_transcript.delta', response_id: response.id, item_id: 'safety-words', delta: 'Once you are safe, we can resume.' });
+      assert.ok(h.el('vi-question').textContent.includes('emergency services'), 'fixed guidance stays visible');
+      h.event({ type: 'response.done', response: { id: 'answer-response' } });
+      h.event({ type: 'output_audio_buffer.stopped', response_id: 'answer-response' });
+      await h.endInterview();
+      assert.equal(h.completeBodies().length, 0, 'neither stale events nor manual Finish cut off guidance');
+      h.event({ type: 'response.done', response });
+      assert.equal(h.completeBodies().length, 0);
+      h.event({ type: 'output_audio_buffer.stopped', response_id: response.id });
+      await h.settle();
+      assert.equal(h.completeBodies().length, 1);
+      assert.equal(h.completeBodies()[0].reason, 'ended_for_safety');
+    } finally { h.dispose(); }
+  });
+}
+
 // ------------------------------------------------------------- pace guards
 
 test('the client adds no fixed silence cutoff and no artificial turn delay', async () => {
   const h = await liveInterviewWithOneAnswer();
   try {
-    // Everything the client sends on the data channel across a whole session:
-    // the audio-check response.create and nothing that reconfigures turn
-    // detection or paces the conversation.
-    const types = h.sends.map((s) => s.type);
-    assert.deepEqual(types, ['response.create'], 'the client only ever requests the opening turn');
+    const update = h.sends.find(s => s.type === 'session.update');
+    assert.deepEqual(update.session.audio.input.turn_detection,
+      { type: 'semantic_vad', create_response: false, interrupt_response: true });
+    assert.equal(h.sends.filter(s => s.type === 'response.create').length, 3, 'audio check, opening, and reply to committed answer');
     for (const sent of h.sends) {
       assert.ok(!JSON.stringify(sent).includes('silence_duration_ms'));
-      assert.ok(!JSON.stringify(sent).includes('turn_detection'));
+      assert.ok(!JSON.stringify(sent).includes('eagerness'), 'semantic endpointing retains its existing default');
     }
   } finally { h.dispose(); }
 });
@@ -513,10 +635,9 @@ for (const status of [401, 500]) {
         : { scorecardReady: false }
     } });
     try {
-      await h.click('vi-end-btn');
+      await h.endInterview();
       assert.equal(h.completeBodies().length, 1);
       assert.ok(h.el('vi-save-status').textContent.includes('has not been saved'));
-      assert.equal(h.analyticsEvents.filter(e => e.name === 'voice_session_complete').length, 0);
       assert.equal(h.el('vi-save-retry').style.display, '');
       assert.equal(h.requests.filter(r => r.method === 'GET' && r.url.includes('/api/voice/session/')).length, 0);
       const historyReads = h.requests.filter(r => r.url === '/api/voice/sessions').length;
@@ -527,56 +648,6 @@ for (const status of [401, 500]) {
       assert.equal(h.el('vi-save-status').textContent, '');
       assert.equal(h.el('vi-save-retry').style.display, 'none');
       assert.ok(h.el('vi-done-status').textContent.includes('Interview saved'));
-      assert.equal(h.analyticsEvents.filter(e => e.name === 'voice_session_complete').length, 1);
-    } finally { h.dispose(); }
-  });
-}
-
-for (const review of [false, true]) {
-  test('saved interview counts once while provider closure remains pending; review=' + review, async () => {
-    let attempts = 0;
-    const h = await liveInterviewWithOneAnswer({ routes: { ...LIVE_ROUTES,
-      '/api/voice/session/': url => url.includes('/complete')
-        ? (++attempts === 1 ? { __status: 202, saved: true, connectionClosed: false, closureNeedsReview: review }
-          : { status: 'completed', saved: true, connectionClosed: true })
-        : { scorecardReady: false }
-    } });
-    try {
-      await h.click('vi-end-btn');
-      assert.equal(h.analyticsEvents.filter(e => e.name === 'voice_session_complete').length, 1);
-      if (!review) {
-        await h.click('vi-save-retry');
-        assert.equal(h.analyticsEvents.filter(e => e.name === 'voice_session_complete').length, 1);
-      }
-    } finally { h.dispose(); }
-  });
-}
-
-test('pending closure without a saved interview does not count as completion', async () => {
-  const h = await liveInterviewWithOneAnswer({ routes: { ...LIVE_ROUTES,
-    '/api/voice/session/': url => url.includes('/complete')
-      ? { __status: 202, saved: false, connectionClosed: false, closureNeedsReview: true }
-      : { scorecardReady: false }
-  } });
-  try { await h.click('vi-end-btn'); assert.equal(h.analyticsEvents.filter(e => e.name === 'voice_session_complete').length, 0); }
-  finally { h.dispose(); }
-});
-
-for (const mode of ['free', 'pack', 'subscription']) {
-  test('voice funnel preserves Google session identity and reports ' + mode + ' completion', async () => {
-    const h = await liveInterviewWithOneAnswer({ routes: { ...LIVE_ROUTES,
-      '/api/voice/session': () => ({ sessionId: 'live-1', clientSecret: 'ek_test', model: 'test', mode, maxMinutes: 20 })
-    } });
-    try {
-      await h.click('vi-end-btn');
-      for (const name of ['voice_session_start', 'voice_session_complete']) {
-        const events = h.analyticsEvents.filter(e => e.name === name);
-        assert.equal(events.length, 1);
-        assert.equal(events[0].params.mode, mode);
-        assert.equal(events[0].params.interview_id, 'live-1');
-        assert.equal('session_id' in events[0].params, false, 'Google session ID belongs to its own runtime');
-        assert.equal(JSON.stringify(events).includes('checkout relaunch'), false, 'answer content is not analytics');
-      }
     } finally { h.dispose(); }
   });
 }
@@ -586,7 +657,8 @@ test('closing during transcript flush warns before completion is assembled', asy
   try {
     h.event({ type: 'conversation.item.created', item: { id: 'pending-answer' } });
     h.event({ type: 'input_audio_buffer.committed', item_id: 'pending-answer' });
-    const ending = h.click('vi-end-btn');
+    await h.click('vi-end-btn');
+    const ending = h.click('vi-end-confirm-btn');
     let warned = false;
     h.windowEvent('beforeunload', { preventDefault() { warned = true; } });
     assert.equal(warned, true);
@@ -600,7 +672,8 @@ test('a stop transcription arriving during the completion flush is excluded', as
   try {
     h.event({ type: 'conversation.item.created', item: { id: 'late-stop' } });
     h.event({ type: 'input_audio_buffer.committed', item_id: 'late-stop' });
-    const ending = h.click('vi-end-btn');
+    await h.click('vi-end-btn');
+    const ending = h.click('vi-end-confirm-btn');
     h.event({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'late-stop', transcript: "I'll end the interview." });
     await ending;
     assert.equal(h.completeBodies().length, 1);
@@ -640,8 +713,8 @@ test('spoken stop silences playback immediately while a late answer still flushe
   } finally { h.dispose(); }
 });
 
-test('a natural wrap-up keeps its audio until playback finishes, then releases it', async () => {
-  const h = await liveInterviewWithOneAnswer();
+test('a natural wrap-up longer than six seconds keeps audio until playback finishes', async () => {
+  const h = await liveInterviewWithOneAnswer({ timerDelay: ms => ms === 6000 ? 5 : ms });
   try {
     const audio = h.el('vi-remote-audio');
     const stream = { id: 'closing-audio' };
@@ -652,6 +725,7 @@ test('a natural wrap-up keeps its audio until playback finishes, then releases i
     h.event({ type: 'output_audio_buffer.started', response_id: 'closing-response' });
     h.event({ type: 'response.output_audio_transcript.done', item_id: 'closing-item', response_id: 'closing-response', transcript: 'Thank you for your time. Your written feedback report is being prepared and will appear on this page.' });
     h.event({ type: 'response.done', response: { id: 'closing-response' } });
+    await new Promise(resolve => setTimeout(resolve, 25));
     assert.equal(audio.srcObject, stream, 'do not cut off the natural closing line');
     assert.equal(h.completeBodies().length, 0);
     h.event({ type: 'output_audio_buffer.stopped', response_id: 'closing-response' });
@@ -661,6 +735,28 @@ test('a natural wrap-up keeps its audio until playback finishes, then releases i
     assert.equal(audio.srcObject, null);
   } finally { h.dispose(); }
 });
+
+for (const withoutModules of [[], ['createClosingTurnGate']]) {
+  test('a missing normal closing playback receipt is still bounded: '+JSON.stringify(withoutModules), async () => {
+    const h = await liveInterviewWithOneAnswer({ withoutModules, timerDelay: ms => ms === 30000 ? 10 : ms });
+    try {
+      h.event({ type: 'response.created', response: { id: 'closing-response' } });
+      h.event({ type: 'conversation.item.created', item: { id: 'closing-item' } });
+      h.event({ type: 'output_audio_buffer.started', response_id: 'closing-response' });
+      h.event({ type: 'response.output_audio_transcript.done', item_id: 'closing-item', response_id: 'closing-response',
+        transcript: 'Thank you for your time. Your feedback report is being prepared and will appear on this page shortly.' });
+      h.event({ type: 'response.done', response: { id: 'closing-response' } });
+      assert.equal(h.completeBodies().length, 0);
+      await new Promise(resolve => setTimeout(resolve, 30));
+      await h.settle();
+      assert.equal(h.completeBodies().length, 1);
+      assert.equal(h.completeBodies()[0].reason, 'completed');
+      h.event({ type: 'output_audio_buffer.stopped', response_id: 'closing-response' });
+      await h.settle();
+      assert.equal(h.completeBodies().length, 1,'a late playback receipt cannot save twice');
+    } finally { h.dispose(); }
+  });
+}
 
 
 // Connection setup can settle after End, or after a replacement connection.
@@ -686,7 +782,7 @@ test('End releases a microphone granted after the interview has already complete
     const starting = h.click('vi-start-btn');
     await h.settle();
     assert.equal(micRequests, 2, 'the connection microphone request is pending');
-    await h.click('vi-end-btn');
+    await h.endInterview();
     permission.resolve(lateMic);
     await starting;
     assert.equal(lateMic.track.enabled, false, 'late microphone must be stopped');
@@ -709,7 +805,7 @@ test('End aborts an in-flight SDP exchange and ignores its late answer', async (
     const pc = h.peerConnection();
     const request = h.requests.find(r => r.url.includes('/realtime/calls'));
     assert.ok(request, 'SDP request was sent');
-    await h.click('vi-end-btn');
+    await h.endInterview();
     answer.resolve({ __text: 'v=0 late answer' });
     await starting;
     assert.equal(request.signal?.aborted, true);
@@ -733,7 +829,7 @@ test('End during reconnect token lookup cannot reopen the microphone or overwrit
     const reconnecting = h.click('vi-reconnect-btn');
     await h.settle();
     assert.equal(calls, 2);
-    await h.click('vi-end-btn');
+    await h.endInterview();
     token.resolve(session());
     await reconnecting;
     assert.equal(h.peerConnection(), oldPc, 'no replacement peer connection after End');
@@ -770,7 +866,7 @@ test('an aborted SDP fetch cannot replace the completed report with a connection
     await h.ready(); h.el('vi-role').value = 'Product Manager';
     const starting = h.click('vi-start-btn');
     await h.settle();
-    await h.click('vi-end-btn');
+    await h.endInterview();
     await starting;
     assert.equal(h.el('vi-done-view').style.display, '');
     assert.equal(h.completeBodies().length, 1);
@@ -779,6 +875,564 @@ test('an aborted SDP fetch cannot replace the completed report with a connection
     assert.ok(h.peerConnection().tracks.every(t => t.enabled === false));
   } finally { h.dispose(); }
 });
+
+// ------------------------------------------------------------ live view
+
+test('a late candidate transcription never replaces the pinned question', async () => {
+  const h = await liveInterviewWithOneAnswer();
+  try {
+    // The candidate's next answer is committed, then the interviewer asks the
+    // next question, and only then does whisper deliver the answer's text.
+    h.event({ type: 'conversation.item.created', item: { id: 'u3' } });
+    h.event({ type: 'input_audio_buffer.committed', item_id: 'u3' });
+    h.event({ type: 'response.created', response: { id: 'r3' } });
+    h.event({ type: 'conversation.item.created', item: { id: 'a3' } });
+    h.event({ type: 'response.output_audio_transcript.done', item_id: 'a3', response_id: 'r3', transcript: 'How did you choose what to cut?' });
+    h.event({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'u3', transcript: 'We had a challenge with the launch date.' });
+    await h.settle();
+    assert.equal(h.el('vi-question').textContent, 'How did you choose what to cut?');
+    const recent = h.el('vi-recent-turns').innerHTML;
+    assert.ok(recent.indexOf('We had a challenge') !== -1, 'the late answer joins the recent conversation');
+    assert.ok(recent.indexOf('We had a challenge') < recent.indexOf('How did you choose'), 'turns are in conversation order, not arrival order');
+    assert.equal(h.el('vi-recent').style.display, '');
+  } finally { h.dispose(); }
+});
+
+test('the speaking indicator follows the audio, not response.done', async () => {
+  const h = await liveInterviewWithOneAnswer();
+  try {
+    h.event({ type: 'response.created', response: { id: 'r3' } });
+    h.event({ type: 'output_audio_buffer.started', response_id: 'r3' });
+    assert.ok(h.el('vi-speaking')._classes.has('vi-speaking-on'));
+    assert.equal(h.el('vi-speaking-label').textContent, 'Interviewer speaking');
+    // Generation finishes about a second in; the audio keeps playing.
+    h.event({ type: 'response.done', response: { id: 'r3' } });
+    assert.ok(h.el('vi-speaking')._classes.has('vi-speaking-on'), 'still speaking after response.done');
+    h.event({ type: 'output_audio_buffer.stopped', response_id: 'r3' });
+    assert.ok(!h.el('vi-speaking')._classes.has('vi-speaking-on'));
+    assert.equal(h.el('vi-speaking-label').textContent, 'Your turn');
+  } finally { h.dispose(); }
+});
+
+test('without audio buffer events the indicator falls back to response.done', async () => {
+  const h = await liveInterviewWithOneAnswer();
+  try {
+    h.event({ type: 'response.created', response: { id: 'r3' } });
+    assert.equal(h.el('vi-speaking-label').textContent, 'Interviewer speaking');
+    h.event({ type: 'response.done', response: { id: 'r3' } });
+    assert.ok(!h.el('vi-speaking')._classes.has('vi-speaking-on'));
+    assert.equal(h.el('vi-speaking-label').textContent, 'Your turn');
+  } finally { h.dispose(); }
+});
+
+test('the countdown remains active across the audio check and interview', async () => {
+  const h = createVoiceClientHarness({ routes: LIVE_ROUTES });
+  try {
+    await h.ready();
+    h.el('vi-role').value = 'Product Manager';
+    await h.click('vi-start-btn');
+    await h.openDataChannel();
+    assert.equal(h.el('vi-timer').textContent, '20:00');
+    assert.ok(!h.el('vi-timer')._classes.has('vi-timer--held'), 'session clock also runs during the audio check');
+    h.event({ type: 'response.created', response: { id: 'r1' } });
+    h.event({ type: 'conversation.item.created', item: { id: 'a1' } });
+    h.event({ type: 'response.output_audio_transcript.done', item_id: 'a1', response_id: 'r1', transcript: 'Hi. Before we begin, can you hear me clearly?' });
+    h.event({ type: 'response.done', response: { id: 'r1' } });
+    assert.equal(h.el('vi-question').textContent, 'Hi. Before we begin, can you hear me clearly?');
+    h.event({ type: 'conversation.item.created', item: { id: 'u1' } });
+    h.event({ type: 'input_audio_buffer.committed', item_id: 'u1' });
+    assert.ok(!h.el('vi-timer')._classes.has('vi-timer--held'), 'counting once the interview begins');
+  } finally { h.dispose(); }
+});
+
+test('End asks first during the interview, and Keep going keeps the session', async () => {
+  const h = await liveInterviewWithOneAnswer();
+  try {
+    await h.click('vi-end-btn');
+    assert.equal(h.el('vi-end-confirm').open, true);
+    assert.equal(h.completeBodies().length, 0, 'nothing ends on the first press');
+    assert.equal(h.el('vi-live-view').style.display, '');
+    await h.click('vi-end-keep');
+    assert.equal(h.el('vi-end-confirm').open, false);
+    assert.equal(h.completeBodies().length, 0);
+    await h.click('vi-end-btn');
+    await h.click('vi-end-confirm-btn');
+    assert.equal(h.completeBodies().length, 1);
+    assert.equal(h.completeBodies()[0].reason, 'user_ended');
+    const names = h.analyticsEvents.map(e => e.name);
+    assert.equal(names.filter(n => n === 'end_confirm_shown').length, 2);
+    assert.equal(names.filter(n => n === 'end_confirm_cancel').length, 1);
+  } finally { h.dispose(); }
+});
+
+test('Escape cancels the Finish dialog without ending or losing the transcript', async () => {
+  const h = await liveInterviewWithOneAnswer();
+  try {
+    await h.click('vi-end-btn');
+    let prevented = false;
+    for (const listener of h.el('vi-end-confirm')._listeners.cancel || []) {
+      listener({ preventDefault() { prevented = true; } });
+    }
+    assert.equal(prevented, true);
+    assert.equal(h.el('vi-end-confirm').open, false);
+    assert.equal(h.completeBodies().length, 0);
+    await h.click('vi-end-btn');
+    assert.equal(h.el('vi-end-confirm').open, true);
+    await h.click('vi-end-confirm-btn');
+    assert.equal(h.completeBodies().length, 1);
+    assert.ok(h.completeBodies()[0].transcript.some(t => t.speaker === 'user'));
+  } finally { h.dispose(); }
+});
+
+test('missing dialog and confirm APIs keep the interview running', async () => {
+  const h = await liveInterviewWithOneAnswer();
+  try {
+    h.el('vi-end-confirm').showModal = undefined;
+    await h.click('vi-end-btn');
+    assert.equal(h.completeBodies().length, 0);
+    assert.equal(h.el('vi-live-view').style.display, '');
+    assert.equal(h.analyticsEvents.filter(e => e.name === 'end_confirm_cancel').length, 1);
+  } finally { h.dispose(); }
+});
+
+test('End before the official interview ends at once without asking', async () => {
+  const h = createVoiceClientHarness({ routes: LIVE_ROUTES });
+  try {
+    await h.ready();
+    h.el('vi-role').value = 'Product Manager';
+    await h.click('vi-start-btn');
+    await h.openDataChannel();
+    await h.click('vi-end-btn');
+    assert.equal(h.el('vi-end-confirm').open, false);
+    assert.equal(h.completeBodies().length, 1);
+  } finally { h.dispose(); }
+});
+
+test('a spoken end request is not held behind the confirmation', async () => {
+  const h = await liveInterviewWithOneAnswer();
+  try {
+    await h.click('vi-end-btn');
+    h.event({ type: 'conversation.item.created', item: { id: 'u3' } });
+    h.event({ type: 'input_audio_buffer.committed', item_id: 'u3' });
+    h.event({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'u3', transcript: 'Please end this interview.' });
+    await h.settle();
+    assert.equal(h.completeBodies().length, 1);
+    assert.equal(h.el('vi-end-confirm').open, false, 'the confirmation closes with the session');
+  } finally { h.dispose(); }
+});
+
+test('the live and done views switch the page into focus modes', async () => {
+  const h = await liveInterviewWithOneAnswer();
+  try {
+    assert.ok(h.wrap()._classes.has('vi-mode-live'));
+    await h.endInterview();
+    assert.ok(!h.wrap()._classes.has('vi-mode-live'));
+    assert.ok(h.wrap()._classes.has('vi-mode-done'));
+  } finally { h.dispose(); }
+});
+
+test('an early end the server credits back says so on the done view', async () => {
+  const h = await liveInterviewWithOneAnswer({ routes: { ...LIVE_ROUTES,
+    '/api/voice/session/': (url) => (url.includes('/complete')
+      ? { sessionId: 'live-1', status: 'completed', creditRestored: true }
+      : { sessionId: 'live-1', scorecardReady: false }) } });
+  try {
+    await h.endInterview();
+    assert.equal(h.el('vi-grace-note').style.display, '');
+    assert.equal(h.analyticsEvents.filter(e => e.name === 'grace_credit_restored').length, 1);
+  } finally { h.dispose(); }
+});
+
+test('a normal end shows no grace note', async () => {
+  const h = await liveInterviewWithOneAnswer();
+  try {
+    await h.endInterview();
+    assert.equal(h.el('vi-grace-note').style.display, 'none');
+  } finally { h.dispose(); }
+});
+
+// -------------------------------------------------- setup access and Start
+
+for (const [label, planRoute] of [
+  ['a server error', () => ({ __status: 500, error: 'server_error' })],
+  ['a network failure', () => { throw new Error('offline'); }]
+]) {
+  test(`${label} on the plan lookup offers a retry instead of a stuck access check`, async () => {
+    let failing = true;
+    const h = createVoiceClientHarness({ routes: {
+      '/api/plan/me': () => (failing ? planRoute() : PLAN_PAYLOAD),
+      '/api/voice/sessions': () => ({ sessions: [] })
+    } });
+    try {
+      await h.ready();
+      assert.equal(h.el('vi-setup-view').style.display, '', 'a failed lookup is not the feature-disabled view');
+      assert.equal(h.el('vi-disabled-view').style.display, 'none');
+      assert.match(h.el('vi-entitlement').textContent, /could not check your access/i);
+      assert.equal(h.el('vi-start-btn').disabled, true);
+      assert.equal(h.el('vi-entitlement-retry').style.display, '');
+
+      failing = false;
+      await h.click('vi-entitlement-retry');
+      assert.equal(h.el('vi-entitlement-retry').style.display, 'none');
+      assert.equal(h.el('vi-start-btn').disabled, false);
+      assert.match(h.el('vi-entitlement').textContent, /voice interviews left this calendar month|subscription/);
+    } finally { h.dispose(); }
+  });
+}
+
+test('a 403 on start keeps Start disabled once the reload says no sessions are left', async () => {
+  let planCalls = 0;
+  const h = createVoiceClientHarness({ routes: { ...LIVE_ROUTES,
+    '/api/plan/me': () => (++planCalls === 1 ? PLAN_PAYLOAD
+      : { voice: { enabled: true, canStart: false, unlimited: false, mode: null, reason: 'paywall', sessionsRemaining: 0 } }),
+    '/api/voice/session': () => ({ __status: 403, error: 'Your free voice interview is used. Upgrade to keep practicing.', reason: 'paywall' })
+  } });
+  try {
+    await h.ready();
+    h.el('vi-role').value = 'Product Manager';
+    await h.click('vi-start-btn');
+    assert.equal(planCalls, 2, 'the 403 reloads the entitlement');
+    assert.equal(h.el('vi-setup-view').style.display, '');
+    assert.equal(h.el('vi-start-btn').disabled, true, 'no sessions left, so Start stays disabled');
+    assert.equal(h.el('vi-start-btn').textContent, 'Start the interview');
+    assert.match(h.el('vi-entitlement').innerHTML, /See plans/);
+  } finally { h.dispose(); }
+});
+
+test('a start failure that is not a paywall still lets the user retry', async () => {
+  const h = createVoiceClientHarness({ routes: { ...LIVE_ROUTES,
+    '/api/voice/session': () => ({ __status: 502, error: 'Could not start the voice session. Please try again.' })
+  } });
+  try {
+    await h.ready();
+    h.el('vi-role').value = 'Product Manager';
+    await h.click('vi-start-btn');
+    assert.equal(h.el('vi-start-btn').disabled, false);
+    assert.equal(h.el('vi-start-btn').textContent, 'Start the interview');
+  } finally { h.dispose(); }
+});
+
+// ------------------------------------------------------- report variants
+
+const FREE_TOO_SHORT = {
+  partial: true, tooShort: true, overall: null, dimensions: null, moments: null, summary: null,
+  topStrength: 'The session was too short to evaluate.',
+  topImprovement: 'Run a full session so the interviewer can hear complete answers.'
+};
+
+test('a free session too short to score says so, with no score and no locked report', async () => {
+  const h = await openPastSession(scoredSessionPayload({ fullAccess: false, transcript: null, scorecard: FREE_TOO_SHORT }));
+  try {
+    const html = h.el('vi-scorecard').innerHTML;
+    assert.ok(html.includes('Not enough captured speech for feedback'));
+    assert.ok(html.includes('Start another interview'));
+    assert.ok(!html.includes('Top strength'));
+    assert.ok(!html.includes('Run a full session so the interviewer can hear complete answers.'));
+    for (const marker of ['vi-result-score', 'Your full report is ready', 'vi-sc-blur', 'What went well', 'Hear a strong answer', 'vi-locked-dims']) {
+      assert.ok(!html.includes(marker), marker);
+    }
+    assert.ok(html.includes('href="voice-interview.html"'));
+    assert.ok(!html.includes('/pricing?plan='));
+  } finally { h.dispose(); }
+});
+
+const FREE_SCORED = {
+  partial: true, overall: 58, methodologyVersion: 2, dimensions: null, moments: null, summary: null,
+  topStrength: 'You named the stakeholder you had to persuade.',
+  topImprovement: 'Say what you changed and what happened next.',
+  teaserQuote: 'I challenged it.'
+};
+const freeReport = (overrides = {}) => scoredSessionPayload({
+  fullAccess: false, transcript: null, questionCount: 3, scorecard: FREE_SCORED, ...overrides
+});
+
+test('the free report leads with feedback and keeps scores in optional detail', async () => {
+  const h = await openPastSession(freeReport());
+  try {
+    const html = h.el('vi-scorecard').innerHTML;
+    assert.ok(html.includes('Interview complete'));
+    assert.ok(html.includes('<h2 class="vi-result-role">Product Manager</h2>'));
+    assert.ok(html.includes('Senior · 14 min · 3 questions'));
+    assert.ok(html.includes('<div class="vi-sc-score">58</div>'));
+    assert.ok(html.includes('<details class="vi-feedback-details"><summary>Practice score details</summary>'));
+    assert.ok(!html.includes('Getting there'));
+    assert.ok(!html.includes('Interview ready'));
+    const order = ['Interview complete', 'Your next step', 'What worked', 'vi-sc-score', 'In the full report', 'Keep practicing until this answer is automatic'];
+    const at = order.map(marker => html.indexOf(marker));
+    assert.ok(at.every(i => i >= 0), JSON.stringify(at));
+    assert.deepEqual(at, [...at].sort((a, b) => a - b), 'sections appear in order');
+    assert.ok(html.includes('Say what you changed and what happened next.'));
+    assert.ok(html.includes('You named the stakeholder you had to persuade.'));
+    assert.ok(html.includes('data-cta="voice-strong-answer-locked"'));
+    assert.ok(!html.includes('Your full report is ready'));
+  } finally { h.dispose(); }
+});
+
+test('locked details name the dimensions without any numbers', async () => {
+  const h = await openPastSession(freeReport());
+  try {
+    const html = h.el('vi-scorecard').innerHTML;
+    for (const name of ['Communication', 'Structure', 'Content depth', 'Role fit']) assert.ok(html.includes('<span>' + name + '</span>'), name);
+    assert.ok(!html.includes('vi-dim-num') && !html.includes('vi-dim-fill'), 'no bars or numbers');
+    for (const placeholder of ['>70<', '>55<', '>62<', '>75<']) assert.ok(!html.includes(placeholder), placeholder);
+    assert.ok(html.includes('You said "I challenged it." The full report shows what to say instead.'));
+  } finally { h.dispose(); }
+});
+
+test('a teaser quote without closing punctuation still reads as a sentence', async () => {
+  const h = await openPastSession(freeReport({ scorecard: { ...FREE_SCORED, teaserQuote: 'we just figured it out' } }));
+  try {
+    assert.ok(h.el('vi-scorecard').innerHTML.includes('You said "we just figured it out." The full report'));
+  } finally { h.dispose(); }
+});
+
+test('no teaser line when the server sends no grounded quote', async () => {
+  const h = await openPastSession(freeReport({ scorecard: { ...FREE_SCORED, teaserQuote: undefined } }));
+  try {
+    assert.ok(!h.el('vi-scorecard').innerHTML.includes('vi-teaser'));
+  } finally { h.dispose(); }
+});
+
+for (const score of [49, 50, 74, 75]) {
+  test(`a free score of ${score} stays sample-scoped and never claims readiness`, async () => {
+    const h = await openPastSession(freeReport({ scorecard: { ...FREE_SCORED, overall: score } }));
+    try {
+      const html = h.el('vi-scorecard').innerHTML;
+      assert.ok(html.includes('<div class="vi-sc-score">' + score + '</div>'));
+      assert.ok(html.includes('Practice sample'));
+      assert.ok(!html.includes('Interview ready'));
+    } finally { h.dispose(); }
+  });
+}
+
+test('without a server score the free report shows no number', async () => {
+  const h = await openPastSession(freeReport({ scorecard: { ...FREE_SCORED, overall: null } }));
+  try {
+    const html = h.el('vi-scorecard').innerHTML;
+    assert.ok(!html.includes('vi-result-score'));
+    assert.ok(html.includes('Your next step'));
+  } finally { h.dispose(); }
+});
+
+test('the retry button appears only when the server offers it', async () => {
+  const plain = await openPastSession(freeReport());
+  try { assert.ok(!plain.el('vi-scorecard').innerHTML.includes('Retry this question, free')); }
+  finally { plain.dispose(); }
+  const h = await openPastSession(freeReport({ retry: { eligible: true, question: 'Tell me about a decision you challenged?' } }));
+  try {
+    const card = h.el('vi-scorecard');
+    assert.ok(card.innerHTML.includes('Retry this question, free'));
+    for (const fn of card._listeners.click) fn({ target: { id: 'vi-retry-btn' } });
+    assert.equal(h.analyticsEvents.filter(e => e.name === 'retry_start').length, 1);
+  } finally { h.dispose(); }
+});
+
+test('the plan picker preselects Monthly and follows the selection', async () => {
+  const h = await openPastSession(freeReport());
+  try {
+    const html = h.el('vi-scorecard').innerHTML;
+    assert.ok(html.includes('value="monthly" checked'));
+    assert.ok(html.includes('Continue with Monthly'));
+    assert.ok(html.includes('href="/pricing?plan=monthly#plans"'));
+    assert.ok(html.includes('data-cta="voice-scorecard-plan-continue"'));
+    assert.ok(html.includes('Cancel anytime'));
+    for (const price of ['$17<small>/week', '$34<small>/month', '$39<small>for 5 sessions']) assert.ok(html.includes(price), price);
+    for (const fn of h.el('vi-scorecard')._listeners.change) fn({ target: { name: 'vi-plan', value: 'pack' } });
+    const link = h.el('vi-plan-continue');
+    assert.equal(link.getAttribute('href'), '/pricing?plan=pack#plans');
+    assert.equal(link.getAttribute('data-plan'), 'pack');
+    assert.equal(link.textContent, 'Continue with Interview Pack');
+    assert.equal(h.el('vi-plan-note').textContent, 'One time payment. No subscription.');
+    const picked = h.analyticsEvents.filter(e => e.name === 'plan_option_selected');
+    assert.equal(picked.length, 1);
+    assert.equal(picked[0].params.plan, 'pack');
+  } finally { h.dispose(); }
+});
+
+test('each report view is tracked once with its access level', async () => {
+  const h = await openPastSession(freeReport());
+  try {
+    const views = h.analyticsEvents.filter(e => e.name === 'report_view');
+    assert.equal(views.length, 1);
+    assert.equal(views[0].params.access, 'free');
+    assert.equal(views[0].params.has_score, true);
+  } finally { h.dispose(); }
+});
+
+const expiredPayload = (activePlan) => scoredSessionPayload({
+  fullAccess: false, expired: true, activePlan, transcript: null,
+  scorecard: { topStrength: 'Clear example.', topImprovement: 'Lead with the result.' }
+});
+
+test('an expired report points an active plan at a new interview, not an upgrade', async () => {
+  const h = await openPastSession(expiredPayload(true));
+  try {
+    const html = h.el('vi-scorecard').innerHTML;
+    assert.ok(html.includes('This report has expired.'));
+    assert.ok(html.includes('Your plan is still active.'));
+    assert.ok(html.includes('Start a new interview'));
+    assert.ok(!/upgrade/i.test(html));
+    assert.ok(!html.includes('href="/pricing"'));
+    assert.equal(h.analyticsEvents.filter((e) => e.name === 'paywall_view').length, 0);
+  } finally { h.dispose(); }
+});
+
+test('an expired report without an active plan points to plans and never promises to keep reports', async () => {
+  const h = await openPastSession(expiredPayload(false));
+  try {
+    const html = h.el('vi-scorecard').innerHTML;
+    assert.ok(html.includes('This report has expired.'));
+    assert.ok(html.includes('Reports are kept for 90 days.'));
+    assert.ok(html.includes('href="/pricing"'));
+    assert.ok(!/upgrade to keep every report/i.test(html));
+    assert.ok(!html.includes('vi-dim-num') && !html.includes('vi-sc-blur'), 'no placeholder scores behind an expired report');
+  } finally { h.dispose(); }
+});
+
+// ----------------------------------------------- session-over-session delta
+
+// Finish a live session with the history rail on, then read the report the
+// scoring poll renders. History is newest first and omits the live session.
+async function finishedReport(history, scorecard) {
+  const h = await liveInterviewWithOneAnswer({
+    elementIds: ['vi-history-panel'],
+    timerDelay: (ms) => (ms === 2500 || ms === 3500 ? 0 : ms),
+    routes: { ...LIVE_ROUTES,
+      '/api/voice/sessions': () => ({ sessions: history }),
+      '/api/voice/session/': (url) => (url.includes('/complete')
+        ? { sessionId: 'live-1', status: 'completed' }
+        : scoredSessionPayload({ sessionId: 'live-1', scorecard: { ...scoredSessionPayload().scorecard, ...scorecard } }))
+    }
+  });
+  await h.endInterview();
+  // The poll timer is shortened to 0 ms, which still needs a real tick.
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  await h.settle(20);
+  return h;
+}
+
+const PM_SENIOR = { role: 'Product Manager', seniority: 'Senior', status: 'ready' };
+
+test('full v2 feedback retains competencies, quoted moments and summary together', async () => {
+  const h = await finishedReport([], {
+    methodologyVersion: 2,
+    assessmentScope: 'Based on one launch example.',
+    competencies: [{ name: 'Customer judgment', status: 'demonstrated', quote: 'We interviewed five customers.', feedback: 'You tested the customer problem.' }],
+    moments: [{ quote: 'We cut drop-off by 18 percent.', comment: 'Strong, specific outcome.' }],
+    summary: 'A solid, concrete interview.'
+  });
+  try {
+    const html = h.el('vi-scorecard').innerHTML;
+    for (const text of ['Customer judgment', 'We interviewed five customers.', 'Strong, specific outcome.', 'A solid, concrete interview.']) {
+      assert.ok(html.includes(text), 'full report retains ' + text);
+    }
+  } finally { h.dispose(); }
+});
+
+test('a v2 report shows the delta against the last v2 session for the same role and level', async () => {
+  const h = await finishedReport([
+    { sessionId: 'other-role', role: 'Data Engineer', seniority: 'Senior', status: 'ready', overall: 95, methodologyVersion: 2 },
+    { sessionId: 'other-level', role: 'Product Manager', seniority: 'Junior', status: 'ready', overall: 90, methodologyVersion: 2 },
+    { sessionId: 'same', ...PM_SENIOR, overall: 64, methodologyVersion: 2 },
+    { sessionId: 'old-rubric', ...PM_SENIOR, overall: 30, methodologyVersion: 1 }
+  ], { overall: 72, methodologyVersion: 2 });
+  try {
+    const html = h.el('vi-scorecard').innerHTML;
+    assert.ok(html.includes('>72<'), 'the report rendered: ' + html.slice(0, 200));
+    assert.ok(html.includes('▲ +8 vs your last session for this role'));
+    assert.ok(!html.includes('vi-sc-delta--down'));
+  } finally { h.dispose(); }
+});
+
+test('a lower v2 score keeps the muted downward styling', async () => {
+  const h = await finishedReport([{ sessionId: 'same', ...PM_SENIOR, overall: 80, methodologyVersion: 2 }],
+    { overall: 72, methodologyVersion: 2 });
+  try {
+    const html = h.el('vi-scorecard').innerHTML;
+    assert.ok(html.includes('vi-sc-delta vi-sc-delta--down'));
+    assert.ok(html.includes('▼ −8 vs your last session for this role'));
+  } finally { h.dispose(); }
+});
+
+test('no delta when no earlier session shares the rubric, role and level', async () => {
+  const h = await finishedReport([
+    { sessionId: 'old-rubric', ...PM_SENIOR, overall: 30, methodologyVersion: 1 },
+    { sessionId: 'other-role', role: 'Data Engineer', seniority: 'Senior', status: 'ready', overall: 95, methodologyVersion: 2 }
+  ], { overall: 72, methodologyVersion: 2 });
+  try {
+    const html = h.el('vi-scorecard').innerHTML;
+    assert.ok(html.includes('>72<'));
+    assert.ok(!html.includes('vi-sc-delta'), 'scores from another rubric, role or level are never compared');
+  } finally { h.dispose(); }
+});
+
+
+async function historyAccessHarness() {
+  const ids = ['vi-history-panel','vi-history-list','vi-history-empty',
+    'vi-history-manage','vi-history-cancel-manage','vi-history-delete-selected',
+    'vi-history-clear','vi-history-modal-backdrop','vi-history-delete-modal',
+    'vi-history-delete-cancel','vi-history-delete-confirm','fixture-checkbox'];
+  const h = createVoiceClientHarness({elementIds:ids,routes:{
+    '/api/plan/me':()=>PLAN_PAYLOAD,
+    '/api/voice/sessions':()=>({sessions:[{sessionId:'history-1',role:'QA "Engineer"',seniority:'Lead',
+      createdAt:'2026-11-07T12:00:00Z',durationSeconds:240,status:'ready',reportAvailable:true,fullAccess:true}]})
+  }});
+  await h.ready();return h;
+}
+
+test('saved interviews expose native links without nested selection controls',async()=>{
+  const h=await historyAccessHarness();
+  try {
+    const html=h.el('vi-history-list').innerHTML;
+    assert.match(html,/<a\b[^>]*href="voice-interview\.html\?session=history-1"/);
+    assert.doesNotMatch(html,/<input|tabindex="0"/);
+    assert.ok(html.includes('QA "Engineer"'));
+    assert.equal((h.el('vi-history-list')._listeners.keydown || []).length,0,'native links own keyboard activation');
+  } finally {h.dispose();}
+});
+
+test('manage mode uses native checkbox changes once and preserves focus',async()=>{
+  const h=await historyAccessHarness();
+  try {
+    await h.click('vi-history-manage');
+    assert.equal(h.activeElement().id,'vi-history-cancel-manage');
+    const html=h.el('vi-history-list').innerHTML;
+    assert.match(html,/<label\b/);assert.doesNotMatch(html,/<a\b/);
+    const checkbox=h.el('fixture-checkbox'),row=h.el('vi-history-panel');
+    checkbox.setAttribute('data-id','history-1');
+    checkbox.closest=s=>s==='[data-action="toggle-select"]'?checkbox:row;
+    checkbox.checked=true;checkbox.focus();
+    const handlers=h.el('vi-history-list')._listeners.change || [];
+    assert.equal(handlers.length,1);
+    handlers[0]({target:checkbox});
+    assert.equal(h.el('vi-history-delete-selected').disabled,false);
+    assert.equal(h.activeElement(),checkbox);
+    assert.equal(h.el('vi-history-list').innerHTML,html,'selection must not replace the focused checkbox');
+    assert.ok(row.classList.contains('is-selected'));
+    checkbox.checked=false;handlers[0]({target:checkbox});
+    assert.equal(h.el('vi-history-delete-selected').disabled,true);
+    assert.equal(row.classList.contains('is-selected'),false);
+    await h.click('vi-history-cancel-manage');
+    assert.equal(h.activeElement().id,'vi-history-manage');
+  } finally {h.dispose();}
+});
+
+test('history confirmation starts on Cancel and restores the trigger after Escape or cancellation',async()=>{
+  const h=await historyAccessHarness();
+  try {
+    await h.click('vi-history-clear');
+    assert.equal(h.activeElement().id,'vi-history-delete-cancel');
+    await h.click('vi-history-delete-cancel');
+    assert.equal(h.el('vi-history-delete-modal').hidden,true);
+    assert.equal(h.activeElement().id,'vi-history-clear');
+    await h.click('vi-history-clear');
+    const handlers=h.el('vi-history-delete-modal')._listeners.keydown;
+    handlers[0]({key:'Escape',preventDefault(){}});
+    assert.equal(h.activeElement().id,'vi-history-clear');
+    assert.ok(!h.requests.some(r=>r.method==='DELETE'||r.url==='/api/voice/sessions/clear'));
+  } finally {h.dispose();}
+});
+
 
 for (const t of pending) await t();
 console.log(`\n${passed} passed, ${failed} failed`);

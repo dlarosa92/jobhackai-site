@@ -32,7 +32,9 @@ import {
   isConductWarningLine
 } from '../../../../../js/voice-conduct.js';
 import { createVoiceUsage } from '../../../../../js/voice-usage.js';
+import { createVoiceTurnPlan } from '../../../../../js/voice-turn-plan.js';
 import { createTranscriptOrder } from '../../../../../js/voice-transcript-order.js';
+import { createVoiceAudioDiagnostics } from '../../../../../js/voice-audio-diagnostics.js';
 
 const CLIENT_SRC = new URL('../../../../../js/voice-interview.js', import.meta.url);
 
@@ -41,13 +43,21 @@ const CLIENT_SRC = new URL('../../../../../js/voice-interview.js', import.meta.u
 // bails on a missing #vi-history-panel, exactly as it does on a page that does
 // not render the rail.
 const ELEMENT_IDS = [
+  'vi-audio-check', 'vi-audio-note', 'vi-audio-confirm', 'vi-audio-retry', 'vi-audio-help',
+  'vi-audio-mic-status', 'vi-audio-output-status', 'vi-audio-meter', 'vi-timer-label',
   'vi-setup-view', 'vi-live-view', 'vi-done-view', 'vi-disabled-view',
   'vi-status', 'vi-caption', 'vi-timer', 'vi-speaking',
-  'vi-done-status', 'vi-scorecard', 'vi-save-status', 'vi-save-retry',
-  'vi-entitlement', 'vi-role', 'vi-seniority', 'vi-jd',
+  'vi-done-status', 'vi-scorecard', 'vi-save-status', 'vi-save-retry', 'vi-audio-restart',
+  'vi-entitlement', 'vi-entitlement-retry', 'vi-role', 'vi-seniority', 'vi-jd',
   'vi-start-btn', 'vi-end-btn', 'vi-mute-btn', 'vi-reconnect-btn',
-  'vi-remote-audio'
+  'vi-remote-audio', 'vi-question', 'vi-speaking-label', 'vi-time-note',
+  'vi-your-answer', 'vi-input-status',
+  'vi-recent', 'vi-recent-turns', 'vi-answer-tip', 'vi-end-confirm', 'vi-end-keep',
+  'vi-end-confirm-btn', 'vi-grace-note', 'vi-plan-continue', 'vi-plan-note'
 ];
+
+// Elements voice-interview.html ships hidden with an inline display:none.
+const HIDDEN_IDS = ['vi-entitlement-retry', 'vi-time-note', 'vi-recent', 'vi-grace-note', 'vi-audio-restart'];
 
 // The browser's textContent -> innerHTML escaping, which escapeHtml() in the
 // client leans on (it round-trips a detached div).
@@ -67,10 +77,15 @@ function makeElement(id) {
     style: {},
     dataset: {},
     hidden: false,
+    open: false,
+    showModal() { this.open = true; },
+    close() { this.open = false; },
     disabled: false,
     value: '',
     className: '',
     innerHTML: '',
+    play: async () => {},
+    pause: () => {},
     autoplay: false,
     srcObject: null,
     offsetParent: null,
@@ -108,33 +123,44 @@ function makeElement(id) {
  * `withoutModules` deletes named browser-module globals before the client
  * loads, so a test can prove the client's hand-synced fallbacks still hold when
  * a module script fails to execute.
+ *
+ * `elementIds` adds elements beyond ELEMENT_IDS; 'vi-history-panel' switches
+ * the history rail on, which the report's "vs your last session" line reads.
  */
 export function createVoiceClientHarness(options = {}) {
-  const { search = '', routes = {}, withoutModules = [] } = options;
+  const { search = '', routes = {}, withoutModules = [], elementIds = [] } = options;
 
   const elements = Object.create(null);
-  for (const id of ELEMENT_IDS) elements[id] = makeElement(id);
+  for (const id of ELEMENT_IDS.concat(elementIds)) elements[id] = makeElement(id);
+  for (const id of HIDDEN_IDS) elements[id].style.display = 'none';
 
   const timers = new Set();
   const logs = [];
   const requests = [];
   const dataChannelSends = [];
-  const analyticsEvents = [];
   let dataChannel = null;
   let peerConnection = null;
   let domReadyHandler = null;
 
   const trackTimer = (handle) => { timers.add(handle); return handle; };
 
+  // The page wrapper carries the live/done page-mode classes.
+  const wrapEl = makeElement('__vi-wrap');
   const documentStub = {
     readyState: 'loading',
+    body: makeElement('__body'),
     getElementById: (id) => elements[id] || null,
     createElement: (tag) => makeElement('__' + tag),
-    querySelector: () => null,
+    querySelector: (selector) => (selector === '.vi-wrap' ? wrapEl : null),
     querySelectorAll: () => [],
     addEventListener: (type, fn) => { if (type === 'DOMContentLoaded') domReadyHandler = fn; },
     removeEventListener: () => {}
   };
+  documentStub.activeElement = documentStub.body;
+  for (const el of Object.values(elements)) {
+    el.isConnected = true;
+    el.focus = () => { documentStub.activeElement = el; };
+  }
 
   async function respond(url, opts) {
     const key = Object.keys(routes).find((k) => String(url).includes(k));
@@ -191,10 +217,11 @@ export function createVoiceClientHarness(options = {}) {
   };
 
   const windowListeners = {};
+  const analyticsEvents = [];
   const win = {
-    JHA: { trackEventSafe: (name, params) => analyticsEvents.push({ name, params }) },
+    JHA: { analytics: { track: (name, params) => analyticsEvents.push({ name, params }) } },
     crypto: webcrypto,
-    location: { search, href: 'https://app.jobhackai.io/voice-interview.html' + search, pathname: '/voice-interview.html' },
+    location: { search, hostname: options.hostname || 'app.jobhackai.io', href: 'https://app.jobhackai.io/voice-interview.html' + search, pathname: '/voice-interview.html' },
     navigator: { mediaDevices: { getUserMedia: options.getUserMedia || (async () => micStream()) } },
     FirebaseAuthManager: {
       waitForAuthReady: async () => ({ getIdToken: async () => 'test-id-token' }),
@@ -215,6 +242,12 @@ export function createVoiceClientHarness(options = {}) {
     isConductWarningLine,
     createTranscriptOrder,
     createVoiceUsage,
+    createVoiceTurnPlan,
+    createVoiceAudioDiagnostics: (env, readState) => {
+      const diagnostics = createVoiceAudioDiagnostics(env, readState);
+      if (options.onAudioDiagnostics) options.onAudioDiagnostics(diagnostics);
+      return diagnostics;
+    },
     addEventListener: (type, fn) => { (windowListeners[type] ||= []).push(fn); },
     removeEventListener: () => {}
   };
@@ -225,10 +258,14 @@ export function createVoiceClientHarness(options = {}) {
   win.RTCPeerConnection = StubPeerConnection;
   win.URLSearchParams = URLSearchParams;
   win.AbortController = AbortController;
+  win.Date = options.Date || Date;
   win.fetch = (url, opts) => respond(url, opts);
   win.setTimeout = (fn, ms) => trackTimer(setTimeout(fn, options.timerDelay ? options.timerDelay(ms) : ms));
   win.clearTimeout = (h) => { timers.delete(h); clearTimeout(h); };
-  win.setInterval = (fn, ms) => trackTimer(setInterval(fn, ms));
+  win.setInterval = (fn, ms) => {
+    if (options.onInterval) options.onInterval(fn, ms);
+    return trackTimer(setInterval(fn, ms));
+  };
   win.clearInterval = (h) => { timers.delete(h); clearInterval(h); };
   win.console = {
     log: (...a) => logs.push(['log', a.join(' ')]),
@@ -248,10 +285,12 @@ export function createVoiceClientHarness(options = {}) {
   }
 
   return {
+    analyticsEvents,
     windowEvent: (type, event) => (windowListeners[type] || []).forEach(fn => fn(event)),
     el: (id) => elements[id],
+    activeElement: () => documentStub.activeElement,
+    wrap: () => wrapEl,
     logs,
-    analyticsEvents,
     requests,
     sends: dataChannelSends,
     settle,
@@ -265,10 +304,16 @@ export function createVoiceClientHarness(options = {}) {
     /** Click a button the client bound a handler to. */
     async click(id) {
       const el = elements[id];
+      if (el) el.focus();
       const handlers = (el && el._listeners.click) || [];
       if (!handlers.length) throw new Error(`#${id} has no click handler`);
       for (const fn of handlers) await fn({ type: 'click', preventDefault() {} });
       await settle();
+    },
+    /** Press End and, once the official interview is running, confirm it. */
+    async endInterview() {
+      await this.click('vi-end-btn');
+      if (elements['vi-end-confirm'].style.display !== 'none') await this.click('vi-end-confirm-btn');
     },
     /** Open the realtime data channel (the client requests the greeting here). */
     async openDataChannel() {
@@ -281,6 +326,10 @@ export function createVoiceClientHarness(options = {}) {
       }
       if (dataChannel.readyState !== 'open') throw new Error('the data channel is not open; connectRealtime failed');
       await dataChannel.onopen();
+      // The real server acknowledges the effective configuration. Tests for
+      // missing/rejected acknowledgements opt out explicitly.
+      if (options.autoTurnConfig !== false) this.event({ type: 'session.updated',
+        session: this.sends.filter(x => x.type === 'session.update').at(-1).session });
       await settle(2);
     },
     /** Deliver one realtime event over the data channel. */

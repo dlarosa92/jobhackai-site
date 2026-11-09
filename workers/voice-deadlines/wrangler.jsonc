@@ -14,21 +14,21 @@
   "env": {
     "dev": {
       "name": "jobhackai-voice-deadlines-dev",
-      "vars": {"ENVIRONMENT": "dev", "VOICE_DEADLINES_ENABLED": "false"},
+      "vars": {"ENVIRONMENT": "dev", "VOICE_DEADLINES_ENABLED": "true"},
       "secrets": {"required": ["OPENAI_API_KEY"]},
       "d1_databases": [{"binding": "DB", "database_name": "jobhackai-dev-db", "database_id": "c5c0eee5-a223-4ea2-974e-f4aee5a28bab"}],
       "durable_objects": {"bindings": [{"name": "VOICE_DEADLINES", "class_name": "VoiceDeadline"}]}
     },
     "qa": {
       "name": "jobhackai-voice-deadlines-qa",
-      "vars": {"ENVIRONMENT": "qa", "VOICE_DEADLINES_ENABLED": "false"},
+      "vars": {"ENVIRONMENT": "qa", "VOICE_DEADLINES_ENABLED": "true"},
       "secrets": {"required": ["OPENAI_API_KEY"]},
       "d1_databases": [{"binding": "DB", "database_name": "jobhackai-qa-db", "database_id": "80d87a73-6615-4823-b7a4-19a8821b4f87"}],
       "durable_objects": {"bindings": [{"name": "VOICE_DEADLINES", "class_name": "VoiceDeadline"}]}
     },
     "prod": {
       "name": "jobhackai-voice-deadlines-prod",
-      "vars": {"ENVIRONMENT": "prod", "VOICE_DEADLINES_ENABLED": "false"},
+      "vars": {"ENVIRONMENT": "prod", "VOICE_DEADLINES_ENABLED": "true"},
       "secrets": {"required": ["OPENAI_API_KEY"]},
       "d1_databases": [{"binding": "DB", "database_name": "jobhackai-prod-db", "database_id": "f9b709fd-56c3-4a0b-8141-4542327c9d4d"}],
       "durable_objects": {"bindings": [{"name": "VOICE_DEADLINES", "class_name": "VoiceDeadline"}]}

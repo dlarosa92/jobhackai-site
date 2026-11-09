@@ -14,12 +14,12 @@
 </head>
 <body>
   <h1>Voice connection check</h1>
-  <p>QA only. Uses a silent generated audio track, never your microphone. This uses one interview from the signed-in QA account. Reconnect keeps the same interview.</p>
-  <p>Finish the check before leaving. It automatically attempts to finish after 60 seconds. No spoken answers or interview transcript are collected.</p>
+  <p>QA only. Uses a silent generated audio track, never your microphone. This checks the uncharged setup connection without starting an interview. Reconnect keeps the same check.</p>
+  <p>Finish the check before leaving. It automatically attempts to finish after 110 seconds. No spoken answers or interview transcript are collected.</p>
   <p id="status" role="status">Checking QA access...</p>
   <button id="start" disabled>Start silent QA check</button>
   <button id="drop" disabled>Disconnect browser transport</button>
-  <button id="reconnect" disabled>Reconnect same interview</button>
+  <button id="reconnect" disabled>Reconnect same check</button>
   <button id="finish" disabled>Finish check</button>
   <p><a href="/voice-interview">Back to voice interviews</a></p>
   <pre id="events" aria-label="Connection check events"></pre>
@@ -27,7 +27,7 @@
     import authManager from '/js/firebase-auth.js?v=20260207-2';
     const el = id => document.getElementById(id);
     const allowed = ['qa.jobhackai.io','dev.jobhackai.io','localhost','127.0.0.1'].includes(location.hostname);
-    let sessionId, attemptId, pc, dc, audio, stream, startedAt, stopTimer;
+    let sessionId, attemptId, pc, dc, audio, stream, startedAt, stopTimer, heartbeat;
     let busy = false, finishing = false, finished = false, dropped = false;
     function log(event, detail = {}) {
       el('events').textContent += new Date().toISOString() + ' ' + event + ' ' + JSON.stringify(detail) + '\n';
@@ -37,19 +37,39 @@
       const user = await authManager.waitForAuthReady();
       if (!user || user._authPending || typeof user.getIdToken !== 'function') throw Error('sign_in_required');
       const response = await fetch(path, {method: body ? 'POST' : 'GET',
-        headers: {'Content-Type':'application/json', Authorization:'Bearer ' + await user.getIdToken(true)},
-        ...(body ? {body:JSON.stringify(body)} : {}), signal:AbortSignal.timeout(30000)});
+        headers: {'Content-Type':'application/json', Authorization:'Bearer ' + await user.getIdToken(body?.action !== 'heartbeat')},
+        ...(body ? {body:JSON.stringify(body)} : {}), signal:AbortSignal.timeout(body?.action === 'heartbeat' ? 5000 : 30000)});
       const data = await response.json();
       // Never display an auth token, SDP, provider payload, transcript or key.
       log(body?.action || (body ? 'complete' : 'entitlement'), {status:response.status,
         reason:/^voice_[a-z_]+$/.test(data.reason || '') ? data.reason : undefined,
-        connectionClosed:data.connectionClosed, closureNeedsReview:data.closureNeedsReview, saved:data.saved});
+        connectionClosed:data.connectionClosed, connectionAlive:data.connectionAlive,
+        closureNeedsReview:data.closureNeedsReview, saved:data.saved});
       if (!response.ok) throw Error('request_failed_' + response.status);
       return data;
     }
     function disconnect() {
+      clearInterval(heartbeat); heartbeat = null;
       if (dc) { dc.close(); dc = null; }
       if (pc) { pc.close(); pc = null; }
+    }
+    function watch(next, ownedAttempt) {
+      clearInterval(heartbeat);
+      let pending = false;
+      async function pulse() {
+        if (pending || finishing || finished || pc !== next || next.connectionState !== 'connected' || dc?.readyState !== 'open') return;
+        pending = true;
+        try {
+          const result = await api('/api/voice/connection', {action:'heartbeat',sessionId,attemptId:ownedAttempt});
+          if (pc === next && !finishing && !finished && result.connectionAlive === false) {
+            disconnect(); dropped = true;
+            el('drop').disabled = true; el('reconnect').disabled = false;
+            status('The connection is no longer available. Reconnect checks closure and uses the same uncharged check.');
+          }
+        } catch { log('heartbeat_unacknowledged'); }
+        finally { pending = false; }
+      }
+      heartbeat = setInterval(pulse, 8000); void pulse();
     }
     async function connect() {
       const next = new RTCPeerConnection();
@@ -63,6 +83,7 @@
         log('data_channel_open');
         status('Silent test connected. No microphone is in use.');
         el('drop').disabled = false;
+        watch(next, attemptId);
       };
       dc.onmessage = event => {
         try {
@@ -71,10 +92,12 @@
         } catch { /* No arbitrary provider content is displayed. */ }
       };
       await next.setLocalDescription(await next.createOffer());
-      const answer = await api('/api/voice/connection', {action:'open', sessionId,
+      const answer = await api('/api/voice/connection', {action:'open', sessionId, audioCheck:true, connectionWatch:true,
         replacesAttemptId:attemptId || null, sdp:next.localDescription.sdp,
         role:'QA connection check', seniority:'Any level', transcript:[], interviewStarted:false});
       if (finishing || finished || pc !== next) { next.close(); return; }
+      if (answer.requiresAudioCheck !== true) throw Error('audio_check_protocol_required');
+      if (answer.connectionWatch !== true) throw Error('connection_watch_required');
       attemptId = answer.attemptId;
       log('owned_attempt', {sessionId, attemptId});
       await next.setRemoteDescription({type:'answer', sdp:answer.sdp});
@@ -82,6 +105,7 @@
     async function finish() {
       if (!sessionId || finishing || finished) return;
       finishing = true;
+      clearInterval(heartbeat); heartbeat = null;
       clearTimeout(stopTimer);
       el('finish').disabled = el('drop').disabled = el('reconnect').disabled = true;
       status('Finishing the QA check...');
@@ -138,16 +162,16 @@
       } finally { clearTimeout(audioTimer); }
       stream = audio.createMediaStreamDestination().stream;
       sessionId = crypto.randomUUID(); startedAt = Date.now();
-      log('check_started', {sessionId, source:'generated_silence', maxSeconds:60});
+      log('check_started', {sessionId, source:'generated_silence', maxSeconds:110});
       el('finish').disabled = false;
-      stopTimer = setTimeout(() => { void finish(); }, 60000);
+      stopTimer = setTimeout(() => { void finish(); }, 110000);
       await connect();
     }); });
     el('drop').addEventListener('click', () => {
       if (busy || finishing || finished) return;
       dropped = true; disconnect(); log('browser_transport_disconnected');
       el('drop').disabled = true; el('reconnect').disabled = false;
-      status('Browser transport disconnected. Reconnect uses the same interview.');
+      status('Browser transport disconnected. Reconnect uses the same uncharged check.');
     });
     el('reconnect').addEventListener('click', () => { void run(async () => {
       el('reconnect').disabled = true; status('Requesting a replacement connection...'); await connect();
