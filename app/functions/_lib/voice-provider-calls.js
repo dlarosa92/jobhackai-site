@@ -80,10 +80,17 @@ export async function createManagedVoiceCall(env, { uid, sessionId, sdp, instruc
   try {
     const form = new FormData();
     form.set('sdp',sdp);
-    form.set('session',JSON.stringify(realtimeSessionConfig({
+    const session = realtimeSessionConfig({
       model:env.OPENAI_MODEL_VOICE || 'gpt-realtime-mini', instructions,
       voice:env.VOICE_INTERVIEW_VOICE || 'marin'
-    })));
+    });
+    // Microphone audio can arrive before the data channel is configured.
+    // Start passive on every new/replacement call; the client acknowledges
+    // setup protection or official-interview barge-in before requesting audio.
+    session.audio.input.turn_detection = {
+      type:'semantic_vad',create_response:false,interrupt_response:false
+    };
+    form.set('session',JSON.stringify(session));
     phase = 'dispatch';
     // Workers rejects redirect:'error' before dispatch. Manual prevents
     // forwarding the bearer credential; any 3xx remains an uncertain result.
