@@ -1,7 +1,11 @@
 # Scoped voice production preparation
 
 This local candidate carries voice code deployed to QA at
-`82d60170e74de6aeb676d1c5b2958eb92dd1125b`. It is based on production
+`15231f1cbd2f6ec335a137695d26cdd56aa53b73`. The recorded human QA run was on
+`82d60170e74de6aeb676d1c5b2958eb92dd1125b`; the final authoritative-heartbeat
+recovery patch adds deterministic setup/live tests and a new cached asset version.
+That narrow patch passes 102 client tests and follows dev0 PR #1189 and QA PR
+#1190 before production. It is based on production
 `823ee4dc0f3f66e7b28920fbdbcd7be9e181b80c`. Recorded QA acceptance is complete. The session recovered after a physical
 network outage, preserved the question, mute state and original deadline, used
 one free session, generated a graded report and reopened it after reload. Both
@@ -17,7 +21,9 @@ are preserved.
 
 Local validation: full voice suite, 232 focused managed-call and privacy
 checks, application build, native worker tests, worker type checking and five
-release-preflight checks pass. Hosted candidate checks have not run.
+release-preflight checks pass. The initial hosted candidate checks passed after carrying the corresponding QA
+scoring and admission fixtures. Final hosted checks include the authoritative
+heartbeat patch. The production-only compiled KV privacy test is preserved.
 
 Release sequence:
 
