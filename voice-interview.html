@@ -152,6 +152,12 @@
     .vi-sc-actions { margin-top: 1.4rem; display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; }
     .vi-sc-actions-link { margin-left: auto; color: var(--color-accent-blue); font-weight: var(--font-weight-semibold); text-decoration: none; }
     .vi-sc-actions-link:hover { text-decoration: underline; }
+    .vi-summary-pdf { margin: 1.1rem 0 0.4rem; padding: 0.9rem 1rem; border: 1px solid var(--color-divider); border-radius: var(--radius-button); background: var(--color-bg-light); }
+    .vi-summary-pdf .vi-btn-secondary:disabled { opacity: 0.6; cursor: progress; }
+    .vi-summary-pdf-hint { margin: 0.55rem 0 0; color: var(--color-text-secondary); font-size: 0.92rem; }
+    .vi-summary-pdf-status { margin: 0.35rem 0 0; color: var(--color-text-secondary); font-size: 0.92rem; min-height: 1.2em; }
+    .vi-summary-pdf-status:empty { display: none; }
+    .vi-summary-pdf-status--error { color: var(--color-error); }
     .vi-sc-unlock { position: absolute; top: 18%; left: 50%; transform: translateX(-50%); width: min(92%, 420px); background: #fff; border: 1px solid var(--color-divider); border-radius: var(--radius-xl); box-shadow: var(--shadow-xl); padding: 1.4rem 1.4rem 1.5rem; text-align: center; }
     .vi-sc-unlock h3 { margin: 0 0 0.5rem; color: var(--color-text-main); }
     .vi-sc-unlock p { color: var(--color-text-secondary); font-size: 0.95rem; margin: 0 0 1rem; }
@@ -652,6 +658,7 @@
   <script src="js/voice-usage.js?v=20260920-1" type="module"></script>
   <script src="js/voice-turn-plan.js?v=20261108-closing-copy-1" type="module"></script>
   <script src="js/voice-audio-diagnostics.js?v=20261108-network-recovery-1" type="module"></script>
-  <script src="js/voice-interview.js?v=20261108-authoritative-reconnect-1" defer></script>
+  <script src="js/voice-summary-pdf.js?v=20261112-summary-pdf-1" type="module"></script>
+  <script src="js/voice-interview.js?v=20261112-summary-pdf-1" defer></script>
 </body>
 </html>
