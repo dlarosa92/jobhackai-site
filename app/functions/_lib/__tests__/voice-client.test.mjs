@@ -1329,6 +1329,16 @@ test('full v2 feedback retains competencies, quoted moments and summary together
   } finally { h.dispose(); }
 });
 
+test('a report shown right after a live interview offers the summary PDF download', async () => {
+  const h = await finishedReport([], { methodologyVersion: 2 });
+  try {
+    const html = h.el('vi-scorecard').innerHTML;
+    assert.ok(html.includes('id="vi-summary-pdf-btn"'), 'the download action is rendered');
+    assert.ok(html.includes('>Download summary PDF</button>'));
+    assert.equal((h.el('vi-scorecard')._listeners.click || []).length, 1, 'one delegated click listener');
+  } finally { h.dispose(); }
+});
+
 test('a v2 report shows the delta against the last v2 session for the same role and level', async () => {
   const h = await finishedReport([
     { sessionId: 'other-role', role: 'Data Engineer', seniority: 'Senior', status: 'ready', overall: 95, methodologyVersion: 2 },

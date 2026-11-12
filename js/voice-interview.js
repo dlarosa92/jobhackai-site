@@ -3365,6 +3365,7 @@
       '<p class="vi-feedback-priority">' + escapeHtml(priority) + '</p></section>';
     if (sc.topStrength) html += '<section class="vi-feedback-section"><h3 class="vi-feedback-eyebrow">What worked</h3>' +
       '<p class="vi-feedback-strength">' + escapeHtml(sc.topStrength) + '</p></section>';
+    html += summaryPdfHtml(data);
     html += '<details class="vi-feedback-details"><summary>Evidence and limits of this feedback</summary>';
     html += '<p>' + escapeHtml(sc.assessmentScope || 'This feedback is based on the answers captured in this practice session.') + '</p>';
     if (sc.competencies && sc.competencies.length) {
@@ -3396,6 +3397,159 @@
       '<a class="vi-sc-actions-link" href="dashboard.html">Back to Dashboard</a></div>';
     wrap.innerHTML = html;
     wrap.style.display = '';
+    bindSummaryPdf(wrap);
+  }
+
+  // ---------- summary PDF ----------
+  // A short, shareable summary of the saved feedback (js/voice-summary-pdf.js),
+  // offered only inside the full report. The download re-reads the report from
+  // the server first, so access is decided there every time, and the PDF is
+  // built in the browser from that response: no scoring, no model call, no
+  // upload. It reads one report and writes nothing, so a download or a retry
+  // can never start an interview or touch a session balance.
+
+  var SUMMARY_PDF_LABEL = 'Download summary PDF';
+  var SUMMARY_PDF_SCRIPTS = [
+    { src: 'js/vendor/pdf-lib.min.js?v=1.17.1', ready: function () { return !!window.PDFLib; } },
+    { src: 'js/vendor/fontkit.umd.min.js?v=1.1.1', ready: function () { return !!window.fontkit; } }
+  ];
+  var SUMMARY_PDF_FONTS = { regular: 'assets/fonts/Inter-Regular.ttf?v=4.1', bold: 'assets/fonts/Inter-Bold.ttf?v=4.1' };
+  var summaryPdfState = { busy: false, sessionId: null, assets: null };
+
+  function summaryPdfLib() {
+    var lib = window.JobHackAIVoiceSummary;
+    return lib && typeof lib.buildInterviewSummary === 'function' && typeof lib.renderSummaryPdf === 'function' ? lib : null;
+  }
+
+  // The button appears only when this exact report can produce a summary.
+  function summaryPdfHtml(data) {
+    var lib = summaryPdfLib();
+    summaryPdfState.sessionId = null;
+    if (!lib || !data || !data.sessionId) return '';
+    var summary;
+    try { summary = lib.buildInterviewSummary(data); } catch (_) { return ''; }
+    if (!summary || !summary.available) return '';
+    summaryPdfState.sessionId = String(data.sessionId);
+    return '<div class="vi-summary-pdf">' +
+      '<button type="button" id="vi-summary-pdf-btn" class="vi-btn-secondary" data-cta="voice-summary-pdf"' +
+      (summaryPdfState.busy ? ' disabled aria-busy="true"' : '') + '>' +
+      (summaryPdfState.busy ? 'Preparing PDF...' : SUMMARY_PDF_LABEL) + '</button>' +
+      '<p class="vi-summary-pdf-hint">A short recap of what went well and what to work on, ready to keep or share with a coach.</p>' +
+      '<p id="vi-summary-pdf-status" class="vi-summary-pdf-status" role="status" aria-live="polite"></p></div>';
+  }
+
+  // Delegated once on the report container, which outlives each render.
+  function bindSummaryPdf(wrap) {
+    if (!wrap || (wrap.dataset && wrap.dataset.summaryPdfBound === 'true')) return;
+    if (wrap.dataset) wrap.dataset.summaryPdfBound = 'true';
+    wrap.addEventListener('click', function (e) {
+      var target = e && e.target;
+      var btn = target && (target.id === 'vi-summary-pdf-btn' ? target
+        : (typeof target.closest === 'function' ? target.closest('#vi-summary-pdf-btn') : null));
+      if (btn) downloadSummaryPdf();
+    });
+  }
+
+  function setSummaryPdfUi(busy, message, isError) {
+    var btn = $('vi-summary-pdf-btn');
+    if (btn) {
+      btn.disabled = !!busy;
+      if (busy) btn.setAttribute('aria-busy', 'true'); else btn.removeAttribute('aria-busy');
+      btn.textContent = busy ? 'Preparing PDF...' : SUMMARY_PDF_LABEL;
+    }
+    var status = $('vi-summary-pdf-status');
+    if (status) {
+      status.textContent = message || '';
+      status.className = 'vi-summary-pdf-status' + (isError ? ' vi-summary-pdf-status--error' : '');
+    }
+  }
+
+  function loadSummaryPdfScript(entry) {
+    if (entry.ready()) return Promise.resolve();
+    return new Promise(function (resolve, reject) {
+      var script = document.createElement('script');
+      script.src = entry.src;
+      script.async = true;
+      script.onload = function () { if (entry.ready()) resolve(); else reject(new Error('summary_script_empty')); };
+      script.onerror = function () {
+        if (script.parentNode) script.parentNode.removeChild(script);
+        reject(new Error('summary_script_failed'));
+      };
+      (document.head || document.body).appendChild(script);
+    });
+  }
+
+  async function fetchSummaryPdfFont(url) {
+    var res = await fetch(url);
+    if (!res.ok) throw new Error('summary_font_failed');
+    return await res.arrayBuffer();
+  }
+
+  // The PDF library and fonts load on first use only, from this origin. A
+  // failed load is not cached, so the next click starts clean.
+  function loadSummaryPdfAssets() {
+    if (!summaryPdfState.assets) {
+      summaryPdfState.assets = (async function () {
+        for (var i = 0; i < SUMMARY_PDF_SCRIPTS.length; i++) await loadSummaryPdfScript(SUMMARY_PDF_SCRIPTS[i]);
+        var fonts = await Promise.all([fetchSummaryPdfFont(SUMMARY_PDF_FONTS.regular), fetchSummaryPdfFont(SUMMARY_PDF_FONTS.bold)]);
+        return { PDFLib: window.PDFLib, fontkit: window.fontkit, fonts: { regular: fonts[0], bold: fonts[1] } };
+      })();
+      summaryPdfState.assets.catch(function () { summaryPdfState.assets = null; });
+    }
+    return summaryPdfState.assets;
+  }
+
+  function saveSummaryPdf(bytes, filename) {
+    var url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.rel = 'noopener';
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    // Safari reads the blob after the click returns: release it late.
+    setTimeout(function () {
+      if (link.parentNode) link.parentNode.removeChild(link);
+      try { URL.revokeObjectURL(url); } catch (_) {}
+    }, 60000);
+  }
+
+  async function downloadSummaryPdf() {
+    // One export at a time: extra clicks while preparing do nothing.
+    if (summaryPdfState.busy) return;
+    var lib = summaryPdfLib();
+    var sessionId = summaryPdfState.sessionId;
+    if (!lib || !sessionId) return;
+    summaryPdfState.busy = true;
+    setSummaryPdfUi(true, 'Preparing your summary PDF...', false);
+    var outcome = 'failed';
+    try {
+      var res = await api('/api/voice/session/' + encodeURIComponent(sessionId), { method: 'GET' });
+      if (res.status === 404) {
+        outcome = 'unavailable';
+        setSummaryPdfUi(false, lib.summaryUnavailableMessage('missing'), true);
+        return;
+      }
+      if (!res.ok || !res.data) throw new Error('summary_report_failed');
+      var summary = lib.buildInterviewSummary(res.data);
+      if (!summary.available) {
+        outcome = 'unavailable';
+        setSummaryPdfUi(false, lib.summaryUnavailableMessage(summary.reason), true);
+        return;
+      }
+      var assets = await loadSummaryPdfAssets();
+      var bytes = await lib.renderSummaryPdf(summary, assets);
+      saveSummaryPdf(bytes, lib.summaryFilename(summary));
+      outcome = 'downloaded';
+      setSummaryPdfUi(false, 'Your summary PDF has been downloaded.', false);
+    } catch (err) {
+      console.warn('[VOICE] summary PDF failed:', err && err.message);
+      setSummaryPdfUi(false, 'We could not create your summary PDF. Check your connection and try again.', true);
+    } finally {
+      summaryPdfState.busy = false;
+      track('summary_pdf_download', { result: outcome });
+    }
   }
 
   function renderScorecard(data) {
