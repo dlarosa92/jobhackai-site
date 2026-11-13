@@ -27,27 +27,27 @@
   <div class="test-section">
     <h2>Test New User Flows</h2>
     <p>These simulate a completely new user selecting different plans:</p>
-    <button class="btn btn-primary" onclick="testNewUser('trial')">New User → Free Trial</button>
-    <button class="btn btn-primary" onclick="testNewUser('essential')">New User → Essential</button>
-    <button class="btn btn-primary" onclick="testNewUser('pro')">New User → Pro</button>
-    <button class="btn btn-primary" onclick="testNewUser('premium')">New User → Premium</button>
-    <button class="btn btn-secondary" onclick="testNewUser('create-account')">New User → Free Account</button>
+    <button class="btn btn-primary" data-jh-call="testNewUser" data-jh-args='["trial"]'>New User → Free Trial</button>
+    <button class="btn btn-primary" data-jh-call="testNewUser" data-jh-args='["essential"]'>New User → Essential</button>
+    <button class="btn btn-primary" data-jh-call="testNewUser" data-jh-args='["pro"]'>New User → Pro</button>
+    <button class="btn btn-primary" data-jh-call="testNewUser" data-jh-args='["premium"]'>New User → Premium</button>
+    <button class="btn btn-secondary" data-jh-call="testNewUser" data-jh-args='["create-account"]'>New User → Free Account</button>
   </div>
 
   <div class="test-section">
     <h2>Test Existing User Flows</h2>
     <p>These simulate an existing user trying to upgrade (should go directly to pricing):</p>
-    <button class="btn btn-primary" onclick="testExistingUser('free', 'trial')">Free User → Trial</button>
-    <button class="btn btn-primary" onclick="testExistingUser('free', 'essential')">Free User → Essential</button>
-    <button class="btn btn-primary" onclick="testExistingUser('essential', 'pro')">Essential → Pro</button>
-    <button class="btn btn-primary" onclick="testExistingUser('pro', 'premium')">Pro → Premium</button>
+    <button class="btn btn-primary" data-jh-call="testExistingUser" data-jh-args='["free", "trial"]'>Free User → Trial</button>
+    <button class="btn btn-primary" data-jh-call="testExistingUser" data-jh-args='["free", "essential"]'>Free User → Essential</button>
+    <button class="btn btn-primary" data-jh-call="testExistingUser" data-jh-args='["essential", "pro"]'>Essential → Pro</button>
+    <button class="btn btn-primary" data-jh-call="testExistingUser" data-jh-args='["pro", "premium"]'>Pro → Premium</button>
   </div>
 
   <div class="test-section">
     <h2>Reset & Navigation</h2>
-    <button class="btn btn-danger" onclick="resetAll()">Reset All Data</button>
-    <button class="btn btn-secondary" onclick="goToPricing()">Go to Pricing Page</button>
-    <button class="btn btn-secondary" onclick="goToLogin()">Go to Login Page</button>
+    <button class="btn btn-danger" data-jh-call="resetAll">Reset All Data</button>
+    <button class="btn btn-secondary" data-jh-call="goToPricing">Go to Pricing Page</button>
+    <button class="btn btn-secondary" data-jh-call="goToLogin">Go to Login Page</button>
   </div>
 
   <script>
@@ -121,6 +121,21 @@
 
     // Update state on page load
     updateCurrentState();
+  </script>
+  <script>
+    // Buttons name a page function in data-jh-call (arguments as a JSON array
+    // in data-jh-args). The CSP blocks inline onclick attributes. Only the
+    // functions listed here can be called this way.
+    (function () {
+      var allowed = ["testNewUser", "testExistingUser", "resetAll", "goToPricing", "goToLogin"];
+      document.addEventListener('click', function (event) {
+        var target = event.target instanceof Element ? event.target.closest('[data-jh-call]') : null;
+        if (!target) return;
+        var name = target.getAttribute('data-jh-call');
+        if (allowed.indexOf(name) === -1 || typeof window[name] !== 'function') return;
+        window[name].apply(null, JSON.parse(target.getAttribute('data-jh-args') || '[]'));
+      });
+    })();
   </script>
 </body>
 </html> 

@@ -447,17 +447,17 @@
     <div class="control-panel">
       <h2>Control Panel</h2>
       <div class="phase-buttons">
-        <button class="phase-btn" onclick="showPhase('upload')">Phase 1: Upload</button>
-        <button class="phase-btn" onclick="showPhase('skeleton')">Phase 2: Skeleton</button>
-        <button class="phase-btn" onclick="showPhase('ats-arriving')">Phase 3: ATS Arriving</button>
-        <button class="phase-btn" onclick="showPhase('ats-visible')">Phase 4: ATS Visible</button>
-        <button class="phase-btn" onclick="showPhase('feedback-arriving')">Phase 5: Feedback Arriving</button>
-        <button class="phase-btn" onclick="showPhase('complete')">Phase 6: Complete</button>
+        <button class="phase-btn" data-jh-call="showPhase" data-jh-args='["upload"]'>Phase 1: Upload</button>
+        <button class="phase-btn" data-jh-call="showPhase" data-jh-args='["skeleton"]'>Phase 2: Skeleton</button>
+        <button class="phase-btn" data-jh-call="showPhase" data-jh-args='["ats-arriving"]'>Phase 3: ATS Arriving</button>
+        <button class="phase-btn" data-jh-call="showPhase" data-jh-args='["ats-visible"]'>Phase 4: ATS Visible</button>
+        <button class="phase-btn" data-jh-call="showPhase" data-jh-args='["feedback-arriving"]'>Phase 5: Feedback Arriving</button>
+        <button class="phase-btn" data-jh-call="showPhase" data-jh-args='["complete"]'>Phase 6: Complete</button>
       </div>
       <div class="auto-demo">
-        <button onclick="runAutoDemo()">▶️ Run Auto Demo (Watch All Phases)</button>
-        <button onclick="resetDemo()" class="secondary">Reset</button>
-        <button onclick="showComparison()" class="secondary">Show Comparison (Broken vs Fixed)</button>
+        <button data-jh-call="runAutoDemo">▶️ Run Auto Demo (Watch All Phases)</button>
+        <button data-jh-call="resetDemo" class="secondary">Reset</button>
+        <button data-jh-call="showComparison" class="secondary">Show Comparison (Broken vs Fixed)</button>
       </div>
     </div>
 
@@ -827,6 +827,21 @@
 
     // Initialize
     showPhase('upload');
+  </script>
+  <script>
+    // Buttons name a page function in data-jh-call (arguments as a JSON array
+    // in data-jh-args). The CSP blocks inline onclick attributes. Only the
+    // functions listed here can be called this way.
+    (function () {
+      var allowed = ["showPhase", "runAutoDemo", "resetDemo", "showComparison"];
+      document.addEventListener('click', function (event) {
+        var target = event.target instanceof Element ? event.target.closest('[data-jh-call]') : null;
+        if (!target) return;
+        var name = target.getAttribute('data-jh-call');
+        if (allowed.indexOf(name) === -1 || typeof window[name] !== 'function') return;
+        window[name].apply(null, JSON.parse(target.getAttribute('data-jh-args') || '[]'));
+      });
+    })();
   </script>
 </body>
 </html>

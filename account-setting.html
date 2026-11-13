@@ -587,7 +587,7 @@
       <!-- Security Card -->
       <div class="settings-block" style="margin-bottom:2.2rem;">
         <div class="settings-label" style="margin-bottom:0.5rem;">Security</div>
-        <button class="btn-outline" type="button" style="margin-bottom:0.2rem;" onclick="resetPassword()">Reset My Password</button>
+        <button class="btn-outline" type="button" style="margin-bottom:0.2rem;" data-jh-click="resetPassword">Reset My Password</button>
       </div>
       <!-- Privacy & Data Section -->
       <div class="settings-block" style="margin-bottom:2.2rem;">
@@ -985,7 +985,7 @@
                 ⏰ Your trial will convert to Essential Plan ($29/month) on ${trialEndDateStr}
               </div>`;
               html += `<div style="margin-top:0.9rem; display:flex; gap:0.75rem; flex-wrap:wrap;">
-                <button class="btn-primary" type="button" onclick="startPaidNow(this)">Start Paid Now</button>
+                <button class="btn-primary" type="button" data-jh-click="startPaidNow">Start Paid Now</button>
               </div>`;
             }
           } else {
@@ -1022,7 +1022,7 @@
           
           html += `</div>`;
           html += `<div class="subscription-action-row">`;
-          html += `<button class="btn-outline" type="button" onclick="openBillingPortal()">Billing Management</button>`;
+          html += `<button class="btn-outline" type="button" data-jh-click="openBillingPortal">Billing Management</button>`;
           html += `<span class="plan-badge ${plan}">${planBadgeText[plan] || plan}</span>`;
           html += `</div>`;
           
@@ -1090,6 +1090,20 @@
       }
     };
     
+    // --- BUTTON ACTIONS ---
+    // Buttons name their action in data-jh-click and are dispatched here. The
+    // CSP blocks inline onclick attributes, including ones in markup this
+    // page renders later, so never reintroduce them.
+    document.addEventListener('click', (event) => {
+      const target = event.target instanceof Element ? event.target.closest('[data-jh-click]') : null;
+      if (!target) return;
+      switch (target.dataset.jhClick) {
+        case 'resetPassword': resetPassword(); break;
+        case 'startPaidNow': startPaidNow(target); break;
+        case 'openBillingPortal': openBillingPortal(); break;
+      }
+    });
+
     // --- RESET PASSWORD FUNCTION ---
     async function resetPassword() {
       const user = window.FirebaseAuthManager?.getCurrentUser?.();
