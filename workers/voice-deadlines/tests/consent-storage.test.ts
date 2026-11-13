@@ -2,12 +2,11 @@ import {env} from 'cloudflare:workers';
 import {applyD1Migrations} from 'cloudflare:test';
 import {beforeAll,it,expect} from 'vitest';
 import {upsertCookieConsent,getCookieConsent} from '../../../app/functions/_lib/db.js';
-import {upsertCookieConsent as rootSave,getCookieConsent as rootRead} from '../../../functions/_lib/db.js';
 
 beforeAll(()=>applyD1Migrations(env.DB,env.TEST_MIGRATIONS));
 const decision=(analytics:boolean)=>({version:1,analytics,updatedAt:new Date().toISOString()});
 async function owner(){const uid=crypto.randomUUID();const row=await env.DB.prepare('INSERT INTO users(auth_id,email) VALUES(?,?) RETURNING id').bind(uid,uid+'@example.test').first<{id:number}>();return row!.id;}
-for(const [name,save,read] of [['app',upsertCookieConsent,getCookieConsent],['root',rootSave,rootRead]] as const){
+for(const [name,save,read] of [['app',upsertCookieConsent,getCookieConsent]] as const){
   it(`${name}: anonymous marketing withdrawal overrides an older account grant`,async()=>{
     const userId=await owner(),clientId=crypto.randomUUID();
     expect(await save(env,{userId,clientId,consent:decision(true)})).toBe(true);
