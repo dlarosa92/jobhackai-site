@@ -1425,7 +1425,7 @@
           <circle cx="12" cy="12" r="4"/>
         </svg>
         <span style="flex:1;"><strong>Tip:</strong> Star the questions you care about most, then use 'Start Mock Interview' to practice them live.</span>
-        <button type="button" class="icon-btn" aria-label="Dismiss" onclick="this.parentElement.style.display='none'; try{localStorage.setItem('iq_first_visit_shown','true');}catch{}" style="flex-shrink:0; padding:0.25rem; min-width:24px; min-height:24px; display:flex; align-items:center; justify-content:center; background:transparent; border:none; color:#1E40AF; cursor:pointer; transition:opacity 0.15s ease;">
+        <button type="button" class="icon-btn" aria-label="Dismiss" data-iq-dismiss-hint style="flex-shrink:0; padding:0.25rem; min-width:24px; min-height:24px; display:flex; align-items:center; justify-content:center; background:transparent; border:none; color:#1E40AF; cursor:pointer; transition:opacity 0.15s ease;">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
@@ -4198,6 +4198,15 @@ function initIQPage(){
       // Show first-time visitor hint if not shown before
       const hintBanner = $IQ('#iq-first-hint');
       if (hintBanner) {
+        // Dismiss button. Bound here, not as an inline attribute: the CSP
+        // blocks inline event handlers.
+        const hintDismiss = hintBanner.querySelector('[data-iq-dismiss-hint]');
+        if (hintDismiss) {
+          hintDismiss.addEventListener('click', () => {
+            hintBanner.style.display = 'none';
+            try { localStorage.setItem('iq_first_visit_shown', 'true'); } catch (_) {}
+          });
+        }
         try {
           const shown = localStorage.getItem('iq_first_visit_shown');
           const mockCompleted = localStorage.getItem('iq_mock_completed');

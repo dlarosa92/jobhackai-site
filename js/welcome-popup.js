@@ -489,8 +489,7 @@ export async function showWelcomePopup(plan = 'free', userName = 'there', onComp
           cursor: pointer;
           transition: all 0.2s;
           box-shadow: 0 4px 14px rgba(0, 122, 48, 0.3);
-        " onmouseover="this.style.background='#006B28'; this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(0, 122, 48, 0.4)'"
-           onmouseout="this.style.background='#007A30'; this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 14px rgba(0, 122, 48, 0.3)'">
+        ">
           ${escapedCta}
         </button>
       </div>
@@ -536,6 +535,16 @@ export async function showWelcomePopup(plan = 'free', userName = 'there', onComp
   }
 
   document.body.appendChild(modal);
+
+  // Hover state for the call to action. Bound here, not as inline attributes:
+  // the CSP blocks inline event handlers.
+  const hoverCta = document.getElementById('jh-welcome-cta');
+  if (hoverCta) {
+    hoverCta.addEventListener('mouseover', () => Object.assign(hoverCta.style,
+      { background: '#006B28', transform: 'translateY(-2px)', boxShadow: '0 6px 20px rgba(0, 122, 48, 0.4)' }));
+    hoverCta.addEventListener('mouseout', () => Object.assign(hoverCta.style,
+      { background: '#007A30', transform: 'translateY(0)', boxShadow: '0 4px 14px rgba(0, 122, 48, 0.3)' }));
+  }
 
   // Close on Escape key
   const escapeHandler = (e) => {

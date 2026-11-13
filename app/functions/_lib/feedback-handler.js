@@ -1,7 +1,5 @@
 /**
- * Shared feedback handler logic.
- * Both functions/api/feedback.js and app/functions/api/feedback.js
- * delegate to this module to avoid duplication.
+ * Shared feedback handler logic, used by app/functions/api/feedback.js.
  *
  * Feedback is always saved to KV for reliability. Email via Resend is best-effort.
  */

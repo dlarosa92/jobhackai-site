@@ -16,9 +16,10 @@ export async function onRequest({ request, env }) {
       JSON.stringify({ ok: true, uid, email: payload.email }), 
       { headers: { 'Content-Type': 'application/json' } }
     );
-  } catch (e) {
+  } catch (_) {
+    // Never echo verifier diagnostics (expected issuer, audience, key ids).
     return new Response(
-      JSON.stringify({ ok: false, error: e.message }), 
+      JSON.stringify({ ok: false, error: 'invalid_token' }), 
       { status: 401, headers: { 'Content-Type': 'application/json' } }
     );
   }

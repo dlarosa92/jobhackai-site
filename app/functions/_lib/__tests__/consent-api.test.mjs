@@ -20,7 +20,7 @@ function harness(path, {authFailure=false, userMissing=false, saveFailure=false,
   vm.runInContext(source+'\nglobalThis.handler=onRequest;',ctx);
   return {writes,reads,revocations,request:(body,headers={},method='POST')=>ctx.handler({env:{FIREBASE_PROJECT_ID:'qa',ENVIRONMENT:'qa'},request:new Request('https://qa.jobhackai.io/api/cookie-consent',{method,headers, ...(method==='POST'?{body:JSON.stringify(body)}:{})})})};
 }
-for(const path of ['app/functions/api/cookie-consent.js','functions/api/cookie-consent.js']) {
+for(const path of ['app/functions/api/cookie-consent.js']) {
   test(path+': rejection removes verified account and browser context and surfaces cleanup failure',async()=>{
     const h=harness(path);
     const headers={Authorization:'Bearer valid',Cookie:'jha_client_id_qa='+clientId};
@@ -100,7 +100,7 @@ for(const path of ['app/functions/api/cookie-consent.js','functions/api/cookie-c
   });
 }
 
-for (const path of ['app/functions/_lib/db.js','functions/_lib/db.js']) {
+for (const path of ['app/functions/_lib/db.js']) {
   test(path+': missing record differs from corrupt or null JSON',async()=>{
     const ctx={console:{error(){}},sanitizeRoleSpecificFeedback:value=>value};vm.createContext(ctx);
     vm.runInContext(readFileSync(new URL(path,root),'utf8').replace(/^import .*;\n/gm,'').replace(/^export /gm,'')+'\nglobalThis.readConsent=getCookieConsent;',ctx);
@@ -115,7 +115,7 @@ for (const path of ['app/functions/_lib/db.js','functions/_lib/db.js']) {
   });
 }
 
-for(const path of ['app/functions/api/cookie-consent.js','functions/api/cookie-consent.js'])test(path+': a body identifier cannot override conflicting browser cookies',async()=>{
+for(const path of ['app/functions/api/cookie-consent.js'])test(path+': a body identifier cannot override conflicting browser cookies',async()=>{
   const h=harness(path);
   const headers={Cookie:'jha_client_id_qa='+clientId+'; jha_client_id_qa=6bbba230-b755-4d31-b475-e20cf6d00ed9'};
   for(const method of ['GET','POST'])assert.equal((await h.request({clientId,consent:{version:1,analytics:true}},headers,method)).status,400);
