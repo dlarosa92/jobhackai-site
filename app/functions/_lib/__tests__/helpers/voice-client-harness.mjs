@@ -35,6 +35,7 @@ import { createVoiceUsage } from '../../../../../js/voice-usage.js';
 import { createVoiceTurnPlan } from '../../../../../js/voice-turn-plan.js';
 import { createTranscriptOrder } from '../../../../../js/voice-transcript-order.js';
 import { createVoiceAudioDiagnostics } from '../../../../../js/voice-audio-diagnostics.js';
+import * as voiceSummary from '../../../../../js/voice-summary-pdf.js';
 
 const CLIENT_SRC = new URL('../../../../../js/voice-interview.js', import.meta.url);
 
@@ -102,6 +103,7 @@ function makeElement(id) {
       toggle: (c, on) => { if (on === undefined ? classes.has(c) : !on) classes.delete(c); else classes.add(c); }
     },
     setAttribute: (k, v) => { attrs[k] = String(v); },
+    removeAttribute: (k) => { delete attrs[k]; },
     getAttribute: (k) => (k in attrs ? attrs[k] : null),
     addEventListener: (type, fn) => { (listeners[type] = listeners[type] || []).push(fn); },
     removeEventListener: () => {},
@@ -141,6 +143,8 @@ export function createVoiceClientHarness(options = {}) {
   let dataChannel = null;
   let peerConnection = null;
   let domReadyHandler = null;
+  const downloads = [];
+  const blobUrls = new Map();
 
   const trackTimer = (handle) => { timers.add(handle); return handle; };
 
@@ -149,6 +153,7 @@ export function createVoiceClientHarness(options = {}) {
   const documentStub = {
     readyState: 'loading',
     body: makeElement('__body'),
+    head: makeElement('__head'),
     getElementById: (id) => elements[id] || null,
     createElement: (tag) => makeElement('__' + tag),
     querySelector: (selector) => (selector === '.vi-wrap' ? wrapEl : null),
@@ -157,6 +162,21 @@ export function createVoiceClientHarness(options = {}) {
     removeEventListener: () => {}
   };
   documentStub.activeElement = documentStub.body;
+  // A lazily injected <script>: the test decides whether it loads or fails.
+  documentStub.head.appendChild = (el) => {
+    el.parentNode = documentStub.head;
+    documentStub.head.removeChild = () => { el.parentNode = null; };
+    setImmediate(() => {
+      const loaded = options.onScript ? options.onScript(el, win) : false;
+      if (loaded) el.onload && el.onload(); else el.onerror && el.onerror();
+    });
+  };
+  // A download is an <a download> appended to the body and clicked.
+  documentStub.body.appendChild = (el) => {
+    el.parentNode = documentStub.body;
+    if (el.download) el.click = () => downloads.push({ filename: el.download, blob: blobUrls.get(el.href) || null });
+  };
+  documentStub.body.removeChild = () => {};
   for (const el of Object.values(elements)) {
     el.isConnected = true;
     el.focus = () => { documentStub.activeElement = el; };
@@ -172,6 +192,9 @@ export function createVoiceClientHarness(options = {}) {
     requests.push({ url: String(url), method: (opts && opts.method) || 'GET', body, signal: opts?.signal });
     if (!key) return Promise.resolve({ ok: false, status: 404, json: async () => ({ error: 'no route' }), text: async () => '' });
     const out = await routes[key](String(url), opts || {});
+    if (out && out.__bytes !== undefined) {
+      return { ok: true, status: 200, arrayBuffer: async () => out.__bytes, json: async () => ({}), text: async () => '' };
+    }
     if (out && out.__text !== undefined) {
       return Promise.resolve({ ok: out.__status ? out.__status < 400 : true, status: out.__status || 200, text: async () => out.__text, json: async () => ({}) });
     }
@@ -243,6 +266,7 @@ export function createVoiceClientHarness(options = {}) {
     createTranscriptOrder,
     createVoiceUsage,
     createVoiceTurnPlan,
+    JobHackAIVoiceSummary: voiceSummary,
     createVoiceAudioDiagnostics: (env, readState) => {
       const diagnostics = createVoiceAudioDiagnostics(env, readState);
       if (options.onAudioDiagnostics) options.onAudioDiagnostics(diagnostics);
@@ -258,6 +282,12 @@ export function createVoiceClientHarness(options = {}) {
   win.RTCPeerConnection = StubPeerConnection;
   win.URLSearchParams = URLSearchParams;
   win.AbortController = AbortController;
+  win.Blob = Blob;
+  win.URL = {
+    createObjectURL: (blob) => { const url = 'blob:test-' + (blobUrls.size + 1); blobUrls.set(url, blob); return url; },
+    revokeObjectURL: () => {}
+  };
+  Object.assign(win, options.globals || {});
   win.Date = options.Date || Date;
   win.fetch = (url, opts) => respond(url, opts);
   win.setTimeout = (fn, ms) => trackTimer(setTimeout(fn, options.timerDelay ? options.timerDelay(ms) : ms));
@@ -286,6 +316,7 @@ export function createVoiceClientHarness(options = {}) {
 
   return {
     analyticsEvents,
+    downloads,
     windowEvent: (type, event) => (windowListeners[type] || []).forEach(fn => fn(event)),
     el: (id) => elements[id],
     activeElement: () => documentStub.activeElement,
