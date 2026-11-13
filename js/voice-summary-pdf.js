@@ -59,7 +59,8 @@ function pad2(n) { return (n < 10 ? '0' : '') + n; }
  *
  * @param {object} data - the GET /api/voice/session/:id payload
  * @returns {{available: false, reason: string} | {available: true, role: string,
- *   seniority: string, dateLabel: string, dateStamp: string, overview: string,
+ *   seniority: string, dateLabel: string, dateStamp: string, timeStamp: string,
+ *   title: string, overview: string,
  *   wentWell: Array<{label: string, text: string}>,
  *   workOn: Array<{label: string, text: string}>, nextPractice: string[],
  *   notAssessed: string[], notes: string[]}}
@@ -123,13 +124,19 @@ export function buildInterviewSummary(data) {
   notes.push(clean(sc.assessmentScope) || DEFAULT_SCOPE);
   notes.push(CLOSING_NOTE);
 
+  // Dates and times are shown in the reader's own time zone, like the report.
   const when = parseSessionDate(data.startedAt || data.createdAt);
+  const role = clean(data.role);
+  const dateLabel = when ? MONTHS[when.getMonth()] + ' ' + when.getDate() + ', ' + when.getFullYear() : '';
   return {
     available: true,
-    role: clean(data.role),
+    role,
     seniority: clean(data.seniority),
-    dateLabel: when ? MONTHS[when.getMonth()] + ' ' + when.getDate() + ', ' + when.getFullYear() : '',
+    dateLabel,
     dateStamp: when ? when.getFullYear() + '-' + pad2(when.getMonth() + 1) + '-' + pad2(when.getDate()) : '',
+    // 24 hour start time, so two sessions on the same day get different files.
+    timeStamp: when ? pad2(when.getHours()) + pad2(when.getMinutes()) : '',
+    title: ['Interview practice summary', role, dateLabel].filter(Boolean).join(' \u00B7 '),
     overview: clean(sc.summary),
     wentWell,
     workOn,
@@ -141,7 +148,8 @@ export function buildInterviewSummary(data) {
 
 /**
  * A download filename that is safe on every platform: ASCII letters, digits
- * and hyphens only, bounded length, no identifiers.
+ * and hyphens only, bounded length, no identifiers. The session start time
+ * keeps two sessions for the same role on the same day apart.
  */
 export function summaryFilename(summary) {
   let role = '';
@@ -149,7 +157,10 @@ export function summaryFilename(summary) {
   role = role.replace(/[\u0300-\u036F]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40).replace(/-+$/g, '');
   const parts = ['JobHackAI-interview-summary'];
   if (role) parts.push(role);
-  if (summary && /^\d{4}-\d{2}-\d{2}$/.test(summary.dateStamp || '')) parts.push(summary.dateStamp);
+  if (summary && /^\d{4}-\d{2}-\d{2}$/.test(summary.dateStamp || '')) {
+    parts.push(summary.dateStamp);
+    if (/^\d{4}$/.test(summary.timeStamp || '')) parts.push(summary.timeStamp);
+  }
   return parts.join('-') + '.pdf';
 }
 
@@ -204,7 +215,8 @@ export async function renderSummaryPdf(summary, deps) {
   const rgb = (c) => PDFLib.rgb(c[0], c[1], c[2]);
   const safe = (text, font) => fontSafe(text, glyphs.get(font));
 
-  doc.setTitle('Interview practice summary');
+  // Viewers show this title in the window title bar instead of the filename.
+  doc.setTitle(summary.title || 'Interview practice summary', { showInWindowTitleBar: true });
   doc.setAuthor('JobHackAI');
   doc.setSubject('Practice interview feedback summary');
   doc.setCreator('JobHackAI');

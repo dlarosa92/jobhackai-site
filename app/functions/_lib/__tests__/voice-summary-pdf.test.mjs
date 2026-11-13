@@ -15,6 +15,9 @@ import {
 import { loadPdfDeps, readPdf } from './helpers/pdf-test-kit.mjs';
 import { scoreVoiceTranscript } from '../voice-scorecard.js';
 
+// Dates and times are local; pin the zone so results match on any machine.
+process.env.TZ = 'UTC';
+
 const EM_DASH = String.fromCharCode(0x2014);
 
 function report(overrides = {}, scorecard = {}) {
@@ -195,9 +198,24 @@ test('authored copy uses US English and no em dash', () => {
 
 // ------------------------------------------------------------ filename
 
+test('two sessions for the same role on the same day get different filenames and titles', () => {
+  const morning = buildInterviewSummary(report({ startedAt: '2026-09-29 09:05:00' }));
+  const afternoon = buildInterviewSummary(report({ startedAt: '2026-09-29 14:05:00' }));
+  assert.equal(summaryFilename(morning), 'JobHackAI-interview-summary-Customer-Service-Representative-2026-09-29-0905.pdf');
+  assert.equal(summaryFilename(afternoon), 'JobHackAI-interview-summary-Customer-Service-Representative-2026-09-29-1405.pdf');
+  assert.equal(morning.title, 'Interview practice summary \u00B7 Customer Service Representative \u00B7 September 29, 2026');
+  assert.ok(!/\b72\b/.test(summaryFilename(morning) + morning.title), 'no score in the filename or title');
+});
+
+test('the title falls back cleanly when role or date is missing', () => {
+  const s = buildInterviewSummary(report({ role: null, startedAt: null, createdAt: null }));
+  assert.equal(s.title, 'Interview practice summary');
+  assert.equal(s.timeStamp, '');
+});
+
 test('filenames are descriptive, ASCII-safe and bounded', () => {
   assert.equal(summaryFilename(buildInterviewSummary(report())),
-    'JobHackAI-interview-summary-Customer-Service-Representative-2026-11-08.pdf');
+    'JobHackAI-interview-summary-Customer-Service-Representative-2026-11-08-1500.pdf');
   const hostile = summaryFilename({ role: '../../etc/passwd "Se\u00F1or" <Dev>\u202E\\ \uD83D\uDE00 ' + 'x'.repeat(200), dateStamp: '2026-11-08' });
   assert.match(hostile, /^[A-Za-z0-9-]+\.pdf$/);
   assert.ok(hostile.length <= 90, hostile);
@@ -210,7 +228,8 @@ test('filenames are descriptive, ASCII-safe and bounded', () => {
 test('a typical report renders as one page of selectable text', async () => {
   const { pdf } = await pdfOf(report());
   assert.equal(pdf.pageCount, 1);
-  assert.equal(pdf.info.title, 'Interview practice summary');
+  assert.equal(pdf.info.title, 'Interview practice summary \u00B7 Customer Service Representative \u00B7 November 8, 2026');
+  assert.equal(pdf.info.showTitle, true, 'viewers show the title, not the filename');
   for (const text of ['JOBHACKAI', 'Interview practice summary', 'Role: Customer Service Representative',
     'Seniority: Entry level', 'Session date: November 8, 2026', 'Overview', 'What went well', 'What to work on',
     'For your next practice', 'Not assessed in this session', 'About this feedback',
