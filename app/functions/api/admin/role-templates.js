@@ -4,6 +4,7 @@
 // PATCH /api/admin/role-templates (approve/deprecate)
 
 import { getDb } from '../../_lib/db.js';
+import { hasValidAdminKey } from '../../_lib/admin-auth.js';
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -19,7 +20,7 @@ function corsHeaders(origin, env) {
   return {
     'Access-Control-Allow-Origin': allowedOrigin,
     'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Key',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin'
   };
@@ -44,10 +45,9 @@ export async function onRequest(context) {
     return new Response(null, { headers: corsHeaders(origin, env) });
   }
   
-  // Auth check
-  const authHeader = request.headers.get('Authorization');
-  const expectedAuth = `Bearer ${env.ADMIN_API_KEY}`;
-  if (!env.ADMIN_API_KEY || authHeader !== expectedAuth) {
+  // Operator secret in X-Admin-Key (see _lib/admin-auth.js). Bearer is reserved
+  // for Firebase ID tokens and is rejected by api/_middleware.js.
+  if (!(await hasValidAdminKey(request, env))) {
     return json({ error: 'Unauthorized' }, 401, origin, env);
   }
   

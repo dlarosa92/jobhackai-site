@@ -51,7 +51,7 @@
       <strong>🎉 IMPROVEMENT:</strong> No more confusing "click Sign Up" step!
     </div>
     
-    <button class="btn btn-primary" onclick="testNewUserFlow()">Test New User Flow</button>
+    <button class="btn btn-primary" data-jh-call="testNewUserFlow">Test New User Flow</button>
   </div>
 
   <div class="demo-section">
@@ -79,18 +79,18 @@
       <strong>🎉 IMPROVEMENT:</strong> No more re-authentication for upgrades!
     </div>
     
-    <button class="btn btn-secondary" onclick="testExistingUserFlow()">Test Existing User Flow</button>
+    <button class="btn btn-secondary" data-jh-call="testExistingUserFlow">Test Existing User Flow</button>
   </div>
 
   <div class="demo-section">
     <h2>🔧 Test Different Scenarios</h2>
-    <button class="btn btn-outline" onclick="setupNewUser()">Setup New User</button>
-    <button class="btn btn-outline" onclick="setupFreeUser()">Setup Free User</button>
-    <button class="btn btn-outline" onclick="setupProUser()">Setup Pro User</button>
-    <button class="btn btn-outline" onclick="resetAll()">Reset All Data</button>
+    <button class="btn btn-outline" data-jh-call="setupNewUser">Setup New User</button>
+    <button class="btn btn-outline" data-jh-call="setupFreeUser">Setup Free User</button>
+    <button class="btn btn-outline" data-jh-call="setupProUser">Setup Pro User</button>
+    <button class="btn btn-outline" data-jh-call="resetAll">Reset All Data</button>
     <br><br>
-    <button class="btn btn-primary" onclick="goToPricing()">Go to Pricing Page</button>
-    <button class="btn btn-primary" onclick="goToLogin()">Go to Login Page</button>
+    <button class="btn btn-primary" data-jh-call="goToPricing">Go to Pricing Page</button>
+    <button class="btn btn-primary" data-jh-call="goToLogin">Go to Login Page</button>
   </div>
 
   <script>
@@ -170,6 +170,21 @@
 
     // Update state on page load
     updateCurrentState();
+  </script>
+  <script>
+    // Buttons name a page function in data-jh-call (arguments as a JSON array
+    // in data-jh-args). The CSP blocks inline onclick attributes. Only the
+    // functions listed here can be called this way.
+    (function () {
+      var allowed = ["testNewUserFlow", "testExistingUserFlow", "setupNewUser", "setupFreeUser", "setupProUser", "resetAll", "goToPricing", "goToLogin"];
+      document.addEventListener('click', function (event) {
+        var target = event.target instanceof Element ? event.target.closest('[data-jh-call]') : null;
+        if (!target) return;
+        var name = target.getAttribute('data-jh-call');
+        if (allowed.indexOf(name) === -1 || typeof window[name] !== 'function') return;
+        window[name].apply(null, JSON.parse(target.getAttribute('data-jh-args') || '[]'));
+      });
+    })();
   </script>
 </body>
 </html> 

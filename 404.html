@@ -103,7 +103,7 @@
       <p>This page doesn’t exist. Let’s get you back to your JobHackAI workspace.</p>
       <div class="buttons">
         <a class="btn-primary" id="primary-cta" href="https://jobhackai.io/">Go to homepage</a>
-        <button class="btn-outline" type="button" onclick="history.back()">Go back</button>
+        <button class="btn-outline" type="button" id="go-back-btn">Go back</button>
       </div>
       <p class="muted">
         If you followed a link from an email or another page, it may be outdated. Visit the
@@ -135,6 +135,11 @@
   </footer>
 
   <script>
+    // Bound here, not as an inline attribute: the CSP blocks inline event handlers.
+    (function () {
+      const back = document.getElementById('go-back-btn');
+      if (back) back.addEventListener('click', function () { history.back(); });
+    })();
     (function () {
       const cta = document.getElementById('primary-cta');
       if (!cta) return;
