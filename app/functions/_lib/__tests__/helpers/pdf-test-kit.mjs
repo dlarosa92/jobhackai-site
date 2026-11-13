@@ -87,6 +87,6 @@ export async function readPdf(bytes) {
     pageCount: pages.length,
     pages,
     text: pages.join(' '),
-    info: { title: doc.getTitle(), author: doc.getAuthor(), subject: doc.getSubject(), producer: doc.getProducer() }
+    info: { showTitle: (() => { const vp = doc.catalog.lookup(PDFLib.PDFName.of('ViewerPreferences')); return vp ? String(vp.get(PDFLib.PDFName.of('DisplayDocTitle'))) === 'true' : false; })(), title: doc.getTitle(), author: doc.getAuthor(), subject: doc.getSubject(), producer: doc.getProducer() }
   };
 }
