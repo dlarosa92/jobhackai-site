@@ -1,3 +1,7 @@
+/* Dashboard styles. @import must precede every other rule to be valid CSS;
+   the bundler already emitted this file first, so the cascade is unchanged. */
+@import './dashboard.css';
+
 /* JobHackAI Design System - Cloudflare App */
 :root {
   --color-bg-light: #F9FAFB;
@@ -140,9 +144,6 @@ a {
   color: var(--color-text-secondary);
   line-height: 1.6;
 }
-
-/* Import dashboard styles */
-@import './dashboard.css';
 
 @media (max-width: 768px) {
   .hero h1 {
