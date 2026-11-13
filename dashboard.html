@@ -2187,13 +2187,13 @@
           ${subStatus && subStatus.cancelAt ? `
             <div style="background:#FEF3C7;border-left:4px solid #F59E0B;color:#92400E;padding:0.8rem 1rem;border-radius:8px;margin:0.5rem 0;font-size:0.98rem;">
               ⚠️ <strong>Your subscription will be canceled on ${new Date(subStatus.cancelAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}.</strong> You'll have access until then.
-              <a href="#" onclick="openBillingPortal(event)" style="color:#92400E;text-decoration:underline;margin-left:0.5rem;">Manage subscription</a>
+              <a href="#" data-jh-click="openBillingPortal" style="color:#92400E;text-decoration:underline;margin-left:0.5rem;">Manage subscription</a>
             </div>
           ` : ''}
           ${subStatus && subStatus.scheduledPlanChange ? `
             <div style="background:#DBEAFE;border-left:4px solid #3B82F6;color:#1E40AF;padding:0.8rem 1rem;border-radius:8px;margin:0.5rem 0;font-size:0.98rem;">
               ℹ️ <strong>Your plan will change to ${subStatus.scheduledPlanChange.newPlan.charAt(0).toUpperCase() + subStatus.scheduledPlanChange.newPlan.slice(1)} on ${new Date(subStatus.scheduledPlanChange.effectiveDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}.</strong>
-              <a href="#" onclick="openBillingPortal(event)" style="color:#1E40AF;text-decoration:underline;margin-left:0.5rem;">View details</a>
+              <a href="#" data-jh-click="openBillingPortal" style="color:#1E40AF;text-decoration:underline;margin-left:0.5rem;">View details</a>
             </div>
           ` : ''}
           ${subStatus && subStatus.currentPeriodEnd && user.plan !== 'free' && !subStatus.cancelAt && !subStatus.scheduledPlanChange ? `
@@ -3557,6 +3557,13 @@
       });
       console.log(`✅ [DASHBOARD] Attached ${lockedButtons.length} upgrade button handlers`);
     }
+
+    // The billing links are rendered later with data-jh-click and dispatched
+    // here. The CSP blocks inline onclick attributes.
+    document.addEventListener('click', (event) => {
+      const target = event.target instanceof Element ? event.target.closest('[data-jh-click="openBillingPortal"]') : null;
+      if (target) openBillingPortal(event);
+    });
 
     // Billing portal helper function
     async function openBillingPortal(event) {

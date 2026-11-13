@@ -258,7 +258,8 @@ export async function onRequest(context) {
 
     // OIDC provider requires id_token (we request 'openid' scope)
     if (!idToken) {
-      console.error('[LINKEDIN-CALLBACK] No id_token in OIDC response:', tokenData);
+      // Field names only: the response body carries a live LinkedIn access token.
+      console.error('[LINKEDIN-CALLBACK] No id_token in OIDC response; fields:', Object.keys(tokenData || {}).join(','));
       return new Response('Invalid response from LinkedIn. Please try again.', {
         status: 500,
         headers: { 'Content-Type': 'text/plain', ...corsHeaders(origin, env), 'Set-Cookie': expireCookie }

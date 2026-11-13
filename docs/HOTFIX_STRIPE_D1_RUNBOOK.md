@@ -50,7 +50,8 @@ explicitly authorized them.
 
 - [ ] Production Pages env: `STRIPE_SECRET_KEY` is `sk_live_*`, live
       `whsec_*`, `ENVIRONMENT=PROD` (dashboard eyes-on; `/api/health-env`
-      with an authed token for existence checks). Fixing a wrong key/var is
+      with the operator secret in `X-Admin-Key` for existence checks; a
+      signed-in user token is accepted only in dev and QA). Fixing a wrong key/var is
       the root-cause remediation and precedes everything else.
 - [ ] QA Pages env: `sk_test_*` key, test `whsec_*`, `ENVIRONMENT=qa`.
 - [ ] Cloudflare Pages Function metrics/logs over a trailing window show no

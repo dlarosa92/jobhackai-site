@@ -1,0 +1,42 @@
+name: Security hardening
+on:
+  pull_request:
+    branches: [dev0, develop, main]
+    paths:
+      - '*.html'
+      - 'js/**'
+      - 'app/functions/**'
+      - 'app/public/**'
+      - 'app/src/**'
+      - 'app/package.json'
+      - 'app/package-lock.json'
+      - '.github/workflows/test-security-hardening.yml'
+  push:
+    branches: [dev0, develop, main]
+    paths:
+      - '*.html'
+      - 'js/**'
+      - 'app/functions/**'
+      - 'app/public/**'
+      - 'app/src/**'
+      - 'app/package.json'
+      - 'app/package-lock.json'
+      - '.github/workflows/test-security-hardening.yml'
+permissions:
+  contents: read
+jobs:
+  security-hardening:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: app
+      # Operator secret, admin and cron endpoints, diagnostic endpoints, token
+      # logging, the script CSP nonce, and the no-inline-handler source guard.
+      - run: npm run test:security
+        working-directory: app

@@ -1,9 +1,17 @@
 // Lightweight cron worker to sync KV-cached resume states into D1 when possible.
+//
+// This is a public URL on the Pages project (/cron/kv-d1-sync), so it requires
+// the operator secret in X-Admin-Key. Without it anyone could trigger a full
+// KV scan plus D1 writes on demand. A missing ADMIN_API_KEY fails closed.
 import { getDb, getOrCreateUserByAuthId, upsertResumeSessionWithScores, setFirstResumeSnapshot, getFirstResumeSnapshot, isD1Available, isDeletedUser } from '../_lib/db.js';
 import { sanitizeResumeId } from '../_lib/input-sanitizer.js';
+import { hasValidAdminKey } from '../_lib/admin-auth.js';
 
 export async function onRequest(context) {
-  const { env } = context;
+  const { request, env } = context;
+  if (!(await hasValidAdminKey(request, env))) {
+    return Response.json({ error: 'unauthorized' }, { status: 401, headers: { 'Cache-Control': 'no-store' } });
+  }
   const kv = env.JOBHACKAI_KV;
   if (!kv) {
     console.warn('[KV-D1-SYNC] No KV binding available');
