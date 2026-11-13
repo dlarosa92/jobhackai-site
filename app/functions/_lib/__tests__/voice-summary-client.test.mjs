@@ -13,6 +13,9 @@ import {
 } from './helpers/voice-client-harness.mjs';
 import { loadPdfDeps, fontBytes, readPdf } from './helpers/pdf-test-kit.mjs';
 
+// Dates and times are local; pin the zone so results match on any machine.
+process.env.TZ = 'UTC';
+
 const BUTTON = 'vi-summary-pdf-btn';
 const STATUS = 'vi-summary-pdf-status';
 
@@ -83,10 +86,11 @@ test('a full report reopened from history offers the download and produces a rea
     await until(h, () => h.downloads.length === 1, 'the download');
     await until(h, () => idle(h), 'the button to reset');
 
-    assert.equal(h.downloads[0].filename, 'JobHackAI-interview-summary-Product-Manager-2026-07-20.pdf');
+    assert.equal(h.downloads[0].filename, 'JobHackAI-interview-summary-Product-Manager-2026-07-20-1500.pdf');
     assert.equal(h.downloads[0].blob.type, 'application/pdf');
     const pdf = await readPdf(new Uint8Array(await h.downloads[0].blob.arrayBuffer()));
     assert.equal(pdf.pageCount, 1);
+    assert.equal(pdf.info.title, 'Interview practice summary \u00B7 Product Manager \u00B7 July 20, 2026');
     assert.ok(pdf.text.includes('You quantified the checkout relaunch.'));
     assert.ok(pdf.text.includes('Top priority: Name the outcome before the process.'));
     assert.ok(!pdf.text.includes('I owned the checkout relaunch.'), 'the transcript stays out');
