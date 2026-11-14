@@ -84,6 +84,11 @@ jobs:
         working-directory: app/functions/_lib/__tests__
         run: node ats-scoring-engine.test.mjs
 
+      # The score cache must be keyed on the whole resume, never a prefix.
+      - name: Run ATS score cache key tests
+        working-directory: app/functions/_lib/__tests__
+        run: node --test ats-cache-key.test.mjs
+
       # Deterministic voice suites — no API key, no cost. These prove the
       # transcript assembler and the prompt's own text, NOT that the live model
       # obeys the prompt; that stays a manual dev-session check.

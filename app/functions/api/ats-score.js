@@ -6,6 +6,7 @@ import { scoreResume } from '../_lib/ats-scoring-engine.js';
 import { getOrCreateUserByAuthId, upsertResumeSessionWithScores, isD1Available, getDb, claimFreeATSUsage, getUserPlan } from '../_lib/db.js';
 import { normalizeRoleToFamily } from '../_lib/role-normalizer.js';
 import { sanitizeResumeId } from '../_lib/input-sanitizer.js';
+import { atsCacheKey } from '../_lib/ats-cache-key.js';
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -163,13 +164,9 @@ export async function onRequest(context) {
     let cachedResult = null;
     if (kv) {
       try {
-        // FIX: Use content-based hash instead of resumeId to ensure same resume = same cache
-        // This prevents different users from getting different cached scores for the same resume
-        // Use first 2000 chars for better uniqueness while keeping hash fast
-        const textHash = await hashString(text.substring(0, 2000));
-        const cacheKeyBase = `${textHash}:${normalizedJobTitle}:ats`;
-        const cacheHash = await hashString(cacheKeyBase);
-        const cacheKey = `atsCache:${cacheHash}`;
+        // Content-based key over the WHOLE resume text (see _lib/ats-cache-key.js):
+        // the same resume and role always hit the same entry, and any edit misses.
+        const cacheKey = await atsCacheKey(text, normalizedJobTitle);
         const cached = await kv.get(cacheKey);
         
         if (cached) {
@@ -514,11 +511,8 @@ export async function onRequest(context) {
     // Cache result (24 hours) - best effort, skip if KV unavailable
     if (kv) {
       try {
-        // FIX: Use same content-based hash for cache write
-        const textHash = await hashString(text.substring(0, 2000));
-        const cacheKeyBase = `${textHash}:${normalizedJobTitle}:ats`;
-        const cacheHash = await hashString(cacheKeyBase);
-        const cacheKey = `atsCache:${cacheHash}`;
+        // Same content-based key as the cache read above.
+        const cacheKey = await atsCacheKey(text, normalizedJobTitle);
         await kv.put(cacheKey, JSON.stringify({
           result,
           timestamp: Date.now()
@@ -593,13 +587,3 @@ export async function onRequest(context) {
     }, 500, origin, env);
   }
 }
-
-// Simple hash function for cache keys
-async function hashString(str) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(str);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
