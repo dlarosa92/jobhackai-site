@@ -10,6 +10,7 @@ on:
       - 'app/src/**'
       - 'app/package.json'
       - 'app/package-lock.json'
+      - 'app/tsconfig.json'
       - '.github/workflows/test-security-hardening.yml'
   push:
     branches: [dev0, develop, main]
@@ -21,6 +22,7 @@ on:
       - 'app/src/**'
       - 'app/package.json'
       - 'app/package-lock.json'
+      - 'app/tsconfig.json'
       - '.github/workflows/test-security-hardening.yml'
 permissions:
   contents: read
@@ -40,3 +42,15 @@ jobs:
       # logging, the script CSP nonce, and the no-inline-handler source guard.
       - run: npm run test:security
         working-directory: app
+      # Pages currently packages Functions with Wrangler 3.114.17, independently
+      # of the project dependency. Exercise that exact packaging path as well.
+      - name: Build with the Cloudflare Pages Functions packager
+        working-directory: app
+        run: |
+          npx --yes wrangler@3.114.17 pages functions build functions --outdir="$RUNNER_TEMP/jobhackai-pages-functions"
+          cp "$RUNNER_TEMP/jobhackai-pages-functions/index.js" "$RUNNER_TEMP/jobhackai-pages-functions/index.mjs"
+      - name: Verify the Pages bundle with intercepted providers
+        working-directory: app
+        env:
+          JOBHACKAI_FUNCTIONS_BUNDLE: ${{ runner.temp }}/jobhackai-pages-functions/index.mjs
+        run: node --test functions/_lib/__tests__/account-operation-bundle.test.mjs
