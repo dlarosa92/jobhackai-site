@@ -109,6 +109,38 @@
   display: none;
 }
 
+/* main.css gives every <header> 1.5rem of side padding on top of the
+   container's own. On the narrowest phones that left too little room for the
+   logo, the account button and the menu button. */
+@media (max-width: 480px) {
+  .site-header {
+    padding-left: 0;
+    padding-right: 0;
+  }
+}
+
+/* Between the mobile breakpoint and 1023px the signed-in menu (six links plus
+   the account button) is wider than the window, which pushed the account
+   button off screen and gave the whole page a sideways scrollbar. Tighten the
+   spacing in that band instead of switching to the mobile menu, so a window
+   snapped to half of a 1920px screen still gets the full menu. */
+@media (min-width: 901px) and (max-width: 1023px) {
+  .site-header .container {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+  .site-header .nav-group {
+    margin-left: 1.25rem;
+    gap: 1rem;
+  }
+  .site-header .nav-links {
+    gap: 0.4rem;
+  }
+  .site-header .nav-links a {
+    font-size: 0.9rem;
+  }
+}
+
 @media (max-width: 900px) {
   .container {
     padding: 0 1rem;
@@ -118,6 +150,23 @@
   }
   .cta-button {
     display: none;
+  }
+  /* navigation.js builds the desktop "Sign Up Free" button with an inline
+     display style and without the .cta-button class, so the rule above never
+     hid it. On phones it was squeezed onto three lines, stuck out below the
+     header and pushed the menu button off screen. The mobile menu carries its
+     own copy of the button. */
+  .site-header .nav-actions > a.btn,
+  .site-header .nav-actions > .cta-skeleton-desktop {
+    display: none !important;
+  }
+  /* Logo on the left, account button and menu button on the right. Without
+     the full width the three items sat bunched together in the middle. */
+  .site-header .container {
+    width: 100%;
+  }
+  .site-header .nav-group {
+    margin-left: auto;
   }
   .mobile-toggle {
     display: block;
