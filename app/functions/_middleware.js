@@ -26,6 +26,28 @@ function documentRequestWithoutValidators(request) {
   return new Request(request, { headers: stripped });
 }
 
+// Stamp one <script> element with the response nonce and opt it out of
+// Cloudflare Rocket Loader.
+//
+// Rocket Loader is enabled on the jobhackai.io zone and runs at the edge AFTER
+// this function. It rewrites every script's type so the browser skips it, then
+// re-creates the scripts from its own loader. The copies it makes of inline
+// scripts carry no nonce, so the CSP blocks them and pages stay half loaded
+// (the dashboard never leaves its skeleton). data-cfasync="false" is the
+// documented per-script opt-out; Cloudflare requires it to appear BEFORE src,
+// so the attribute list is rebuilt with it first. Do not remove this while
+// script-src has no 'unsafe-inline', unless Rocket Loader is switched off for
+// every app hostname in the Cloudflare dashboard.
+function stampScript(element, nonce) {
+  const attributes = [...element.attributes];
+  for (const [name] of attributes) element.removeAttribute(name);
+  element.setAttribute('data-cfasync', 'false');
+  for (const [name, value] of attributes) {
+    if (name !== 'data-cfasync' && name !== 'nonce') element.setAttribute(name, value);
+  }
+  element.setAttribute('nonce', nonce);
+}
+
 // Diagnostic pages/endpoints, reachable ONLY when ENVIRONMENT is explicitly
 // a known non-production value (fail closed: a missing or misspelled
 // ENVIRONMENT blocks them instead of exposing them).
@@ -115,7 +137,7 @@ export async function onRequest({ request, next, env }) {
     h.delete('content-length');
     if (!/no-store/i.test(h.get('cache-control') || '')) h.set('cache-control', 'private, no-cache');
     body = new HTMLRewriter()
-      .on('script', { element(element) { element.setAttribute('nonce', nonce); } })
+      .on('script', { element(element) { stampScript(element, nonce); } })
       .transform(res).body;
   }
 
