@@ -224,7 +224,8 @@ test('CSP: app/public/_headers carries the same nonce-less policy', () => {
   assert.equal(lines[0].trim().slice('Content-Security-Policy:'.length).trim(), CONTENT_SECURITY_POLICY);
 });
 
-// Minimal stand-in for the Workers HTMLRewriter (absent in Node).
+// Minimal stand-in for the Workers HTMLRewriter (absent in Node). Attributes
+// keep insertion order, as the real rewriter serializes them.
 class FakeHTMLRewriter {
   on(selector, handlers) { assert.equal(selector, 'script'); this.handlers = handlers; return this; }
   transform(response) {
@@ -232,10 +233,17 @@ class FakeHTMLRewriter {
     return new Response(new ReadableStream({
       async start(controller) {
         const text = await response.text();
-        controller.enqueue(new TextEncoder().encode(text.replace(/<script\b([^>]*)>/gi, (match, attrs) => {
-          const added = [];
-          handlers.element({ setAttribute: (name, value) => added.push(` ${name}="${value}"`) });
-          return `<script${attrs}${added.join('')}>`;
+        controller.enqueue(new TextEncoder().encode(text.replace(/<script\b([^>]*)>/gi, (match, raw) => {
+          let attributes = [...raw.matchAll(/([^\s=]+)(?:="([^"]*)")?/g)].map((m) => [m[1], m[2] ?? '']);
+          handlers.element({
+            get attributes() { return attributes[Symbol.iterator](); },
+            removeAttribute(name) { attributes = attributes.filter(([n]) => n !== name); },
+            setAttribute(name, value) {
+              const existing = attributes.find(([n]) => n === name);
+              if (existing) existing[1] = value; else attributes.push([name, value]);
+            }
+          });
+          return `<script${attributes.map(([n, v]) => ` ${n}="${v}"`).join('')}>`;
         })));
         controller.close();
       }
@@ -271,6 +279,28 @@ test('CSP: every script element of an HTML document carries the nonce named in i
   for (const tag of tags) assert.ok(tag.includes(`nonce="${nonce}"`), tag);
   const second = await throughMiddleware();
   assert.notEqual(/'nonce-([^']+)'/.exec(second.res.headers.get('content-security-policy'))[1], nonce, 'a new nonce per response');
+});
+
+// Cloudflare Rocket Loader re-creates scripts without the nonce, which the CSP
+// then blocks. Every script must carry the documented opt-out, placed before src.
+test('CSP: every script opts out of Cloudflare Rocket Loader, with data-cfasync before src', async () => {
+  const { text } = await throughMiddleware({
+    body: '<html><head><script src="js/a.js?v=1" defer></script><script type="module" src="js/m.js"></script>'
+      + '<script>inline()</script><script async src="https://www.googletagmanager.com/gtag/js" data-cfasync="true" nonce="stale"></script></head></html>'
+  });
+  const tags = text.match(/<script\b[^>]*>/g);
+  assert.equal(tags.length, 4);
+  for (const tag of tags) {
+    assert.ok(tag.startsWith('<script data-cfasync="false"'), `opt-out must be the first attribute: ${tag}`);
+    assert.equal(tag.match(/data-cfasync=/g).length, 1, tag);
+    assert.equal(tag.match(/nonce=/g).length, 1, tag);
+    assert.ok(!tag.includes('nonce="stale"'), tag);
+    if (tag.includes(' src=')) assert.ok(tag.indexOf('data-cfasync') < tag.indexOf(' src='), tag);
+  }
+  // Nothing else about the tags changes.
+  assert.ok(tags[0].includes(' src="js/a.js?v=1"') && tags[0].includes(' defer='));
+  assert.ok(tags[1].includes(' type="module"') && tags[1].includes(' src="js/m.js"'));
+  assert.ok(tags[3].includes(' async=') && tags[3].includes(' src="https://www.googletagmanager.com/gtag/js"'));
 });
 
 test('CSP: a nonced document cannot be cached by a shared cache or revalidated', async () => {
