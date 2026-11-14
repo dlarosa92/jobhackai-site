@@ -176,6 +176,9 @@
       margin: 2.5rem auto 4rem auto;
       padding: 0 1rem;
       width: 100%;
+      /* Without this the side padding is added on top of width: 100%, which
+         made the page scroll sideways on every screen narrower than 1232px. */
+      box-sizing: border-box;
     }
     /* Canonical feature-tile pattern (matches resume-feedback-pro.html) */
     .rf-card {
