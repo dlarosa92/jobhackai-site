@@ -218,6 +218,18 @@
       align-items: center;
       gap: 0.5rem;
     }
+    /* At two window width ranges the grid packs cards too narrow for the
+       button and the usage meter to sit side by side: just after it switches
+       to two columns, and from where it switches to three columns until the
+       cards reach full width. There the meter spilled out of the card and the
+       page scrolled sideways. Let it drop below the button in those ranges
+       only; every other width keeps the side by side layout unchanged. The
+       upper bounds allow for a classic 17px scrollbar. */
+    @media (min-width: 701px) and (max-width: 745px), (min-width: 858px) and (max-width: 1119px) {
+      .feature-card .feature-action {
+        flex-wrap: wrap;
+      }
+    }
     .feature-card .feature-action .btn-primary,
     .feature-card .feature-action a.btn-primary {
       padding: 0.7rem 1.5rem;
