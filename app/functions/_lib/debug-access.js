@@ -1,11 +1,15 @@
 const PRODUCTION_ENVIRONMENTS = new Set(['prod', 'production']);
 const NON_PRODUCTION_ENVIRONMENTS = new Set(['qa', 'dev', 'development']);
 
+// The Clarity and Cloudflare Web Analytics origins match what production
+// already allows (consent-controlled; both are off outside production). Keep
+// vendor origins scoped to the resource types they use; do not widen default-src.
+//
 // script-src never contains 'unsafe-inline'. Inline <script> blocks run only
 // when they carry the per-response nonce that functions/_middleware.js adds to
 // HTML documents; inline event-handler attributes (onclick="...") and
 // javascript: URLs never run. Bind handlers with addEventListener instead.
-const SCRIPT_HOSTS = "https://www.gstatic.com https://www.googleapis.com https://apis.google.com https://accounts.google.com https://www.googletagmanager.com https://www.google-analytics.com https://www.google.com https://js.stripe.com https://checkout.stripe.com https://*.firebaseapp.com";
+const SCRIPT_HOSTS = "https://www.gstatic.com https://www.googleapis.com https://apis.google.com https://accounts.google.com https://www.googletagmanager.com https://www.google-analytics.com https://www.google.com https://js.stripe.com https://checkout.stripe.com https://*.firebaseapp.com https://www.clarity.ms https://scripts.clarity.ms https://static.cloudflareinsights.com";
 
 /**
  * Build the Content-Security-Policy. With a nonce, inline scripts carrying
@@ -20,11 +24,11 @@ export function contentSecurityPolicy(nonce) {
     "object-src 'none'",
     "frame-ancestors 'none'",
     "form-action 'self' https://checkout.stripe.com https://billing.stripe.com",
-    "img-src 'self' data: blob: https://www.gstatic.com https://www.google-analytics.com https://www.googletagmanager.com https://*.googleusercontent.com https://jobhackai.io https://app.jobhackai.io",
+    "img-src 'self' data: blob: https://www.gstatic.com https://www.google-analytics.com https://www.googletagmanager.com https://*.googleusercontent.com https://jobhackai.io https://app.jobhackai.io https://*.clarity.ms https://c.bing.com",
     "font-src 'self' data: https://fonts.gstatic.com",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     scriptSrc,
-    "connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://firebaseinstallations.googleapis.com https://www.googleapis.com https://api.stripe.com https://checkout.stripe.com https://www.google-analytics.com https://region1.google-analytics.com https://stats.g.doubleclick.net https://*.firebaseio.com https://*.firebasedatabase.app https://*.firebaseapp.com https://api.openai.com",
+    "connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://firebaseinstallations.googleapis.com https://www.googleapis.com https://api.stripe.com https://checkout.stripe.com https://www.google-analytics.com https://region1.google-analytics.com https://stats.g.doubleclick.net https://*.firebaseio.com https://*.firebasedatabase.app https://*.firebaseapp.com https://api.openai.com https://*.clarity.ms https://cloudflareinsights.com",
     "frame-src 'self' https://accounts.google.com https://*.google.com https://*.firebaseapp.com https://js.stripe.com https://hooks.stripe.com https://checkout.stripe.com",
     "worker-src 'self' blob:",
     "manifest-src 'self'",

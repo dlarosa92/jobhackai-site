@@ -1,29 +1,11 @@
-// KV test endpoint to verify KV namespace binding
+// Read-only, non-production diagnostic for the KV namespace binding.
 // GET /api/kv-test?key=config:ats
-//
-// Diagnostic only. Reachable solely when ENVIRONMENT is explicitly a known
-// non-production value (also enforced in functions/_middleware.js), and only
-// for the keys below: KV also holds resume text, billing caches and feedback,
-// which this endpoint must never be able to read for the caller.
 
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
 import { isExplicitNonProductionEnvironment, notFoundInProductionResponse } from '../_lib/debug-access.js';
 
-const READABLE_KEYS = new Set(['config:ats']);
-const SCRATCH_PREFIX = 'test:kv-test:';
-const SCRATCH_TTL_SECONDS = 300;
-const SCRATCH_SUFFIX = /^[A-Za-z0-9_-]{1,64}$/;
-
-// The only keys this endpoint touches: the documented config key, and a
-// short-lived scratch key namespaced to the caller's own uid.
-export function resolveKvTestKey(requested, uid) {
-  const key = requested || 'config:ats';
-  if (READABLE_KEYS.has(key)) return { key, writable: false };
-  if (key.startsWith(SCRATCH_PREFIX) && SCRATCH_SUFFIX.test(key.slice(SCRATCH_PREFIX.length))) {
-    return { key: `${SCRATCH_PREFIX}${uid}:${key.slice(SCRATCH_PREFIX.length)}`, writable: true };
-  }
-  return null;
-}
+// Never accept account data keys or caller-controlled write targets.
+const ALLOWED_DIAGNOSTIC_KEYS = new Set(['config:ats']);
 
 function corsHeaders(origin, env) {
   const allowedOrigins = [
@@ -82,17 +64,16 @@ export async function onRequest(context) {
     let uid;
     try {
       ({ uid } = await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID));
-    } catch (_) {
+    } catch {
       return json({ success: false, error: 'Unauthorized' }, 401, origin, env);
     }
 
-    // Only the documented config key or the caller's own scratch key.
+    // Get key from query params
     const url = new URL(request.url);
-    const resolved = resolveKvTestKey(url.searchParams.get('key'), uid);
-    if (!resolved) {
-      return json({ success: false, error: 'key_not_allowed' }, 400, origin, env);
+    const testKey = url.searchParams.get('key') || 'config:ats';
+    if (!ALLOWED_DIAGNOSTIC_KEYS.has(testKey)) {
+      return json({ success: false, error: 'Unsupported diagnostic key' }, 400, origin, env);
     }
-    const testKey = resolved.key;
 
     // Check KV binding
     const kvAvailable = !!env.JOBHACKAI_KV;
@@ -113,21 +94,8 @@ export async function onRequest(context) {
     try {
       kvValue = await env.JOBHACKAI_KV.get(testKey);
     } catch (err) {
-      kvError = 'kv_read_failed';
+      kvError = err.message;
       console.error('[KV-TEST] KV read error:', err);
-    }
-
-    // Test write (optional - only if key doesn't exist). Scratch keys expire so
-    // repeated checks cannot accumulate storage.
-    let writeSuccess = false;
-    if (!kvValue && resolved.writable) {
-      try {
-        await env.JOBHACKAI_KV.put(testKey, JSON.stringify({ test: true, timestamp: Date.now() }), { expirationTtl: SCRATCH_TTL_SECONDS });
-        writeSuccess = true;
-        kvValue = await env.JOBHACKAI_KV.get(testKey);
-      } catch (err) {
-        console.error('[KV-TEST] KV write error:', err);
-      }
     }
 
     return json({
@@ -143,14 +111,17 @@ export async function onRequest(context) {
         }
       })() : null,
       kvError: kvError || null,
-      writeSuccess,
+      writeSuccess: false,
       uid,
       timestamp: new Date().toISOString()
     }, 200, origin, env);
 
   } catch (error) {
     console.error('[KV-TEST] Error:', error);
-    return json({ success: false, error: 'Internal server error' }, 500, origin, env);
+    return json({ 
+      success: false, 
+      error: 'Internal server error',
+      message: error.message 
+    }, 500, origin, env);
   }
 }
-

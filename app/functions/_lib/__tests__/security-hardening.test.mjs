@@ -18,7 +18,7 @@ import { onRequest as cronSync } from '../../cron/kv-d1-sync.js';
 import { onRequest as detectGaps } from '../../api/admin/detect-gaps.js';
 import { onRequest as roleTemplates } from '../../api/admin/role-templates.js';
 import { onRequest as generateRoleTemplate } from '../../api/admin/generate-role-template.js';
-import { onRequest as kvTest, resolveKvTestKey } from '../../api/kv-test.js';
+import { onRequest as kvTest } from '../../api/kv-test.js';
 import { onRequest as healthEnv } from '../../api/health-env.js';
 import { onRequest as echoAuth } from '../../api/echo-auth.js';
 import { onRequest as linkedinCallback } from '../../api/auth/linkedin/callback.js';
@@ -118,19 +118,8 @@ test('kv-test: in dev it still requires a valid token and never returns verifier
   assert.deepEqual(JSON.parse(body), { success: false, error: 'Unauthorized' });
 });
 
-test('kv-test: only the config key or the caller\'s own scratch key can be addressed', () => {
-  const uid = 'uid-123';
-  assert.deepEqual(resolveKvTestKey(null, uid), { key: 'config:ats', writable: false });
-  assert.deepEqual(resolveKvTestKey('config:ats', uid), { key: 'config:ats', writable: false });
-  assert.deepEqual(resolveKvTestKey('test:kv-test:probe_1', uid), { key: 'test:kv-test:uid-123:probe_1', writable: true });
-  for (const key of [
-    'user:victim:lastResume', 'resume:victim:1700000000000', 'cusByUid:victim', 'planByUid:victim', 'deleted:victim',
-    'feedback:1700000000000-abc123', 'feedbackRateLimit:1.2.3.4', 'lm:email:abc', 'atsUsage:victim:lifetime',
-    'test:anything', 'test:kv-test:', 'test:kv-test:other-uid:probe', 'test:kv-test:../config', 'config:ats ', 'config:other'
-  ]) {
-    assert.equal(resolveKvTestKey(key, uid), null, key);
-  }
-});
+// Key boundaries (only config:ats, never account data, no writes) are covered
+// with a real signed token in kv-test.test.mjs, shared with production.
 
 // --------------------------------------------------------------- health-env
 
