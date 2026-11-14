@@ -181,3 +181,66 @@ test('recovery cannot prepare until the intent exists and earlier operations fin
  assert.equal(await f.count('account_operation_claims'),0);
  await assert.rejects(admitAccountOperation(f.env,'owner'),/deletion_pending/);
 });
+
+// Uploads are stored in KV as resume:<uid>:<timestamp> before any D1 row exists.
+// One that was never scored has no SQL reference and used to survive deletion.
+function listingKv(f, stored, { pageSize = 1000, fail = false } = {}) {
+  const calls = [];
+  f.env.JOBHACKAI_KV.list = async ({ prefix, cursor } = {}) => {
+    calls.push({ prefix, cursor });
+    if (fail) throw Error('synthetic private provider failure');
+    const matching = stored.filter(name => name.startsWith(prefix));
+    const start = cursor ? Number(cursor) : 0;
+    const keys = matching.slice(start, start + pageSize).map(name => ({ name }));
+    const next = start + pageSize;
+    return next < matching.length ? { keys, list_complete: false, cursor: String(next) } : { keys, list_complete: true };
+  };
+  return calls;
+}
+
+test('unscored uploads with no database row are deleted with the account',async t=>{
+  const f=setup(t),job=await ready(f);
+  const calls=listingKv(f,['resume:owner:1700000000001','resume:owner:1700000000002','resume:other:1700000000003','resume:owner2:1700000000004','user:owner:lastResume']);
+  assert.equal((await finishDeletionRecovery(f.env,job.id)).complete,true);
+  assert.ok(f.deleted.includes('resume:owner:1700000000001')&&f.deleted.includes('resume:owner:1700000000002'));
+  // Another account's uploads are never touched, including a uid that merely starts with the same text.
+  assert.ok(!f.deleted.some(key=>key.startsWith('resume:other:')||key.startsWith('resume:owner2:')));
+  assert.deepEqual(calls.map(call=>call.prefix),['resume:owner:']);
+  // References that came from D1 are still deleted as before.
+  assert.ok(f.deleted.includes('raw:one')&&f.deleted.includes('planByUid:owner'));
+});
+
+test('every page of a long upload listing is followed',async t=>{
+  const f=setup(t),job=await ready(f);
+  const stored=Array.from({length:7},(_,i)=>`resume:owner:${1700000000000+i}`);
+  const calls=listingKv(f,stored,{pageSize:3});
+  await finishDeletionRecovery(f.env,job.id);
+  for(const key of stored)assert.ok(f.deleted.includes(key),key);
+  assert.deepEqual(calls.map(call=>call.cursor),[undefined,'3','6']);
+});
+
+test('a failed upload listing leaves the job retryable and deletes nothing',async t=>{
+  const f=setup(t),job=await ready(f);
+  listingKv(f,['resume:owner:1700000000001'],{fail:true});
+  await assert.rejects(finishDeletionRecovery(f.env,job.id));
+  assert.deepEqual(f.deleted,[]);
+  const row=await f.row(job.id);assert.equal(row.phase,'identity_removed');
+  assert.ok(!JSON.stringify(row).includes('synthetic private provider failure'));
+  assert.equal(await f.count('users'),2);
+  listingKv(f,['resume:owner:1700000000001']);
+  assert.equal((await finishDeletionRecovery(f.env,job.id)).complete,true);
+  assert.ok(f.deleted.includes('resume:owner:1700000000001'));
+});
+
+test('discovered uploads are saved to the manifest before any deletion, so a failed cleanup can be retried',async t=>{
+  const f=setup(t),job=await ready(f);
+  listingKv(f,['resume:owner:1700000000001']);
+  const remove=f.env.JOBHACKAI_KV.delete;
+  f.env.JOBHACKAI_KV.delete=async()=>{throw Error('offline');};
+  await assert.rejects(finishDeletionRecovery(f.env,job.id));
+  assert.ok(JSON.parse((await f.row(job.id)).kv_keys_json).includes('resume:owner:1700000000001'));
+  // The retry succeeds from the saved manifest even if the listing now returns nothing.
+  f.env.JOBHACKAI_KV.delete=remove;listingKv(f,[]);
+  assert.equal((await finishDeletionRecovery(f.env,job.id)).complete,true);
+  assert.ok(f.deleted.includes('resume:owner:1700000000001'));
+});

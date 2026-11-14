@@ -84,6 +84,11 @@ jobs:
         working-directory: app/functions/_lib/__tests__
         run: node ats-scoring-engine.test.mjs
 
+      # The score cache must be keyed on the whole resume, never a prefix.
+      - name: Run ATS score cache key tests
+        working-directory: app/functions/_lib/__tests__
+        run: node --test ats-cache-key.test.mjs
+
       # A tagged PDF that the converter returns empty must be retried untagged.
       - name: Run PDF upload retry tests
         working-directory: app/functions/_lib/__tests__
