@@ -69,7 +69,7 @@
     "test:billing:revenue": "node functions/_lib/__tests__/collected-revenue.test.mjs && node --test functions/_lib/__tests__/payment-attribution.test.mjs && node --test functions/_lib/__tests__/analytics-money.test.mjs",
     "test:billing:status": "node --test functions/_lib/__tests__/billing-status-owner.test.mjs",
     "test:openai:migration": "node --test functions/_lib/__tests__/openai-migration.test.mjs",
-    "test:security": "node --test functions/_lib/__tests__/security-hardening.test.mjs && node functions/_lib/__tests__/middleware-headers.test.mjs"
+    "test:security": "node --test functions/_lib/__tests__/security-hardening.test.mjs && node --conditions=workerd --test functions/_lib/__tests__/kv-test.test.mjs && node functions/_lib/__tests__/middleware-headers.test.mjs"
   },
   "dependencies": {
     "firebase": "^12.19.0",
