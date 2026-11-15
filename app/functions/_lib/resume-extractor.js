@@ -269,81 +269,52 @@ export async function extractResumeText(file, fileName, env) {
  * - Text-based multi-column detection (heuristic)
  */
 async function extractPdfText(arrayBuffer, env) {
-  const MAX_CHARS = 100000; // Character limit for early exit (aligned with overall limit)
-  const SCANNED_PDF_THRESHOLD = 200; // If text < 200 chars, likely scanned
-
   try {
     // Verify AI binding is available
     if (!env?.AI) {
       throw new Error('AI binding not configured. Please add [ai] binding to wrangler.toml');
     }
 
-    // Use Cloudflare Workers AI toMarkdown() for PDF extraction
-    // API expects: { name: string, blob: Blob }
-    const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
-    const result = await env.AI.toMarkdown([{
-      name: 'resume.pdf',
-      blob: blob
-    }]);
+    const tagged = hasPdfStructureTags(arrayBuffer);
+    let conversion = await convertPdfToText(arrayBuffer, env);
 
-    // toMarkdown returns an array of results
-    const pdfResult = Array.isArray(result) ? result[0] : result;
+    // Tagged (accessibility-structured) PDFs, which is what Apple Pages, Word and
+    // Google Docs export by default, are converted by walking the tag tree, and
+    // for some files that walk returns the metadata block with no page text at
+    // all. Untagged PDFs take the plain "text of each page" path instead. So when
+    // a tagged PDF comes back with nothing, ask once more with the tag tree
+    // switched off before telling the user the file is empty.
+    if (tagged && (conversion.error || !conversion.text)) {
+      const untagged = stripPdfStructureTags(arrayBuffer);
+      const retry = untagged ? await convertPdfToText(untagged, env) : null;
+      console.warn('[PDF] Tagged PDF produced no text, retried without structure tags', {
+        firstAttempt: conversion.shape,
+        retry: retry ? retry.shape : null
+      });
+      if (retry && !retry.error && retry.text) {
+        conversion = retry;
+      }
+    }
 
-    if (!pdfResult || pdfResult.error) {
-      const errorMessage = pdfResult?.error || 'toMarkdown returned no result';
-      console.error('[PDF] toMarkdown failed', { error: errorMessage });
+    if (conversion.error) {
+      console.error('[PDF] toMarkdown failed', { error: conversion.error });
       return {
         text: '',
         isMultiColumn: false,
         numPages: 0,
         parseFailed: true,
         errorName: 'ToMarkdownError',
-        errorMessage
+        errorMessage: conversion.error
       };
     }
 
-    // Extract text from markdown result
-    let extractedText = pdfResult.data || pdfResult.text || '';
-
-    // Check if PDF appears empty (before processing)
-    if (!extractedText || extractedText.trim().length === 0) {
-      console.warn('[PDF] PDF has no extractable text');
+    if (!conversion.text) {
+      // shape holds counts only, never resume content
+      console.warn('[PDF] Extracted text empty after cleaning', { tagged, ...conversion.shape });
       return { text: '', isMultiColumn: false, numPages: 0, isEmpty: true };
     }
 
-    // Apply character limit (early exit for very large PDFs)
-    if (extractedText.length > MAX_CHARS) {
-      console.log('[PDF] Text limit reached, truncating', {
-        originalLength: extractedText.length,
-        truncatedLength: MAX_CHARS
-      });
-      extractedText = extractedText.substring(0, MAX_CHARS);
-    }
-
-    // Filter out PDF metadata and base64 image data FIRST
-    // This must happen before any other processing to prevent metadata from affecting scoring
-    extractedText = filterPdfMetadata(extractedText);
-
-    // Multi-column detection BEFORE stripMarkdown (to preserve list markers for accurate line length)
-    // This ensures consistent detection regardless of markdown formatting
-    const linesForDetection = extractedText.split('\n').filter(line => line.trim().length > 0);
-    const avgLineLengthForDetection = linesForDetection.reduce((sum, line) => sum + line.trim().length, 0) / Math.max(linesForDetection.length, 1);
-    const isMultiColumn = avgLineLengthForDetection < 30 && linesForDetection.length > 20;
-
-    // Now strip markdown syntax (after multi-column detection)
-    extractedText = stripMarkdown(extractedText);
-
-    // Clean text (fix encoding issues, normalize whitespace)
-    extractedText = cleanText(extractedText);
-
-    const trimmedText = extractedText.trim();
-
-    // If we got minimal text, return empty (check before scanned PDF detection)
-    // This handles truly empty or corrupted PDFs
-    if (trimmedText.length === 0) {
-      console.warn('[PDF] Extracted text empty after cleaning');
-      return { text: '', isMultiColumn: false, numPages: 0, isEmpty: true };
-    }
+    const { text: trimmedText, isMultiColumn } = conversion;
 
     // Smart low-text detection (soft flag)
     if (trimmedText.length < SCANNED_PDF_THRESHOLD) {
@@ -384,6 +355,133 @@ async function extractPdfText(arrayBuffer, env) {
       errorMessage
     };
   }
+}
+
+const PDF_MAX_CHARS = 100000; // Character limit for early exit (aligned with overall limit)
+const SCANNED_PDF_THRESHOLD = 200; // If text < 200 chars, likely scanned
+
+/**
+ * One toMarkdown() call plus our cleanup.
+ * Returns { error } when the converter reports a failure, otherwise
+ * { text, isMultiColumn, shape }. text is '' when nothing readable is left.
+ * shape describes what the converter sent back using counts only, so it is
+ * safe to log.
+ */
+async function convertPdfToText(arrayBuffer, env) {
+  // API expects: { name: string, blob: Blob }
+  const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
+  const result = await env.AI.toMarkdown([{
+    name: 'resume.pdf',
+    blob: blob
+  }]);
+
+  // toMarkdown returns an array of results
+  const pdfResult = Array.isArray(result) ? result[0] : result;
+
+  if (!pdfResult || pdfResult.error) {
+    const error = pdfResult?.error || 'toMarkdown returned no result';
+    return { error, text: '', isMultiColumn: false, shape: { error: String(error).slice(0, 200) } };
+  }
+
+  // Extract text from markdown result
+  let extractedText = pdfResult.data || pdfResult.text || '';
+  const shape = describeConverterOutput(pdfResult, extractedText);
+
+  if (!extractedText || extractedText.trim().length === 0) {
+    return { text: '', isMultiColumn: false, shape };
+  }
+
+  // Apply character limit (early exit for very large PDFs)
+  if (extractedText.length > PDF_MAX_CHARS) {
+    console.log('[PDF] Text limit reached, truncating', {
+      originalLength: extractedText.length,
+      truncatedLength: PDF_MAX_CHARS
+    });
+    extractedText = extractedText.substring(0, PDF_MAX_CHARS);
+  }
+
+  // Filter out PDF metadata and base64 image data FIRST
+  // This must happen before any other processing to prevent metadata from affecting scoring
+  extractedText = filterPdfMetadata(extractedText);
+
+  // Multi-column detection BEFORE stripMarkdown (to preserve list markers for accurate line length)
+  // This ensures consistent detection regardless of markdown formatting
+  const linesForDetection = extractedText.split('\n').filter(line => line.trim().length > 0);
+  const avgLineLengthForDetection = linesForDetection.reduce((sum, line) => sum + line.trim().length, 0) / Math.max(linesForDetection.length, 1);
+  const isMultiColumn = avgLineLengthForDetection < 30 && linesForDetection.length > 20;
+
+  // Now strip markdown syntax (after multi-column detection)
+  extractedText = stripMarkdown(extractedText);
+
+  // Clean text (fix encoding issues, normalize whitespace)
+  extractedText = cleanText(extractedText);
+
+  const text = extractedText.trim();
+  shape.cleanedLength = text.length;
+  return { text, isMultiColumn, shape };
+}
+
+/**
+ * Counts that describe a converter result without quoting any of it.
+ */
+function describeConverterOutput(pdfResult, raw) {
+  const lines = raw ? raw.split('\n') : [];
+  return {
+    format: pdfResult.format || null,
+    mimeType: pdfResult.mimeType || pdfResult.mimetype || null,
+    tokens: typeof pdfResult.tokens === 'number' ? pdfResult.tokens : null,
+    rawLength: raw.length,
+    lines: lines.length,
+    blankLines: lines.filter(line => line.trim().length === 0).length,
+    headingLines: lines.filter(line => /^#{1,6}\s/.test(line)).length,
+    keyValueLines: lines.filter(line => /^[-*]?\s*[\w:]+=/.test(line.trim())).length,
+    pageMarkers: lines.filter(line => /^#{0,6}\s*Page\s*\d+\s*$/i.test(line.trim())).length
+  };
+}
+
+const PDF_STRUCT_TREE_KEY = [0x2F, 0x53, 0x74, 0x72, 0x75, 0x63, 0x74, 0x54, 0x72, 0x65, 0x65, 0x52, 0x6F, 0x6F, 0x74]; // "/StructTreeRoot"
+
+function findPdfStructureTagOffsets(bytes) {
+  const offsets = [];
+  const last = bytes.length - PDF_STRUCT_TREE_KEY.length;
+  for (let i = 0; i <= last; i++) {
+    if (bytes[i] !== 0x2F) continue;
+    let match = true;
+    for (let j = 1; j < PDF_STRUCT_TREE_KEY.length; j++) {
+      if (bytes[i + j] !== PDF_STRUCT_TREE_KEY[j]) { match = false; break; }
+    }
+    if (match) offsets.push(i);
+  }
+  return offsets;
+}
+
+/**
+ * True when the PDF declares a structure (accessibility tag) tree in plain bytes.
+ */
+export function hasPdfStructureTags(arrayBuffer) {
+  return findPdfStructureTagOffsets(new Uint8Array(arrayBuffer)).length > 0;
+}
+
+/**
+ * Return a copy of the PDF whose structure tree is unreachable, or null when
+ * there is none to switch off.
+ *
+ * The catalog key "/StructTreeRoot" is renamed to "/StructTreeRooX". The new
+ * name has the same length, so every byte offset in the file's cross reference
+ * table stays valid, and a reader simply sees an unknown key and treats the
+ * document as untagged. Page content is not touched. PDFs that keep their
+ * catalog inside a compressed object stream have no such bytes to rename and
+ * are returned as null.
+ */
+export function stripPdfStructureTags(arrayBuffer) {
+  const source = new Uint8Array(arrayBuffer);
+  const offsets = findPdfStructureTagOffsets(source);
+  if (offsets.length === 0) return null;
+  const copy = source.slice();
+  for (const offset of offsets) {
+    copy[offset + PDF_STRUCT_TREE_KEY.length - 1] = 0x58; // "t" -> "X"
+  }
+  return copy.buffer;
 }
 
 /**
