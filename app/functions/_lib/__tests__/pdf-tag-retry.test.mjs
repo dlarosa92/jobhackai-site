@@ -15,6 +15,7 @@ import {
   extractResumeText,
   hasPdfStructureTags,
   stripPdfStructureTags,
+  unglueBullets,
   EXTRACTION_ERRORS
 } from '../resume-extractor.js';
 
@@ -201,4 +202,36 @@ test('a converter error that survives the retry is reported as a parse failure',
       return true;
     }
   );
+});
+
+test('a bullet stuck to the previous line is moved to its own line', () => {
+  const glued = 'Senior Engineer at CloudScaleMarch 2021 - Present• Led a team of five• Cut load time by 45%';
+  assert.equal(
+    unglueBullets(glued),
+    'Senior Engineer at CloudScaleMarch 2021 - Present\n• Led a team of five\n• Cut load time by 45%'
+  );
+});
+
+test('bullets used as separators inside a line, and bullets already on their own line, are left alone', () => {
+  const text = 'Skills: React • Node.js • Python\n• Led a team\n  • Nested point';
+  assert.equal(unglueBullets(text), text);
+  assert.equal(unglueBullets(''), '');
+});
+
+test('text recovered from a PDF has its bullets at the start of lines', async (t) => {
+  silenceConsole(t);
+  const gluedPage = [
+    '# resume.pdf',
+    '## Contents',
+    '### Page 1',
+    'Michael Rodriguezmichael.rodriguez@email.com | (415) 555-0123EXPERIENCESenior Software Engineer at CloudScale TechnologiesMarch 2021 - Present• Architected a React dashboard serving 500K daily users,',
+    'improving page load time by 45%• Designed RESTful API services processing 10M requests per day• Led migration from a monolith to microservices, reducing deployment time by 60%'
+  ].join('\n');
+  const env = fakeEnv(() => ({ name: 'resume.pdf', format: 'markdown', data: gluedPage }));
+
+  const result = await extractResumeText(toArrayBuffer(untaggedImagePdf), 'resume.pdf', env);
+
+  const bulletLines = result.text.split('\n').filter((line) => line.startsWith('• '));
+  assert.equal(bulletLines.length, 3);
+  assert.doesNotMatch(result.text, /\S•/);
 });
