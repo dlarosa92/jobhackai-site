@@ -89,6 +89,11 @@ jobs:
         working-directory: app/functions/_lib/__tests__
         run: node --test ats-cache-key.test.mjs
 
+      # A tagged PDF that the converter returns empty must be retried untagged.
+      - name: Run PDF upload retry tests
+        working-directory: app/functions/_lib/__tests__
+        run: node --test pdf-tag-retry.test.mjs
+
       # Deterministic voice suites — no API key, no cost. These prove the
       # transcript assembler and the prompt's own text, NOT that the live model
       # obeys the prompt; that stays a manual dev-session check.
