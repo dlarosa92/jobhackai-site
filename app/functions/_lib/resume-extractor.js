@@ -416,9 +416,28 @@ async function convertPdfToText(arrayBuffer, env) {
   // Clean text (fix encoding issues, normalize whitespace)
   extractedText = cleanText(extractedText);
 
+  extractedText = unglueBullets(extractedText);
+
   const text = extractedText.trim();
   shape.cleanedLength = text.length;
   return { text, isMultiColumn, shape };
+}
+
+/**
+ * Put a bullet that is stuck to the end of the previous line back on its own line.
+ *
+ * For untagged PDFs the converter joins separate text runs with nothing between
+ * them, so "March 2021 - Present" followed by a bullet arrives as
+ * "March 2021 - Present• Led a team". The scorer counts bullets at the start of
+ * a line, so glued bullets were reported as "too few bullet points".
+ *
+ * Only a bullet touching the character before it is moved. A bullet with a
+ * space before it ("React • Node • Python") is a separator inside a line and
+ * is left alone.
+ */
+export function unglueBullets(text) {
+  if (!text) return '';
+  return text.replace(/(\S)([•▪●◦‣])/g, '$1\n$2');
 }
 
 /**
