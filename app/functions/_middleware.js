@@ -1,15 +1,59 @@
 import {
   isExplicitNonProductionEnvironment,
   notFoundInProductionResponse,
-  STANDARD_SECURITY_HEADERS
+  STANDARD_SECURITY_HEADERS,
+  contentSecurityPolicy,
+  createCspNonce
 } from './_lib/debug-access.js';
 import { isDevCutoverPaused } from './_lib/dev-cutover.js';
+
+const HTML_CONTENT_TYPE = /^text\/html\b/i;
+
+// An HTML document's nonce lives in both its body and its CSP header, so the
+// two must always be produced together. A 304 would pair a fresh header with
+// a browser-cached body (stale nonces, or none at all for a copy cached
+// before this policy shipped) and every inline script would be blocked. So a
+// document navigation is never revalidated: its validators are dropped before
+// the asset layer sees them. Returns null when there is nothing to strip.
+function documentRequestWithoutValidators(request) {
+  const headers = request?.headers;
+  if (!headers || typeof headers.get !== 'function') return null;
+  if (request.method !== 'GET' || !(headers.get('accept') || '').includes('text/html')) return null;
+  if (!headers.has('if-none-match') && !headers.has('if-modified-since')) return null;
+  const stripped = new Headers(headers);
+  stripped.delete('if-none-match');
+  stripped.delete('if-modified-since');
+  return new Request(request, { headers: stripped });
+}
+
+// Stamp one <script> element with the response nonce and opt it out of
+// Cloudflare Rocket Loader.
+//
+// Rocket Loader is enabled on the jobhackai.io zone and runs at the edge AFTER
+// this function. It rewrites every script's type so the browser skips it, then
+// re-creates the scripts from its own loader. The copies it makes of inline
+// scripts carry no nonce, so the CSP blocks them and pages stay half loaded
+// (the dashboard never leaves its skeleton). data-cfasync="false" is the
+// documented per-script opt-out; Cloudflare requires it to appear BEFORE src,
+// so the attribute list is rebuilt with it first. Do not remove this while
+// script-src has no 'unsafe-inline', unless Rocket Loader is switched off for
+// every app hostname in the Cloudflare dashboard.
+function stampScript(element, nonce) {
+  const attributes = [...element.attributes];
+  for (const [name] of attributes) element.removeAttribute(name);
+  element.setAttribute('data-cfasync', 'false');
+  for (const [name, value] of attributes) {
+    if (name !== 'data-cfasync' && name !== 'nonce') element.setAttribute(name, value);
+  }
+  element.setAttribute('nonce', nonce);
+}
 
 // Diagnostic pages/endpoints, reachable ONLY when ENVIRONMENT is explicitly
 // a known non-production value (fail closed: a missing or misspelled
 // ENVIRONMENT blocks them instead of exposing them).
 const NON_PRODUCTION_ONLY_DEBUG_PATHS = new Set([
   '/api/ats-health',
+  '/api/kv-test',
   '/api/test-openai',
   '/auth-test',
   '/auth-test.html',
@@ -67,12 +111,34 @@ export async function onRequest({ request, next, env }) {
     return notFoundInProductionResponse();
   }
 
-  const res = await next();
+  const upstreamRequest = documentRequestWithoutValidators(request);
+  const res = upstreamRequest ? await next(upstreamRequest) : await next();
   const h = new Headers(res.headers);
+  let body = res.body;
 
   // Security headers — applied on ALL environments (shared with notFoundInProductionResponse)
   for (const [name, value] of Object.entries(STANDARD_SECURITY_HEADERS)) {
     h.set(name, value);
+  }
+
+  // HTML documents (static pages and function-rendered ones alike) get a
+  // per-response nonce: stamped on every <script> element and named in
+  // script-src, which carries no 'unsafe-inline'. Markup injected into the DOM
+  // later never has the nonce, so injected inline scripts and inline event
+  // handlers cannot run. Without HTMLRewriter (not the Workers runtime) the
+  // nonce-less policy above stays in force: fail closed.
+  if (body && res.status !== 304 && HTML_CONTENT_TYPE.test(h.get('content-type') || '') && typeof HTMLRewriter !== 'undefined') {
+    const nonce = createCspNonce();
+    h.set('content-security-policy', contentSecurityPolicy(nonce));
+    // The nonce is single-use: no shared cache may store this response, and
+    // no validator may let a browser pair this body with a later header.
+    h.delete('etag');
+    h.delete('last-modified');
+    h.delete('content-length');
+    if (!/no-store/i.test(h.get('cache-control') || '')) h.set('cache-control', 'private, no-cache');
+    body = new HTMLRewriter()
+      .on('script', { element(element) { stampScript(element, nonce); } })
+      .transform(res).body;
   }
 
   // Voice interview needs the same-origin microphone. Mirrors the
@@ -91,5 +157,5 @@ export async function onRequest({ request, next, env }) {
     h.set('expires', '0');
   }
 
-  return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h });
+  return new Response(body, { status: res.status, statusText: res.statusText, headers: h });
 }

@@ -50,10 +50,10 @@
     
     <div style="background: #f5f5f5; padding: 1rem; border-radius: 8px; margin: 1rem 0;">
       <h3>Test Controls:</h3>
-      <button onclick="testVisitor()">Test Visitor Navigation</button>
-      <button onclick="testFree()">Test Free User</button>
-      <button onclick="testTrial()">Test Trial User</button>
-      <button onclick="clearAll()">Clear All</button>
+      <button data-jh-call="testVisitor">Test Visitor Navigation</button>
+      <button data-jh-call="testFree">Test Free User</button>
+      <button data-jh-call="testTrial">Test Trial User</button>
+      <button data-jh-call="clearAll">Clear All</button>
     </div>
     
     <div style="background: #f5f5f5; padding: 1rem; border-radius: 8px; margin: 1rem 0;">
@@ -137,6 +137,21 @@
     
     // Update debug info periodically
     setInterval(updateDebugInfo, 2000);
+  </script>
+  <script>
+    // Buttons name a page function in data-jh-call (arguments as a JSON array
+    // in data-jh-args). The CSP blocks inline onclick attributes. Only the
+    // functions listed here can be called this way.
+    (function () {
+      var allowed = ["testVisitor", "testFree", "testTrial", "clearAll"];
+      document.addEventListener('click', function (event) {
+        var target = event.target instanceof Element ? event.target.closest('[data-jh-call]') : null;
+        if (!target) return;
+        var name = target.getAttribute('data-jh-call');
+        if (allowed.indexOf(name) === -1 || typeof window[name] !== 'function') return;
+        window[name].apply(null, JSON.parse(target.getAttribute('data-jh-args') || '[]'));
+      });
+    })();
   </script>
 </body>
 </html>

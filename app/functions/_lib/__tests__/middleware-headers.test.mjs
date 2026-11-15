@@ -9,6 +9,7 @@
 // the WebRTC SDP offer to api.openai.com.
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { onRequest } from '../../_middleware.js';
 
 async function run(path, { env = {}, nextHeaders = {} } = {}) {
@@ -60,6 +61,16 @@ await test('CSP connect-src permits the OpenAI Realtime endpoint', async () => {
   const csp = h.get('content-security-policy') || '';
   const connect = csp.split(';').find((d) => d.trim().startsWith('connect-src')) || '';
   assert.ok(connect.includes('https://api.openai.com'), 'connect-src must include https://api.openai.com');
+});
+
+await test('production middleware retains the static analytics policy when overriding asset headers', async () => {
+  const staticHeaders = readFileSync(new URL('../../../public/_headers', import.meta.url), 'utf8');
+  const expected = staticHeaders.match(/^\s*Content-Security-Policy:\s*(.+)$/m)?.[1];
+  assert.ok(expected, 'the deployable static policy exists');
+  for (const path of ['/login', '/pricing', '/dashboard', '/voice-interview']) {
+    const headers = await run(path, { env: { ENVIRONMENT: 'prod' }, nextHeaders: { 'content-security-policy': "default-src 'none'" } });
+    assert.equal(headers.get('content-security-policy'), expected, path);
+  }
 });
 
 await test('middleware overrides conflicting headers from the asset layer', async () => {
