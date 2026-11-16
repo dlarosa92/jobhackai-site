@@ -119,54 +119,36 @@
   }
 }
 
-/* Between the mobile breakpoint and 1023px the signed-in menu (six links plus
-   the account button) is wider than the window, which pushed the account
-   button off screen and gave the whole page a sideways scrollbar. Tighten the
-   spacing in that band instead of switching to the mobile menu, so a window
-   snapped to half of a 1920px screen still gets the full menu. */
-@media (min-width: 901px) and (max-width: 1023px) {
-  .site-header .container {
-    padding-left: 1rem;
-    padding-right: 1rem;
-  }
-  .site-header .nav-group {
-    margin-left: 1.25rem;
-    gap: 1rem;
-  }
-  .site-header .nav-links {
-    gap: 0.4rem;
-  }
-  .site-header .nav-links a {
-    font-size: 0.9rem;
-  }
-}
-
-@media (max-width: 900px) {
-  .container {
-    padding: 0 1rem;
-  }
-  .nav-links {
-    display: none;
-  }
-  .cta-button {
-    display: none;
-  }
-  /* navigation.js builds the desktop "Sign Up Free" button with an inline
-     display style and without the .cta-button class, so the rule above never
-     hid it. On phones it was squeezed onto three lines, stuck out below the
-     header and pushed the menu button off screen. The mobile menu carries its
-     own copy of the button. */
+/* navigation.js builds the desktop "Sign Up Free" button with an inline
+   display style and without the .cta-button class, so the .cta-button rule in
+   the drawer block below never hides it. From 521px up it fits beside the logo
+   and the menu button and is left as it is. Below that it was squeezed onto two
+   or three lines, stuck out below the header and, at 360px and 375px, pushed
+   the menu button off screen. On phones hide it (the drawer carries its own
+   copy) and put the logo on the left and the buttons on the right. */
+@media (max-width: 520px) {
   .site-header .nav-actions > a.btn,
   .site-header .nav-actions > .cta-skeleton-desktop {
     display: none !important;
   }
-  /* Logo on the left, account button and menu button on the right. Without
-     the full width the three items sat bunched together in the middle. */
   .site-header .container {
     width: 100%;
   }
   .site-header .nav-group {
     margin-left: auto;
+  }
+}
+
+/* Use the drawer before the full product navigation can overflow. */
+@media (max-width: 1200px) {
+  .site-header .container {
+    padding: 0 1rem;
+  }
+  .nav-links {
+    display: none;
+  }
+  .site-header .cta-button {
+    display: none;
   }
   .mobile-toggle {
     display: block;
