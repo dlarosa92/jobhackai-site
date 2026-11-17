@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "JobHackAI Cloudflare Application",
   "private": true,
+  "engines": {
+    "node": ">=20.9.0"
+  },
   "scripts": {
     "dev": "next dev -p 3003",
     "build": "next build",
@@ -66,14 +69,14 @@
     "test:billing:revenue": "node functions/_lib/__tests__/collected-revenue.test.mjs && node --test functions/_lib/__tests__/payment-attribution.test.mjs && node --test functions/_lib/__tests__/analytics-money.test.mjs",
     "test:billing:status": "node --test functions/_lib/__tests__/billing-status-owner.test.mjs",
     "test:openai:migration": "node --test functions/_lib/__tests__/openai-migration.test.mjs",
-    "test:voice:turn-evidence": "node --test functions/_lib/__tests__/voice-turn-budget.test.mjs functions/_lib/__tests__/voice-score-evidence.test.mjs"
+    "test:voice:turn-evidence": "node --test functions/_lib/__tests__/voice-turn-budget.test.mjs functions/_lib/__tests__/voice-score-evidence.test.mjs",
+    "test:security": "node --test functions/_lib/__tests__/security-hardening.test.mjs && node --conditions=workerd --test functions/_lib/__tests__/kv-test.test.mjs && node functions/_lib/__tests__/middleware-headers.test.mjs"
   },
   "dependencies": {
-    "firebase": "^10.7.0",
+    "firebase": "^12.19.0",
     "jose": "^5.0.0",
     "mammoth": "^1.6.0",
-    "next": "^14.0.0",
-    "openai": "^4.20.0",
+    "next": "^16.4.6",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "stripe": "^14.0.0"
@@ -85,6 +88,9 @@
     "@types/react-dom": "^18.2.0",
     "cross-env": "^7.0.3",
     "typescript": "^5.0.0",
-    "wrangler": "^3.0.0"
+    "wrangler": "^4.161.0"
+  },
+  "overrides": {
+    "@grpc/grpc-js": "^1.14.0"
   }
 }

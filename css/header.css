@@ -109,6 +109,36 @@
   display: none;
 }
 
+/* main.css gives every <header> 1.5rem of side padding on top of the
+   container's own. On the narrowest phones that left too little room for the
+   logo, the account button and the menu button. */
+@media (max-width: 480px) {
+  .site-header {
+    padding-left: 0;
+    padding-right: 0;
+  }
+}
+
+/* navigation.js builds the desktop "Sign Up Free" button with an inline
+   display style and without the .cta-button class, so the .cta-button rule in
+   the drawer block below never hides it. From 521px up it fits beside the logo
+   and the menu button and is left as it is. Below that it was squeezed onto two
+   or three lines, stuck out below the header and, at 360px and 375px, pushed
+   the menu button off screen. On phones hide it (the drawer carries its own
+   copy) and put the logo on the left and the buttons on the right. */
+@media (max-width: 520px) {
+  .site-header .nav-actions > a.btn,
+  .site-header .nav-actions > .cta-skeleton-desktop {
+    display: none !important;
+  }
+  .site-header .container {
+    width: 100%;
+  }
+  .site-header .nav-group {
+    margin-left: auto;
+  }
+}
+
 /* Use the drawer before the full product navigation can overflow. */
 @media (max-width: 1200px) {
   .site-header .container {

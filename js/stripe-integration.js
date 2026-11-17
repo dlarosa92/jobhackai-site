@@ -707,11 +707,17 @@ class JobHackAIStripe {
         <h3 style="margin-bottom: 1rem; color: #232B36;">Subscription Management</h3>
         <p style="color: #4B5563; margin-bottom: 1.5rem;">This is a demo of subscription management. In production, this would redirect to Stripe's customer portal.</p>
         <div style="display: flex; gap: 1rem;">
-          <button onclick="this.closest('.subscription-modal').remove()" style="padding: 0.5rem 1rem; border: 1px solid #E5E7EB; background: white; border-radius: 6px; cursor: pointer;">Close</button>
-          <button onclick="window.location.href='account-setting.html'" style="padding: 0.5rem 1rem; background: #007A30; color: white; border: none; border-radius: 6px; cursor: pointer;">Account Settings</button>
+          <button data-subscription-action="close" style="padding: 0.5rem 1rem; border: 1px solid #E5E7EB; background: white; border-radius: 6px; cursor: pointer;">Close</button>
+          <button data-subscription-action="account" style="padding: 0.5rem 1rem; background: #007A30; color: white; border: none; border-radius: 6px; cursor: pointer;">Account Settings</button>
         </div>
       </div>
     `;
+
+    // Bound here, not as inline attributes: the CSP blocks inline event handlers.
+    modal.querySelector('[data-subscription-action="close"]').addEventListener('click', () => modal.remove());
+    modal.querySelector('[data-subscription-action="account"]').addEventListener('click', () => {
+      window.location.href = 'account-setting.html';
+    });
 
     modal.classList.add('subscription-modal');
     container.appendChild(modal);

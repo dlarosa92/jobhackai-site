@@ -7144,7 +7144,9 @@
     function renderPriorityReviewCTA() {
       const cta = document.createElement('div');
       cta.className = 'priority-review-cta premium-cta';
-      cta.innerHTML = `<strong>Want your resume reviewed first?</strong> <span id="priority-review-inline"></span> <button class="priority-btn" onclick="startCheckout('premium')">Upgrade to Premium</button>`;
+      cta.innerHTML = `<strong>Want your resume reviewed first?</strong> <span id="priority-review-inline"></span> <button class="priority-btn">Upgrade to Premium</button>`;
+      // Bound here, not as an inline attribute: the CSP blocks inline event handlers.
+      cta.querySelector('.priority-btn').addEventListener('click', () => window.startCheckout('premium'));
       // Insert tooltip
       setTimeout(() => {
         const inline = cta.querySelector('#priority-review-inline');
@@ -8833,6 +8835,13 @@
       isHistoricalView: () => _isHistoricalView,
       getCurrentSessionId: () => _currentHistoricalSessionId
     };
+
+    // "Run new analysis" in the historical banner. Delegated because the
+    // button is parsed after this script; the CSP blocks inline onclick.
+    document.addEventListener('click', (event) => {
+      const target = event.target instanceof Element ? event.target.closest('#rf-run-new-analysis-btn') : null;
+      if (target) window.JobHackAIHistory.clearHistoricalView();
+    });
   </script>
   <script src="js/main.js" type="module"></script>
 
@@ -8850,7 +8859,7 @@
             </svg>
             <span id="rf-historical-banner-text">Viewing saved feedback from Jan 15, 2025</span>
           </div>
-          <button class="btn-primary" id="rf-run-new-analysis-btn" onclick="window.JobHackAIHistory.clearHistoricalView()">
+          <button class="btn-primary" id="rf-run-new-analysis-btn">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
             </svg>

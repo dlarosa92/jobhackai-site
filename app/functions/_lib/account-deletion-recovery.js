@@ -42,6 +42,32 @@ async function resumeKeys(db, userId) {
   return rows.flatMap(row => [row.raw_text_location, `resume:${row.id}`].filter(Boolean));
 }
 
+// Uploaded resume text is written to KV as resume:<uid>:<timestamp> before any
+// D1 row exists; a resume_sessions row (with raw_text_location) is only created
+// once the resume is scored. An upload that was never scored therefore has no
+// SQL reference, and the D1 manifest alone would leave its text behind after
+// the account is deleted. List the owner's keys directly.
+//
+// The trailing colon keeps the prefix from matching another uid. A listing
+// failure propagates, leaving the job retryable with every reference intact,
+// like any other KV failure. A binding without list() contributes nothing.
+const RESUME_LIST_PAGE_LIMIT = 20;
+async function uploadedResumeKeys(kv, uid) {
+  if (typeof kv?.list !== 'function') return [];
+  const prefix = `resume:${uid}:`;
+  const keys = [];
+  let cursor;
+  for (let page = 0; page < RESUME_LIST_PAGE_LIMIT; page++) {
+    const result = await kv.list(cursor ? { prefix, cursor } : { prefix });
+    for (const entry of result?.keys || []) {
+      if (typeof entry?.name === 'string' && entry.name.startsWith(prefix)) keys.push(entry.name);
+    }
+    if (result?.list_complete !== false || !result.cursor) return keys;
+    cursor = result.cursor;
+  }
+  throw new Error('deletion_manifest_invalid');
+}
+
 /** Save the recoverable manifest before billing or identity side effects.
  * Callers must hold the account's deletion admission lock. Concurrent creation
  * is idempotent, but this function does not itself block application writes. */
@@ -130,7 +156,8 @@ export async function finishDeletionRecovery(env, id) {
     }
     const keys = validKeys([
       ...validKeys(JSON.parse(job.kv_keys_json)),
-      ...await resumeKeys(db, job.user_id)
+      ...await resumeKeys(db, job.user_id),
+      ...await uploadedResumeKeys(env.JOBHACKAI_KV, job.auth_id)
     ]);
     // Keep newly discovered references durable before deleting any of them.
     await db.prepare(`UPDATE account_deletion_jobs SET kv_keys_json = ?, attempts = attempts + 1,

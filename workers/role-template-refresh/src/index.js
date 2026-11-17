@@ -7,6 +7,9 @@
  * 1. Detect roles with low keyword scores (gaps)
  * 2. Generate templates for those roles
  * 3. Log pending count for human review
+ *
+ * The admin secret is sent as X-Admin-Key. Authorization: Bearer is reserved
+ * for Firebase ID tokens; the API middleware rejects any other Bearer value.
  */
 
 export default {
@@ -18,7 +21,7 @@ export default {
       // Step 1: Detect gaps
       const gapsResponse = await fetch(`${env.ADMIN_API_URL || 'https://dev.jobhackai.io'}/api/admin/detect-gaps`, {
         headers: {
-          'Authorization': `Bearer ${env.ADMIN_API_KEY}`
+          'X-Admin-Key': env.ADMIN_API_KEY
         }
       });
       
@@ -52,7 +55,7 @@ export default {
           const generateResponse = await fetch(`${env.ADMIN_API_URL || 'https://dev.jobhackai.io'}/api/admin/generate-role-template`, {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${env.ADMIN_API_KEY}`,
+              'X-Admin-Key': env.ADMIN_API_KEY,
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({
@@ -77,7 +80,7 @@ export default {
       // Step 3: Get pending count
       const pendingResponse = await fetch(`${env.ADMIN_API_URL || 'https://dev.jobhackai.io'}/api/admin/role-templates?status=pending_review`, {
         headers: {
-          'Authorization': `Bearer ${env.ADMIN_API_KEY}`
+          'X-Admin-Key': env.ADMIN_API_KEY
         }
       });
       

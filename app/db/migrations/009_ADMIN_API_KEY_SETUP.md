@@ -12,12 +12,15 @@ wrangler pages secret list --project-name=jobhackai-app-dev
 
 ## Usage
 
-When calling admin endpoints, include the key in the Authorization header:
+When calling admin endpoints, include the key in the `X-Admin-Key` header:
 
 ```bash
 curl https://dev.jobhackai.io/api/admin/role-templates \
-  -H "Authorization: Bearer YOUR_ADMIN_API_KEY"
+  -H "X-Admin-Key: YOUR_ADMIN_API_KEY"
 ```
+
+Do not send it as `Authorization: Bearer`. The API middleware treats every
+Bearer value as a Firebase ID token and returns 401 before the admin handler runs.
 
 ## Admin Endpoints
 

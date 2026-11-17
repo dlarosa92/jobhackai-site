@@ -31,7 +31,7 @@ async function bootstrapTemplates() {
       const response = await fetch(`${ADMIN_API_URL}/api/admin/role-templates`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${ADMIN_API_KEY}`,
+          'X-Admin-Key': ADMIN_API_KEY,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({

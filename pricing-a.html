@@ -950,7 +950,7 @@
               font-weight: 600;
               font-size: 1rem;
               transition: all 0.2s;
-            " onmouseover="this.style.background='#F8FAFC'" onmouseout="this.style.background='white'">
+            ">
               Cancel
             </button>
             <button id="confirmUpgrade" style="
@@ -964,7 +964,7 @@
               font-weight: 700;
               font-size: 1rem;
               transition: all 0.2s;
-            " onmouseover="this.style.background='#006B28'" onmouseout="this.style.background='#007A30'">
+            ">
               Confirm Upgrade
             </button>
           </div>
@@ -973,6 +973,15 @@
       
       document.body.appendChild(modal);
       
+      // Hover states are bound here, not as inline attributes: the CSP blocks
+      // inline event handlers.
+      const bindHover = (button, hoverBackground, restBackground) => {
+        button.addEventListener('mouseover', () => { button.style.background = hoverBackground; });
+        button.addEventListener('mouseout', () => { button.style.background = restBackground; });
+      };
+      bindHover(modal.querySelector('#cancelUpgrade'), '#F8FAFC', 'white');
+      bindHover(modal.querySelector('#confirmUpgrade'), '#006B28', '#007A30');
+
       // Handle cancel
       modal.querySelector('#cancelUpgrade').addEventListener('click', () => {
         modal.remove();
@@ -1028,7 +1037,7 @@
           <p style="margin: 0 0 1.5rem 0; color: #64748B; line-height: 1.6;">
             You're currently on the <strong>${currentPlan}</strong> plan. Please select a higher tier to upgrade your account.
           </p>
-          <button onclick="this.closest('div').parentElement.remove()" style="
+          <button data-dismiss-modal style="
             width: 100%;
             background: #007A30;
             color: white;
@@ -1045,6 +1054,10 @@
       `;
       
       document.body.appendChild(modal);
+      
+      modal.querySelector('[data-dismiss-modal]').addEventListener('click', () => {
+        modal.remove();
+      });
       
       modal.addEventListener('click', (e) => {
         if (e.target === modal) {

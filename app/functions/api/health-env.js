@@ -1,19 +1,28 @@
 import { getBearer, verifyFirebaseIdToken } from '../_lib/firebase-auth.js';
+import { hasValidAdminKey } from '../_lib/admin-auth.js';
+import { isExplicitNonProductionEnvironment } from '../_lib/debug-access.js';
+
+// Which secrets are configured is operator information. The operator secret
+// (X-Admin-Key) works in every environment. A signed-in user is accepted only
+// when ENVIRONMENT is explicitly non-production, so an ordinary customer
+// account can never map the production configuration.
+async function isAllowed(request, env) {
+  if (await hasValidAdminKey(request, env)) return true;
+  if (!isExplicitNonProductionEnvironment(env)) return false;
+  const token = getBearer(request);
+  if (!token) return false;
+  try {
+    await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export async function onRequest({ request, env }) {
   // Require authentication — this endpoint must never be public
-  const token = getBearer(request);
-  if (!token) {
+  if (!(await isAllowed(request, env))) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-      status: 401,
-      headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }
-    });
-  }
-
-  try {
-    await verifyFirebaseIdToken(token, env.FIREBASE_PROJECT_ID);
-  } catch {
-    return new Response(JSON.stringify({ error: 'Invalid token' }), {
       status: 401,
       headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }
     });

@@ -106,8 +106,7 @@ export function showErrorModal(title, message, options = {}) {
             transition: all 0.18s;
             flex: 1;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-          " onmouseover="this.style.background='#006B28'; this.style.boxShadow='0 4px 12px rgba(0, 122, 48, 0.2)'" 
-             onmouseout="this.style.background='#007A30'; this.style.boxShadow='0 2px 8px rgba(0, 0, 0, 0.04)'">
+          ">
             ${escapedUpgradeText}
           </button>
           <button id="jh-error-close" style="
@@ -121,8 +120,7 @@ export function showErrorModal(title, message, options = {}) {
             font-family: 'Inter', sans-serif;
             cursor: pointer;
             transition: all 0.18s;
-          " onmouseover="this.style.background='#F9FAFB'; this.style.borderColor='#D1D5DB'" 
-             onmouseout="this.style.background='transparent'; this.style.borderColor='#E5E7EB'">
+          ">
             Maybe Later
           </button>
         ` : `
@@ -190,6 +188,22 @@ export function showErrorModal(title, message, options = {}) {
   };
 
   document.getElementById('jh-error-close').addEventListener('click', closeModal);
+
+  // Hover states for the upgrade variant. Bound here, not as inline
+  // attributes: the CSP blocks inline event handlers.
+  if (showUpgrade) {
+    const bindHover = (button, hoverStyle, restStyle) => {
+      if (!button) return;
+      button.addEventListener('mouseover', () => Object.assign(button.style, hoverStyle));
+      button.addEventListener('mouseout', () => Object.assign(button.style, restStyle));
+    };
+    bindHover(document.getElementById('jh-error-upgrade'),
+      { background: '#006B28', boxShadow: '0 4px 12px rgba(0, 122, 48, 0.2)' },
+      { background: '#007A30', boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)' });
+    bindHover(document.getElementById('jh-error-close'),
+      { background: '#F9FAFB', borderColor: '#D1D5DB' },
+      { background: 'transparent', borderColor: '#E5E7EB' });
+  }
 
   if (showRetry && retryCallback) {
     const retryBtn = document.getElementById('jh-error-retry');
