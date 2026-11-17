@@ -9,6 +9,7 @@ import { analyticsApi, analyticsReport } from './analytics.js';
 import { directoryRecords, duplicateDirectoryRecord, applyResolutions, resolveNotification } from './notifications.js';
 import { stripeCheckApi, stripeCheckStatus } from './stripe-check.js';
 import { businessMetrics } from './business-metrics.js';
+import { pilotApi } from './pilot.js';
 
 const OWNER = 'sebastian.larosa@jobhackai.io';
 const ACCESS_AUD = '884df74e9be8546b0051980538c8e00a75efd2b1d2da5a04a4e4fbe78f3a4a40';
@@ -147,6 +148,8 @@ export default {
       if(request.method==='GET'&&url.pathname==='/api/session')return json({role:identity.role,capabilities:identity.capabilities||[]});
       if(request.method==='GET'&&url.pathname==='/api/operating-guide')return json({version:'2026-10-31',text:GUIDE});
       if(url.pathname==='/api/workflow'||url.pathname.startsWith('/api/workflow/'))return workflowApi(request,env,identity,new Date(),async()=>workRecords(env.DASHBOARD_DB,await campaignRecords(env),new Date(),env.DASHBOARD_WORKFLOW_POLICIES));
+      if(url.pathname==='/api/pilot')return pilotApi(request,env,identity);
+      if(request.method==='GET'&&url.pathname==='/pilot-client.js')return asset(PILOT_APP,'application/javascript; charset=utf-8');
       if(url.pathname==='/api/stripe-check')return stripeCheckApi(request,env);
       if(url.pathname==='/api/analytics')return analyticsApi(request,env);
       if(request.method==='POST'&&url.pathname==='/api/work-items/capture-native')return json(await cacheNativeSources(env.DASHBOARD_DB,await campaignRecords(env)));

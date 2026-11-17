@@ -7,12 +7,13 @@
   <title>Team work board · JobHackAI</title>
   <link rel="stylesheet" href="/style.css?v=2026-10-31-clear-status">
   <script src="/app.js?v=2026-10-31-clear-status" defer></script>
+  <script src="/pilot-client.js" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to dashboard</a>
   <aside class="sidebar" aria-label="Main navigation">
     <a class="brand" href="#main">JobHack<span>AI</span><small>BUSINESS DASHBOARD</small></a>
-    <nav><a class="active" href="#work"><span aria-hidden="true">▦</span> Team work board</a><a href="#backlog"><span aria-hidden="true">☷</span> Backlog</a><a href="#learnings"><span aria-hidden="true">◇</span> Learnings</a><a href="#data-health"><span aria-hidden="true">◉</span> Data & settings</a></nav>
+    <nav><a class="active" href="#work"><span aria-hidden="true">▦</span> Team work board</a><a href="#backlog"><span aria-hidden="true">☷</span> Backlog</a><a href="#learnings"><span aria-hidden="true">◇</span> Learnings</a><a href="#pilot">Pilot usage</a><a href="#data-health"><span aria-hidden="true">◉</span> Data & settings</a></nav>
     <div class="sidebar-foot"><span class="dot blue"></span> Your private business view</div>
   </aside>
   <main id="main">
@@ -58,6 +59,28 @@
       </form>
     </details>
 </details>
+    <section class="panel" id="pilot" aria-labelledby="pilot-title">
+      <div class="section-heading"><h2 id="pilot-title">Brighton pilot</h2><button type="button" id="pilot-refresh">Refresh pilot</button></div>
+      <p id="pilot-summary" role="status">Loading pilot accounts…</p>
+      <p id="pilot-note" class="muted">Reads actual account credits and retained interview records.</p>
+      <div id="pilot-accounts" class="pilot-accounts"></div>
+      <details><summary>Enroll an existing free account</summary>
+        <p>Each person creates and signs into their own free account. Preview the email and dates before granting access. Participant access lasts 30 days from the agreed launch date. Specialist preparation can start earlier with the same pilot end date. Nothing is sent to Stripe.</p>
+        <form id="pilot-form" class="email-form">
+          <label>Grant reference<input name="grantId" pattern="[a-z0-9][a-z0-9_-]{7,79}" maxlength="80" placeholder="brighton-person-01" required></label>
+          <label>Account email<input name="email" type="email" required></label>
+          <label>Role<select name="role"><option value="participant">Participant</option><option value="specialist">Specialist</option></select></label>
+          <label>Agreed access start<input name="startsAt" type="datetime-local" required></label>
+          <label>Access expiry<input name="expiresAt" type="datetime-local" required></label>
+          <p>Enter dates in your device’s local timezone. The preview displays Eastern time. Participant expiry must be exactly 30 days after the start. Credits become usable when the grant is applied; future grants are not scheduled.</p>
+          <button type="submit">Preview grant</button>
+        </form>
+        <div id="pilot-preview"></div>
+        <label class="check"><input id="pilot-confirm" type="checkbox"> I confirmed this is the intended person’s own account.</label>
+        <button type="button" id="pilot-apply" disabled>Grant 60 complimentary credits</button>
+        <p id="pilot-status" role="status"></p>
+      </details>
+    </section>
     <footer>JobHackAI <span>Built around your goal: 250 users.</span></footer>
   </main>
   <dialog id="review-dialog" aria-labelledby="review-title"><header class="review-header"><div><p class="eyebrow">WORK DETAILS</p><h2 id="review-title"></h2></div><button type="button" id="review-close" class="icon-button" aria-label="Close review">×</button></header><div id="review-content"></div><p id="review-error" role="alert"></p><label id="review-note-label" for="review-note">Your note<textarea id="review-note" maxlength="4000" rows="3" placeholder="What should change?"></textarea></label><div id="review-actions"></div><p id="review-effect" class="muted"></p></dialog>
