@@ -11,6 +11,15 @@ export function outreachWindowOpen(now, timeZone = 'America/New_York') {
     return hour >= 9 && hour < 17;
   } catch { return false; }
 }
+// A reservation cannot carry permission past the recipient's closing second.
+export function outreachReservationExpiresAt(now, timeZone = 'America/New_York') {
+  if (!outreachWindowOpen(now,timeZone)) return now;
+  const limit=now+30000;
+  for(let time=(Math.floor(now/1000)+1)*1000;time<=limit;time+=1000) {
+    if(!outreachWindowOpen(time,timeZone))return time;
+  }
+  return limit;
+}
 // Counts actual elapsed time inside Mon-Fri 09:00-17:00 Eastern, including DST.
 // Stops at the required threshold so old unresolved episodes stay cheap to check.
 export function businessHoursElapsed(startAt, now, hours = 2) {

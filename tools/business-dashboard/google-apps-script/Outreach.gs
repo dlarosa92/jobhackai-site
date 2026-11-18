@@ -48,6 +48,9 @@ function syncOutreach(work) {
     try {
       var payload = { raw: raw };
       if (outgoing.threadId) payload.threadId = outgoing.threadId;
+      // Recheck after MIME work, immediately before the provider call. A stale
+      // reservation stays held; this does not authorize automatic retry.
+      if (!outreachSendWindowOpen(claim.packet, Date.now()) || !Number.isFinite(Date.parse(claim.expiresAt)) || Date.parse(claim.expiresAt)<=Date.now()) throw new Error('Recipient send window or reservation closed before send.');
       result = Gmail.Users.Messages.send(payload, 'me');
       if(!/^[a-f0-9]{1,64}$/.test(result.id||'') || !/^[a-f0-9]{1,64}$/.test(result.threadId||'')) throw new Error('Missing provider send receipt.');
       // Persist the provider-returned IDs before reading Gmail or uploading the
@@ -67,6 +70,17 @@ function syncOutreach(work) {
     props.deleteProperty('OUTREACH_RECEIPT_'+claim.attemptId);
     outreachLabelSent(result.threadId);
   });
+}
+
+function outreachSendWindowOpen(packet, now) {
+  var window=packet.deliveryWindow||{}, zone=window.timeZone||'America/New_York';
+  try {
+    var clock=new Intl.DateTimeFormat('en-US',{timeZone:zone,hour:'numeric',hourCycle:'h23'});
+    var hour=Number(clock.format(new Date(now)));
+    if(!Number.isFinite(hour)||hour<9||hour>=17)return false;
+    if(window.weekdays && (!Array.isArray(window.weekdays)||window.weekdays.indexOf(new Intl.DateTimeFormat('en-US',{timeZone:zone,weekday:'short'}).format(new Date(now)))<0))return false;
+    return true;
+  } catch(error) { return false; }
 }
 
 function outreachVerifiedSent(message, approved, attemptId, mailbox, accepted) {
@@ -178,12 +192,26 @@ function outreachFailureKind(text) {
 function outreachHistory(packet) {
   var target=packet.message.recipient.toLowerCase(),domain=packet.businessKey;
   var query='in:anywhere {from:'+target+' to:'+target+' "'+target+'" from:'+domain+' to:'+domain+'}';
-  var ids=outreachList(query),sent=[],received=[],drafts=[],failures=[];
+  var ids=outreachList(query),sent=[],received=[],drafts=[],failures=[],threadMessages={};
+  var originalThread=packet.phase==='followup'?packet.message.threadId:'';
+  var mailbox=(PropertiesService.getScriptProperties().getProperty('MAILBOX_EMAIL')||'').toLowerCase();
+  if(originalThread){
+    // Search cannot prove an original thread has no reply from a personal alias.
+    var thread=Gmail.Users.Threads.get('me',originalThread,{format:'full'});
+    if(!thread || thread.id!==originalThread || !Array.isArray(thread.messages) || !thread.messages.length)throw new Error('Original thread could not be completely inspected.');
+    thread.messages.forEach(function(message){
+      if(!/^[a-f0-9]{1,64}$/.test(message.id||'')||message.threadId!==originalThread)throw new Error('Invalid original-thread evidence.');
+      threadMessages[message.id]=message;
+      if(!ids.some(function(entry){return entry.id===message.id;}))ids.push({id:message.id});
+    });
+    if(ids.length>200)throw new Error('Original-thread history exceeds this bounded check; hold for individual review.');
+  }
   ids.forEach(function(entry){
-    var message=Gmail.Users.Messages.get('me',entry.id,{format:'full'});
+    var message=threadMessages[entry.id]||Gmail.Users.Messages.get('me',entry.id,{format:'full'});
     var labels=message.labelIds||[],from=outreachAddress(outreachHeader(message,'From'));
     var recipients=(outreachHeader(message,'To')+' '+outreachHeader(message,'Cc')+' '+outreachHeader(message,'Bcc')).toLowerCase();
-    var direct=recipients.indexOf(target)>=0||recipients.indexOf('@'+domain)>=0;
+    var inOriginal=!!originalThread&&message.threadId===originalThread;
+    var direct=inOriginal||recipients.indexOf(target)>=0||recipients.indexOf('@'+domain)>=0;
     var evidence={messageId:message.id,threadId:message.threadId};
     if(outreachIsFailure(message)) {
       var text=outreachBody(message.payload||{});
@@ -193,7 +221,7 @@ function outreachHistory(packet) {
     }
     if(labels.indexOf('DRAFT')>=0){if(direct)drafts.push(evidence);return;}
     if(labels.indexOf('SENT')>=0&&direct){sent.push({messageId:message.id,threadId:message.threadId,rfcMessageId:outreachHeader(message,'Message-ID'),sentAt:new Date(Number(message.internalDate)).toISOString()});return;}
-    if(from===target||from.endsWith('@'+domain))received.push(evidence);
+    if(from===target||from.endsWith('@'+domain)||(inOriginal&&labels.indexOf('SENT')<0&&from!==mailbox))received.push(evidence);
   });
   return {complete:true,scope:'all-folders-all-history',checkedAt:new Date().toISOString(),sent:sent,received:received,drafts:drafts,failures:failures};
 }

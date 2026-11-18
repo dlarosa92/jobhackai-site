@@ -221,7 +221,8 @@ test('migration preserves existing approvals and native receipts',()=>{
 
 function googleContext(){
  const props={},queries=[],uploads=[],sends=[];
- const context=vm.createContext({Date,console,PropertiesService:{getScriptProperties:()=>({getProperty:k=>props[k],setProperty:(k,v)=>{props[k]=v;},deleteProperty:k=>{delete props[k];}})},Gmail:{Users:{Messages:{list:(_me,options)=>{queries.push(options);return {messages:[]};},get:()=>{throw Error('unconfigured native read');},send:m=>{sends.push(m);throw Error('network timeout');}},getProfile:()=>({emailAddress:mailbox})}},Utilities:{Charset:{UTF_8:'UTF-8'},base64Encode:v=>Buffer.from(v).toString('base64'),base64EncodeWebSafe:v=>Buffer.from(v).toString('base64url'),base64DecodeWebSafe:v=>{if(v.length%4!==0||!/^[A-Za-z0-9_-]*={0,2}$/.test(v))throw Error('Could not decode string');return Buffer.from(v,'base64url');},newBlob:v=>({getDataAsString:()=>Buffer.from(v).toString('utf8')}),computeHmacSha256Signature:(body,key)=>Array.from(createHmac('sha256',key).update(body).digest())},UrlFetchApp:{fetch:(url,options)=>{uploads.push({url,...options});return {getResponseCode:()=>200,getContentText:()=>JSON.stringify({messages:[],reconcile:[],sendingEnabled:false})};}}});
+ class FixedDate extends Date { constructor(...args){super(...(args.length?args:[now]));} static now(){return now;} }
+ const context=vm.createContext({Date:FixedDate,console,PropertiesService:{getScriptProperties:()=>({getProperty:k=>props[k],setProperty:(k,v)=>{props[k]=v;},deleteProperty:k=>{delete props[k];}})},Gmail:{Users:{Messages:{list:(_me,options)=>{queries.push(options);return {messages:[]};},get:()=>{throw Error('unconfigured native read');},send:m=>{sends.push(m);throw Error('network timeout');}},getProfile:()=>({emailAddress:mailbox})}},Utilities:{Charset:{UTF_8:'UTF-8'},base64Encode:v=>Buffer.from(v).toString('base64'),base64EncodeWebSafe:v=>Buffer.from(v).toString('base64url'),base64DecodeWebSafe:v=>{if(v.length%4!==0||!/^[A-Za-z0-9_-]*={0,2}$/.test(v))throw Error('Could not decode string');return Buffer.from(v,'base64url');},newBlob:v=>({getDataAsString:()=>Buffer.from(v).toString('utf8')}),computeHmacSha256Signature:(body,key)=>Array.from(createHmac('sha256',key).update(body).digest())},UrlFetchApp:{fetch:(url,options)=>{uploads.push({url,...options});return {getResponseCode:()=>200,getContentText:()=>JSON.stringify({messages:[],reconcile:[],sendingEnabled:false})};}}});
  vm.runInContext(readFileSync(new URL('./google-apps-script/Outreach.gs',import.meta.url),'utf8'),context);
  return {context,props,queries,uploads,sends};
 }
@@ -230,7 +231,7 @@ test('the Google sender refuses HTML without a matching owner format permit from
  for(const permit of [null,{id:'other',revision:identity.revision},{...identity,revision:'b'.repeat(64)},identity]){
   const c=googleContext();Object.assign(c.props,{OUTREACH_CHECKS_ENABLED:'true',OUTREACH_SEND_ENABLED:'true',MAILBOX_EMAIL:mailbox});
   c.context.outreachHistory=()=>clean();c.context.outreachDeliveryScan=()=>{};
-  c.context.outreachRequest=input=>input.action==='claim'?{packet:p,attemptId,expiresAt:new Date(Date.now()+30000).toISOString(),formatApproval:permit}:input.action==='check'?{issues:[]}:{};
+  c.context.outreachRequest=input=>input.action==='claim'?{packet:p,attemptId,expiresAt:new Date(now+30000).toISOString(),formatApproval:permit}:input.action==='check'?{issues:[]}:{};
   assert.throws(()=>c.context.syncOutreach({messages:[{...identity,packet:p,queued:true}],reconcile:[],sendingEnabled:true}));
   assert.equal(c.sends.length,permit===identity?1:0);
  }
@@ -291,7 +292,7 @@ test('Google send timeout is one attempt, followed only by read-only reconciliat
  c.context.outreachRequest=input=>{
   if(input.action==='poll')return {messages:uncertain?[]:[{...identity,packet:p,queued:true}],reconcile:uncertain?[{...identity,attempt_id:attemptId,packet:p,recipient:p.message.recipient}]:[],sendingEnabled:true};
   if(input.action==='check')return {issues:[]};
-  if(input.action==='claim'){claims++;return {attemptId,packet:p,expiresAt:new Date(Date.now()+30000).toISOString()};}
+  if(input.action==='claim'){claims++;return {attemptId,packet:p,expiresAt:new Date(now+30000).toISOString()};}
   if(input.action==='receipt'){assert.equal(input.outcome,'uncertain');uncertain=true;return {};}
   throw Error('Unexpected request');
  };
@@ -344,7 +345,7 @@ for(const failAt of ['native read','receipt upload'])test('provider IDs survive 
  c.context.outreachRequest=input=>{
   if(input.action==='poll')return {messages:reserved?[]:[{...identity,packet:p,queued:true}],reconcile:reserved?[{...identity,attempt_id:attemptId,packet:p}]:[],sendingEnabled:true};
   if(input.action==='check')return {issues:[]};
-  if(input.action==='claim'){reserved=true;return {attemptId,packet:p,expiresAt:new Date(Date.now()+30000).toISOString()};}
+  if(input.action==='claim'){reserved=true;return {attemptId,packet:p,expiresAt:new Date(now+30000).toISOString()};}
   if(input.action==='receipt'){if(input.outcome==='sent'){if(fail&&failAt==='receipt upload')throw Error('upload timeout');verified++;}return {};}
   throw Error('Unexpected action');
  };
@@ -423,4 +424,43 @@ test('narrower delivery weekdays bind the exact revision and remain separate fro
  assert.equal(response.status,409);assert.match((await response.json()).error,/weekday restriction/);
  p.deliveryWindow.weekdays=['Mon'];const changed=await registerMessage(c.db,p,now);
  assert.notEqual(changed.revision,identity.revision);assert.equal(c.sql.prepare('SELECT approved_revision FROM outreach_messages').get().approved_revision,null);
+});
+
+test('server claim cannot reserve a send beyond the recipient closing second',async()=>{
+ const c=database(),identity=await queued(c),closing=Date.parse('2026-10-19T21:00:00Z'),claimAt=closing-1000;
+ await recordHistory(c.env,{...identity,history:{...clean(),checkedAt:new Date(claimAt).toISOString()}},claimAt,goodDns);
+ const response=await relayOutreach(c.env,{action:'claim',mailbox,...identity},claimAt,goodDns);
+ assert.equal(response.status,200);assert.equal((await response.json()).expiresAt,new Date(closing).toISOString());
+});
+test('Apps Script checks the actual window after MIME preparation and does not send a late or invalid-zone claim',()=>{
+ for(const zone of ['America/New_York','not/a-zone']){
+ const c=googleContext(),p=normalizePacket(packet(),now),identity={id:p.id,revision:'a'.repeat(64)},attemptId='00000000-0000-4000-a000-000000000000';
+ p.deliveryWindow={timeZone:zone};
+ Object.assign(c.props,{OUTREACH_CHECKS_ENABLED:'true',OUTREACH_SEND_ENABLED:'true',MAILBOX_EMAIL:mailbox});
+ let clock=Date.parse('2026-10-19T20:59:59Z');
+ c.context.Date=class extends Date{constructor(...args){super(...(args.length?args:[clock]));}static now(){return clock;}};
+ c.context.outreachHistory=()=>clean();c.context.outreachDeliveryScan=()=>{};
+ const uncertain=[];
+ c.context.outreachRequest=input=>input.action==='claim'?{packet:p,attemptId,expiresAt:'2026-10-19T21:00:29Z'}:input.action==='check'?{issues:[]}:(uncertain.push(input),{});
+ const mime=c.context.outreachMime;c.context.outreachMime=(...args)=>{const raw=mime(...args);clock=Date.parse('2026-10-19T21:00:20Z');return raw;};
+ assert.throws(()=>c.context.syncOutreach({messages:[{...identity,packet:p,queued:true}],reconcile:[],sendingEnabled:true}),/Automatic retry is disabled/);
+ assert.equal(c.sends.length,0);assert.equal(uncertain[0].outcome,'uncertain');
+ }
+});
+test('original-thread personal aliases stop cold follow-up even when absent from address search',()=>{
+ const c=googleContext(),p=normalizePacket(packet(),now);p.phase='followup';p.message.threadId='bb1';p.message.inReplyTo='<original@jobhackai.io>';c.props.MAILBOX_EMAIL=mailbox;
+ const original={id:'aa1',threadId:'bb1',internalDate:String(now-8*86400000),labelIds:['SENT'],payload:{headers:[{name:'From',value:mailbox},{name:'To',value:p.message.recipient},{name:'Message-ID',value:p.message.inReplyTo}]}};
+ const alias={id:'aa2',threadId:'bb1',internalDate:String(now-1000),labelIds:['INBOX'],payload:{headers:[{name:'From',value:'owner.personal@gmail.com'},{name:'To',value:mailbox},{name:'In-Reply-To',value:p.message.inReplyTo}]}};
+ const self={id:'aa3',threadId:'bb1',internalDate:String(now-500),labelIds:['INBOX'],payload:{headers:[{name:'From',value:mailbox},{name:'To',value:mailbox}]}};
+ const dsn={id:'aa4',threadId:'bb1',internalDate:String(now-100),labelIds:['INBOX'],payload:{headers:[{name:'From',value:'mailer-daemon@example.net'},{name:'To',value:mailbox},{name:'Subject',value:'Delivery Status Notification'}],body:{data:Buffer.from('Status: 5.1.1').toString('base64url')}}};
+ c.context.Gmail.Users.Messages.list=()=>({messages:[{id:original.id}]});c.context.Gmail.Users.Messages.get=()=>original;
+ c.context.Gmail.Users.Threads={get:(_me,id)=>{assert.equal(id,'bb1');return {id,messages:[original,alias,self,dsn]};}};
+ const h=c.context.outreachHistory(p);
+ assert.equal(h.complete,true);assert.equal(h.sent.length,1);assert.equal(h.received.length,1);assert.equal(h.received[0].messageId,alias.id);assert.equal(h.failures.length,1);assert.equal(h.failures[0].kind,'hard_bounce');
+ assert.ok(historyIssues(p,h,now).some(issue=>/received message/.test(issue)));
+});
+test('an unavailable original thread never produces clean follow-up history',()=>{
+ const c=googleContext(),p=normalizePacket(packet(),now);p.phase='followup';p.message.threadId='bb1';
+ c.context.Gmail.Users.Threads={get:()=>{throw Error('thread inaccessible');}};
+ assert.throws(()=>c.context.outreachHistory(p),/inaccessible/);
 });

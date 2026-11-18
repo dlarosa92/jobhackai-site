@@ -1,3 +1,4 @@
+import { outreachReservationExpiresAt } from './operating-policy.js';
 import { normalizePacket, messageRevision, routingCheck, historyIssues, fresh, normalizeEmail, formatIssues, validFormatRequest, releaseIssues, OWNER } from './outreach-policy.js';
 
 const json = (value, status = 200) => Response.json(value, { status, headers: { 'Cache-Control': 'no-store' } });
@@ -195,7 +196,7 @@ export async function ownerOutreach(request, env, now = Date.now()) {
 
 // Only called after the separate ingestion Worker has verified the shared HMAC.
 export async function relayOutreach(env, input, now = Date.now(), fetcher = fetch) {
-  const db=env.DASHBOARD_DB;
+  const db=env.DASHBOARD_DB, requestStartedAt=Date.now();
   if (input.mailbox !== env.MAILBOX_EMAIL || !['poll','check','claim','receipt','delivery'].includes(input.action)) return json({error:'Invalid relay request'},400);
   if(input.action==='delivery'){await recordDeliveryEvent(db,input,now);return json({ok:true});}
   if (input.action==='poll') {
@@ -219,10 +220,12 @@ export async function relayOutreach(env, input, now = Date.now(), fetcher = fetc
     // here, not reused from the approval-time result.
     if (!fresh(record.history_at,now,60000)) return json({error:'Immediate Gmail check required'},409);
     const routing=await routingCheck(record.recipient.split('@')[1],{fetcher,now:new Date(now)});
-    const release = releaseIssues(parse(record.packet), now);
+    const claimNow = now + Math.max(0, Date.now()-requestStartedAt);
+    if (!fresh(record.history_at,claimNow,60000)) return json({error:'Immediate Gmail check expired during routing; check again before claiming.'},409);
+    const release = releaseIssues(parse(record.packet), claimNow);
     if (release.length) return json({error:release.join(' ')},409);
     const current={...record,routing:JSON.stringify(routing)};
-    const issues=await gateIssues(db,current,now);
+    const issues=await gateIssues(db,current,claimNow);
     if(issues.length)return json({error:issues.join(' ')},409);
     const attemptId=crypto.randomUUID();
     const packet=parse(record.packet), originalId=parse(record.history)?.sent?.[0]?.messageId||'';
@@ -232,7 +235,7 @@ export async function relayOutreach(env, input, now = Date.now(), fetcher = fetc
         AND NOT (?='followup' AND other.state='sent' AND other.sent_thread_id=? AND other.sent_message_id=? AND json_extract(other.packet,'$.phase')='intro'))`)
       .bind(attemptId,JSON.stringify(routing),routing.checkedAt,iso(now),record.id,record.revision,record.revision,packet.phase,packet.message.threadId,originalId).run();
     if(!(reserved.meta.changes>0))return json({error:'Already claimed, blocked or changed'},409);
-    return json({attemptId,expiresAt:iso(now+30000),packet,
+    return json({attemptId,expiresAt:iso(outreachReservationExpiresAt(claimNow,packet.deliveryWindow?.timeZone)),packet,
       ...(packet.message.html ? {formatApproval:{id:record.id,revision:record.revision}} : {})});
   }
   if(!['sending','uncertain'].includes(record.state) || record.attempt_id!==input.attemptId || (record.state==='uncertain' && input.outcome!=='sent'))return json({error:'Attempt is not current; no automatic retry'},409);
