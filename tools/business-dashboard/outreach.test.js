@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { createHmac } from 'node:crypto';
 import vm from 'node:vm';
-import { normalizePacket, messageRevision, routingCheck, historyIssues, fiveBusinessDaysElapsed, digest } from './src/outreach-policy.js';
+import { normalizePacket, messageRevision, routingCheck, historyIssues, sevenFullDaysElapsed, digest } from './src/outreach-policy.js';
 import { allowed } from './src/access.js';
 import { registerMessage, recordHistory, ownerOutreach, relayOutreach, outreachRecords, recordDeliveryEvent } from './src/outreach.js';
 import ingest from './src/gmail-ingest.js';
@@ -71,10 +71,10 @@ test('current exact published evidence, resolved conflicts and safe headers are 
  for(const mutate of [p=>p.message.recipient='one@example.com,two@example.com',p=>p.message.subject+='\r\nBcc: other@example.net',p=>p.message.cc='other@example.net',p=>p.evidence.mailtoEmail='other@example.com',p=>p.evidence.checkedAt='2026-01-01T00:00:00Z',p=>p.evidence.fit='unknown',p=>p.message.html='<img src="https://tracking.example.net/x">',p=>p.lane='unqualified']){const p=packet();mutate(p);assert.throws(()=>normalizePacket(p,now));}
  assert.equal(normalizePacket(packet(),now).businessKey,'example.com');
 });
-test('five complete business days are evaluated by Eastern calendar date across DST',()=>{
- assert.equal(fiveBusinessDaysElapsed('2026-10-09T16:00:00Z',Date.parse('2026-10-16T23:00:00Z')),false);
- assert.equal(fiveBusinessDaysElapsed('2026-10-09T16:00:00Z',now),true);
- assert.equal(fiveBusinessDaysElapsed('2026-10-30T16:00:00Z',Date.parse('2026-11-09T15:00:00Z')),true);
+test('seven full elapsed days include weekends and require the exact 168-hour boundary',()=>{
+ assert.equal(sevenFullDaysElapsed('2026-10-09T16:00:00Z',Date.parse('2026-10-16T15:59:59Z')),false);
+ assert.equal(sevenFullDaysElapsed('2026-10-09T16:00:00Z',now),true);
+ assert.equal(sevenFullDaysElapsed('2026-10-30T16:00:00Z',Date.parse('2026-11-09T15:00:00Z')),true);
  const p=normalizePacket(packet(),now);assert.deepEqual(historyIssues(p,clean(),now),[]);
  for(const h of [null,{...clean(),complete:false},{...clean(),checkedAt:'2026-10-18T19:00:00Z'},{...clean(),received:[{messageId:'a1'}]},{...clean(),drafts:[{messageId:'a2'}]}])assert.ok(historyIssues(p,h,now).length);
 });
@@ -221,7 +221,8 @@ test('migration preserves existing approvals and native receipts',()=>{
 
 function googleContext(){
  const props={},queries=[],uploads=[],sends=[];
- const context=vm.createContext({Date,console,PropertiesService:{getScriptProperties:()=>({getProperty:k=>props[k],setProperty:(k,v)=>{props[k]=v;},deleteProperty:k=>{delete props[k];}})},Gmail:{Users:{Messages:{list:(_me,options)=>{queries.push(options);return {messages:[]};},get:()=>{throw Error('unconfigured native read');},send:m=>{sends.push(m);throw Error('network timeout');}},getProfile:()=>({emailAddress:mailbox})}},Utilities:{Charset:{UTF_8:'UTF-8'},base64Encode:v=>Buffer.from(v).toString('base64'),base64EncodeWebSafe:v=>Buffer.from(v).toString('base64url'),base64DecodeWebSafe:v=>{if(v.length%4!==0||!/^[A-Za-z0-9_-]*={0,2}$/.test(v))throw Error('Could not decode string');return Buffer.from(v,'base64url');},newBlob:v=>({getDataAsString:()=>Buffer.from(v).toString('utf8')}),computeHmacSha256Signature:(body,key)=>Array.from(createHmac('sha256',key).update(body).digest())},UrlFetchApp:{fetch:(url,options)=>{uploads.push({url,...options});return {getResponseCode:()=>200,getContentText:()=>JSON.stringify({messages:[],reconcile:[],sendingEnabled:false})};}}});
+ class FixedDate extends Date { constructor(...args){super(...(args.length?args:[now]));} static now(){return now;} }
+ const context=vm.createContext({Date:FixedDate,console,PropertiesService:{getScriptProperties:()=>({getProperty:k=>props[k],setProperty:(k,v)=>{props[k]=v;},deleteProperty:k=>{delete props[k];}})},Gmail:{Users:{Messages:{list:(_me,options)=>{queries.push(options);return {messages:[]};},get:()=>{throw Error('unconfigured native read');},send:m=>{sends.push(m);throw Error('network timeout');}},getProfile:()=>({emailAddress:mailbox})}},Utilities:{Charset:{UTF_8:'UTF-8'},base64Encode:v=>Buffer.from(v).toString('base64'),base64EncodeWebSafe:v=>Buffer.from(v).toString('base64url'),base64DecodeWebSafe:v=>{if(v.length%4!==0||!/^[A-Za-z0-9_-]*={0,2}$/.test(v))throw Error('Could not decode string');return Buffer.from(v,'base64url');},newBlob:v=>({getDataAsString:()=>Buffer.from(v).toString('utf8')}),computeHmacSha256Signature:(body,key)=>Array.from(createHmac('sha256',key).update(body).digest())},UrlFetchApp:{fetch:(url,options)=>{uploads.push({url,...options});return {getResponseCode:()=>200,getContentText:()=>JSON.stringify({messages:[],reconcile:[],sendingEnabled:false})};}}});
  vm.runInContext(readFileSync(new URL('./google-apps-script/Outreach.gs',import.meta.url),'utf8'),context);
  return {context,props,queries,uploads,sends};
 }
@@ -230,7 +231,7 @@ test('the Google sender refuses HTML without a matching owner format permit from
  for(const permit of [null,{id:'other',revision:identity.revision},{...identity,revision:'b'.repeat(64)},identity]){
   const c=googleContext();Object.assign(c.props,{OUTREACH_CHECKS_ENABLED:'true',OUTREACH_SEND_ENABLED:'true',MAILBOX_EMAIL:mailbox});
   c.context.outreachHistory=()=>clean();c.context.outreachDeliveryScan=()=>{};
-  c.context.outreachRequest=input=>input.action==='claim'?{packet:p,attemptId,expiresAt:new Date(Date.now()+30000).toISOString(),formatApproval:permit}:input.action==='check'?{issues:[]}:{};
+  c.context.outreachRequest=input=>input.action==='claim'?{packet:p,attemptId,expiresAt:new Date(now+30000).toISOString(),formatApproval:permit}:input.action==='check'?{issues:[]}:{};
   assert.throws(()=>c.context.syncOutreach({messages:[{...identity,packet:p,queued:true}],reconcile:[],sendingEnabled:true}));
   assert.equal(c.sends.length,permit===identity?1:0);
  }
@@ -291,7 +292,7 @@ test('Google send timeout is one attempt, followed only by read-only reconciliat
  c.context.outreachRequest=input=>{
   if(input.action==='poll')return {messages:uncertain?[]:[{...identity,packet:p,queued:true}],reconcile:uncertain?[{...identity,attempt_id:attemptId,packet:p,recipient:p.message.recipient}]:[],sendingEnabled:true};
   if(input.action==='check')return {issues:[]};
-  if(input.action==='claim'){claims++;return {attemptId,packet:p,expiresAt:new Date(Date.now()+30000).toISOString()};}
+  if(input.action==='claim'){claims++;return {attemptId,packet:p,expiresAt:new Date(now+30000).toISOString()};}
   if(input.action==='receipt'){assert.equal(input.outcome,'uncertain');uncertain=true;return {};}
   throw Error('Unexpected request');
  };
@@ -344,7 +345,7 @@ for(const failAt of ['native read','receipt upload'])test('provider IDs survive 
  c.context.outreachRequest=input=>{
   if(input.action==='poll')return {messages:reserved?[]:[{...identity,packet:p,queued:true}],reconcile:reserved?[{...identity,attempt_id:attemptId,packet:p}]:[],sendingEnabled:true};
   if(input.action==='check')return {issues:[]};
-  if(input.action==='claim'){reserved=true;return {attemptId,packet:p,expiresAt:new Date(Date.now()+30000).toISOString()};}
+  if(input.action==='claim'){reserved=true;return {attemptId,packet:p,expiresAt:new Date(now+30000).toISOString()};}
   if(input.action==='receipt'){if(input.outcome==='sent'){if(fail&&failAt==='receipt upload')throw Error('upload timeout');verified++;}return {};}
   throw Error('Unexpected action');
  };
@@ -389,4 +390,93 @@ test('owner feedback withdraws approval and the exact revision stays held after 
  await registerMessage(c.db,p,now);await recordHistory(c.env,{...x,history:clean()},now,goodDns);
  assert.equal((await ownerOutreach(ownerRequest('approve',x),c.env,now)).status,409);
  assert.equal((await outreachRecords(c.db,now)).items[0].feedback.action,'changes');
+});
+
+test('a queued email is held when its final claim crosses the recipient window',async()=>{
+ const c=database(),identity=await queued(c),late=Date.parse('2026-10-19T21:00:00Z'); // 17:00 Eastern
+ await recordHistory(c.env,{...identity,history:{...clean(),checkedAt:new Date(late).toISOString()}},late,goodDns);
+ const response=await relayOutreach(c.env,{action:'claim',mailbox,...identity},late,goodDns);
+ assert.equal(response.status,409);assert.match((await response.json()).error,/09:00-17:00/);
+ assert.equal(c.sql.prepare('SELECT state FROM outreach_messages').get().state,'queued');
+});
+test('Local first email requires verified public listing and cannot create a duplicate second notice',async()=>{
+ const c=database(),p=packet();p.lane='local-provider';p.evidence.profileUrl='https://jobhackai.io/directory/provider/example';
+ const identity=await registerMessage(c.db,p,now);await recordHistory(c.env,{...identity,history:clean()},now,goodDns);
+ assert.equal((await ownerOutreach(ownerRequest('approve',identity),c.env,now)).status,200);
+ await relayOutreach(c.env,{action:'poll',mailbox,canSend:true},now);
+ assert.equal((await ownerOutreach(ownerRequest('send',identity),c.env,now)).status,409);
+ p.evidence.profileVerifiedAt=new Date(now).toISOString();p.message.text+='\n'+p.evidence.profileUrl;
+ const verified=await registerMessage(c.db,p,now);await recordHistory(c.env,{...verified,history:clean()},now,goodDns);
+ await ownerOutreach(ownerRequest('approve',verified),c.env,now);
+ assert.equal((await ownerOutreach(ownerRequest('send',verified),c.env,now)).status,200);
+ const claim=await (await relayOutreach(c.env,{action:'claim',mailbox,...verified},now,goodDns)).json();
+ await relayOutreach(c.env,{action:'receipt',mailbox,...verified,attemptId:claim.attemptId,outcome:'sent',messageId:'abc1',threadId:'abc2'},now);
+ p.id='second-notice';const duplicate=await registerMessage(c.db,p,now);
+ await recordHistory(c.env,{...duplicate,history:clean()},now,goodDns);
+ assert.equal((await ownerOutreach(ownerRequest('approve',duplicate),c.env,now)).status,409);
+ assert.equal(c.sql.prepare("SELECT count(*) n FROM outreach_messages WHERE state='sent'").get().n,1);
+});
+test('narrower delivery weekdays bind the exact revision and remain separate from seven-day eligibility',async()=>{
+ const c=database(),p=packet();p.deliveryWindow={timeZone:'America/New_York',weekdays:['Tue']};
+ const identity=await registerMessage(c.db,p,now);await recordHistory(c.env,{...identity,history:clean()},now,goodDns);
+ await ownerOutreach(ownerRequest('approve',identity),c.env,now);await relayOutreach(c.env,{action:'poll',mailbox,canSend:true},now);
+ const response=await ownerOutreach(ownerRequest('send',identity),c.env,now);
+ assert.equal(response.status,409);assert.match((await response.json()).error,/weekday restriction/);
+ p.deliveryWindow.weekdays=['Mon'];const changed=await registerMessage(c.db,p,now);
+ assert.notEqual(changed.revision,identity.revision);assert.equal(c.sql.prepare('SELECT approved_revision FROM outreach_messages').get().approved_revision,null);
+});
+
+test('server claim cannot reserve a send beyond the recipient closing second',async()=>{
+ const c=database(),identity=await queued(c),closing=Date.parse('2026-10-19T21:00:00Z'),claimAt=closing-1000;
+ await recordHistory(c.env,{...identity,history:{...clean(),checkedAt:new Date(claimAt).toISOString()}},claimAt,goodDns);
+ const response=await relayOutreach(c.env,{action:'claim',mailbox,...identity},claimAt,goodDns);
+ assert.equal(response.status,200);assert.equal((await response.json()).expiresAt,new Date(closing).toISOString());
+});
+test('Apps Script checks the actual window after MIME preparation and does not send a late or invalid-zone claim',()=>{
+ for(const zone of ['America/New_York','not/a-zone']){
+ const c=googleContext(),p=normalizePacket(packet(),now),identity={id:p.id,revision:'a'.repeat(64)},attemptId='00000000-0000-4000-a000-000000000000';
+ p.deliveryWindow={timeZone:zone};
+ Object.assign(c.props,{OUTREACH_CHECKS_ENABLED:'true',OUTREACH_SEND_ENABLED:'true',MAILBOX_EMAIL:mailbox});
+ let clock=Date.parse('2026-10-19T20:59:59Z');
+ c.context.Date=class extends Date{constructor(...args){super(...(args.length?args:[clock]));}static now(){return clock;}};
+ c.context.outreachHistory=()=>clean();c.context.outreachDeliveryScan=()=>{};
+ const uncertain=[];
+ c.context.outreachRequest=input=>input.action==='claim'?{packet:p,attemptId,expiresAt:'2026-10-19T21:00:29Z'}:input.action==='check'?{issues:[]}:(uncertain.push(input),{});
+ const mime=c.context.outreachMime;c.context.outreachMime=(...args)=>{const raw=mime(...args);clock=Date.parse('2026-10-19T21:00:20Z');return raw;};
+ assert.throws(()=>c.context.syncOutreach({messages:[{...identity,packet:p,queued:true}],reconcile:[],sendingEnabled:true}),/Automatic retry is disabled/);
+ assert.equal(c.sends.length,0);assert.equal(uncertain[0].outcome,'uncertain');
+ }
+});
+test('original-thread personal aliases stop cold follow-up even when absent from address search',()=>{
+ const c=googleContext(),p=normalizePacket(packet(),now);p.phase='followup';p.message.threadId='bb1';p.message.inReplyTo='<original@jobhackai.io>';c.props.MAILBOX_EMAIL=mailbox;
+ const original={id:'aa1',threadId:'bb1',internalDate:String(now-8*86400000),labelIds:['SENT'],payload:{headers:[{name:'From',value:mailbox},{name:'To',value:p.message.recipient},{name:'Message-ID',value:p.message.inReplyTo}]}};
+ const alias={id:'aa2',threadId:'bb1',internalDate:String(now-1000),labelIds:['INBOX'],payload:{headers:[{name:'From',value:'owner.personal@gmail.com'},{name:'To',value:mailbox},{name:'In-Reply-To',value:p.message.inReplyTo}]}};
+ const self={id:'aa3',threadId:'bb1',internalDate:String(now-500),labelIds:['INBOX'],payload:{headers:[{name:'From',value:mailbox},{name:'To',value:mailbox}]}};
+ const dsn={id:'aa4',threadId:'bb1',internalDate:String(now-100),labelIds:['INBOX'],payload:{headers:[{name:'From',value:'mailer-daemon@example.net'},{name:'To',value:mailbox},{name:'Subject',value:'Delivery Status Notification'}],body:{data:Buffer.from('Status: 5.1.1').toString('base64url')}}};
+ c.context.Gmail.Users.Messages.list=()=>({messages:[{id:original.id}]});c.context.Gmail.Users.Messages.get=()=>original;
+ c.context.Gmail.Users.Threads={get:(_me,id)=>{assert.equal(id,'bb1');return {id,messages:[original,alias,self,dsn]};}};
+ const h=c.context.outreachHistory(p);
+ assert.equal(h.complete,true);assert.equal(h.sent.length,1);assert.equal(h.received.length,1);assert.equal(h.received[0].messageId,alias.id);assert.equal(h.failures.length,1);assert.equal(h.failures[0].kind,'hard_bounce');
+ assert.ok(historyIssues(p,h,now).some(issue=>/received message/.test(issue)));
+});
+test('an unavailable original thread never produces clean follow-up history',()=>{
+ const c=googleContext(),p=normalizePacket(packet(),now);p.phase='followup';p.message.threadId='bb1';
+ c.context.Gmail.Users.Threads={get:()=>{throw Error('thread inaccessible');}};
+ assert.throws(()=>c.context.outreachHistory(p),/inaccessible/);
+});
+
+test('relevant personal-alias replies in separate threads hold cold follow-up without requiring domain match',()=>{
+ const c=googleContext(),p=normalizePacket(packet(),now);p.phase='followup';p.message.threadId='bb1';p.message.inReplyTo='<original@jobhackai.io>';c.props.MAILBOX_EMAIL=mailbox;
+ const original={id:'aa1',threadId:'bb1',internalDate:String(now-8*86400000),labelIds:['SENT'],payload:{headers:[{name:'From',value:mailbox},{name:'To',value:p.message.recipient},{name:'Message-ID',value:p.message.inReplyTo}]}};
+ const reply={id:'aa2',threadId:'bb2',internalDate:String(now-1000),labelIds:['INBOX'],payload:{headers:[{name:'From',value:'owner.personal@gmail.com'},{name:'To',value:mailbox},{name:'In-Reply-To',value:p.message.inReplyTo}]}};
+ const self={id:'aa3',threadId:'bb3',internalDate:String(now-500),labelIds:['INBOX'],payload:{headers:[{name:'From',value:mailbox},{name:'To',value:mailbox}]}};
+ const messages={[original.id]:original,[reply.id]:reply,[self.id]:self};
+ c.context.Gmail.Users.Messages.list=()=>({messages:Object.keys(messages).map(id=>({id}))});c.context.Gmail.Users.Messages.get=(_me,id)=>messages[id];
+ c.context.Gmail.Users.Threads={get:()=>({id:'bb1',messages:[original]})};
+ for(const references of [true,false]){
+   if(!references)reply.payload.headers=reply.payload.headers.filter(h=>h.name!=='In-Reply-To');
+   const h=c.context.outreachHistory(p);
+   assert.equal(h.sent.length,1);assert.equal(h.received.length,1);assert.equal(h.received[0].messageId,reply.id);
+   assert.ok(historyIssues(p,h,now).some(issue=>/received message/.test(issue)));
+ }
 });

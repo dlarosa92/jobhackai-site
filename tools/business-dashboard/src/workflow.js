@@ -1,9 +1,10 @@
+import { businessHoursElapsed, monthlyReportPeriod } from './operating-policy.js';
 import {notificationsEnabled,briefStatement,alertStatements,notificationStatus,flushOwnerNotifications} from './owner-notifications.js';
 // Receipts and deadlines are separate from source freshness and external release authority.
 const policies = {preparation:'prepare', reconciliation:'reconcile', coordination:'coordinate'};
 const reconciliationSources = ['marblism','campaign','gmail','directory','github'];
 const openStates = ['pending','claimed','blocked'];
-const defaultScheduleLabels = {preparation:'Hourly · Codex on the Mac',reconciliation:'Every 30 minutes · Codex on the Mac',coordination:'Daily · Codex on the Mac'};
+const defaultScheduleLabels = {preparation:'Legacy interval; verify configured coordinator cadence',reconciliation:'Legacy checker; verify configured coordinator mode',coordination:'Daily huddle within the coordinator'};
 // Deployment configuration changes monitoring expectations, never receipts or execution authority.
 export function workflowPolicyOverrides(raw) {
   if(raw===undefined||raw==='')return {};
@@ -85,7 +86,8 @@ async function baseline(db) {
   ]);
   return {items:items.results,sources:sources.results,handoffs:handoffs.results,coordination:runs.results.map(r=>r.id)};
 }
-function periodFor(workflow,now) {
+function periodFor(workflow,now,policy) {
+  if (workflow!=='coordination' && policy?.dailySlots) return `slot:${expectedWorkflowSlot({...policy,graceMinutes:0},new Date(now)).expectedSlotAt}`;
   if(workflow==='reconciliation')return `${now.slice(0,14)}${Number(now.slice(14,16))<30?'00':'30'}`;
   return workflow==='coordination'?new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now)):now.slice(0,13);
 }
@@ -98,21 +100,21 @@ async function start(db,input,identity,now,overrides={}) {
   if(!canRun(identity,input.workflow))fail('Workflow capability required.',403);
   if(input.workflow==='preparation')await retirementPreflight(db,overrides);
   if(overrides[input.workflow]&&overrides[input.workflow].mode!=='active')fail('This workflow is paused or retired. Follow its recorded replacement instead of restarting it.',409);
-  const workflow=input.workflow,period=periodFor(workflow,now);
+  const workflow=input.workflow,period=periodFor(workflow,now,overrides[workflow]);
   let old=await db.prepare('SELECT id,actor,status,lease_until FROM workflow_runs WHERE workflow=? AND period=?').bind(workflow,period).first();
   // Preserve an hourly receipt created before the cadence change in its actual half-hour slot.
-  if(!old&&workflow==='reconciliation')old=await db.prepare(`SELECT id,actor,status,lease_until FROM workflow_runs
+  if(!old&&workflow==='reconciliation'&&!overrides[workflow]?.dailySlots)old=await db.prepare(`SELECT id,actor,status,lease_until FROM workflow_runs
     WHERE workflow=? AND period=? AND started_at>=? AND started_at<?`)
     .bind(workflow,now.slice(0,13),`${period}:00.000Z`,new Date(Date.parse(`${period}:00.000Z`)+30*60000).toISOString()).first();
   if(old){if(old.actor!==actor(identity))fail('This period is owned by another executor.',409);return {...old,reused:true};}
   const id=crypto.randomUUID(),lease=new Date(Date.parse(now)+60*60000).toISOString(),before=await baseline(db);
   // Check and insert atomically: a slow previous check must not overlap the next slot.
   const result=await db.prepare(`INSERT INTO workflow_runs(id,workflow,period,actor,started_at,lease_until,baseline)
-    SELECT ?,?,?,?,?,?,? WHERE ?<>'reconciliation' OR NOT EXISTS(
-      SELECT 1 FROM workflow_runs WHERE workflow='reconciliation' AND status='running' AND lease_until>?
+    SELECT ?,?,?,?,?,?,? WHERE NOT EXISTS(
+      SELECT 1 FROM workflow_runs WHERE workflow=? AND status='running' AND lease_until>?
     ) ON CONFLICT DO NOTHING`)
     .bind(id,workflow,period,actor(identity),now,lease,JSON.stringify(before),workflow,now).run();
-  if(!result.meta?.changes)fail('Another run already owns this period or reconciliation is still running. Read workflow status and wait for the next scheduled check.',409);
+  if(!result.meta?.changes)fail('Another run already owns this period or this workflow is still running. Read workflow status and wait for the next scheduled check.',409);
   return {id,workflow,period,status:'running',startedAt:now,leaseUntil:lease};
 }
 async function activeRun(db,id,identity,now) {
@@ -120,6 +122,26 @@ async function activeRun(db,id,identity,now) {
   if(!run||run.actor!==actor(identity)||!canRun(identity,run.workflow))fail('Run is not owned by this executor.',403);
   if(run.status!=='running'||run.lease_until<=now)fail('Run finished or expired. Start the next scheduled period.',409);
   return run;
+}
+// Recovery acknowledges inspected side effects; it never edits the original attempt.
+async function recover(db,input,identity,now) {
+  const run=await db.prepare('SELECT * FROM workflow_runs WHERE id=?').bind(key(input.id)).first();
+  if(!run || (identity.role!=='owner' && (run.actor!==actor(identity)||!canRun(identity,run.workflow))))fail('Only this executor or the owner can acknowledge recovery.',403);
+  if(run.status!=='running'||run.lease_until>now)fail('Only an expired running attempt can be recovered; never take over a live lease.',409);
+  if(input.expectedActor!==run.actor || input.expectedStartedAt!==run.started_at || input.expectedLeaseUntil!==run.lease_until)fail('The inspected attempt changed. Reload before recovery.',409);
+  if(!['no_external_action','verified_side_effects'].includes(input.resolution))fail('Resolve uncertain side effects before acknowledging recovery.');
+  const summary=text(input.summary),proof=evidence(input.evidence);
+  const existing=await db.prepare('SELECT * FROM workflow_recoveries WHERE run_id=?').bind(run.id).first();
+  if(existing){
+    if(existing.actor===actor(identity)&&existing.summary===summary&&existing.resolution===input.resolution&&existing.evidence===JSON.stringify(proof))return {saved:true,reused:true,recovery:existing};
+    fail('This recovery already has immutable evidence.',409);
+  }
+  const saved=await db.prepare(`INSERT INTO workflow_recoveries(run_id,actor,expected_actor,expected_started_at,expected_lease_until,resolution,summary,evidence,recorded_at)
+    SELECT id,?,actor,started_at,lease_until,?,?,?,? FROM workflow_runs
+    WHERE id=? AND actor=? AND started_at=? AND lease_until=? AND status='running' AND lease_until<=?
+    ON CONFLICT DO NOTHING`).bind(actor(identity),input.resolution,summary,JSON.stringify(proof),now,run.id,input.expectedActor,input.expectedStartedAt,input.expectedLeaseUntil,now).run();
+  if(!saved.meta?.changes)fail('Recovery changed concurrently. Read the saved acknowledgment.',409);
+  return {saved:true,recovery:await db.prepare('SELECT * FROM workflow_recoveries WHERE run_id=?').bind(run.id).first()};
 }
 export async function verifyRunWrite(db,input,identity,now) {
   return input.runId ? activeRun(db,input.runId,identity,now) : null;
@@ -146,6 +168,10 @@ async function finish(db,input,identity,now,loadBoard,env) {
   const run=await activeRun(db,input.id,identity,now);
   if(!['advanced','checked','blocked','failed'].includes(input.outcome))fail('Invalid run outcome.');
   const result={summary:text(input.summary),evidence:input.outcome==='failed'?[]:evidence(input.evidence)};
+  if(input.escalation!==undefined){
+    if(!['serious_customer_harm','uncontrolled_spending','commitment_at_risk'].includes(input.escalation))fail('Invalid escalation reason.');
+    result.escalation=input.escalation;
+  }
   if(input.outcome==='blocked'){result.blocker=text(input.blocker);result.nextCheckAt=future(input.nextCheckAt,now);}
   const writes=(await db.prepare('SELECT kind,reference,result FROM workflow_run_writes WHERE run_id=? ORDER BY recorded_at,version').bind(run.id).all()).results.map(w=>({...w,result:parse(w.result)}));
   const refs=(kind,predicate)=>[...new Set(writes.filter(w=>w.kind===kind&&predicate(w.result)).map(w=>w.reference))];
@@ -215,13 +241,14 @@ export function handoffNextAction(h) {
 }
 export async function workflowStatus(db,now=new Date(),overrides={}) {
   const stamp=now.toISOString();
-  const [specs,runs,handoffs,alerts,health,unfinished]=await Promise.all([
+  const [specs,runs,handoffs,alerts,health,unfinished,recoveryCandidates]=await Promise.all([
     db.prepare('SELECT * FROM workflow_policies ORDER BY id').all(),
-    db.prepare('SELECT * FROM workflow_runs WHERE id IN (SELECT id FROM (SELECT id,ROW_NUMBER() OVER(PARTITION BY workflow ORDER BY started_at DESC) AS n FROM workflow_runs) WHERE n<=8) ORDER BY started_at DESC').all(),
+    db.prepare(`SELECT workflow_runs.*,(SELECT json_object('actor',actor,'resolution',resolution,'summary',summary,'evidence',json(evidence),'recordedAt',recorded_at) FROM workflow_recoveries WHERE run_id=workflow_runs.id) AS recovery FROM workflow_runs WHERE id IN (SELECT id FROM (SELECT id,ROW_NUMBER() OVER(PARTITION BY workflow ORDER BY started_at DESC) AS n FROM workflow_runs) WHERE n<=8) ORDER BY started_at DESC`).all(),
     db.prepare("SELECT h.*,w.document FROM work_handoffs h JOIN work_items w ON w.id=h.item_id WHERE h.status IN ('pending','claimed','blocked') AND w.native_state NOT IN ('sent','published','closed','scheduled') ORDER BY h.due_at").all(),
     db.prepare('SELECT * FROM workflow_alerts WHERE resolved_at IS NULL ORDER BY first_seen_at').all(),
     db.prepare('SELECT source,status,checked_at FROM source_health').all(),
-    db.prepare("SELECT workflow,COUNT(*) AS count,SUM(CASE WHEN lease_until<=? THEN 1 ELSE 0 END) AS stalled,MIN(started_at) AS oldest FROM workflow_runs WHERE status='running' GROUP BY workflow").bind(stamp).all(),
+    db.prepare("SELECT workflow,COUNT(*) AS count,SUM(CASE WHEN lease_until<=? THEN 1 ELSE 0 END) AS stalled,MIN(started_at) AS oldest FROM workflow_runs WHERE status='running' AND NOT EXISTS(SELECT 1 FROM workflow_recoveries WHERE run_id=workflow_runs.id) GROUP BY workflow").bind(stamp).all(),
+    db.prepare("SELECT id,workflow,actor,started_at,lease_until FROM workflow_runs WHERE status='running' AND lease_until<=? AND NOT EXISTS(SELECT 1 FROM workflow_recoveries WHERE run_id=workflow_runs.id) ORDER BY started_at,id LIMIT 51").bind(stamp).all(),
   ]);
   const workflows=specs.results.map(savedSpec=>{
     const override=overrides[savedSpec.id],spec={...savedSpec,max_age_minutes:override?.maxAgeMinutes??savedSpec.max_age_minutes};
@@ -231,7 +258,7 @@ export async function workflowStatus(db,now=new Date(),overrides={}) {
     // Keep immutable run history, but a subsequent audit failure supersedes its health claim.
     const disputedSources=spec.id==='reconciliation'&&run?health.results.filter(h=>reconciliationSources.includes(h.source)&&h.status!=='current'&&h.checked_at>=run.started_at).map(h=>h.source):[];
     let status='waiting';
-    if(run?.status==='running')status=run.lease_until>stamp?'running':'stalled';
+    if(run?.status==='running'&&!run.recovery)status=run.lease_until>stamp?'running':'stalled';
     else if(run?.status==='failed')status='failed';
     else if(run?.status==='blocked')status=result?.nextCheckAt>stamp?'blocked':'overdue';
     else if(spec.id==='reconciliation'&&run&&(!completeReconciliation(result)||disputedSources.length))status='incomplete';
@@ -243,23 +270,23 @@ export async function workflowStatus(db,now=new Date(),overrides={}) {
     if(override&&override.mode!=='active'&&!['running','stalled'].includes(status))status=override.mode;
     const retirementConflict=spec.id==='preparation'&&override?.mode==='retired'&&handoffs.results.length>0;
     if(retirementConflict)status='retirement_conflict';
-    return {...spec,status,mode:override?.mode||'active',policyReason:override?.reason||null,scheduleLabel:override?.scheduleLabel||defaultScheduleLabels[spec.id],schedule,outstandingAttempts:outstanding?{count:outstanding.count,stalled:outstanding.stalled,oldestStartedAt:outstanding.oldest}:null,disputedSources,requiredSources:spec.id==='reconciliation'?reconciliationSources:[],lastRun:run?{id:run.id,status:run.status,startedAt:run.started_at,finishedAt:run.finished_at,result}:null,lastSuccessAt:lastFinished?.finished_at||null};
+    return {...spec,status,mode:override?.mode||'active',policyReason:override?.reason||null,scheduleLabel:override?.scheduleLabel||defaultScheduleLabels[spec.id],schedule,outstandingAttempts:outstanding?{count:outstanding.count,stalled:outstanding.stalled,oldestStartedAt:outstanding.oldest}:null,disputedSources,requiredSources:spec.id==='reconciliation'?reconciliationSources:[],lastRun:run?{id:run.id,status:run.status,startedAt:run.started_at,finishedAt:run.finished_at,result,recovery:parse(run.recovery)}:null,lastSuccessAt:lastFinished?.finished_at||null};
   });
   const jobs=handoffs.results.map(h=>{const {document,...rest}=h;return {...rest,title:parse(document).title,nextAction:handoffNextAction(h),overdue:(h.status==='blocked'?h.next_check_at:h.due_at)<=stamp};});
   // Derive immediately on reads as well as persisting on cron; a late cron cannot make stale work green.
-  const active=[...workflows.filter(w=>['missing','stalled','failed','blocked','overdue','incomplete','retirement_conflict'].includes(w.status)).map(w=>({id:`workflow-${w.id}`,detail:`${w.label}: ${w.status}. ${w.status==='retirement_conflict'?'Actionable owner handoffs require preparation. Restore its reviewed active executor and policy before claiming those handoffs; do not discard them. ':''}${w.outstandingAttempts?.stalled?`${w.outstandingAttempts.stalled} unfinished attempt(s) have expired leases; oldest started ${w.outstandingAttempts.oldestStartedAt}. Inspect side effects before recovery.`:w.status==='missing'&&w.schedule?.expectedSlotAt?`No completed run began at or after the expected ${w.schedule.expectedSlotAt} slot; its ${w.schedule.graceMinutes}-minute grace has elapsed.`:w.disputedSources.length?`Later source checks invalidate the saved success: ${w.disputedSources.join(', ')}.`:w.status==='incomplete'?'The saved run did not verify all required sources.':w.lastRun?.result?.blocker||w.lastRun?.result?.summary||'No completed run receipt within the expected interval.'}`})),
+  const active=[...workflows.filter(w=>['missing','stalled','failed','blocked','overdue','incomplete','retirement_conflict'].includes(w.status)).map(w=>({id:`workflow-${w.id}`,immediate:!!w.lastRun?.result?.escalation,detail:`${w.label}: ${w.status}. ${w.status==='retirement_conflict'?'Actionable owner handoffs require preparation. Restore its reviewed active executor and policy before claiming those handoffs; do not discard them. ':''}${w.outstandingAttempts?.stalled?`${w.outstandingAttempts.stalled} unfinished attempt(s) have expired leases; oldest started ${w.outstandingAttempts.oldestStartedAt}. Inspect side effects before recovery.`:w.status==='missing'&&w.schedule?.expectedSlotAt?`No completed run began at or after the expected ${w.schedule.expectedSlotAt} slot; its ${w.schedule.graceMinutes}-minute grace has elapsed.`:w.disputedSources.length?`Later source checks invalidate the saved success: ${w.disputedSources.join(', ')}.`:w.status==='incomplete'?'The saved run did not verify all required sources.':w.lastRun?.result?.blocker||w.lastRun?.result?.summary||'No completed run receipt within the expected interval.'}`})),
     ...jobs.filter(h=>h.overdue).map(h=>({id:`handoff-${h.decision_id}`,detail:`${h.title}: ${h.department} follow-up is overdue. ${h.nextAction}`}))];
-  return {checkedAt:stamp,workflows,handoffs:jobs,alerts:active.map(a=>({...a,firstSeenAt:alerts.results.find(old=>old.id===a.id)?.first_seen_at||stamp}))};
+  return {checkedAt:stamp,workflows,handoffs:jobs,recoveryCandidates:recoveryCandidates.results.slice(0,50),recoveryCandidatesTruncated:recoveryCandidates.results.length>50,monthlyReport:monthlyReportPeriod(now),alerts:active.map(a=>{const firstSeenAt=alerts.results.find(old=>old.id===a.id)?.first_seen_at||stamp;return {...a,firstSeenAt,notificationDue:a.immediate||businessHoursElapsed(firstSeenAt,now.getTime())};})};
 }
 export async function checkWorkflowDeadlines(env,now=new Date()) {
   const db=env.DASHBOARD_DB,status=await workflowStatus(db,now,workflowPolicyOverrides(env.DASHBOARD_WORKFLOW_POLICIES)),stamp=now.toISOString();
-  // No external messages or mutations: the independent monitor only updates dashboard alerts.
+  // The monitor records alerts; separately enabled owner transport dispatches eligible notices.
   const statements=status.alerts.map(a=>db.prepare(`INSERT INTO workflow_alerts(id,detail,first_seen_at,last_seen_at) VALUES(?,?,?,?)
     ON CONFLICT(id) DO UPDATE SET detail=excluded.detail,last_seen_at=excluded.last_seen_at,
       first_seen_at=CASE WHEN workflow_alerts.resolved_at IS NULL THEN workflow_alerts.first_seen_at ELSE excluded.first_seen_at END,resolved_at=NULL`)
     .bind(a.id,a.detail,stamp,stamp));
   const ids=status.alerts.map(a=>a.id);
-  if(notificationsEnabled(env))statements.push(...alertStatements(db,ids,stamp,env));
+  if(notificationsEnabled(env))statements.push(...alertStatements(db,ids,stamp,env,status.alerts.filter(a=>a.notificationDue).map(a=>a.id)));
   statements.push(db.prepare(`UPDATE workflow_alerts SET resolved_at=? WHERE resolved_at IS NULL AND id NOT IN (SELECT value FROM json_each(?))`).bind(stamp,JSON.stringify(ids)));
   await db.batch(statements);
   console.log(JSON.stringify({event:'workflow_deadlines_checked',checkedAt:stamp,alerts:ids}));
@@ -279,7 +306,8 @@ export async function workflowApi(request,env,identity,now=new Date(),loadBoard)
     if(request.method!=='POST')fail('Method not allowed.',405);
     const input=await readBody(request),stamp=now.toISOString();let result;
     if(!input||typeof input!=='object'||Array.isArray(input))fail('A JSON object is required.');
-    if(path==='/api/workflow/start')result=await start(db,input,identity,stamp,overrides);
+    if(path==='/api/workflow/recover')result=await recover(db,input,identity,stamp);
+    else if(path==='/api/workflow/start')result=await start(db,input,identity,stamp,overrides);
     else if(path==='/api/workflow/finish')result=await finish(db,input,identity,stamp,loadBoard,env);
     else if(path==='/api/workflow/handoff')result=await handoff(db,input,identity,stamp);
     else fail('Not found.',404);
