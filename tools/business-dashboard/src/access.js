@@ -26,7 +26,7 @@ export function allowed(identity,method,path) {
   const caps=identity.capabilities;
   if(method==='GET'&&caps.includes('read'))return ['/api/campaigns','/api/operating-guide','/api/session','/api/workflow','/api/analytics','/api/stripe-check'].includes(path)||/^\/api\/work-items(?:\/[a-z0-9_-]+)?$/.test(path);
   if(method!=='POST')return false;
-  if(['/api/workflow/start','/api/workflow/finish'].includes(path))return ['prepare','reconcile','coordinate'].some(c=>caps.includes(c));
+  if(['/api/workflow/start','/api/workflow/finish','/api/workflow/recover'].includes(path))return ['prepare','reconcile','coordinate'].some(c=>caps.includes(c));
   const routes={
     '/api/workflow/handoff':'prepare','/api/analytics':'reconcile','/api/stripe-check':'reconcile',
     '/api/work-items/prepare':'prepare','/api/outreach/prepare':'prepare',

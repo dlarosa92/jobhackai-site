@@ -556,3 +556,45 @@ for(let round=1;round<=3;round++)test(`scheduled source health has one writer an
   assert.equal((await c.work('source-health',audit)).status,200);
   const after=c.sql.prepare("SELECT * FROM source_health WHERE source='campaign'").get();assert.equal(after.status,'incomplete');assert.equal(after.last_success_at,before.last_success_at);
 });
+
+test('configured two-hour periods deduplicate across the old hourly boundary and retain overlap protection',async()=>{
+ const c=fixture();c.env.DASHBOARD_WORKFLOW_POLICIES=JSON.stringify({preparation:{mode:'active',reason:'Single two-hour coordinator',dailySlots:Array.from({length:12},(_,i)=>`${String(i*2).padStart(2,'0')}:00`),graceMinutes:30,scheduleLabel:'Every two hours Eastern'}});
+ const start=new Date('2026-11-21T15:05:00Z'),run=(await c.flow('start',{workflow:'preparation'},machine,start)).body;
+ assert.equal(run.period,'slot:2026-11-21T15:00:00.000Z');
+ const same=(await c.flow('start',{workflow:'preparation'},machine,new Date('2026-11-21T16:10:00Z'))).body;
+ assert.equal(same.id,run.id);assert.equal(same.reused,true);
+ const next=(await c.flow('start',{workflow:'preparation'},machine,new Date('2026-11-21T17:05:00Z'))).body;
+ assert.notEqual(next.id,run.id);
+ assert.equal(c.sql.prepare('SELECT count(*) n FROM workflow_runs').get().n,2);
+});
+test('expired-run recovery is append-only, exact, same-executor or owner, and never proves success',async()=>{
+ const c=fixture(),run=(await c.flow('start',{workflow:'preparation'})).body;
+ const original=c.sql.prepare('SELECT * FROM workflow_runs WHERE id=?').get(run.id);
+ const input={id:run.id,expectedActor:original.actor,expectedStartedAt:original.started_at,expectedLeaseUntil:original.lease_until,resolution:'no_external_action',summary:'Inspected native side effects and saved run writes; no external action occurred.',evidence:proof};
+ assert.equal((await c.flow('recover',input)).status,409);
+ const later=new Date(c.now.getTime()+3600001);
+ assert.equal((await c.flow('recover',input,{...machine,id:'other'},later)).status,403);
+ assert.equal((await c.flow('recover',{...input,expectedLeaseUntil:later.toISOString()},machine,later)).status,409);
+ assert.equal((await c.flow('recover',{...input,resolution:'uncertain'},machine,later)).status,400);
+ assert.equal((await c.flow('recover',input,machine,later)).status,200);
+ assert.equal((await c.flow('recover',input,machine,later)).body.reused,true);
+ assert.deepEqual(c.sql.prepare('SELECT * FROM workflow_runs WHERE id=?').get(run.id),original);
+ assert.throws(()=>c.sql.prepare("UPDATE workflow_recoveries SET summary='rewrite'").run(),/immutable/);
+ assert.throws(()=>c.sql.prepare('DELETE FROM workflow_recoveries').run(),/immutable/);
+ const status=await workflowStatus(c.db,later);const recovered=status.workflows.find(w=>w.id==='preparation');
+ assert.equal(recovered.outstandingAttempts,null);assert.notEqual(recovered.status,'current');assert.equal(recovered.lastSuccessAt,null);
+ assert.equal(recovered.lastRun.recovery.resolution,'no_external_action');
+ assert.equal((await c.flow('recover',{...input,summary:'Different recovery claim'},owner,later)).status,409);
+});
+test('recovery of an old attempt cannot hide a newer stalled attempt or rewrite a completed run',async()=>{
+ const c=fixture(),first=(await c.flow('start',{workflow:'preparation'})).body;
+ const later=new Date(c.now.getTime()+7200000),second=(await c.flow('start',{workflow:'preparation'},machine,later)).body;
+ const original=c.sql.prepare('SELECT * FROM workflow_runs WHERE id=?').get(first.id);
+ const input={id:first.id,expectedActor:original.actor,expectedStartedAt:original.started_at,expectedLeaseUntil:original.lease_until,resolution:'verified_side_effects',summary:'Verified original receipts and preserved completed external work.',evidence:proof};
+ assert.equal((await c.flow('recover',input,owner,later)).status,200);
+ const status=await workflowStatus(c.db,new Date(later.getTime()+3600001));
+ assert.equal(status.workflows.find(w=>w.id==='preparation').outstandingAttempts.stalled,1);
+ await c.flow('finish',{id:second.id,outcome:'failed',summary:'Explicit failed run'},machine,later);
+ const completed=c.sql.prepare('SELECT * FROM workflow_runs WHERE id=?').get(second.id);
+ assert.equal((await c.flow('recover',{...input,id:second.id,expectedActor:completed.actor,expectedStartedAt:completed.started_at,expectedLeaseUntil:completed.lease_until},owner,new Date(later.getTime()+7200000))).status,409);
+});
