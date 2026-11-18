@@ -1,4 +1,4 @@
-import { normalizePacket, messageRevision, routingCheck, historyIssues, fresh, normalizeEmail, formatIssues, validFormatRequest, OWNER } from './outreach-policy.js';
+import { normalizePacket, messageRevision, routingCheck, historyIssues, fresh, normalizeEmail, formatIssues, validFormatRequest, releaseIssues, OWNER } from './outreach-policy.js';
 
 const json = (value, status = 200) => Response.json(value, { status, headers: { 'Cache-Control': 'no-store' } });
 const parse = value => value ? JSON.parse(value) : null;
@@ -143,6 +143,8 @@ async function queue(env, input, now) {
   const issues = await gateIssues(env.DASHBOARD_DB, record, now);
   if (issues.length) return json({ error: issues.join(' ') }, 409);
   const packet=parse(record.packet), originalId=parse(record.history)?.sent?.[0]?.messageId||'';
+  const release = releaseIssues(packet, now);
+  if (release.length) return json({error:release.join(' ')},409);
   const result = await env.DASHBOARD_DB.prepare(`UPDATE outreach_messages SET state='queued',updated_at=? WHERE id=? AND revision=? AND approved_revision=? AND state='review'
     AND NOT EXISTS(SELECT 1 FROM outreach_blocks WHERE recipient=outreach_messages.recipient)
     AND NOT EXISTS(SELECT 1 FROM outreach_messages other WHERE other.id<>outreach_messages.id AND (other.business_key=outreach_messages.business_key OR other.recipient=outreach_messages.recipient) AND other.state IN ('queued','sending','sent','uncertain')
@@ -217,6 +219,8 @@ export async function relayOutreach(env, input, now = Date.now(), fetcher = fetc
     // here, not reused from the approval-time result.
     if (!fresh(record.history_at,now,60000)) return json({error:'Immediate Gmail check required'},409);
     const routing=await routingCheck(record.recipient.split('@')[1],{fetcher,now:new Date(now)});
+    const release = releaseIssues(parse(record.packet), now);
+    if (release.length) return json({error:release.join(' ')},409);
     const current={...record,routing:JSON.stringify(routing)};
     const issues=await gateIssues(db,current,now);
     if(issues.length)return json({error:issues.join(' ')},409);

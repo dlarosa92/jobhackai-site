@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { createHmac } from 'node:crypto';
 import vm from 'node:vm';
-import { normalizePacket, messageRevision, routingCheck, historyIssues, fiveBusinessDaysElapsed, digest } from './src/outreach-policy.js';
+import { normalizePacket, messageRevision, routingCheck, historyIssues, sevenFullDaysElapsed, digest } from './src/outreach-policy.js';
 import { allowed } from './src/access.js';
 import { registerMessage, recordHistory, ownerOutreach, relayOutreach, outreachRecords, recordDeliveryEvent } from './src/outreach.js';
 import ingest from './src/gmail-ingest.js';
@@ -71,10 +71,10 @@ test('current exact published evidence, resolved conflicts and safe headers are 
  for(const mutate of [p=>p.message.recipient='one@example.com,two@example.com',p=>p.message.subject+='\r\nBcc: other@example.net',p=>p.message.cc='other@example.net',p=>p.evidence.mailtoEmail='other@example.com',p=>p.evidence.checkedAt='2026-01-01T00:00:00Z',p=>p.evidence.fit='unknown',p=>p.message.html='<img src="https://tracking.example.net/x">',p=>p.lane='unqualified']){const p=packet();mutate(p);assert.throws(()=>normalizePacket(p,now));}
  assert.equal(normalizePacket(packet(),now).businessKey,'example.com');
 });
-test('five complete business days are evaluated by Eastern calendar date across DST',()=>{
- assert.equal(fiveBusinessDaysElapsed('2026-10-09T16:00:00Z',Date.parse('2026-10-16T23:00:00Z')),false);
- assert.equal(fiveBusinessDaysElapsed('2026-10-09T16:00:00Z',now),true);
- assert.equal(fiveBusinessDaysElapsed('2026-10-30T16:00:00Z',Date.parse('2026-11-09T15:00:00Z')),true);
+test('seven full elapsed days include weekends and require the exact 168-hour boundary',()=>{
+ assert.equal(sevenFullDaysElapsed('2026-10-09T16:00:00Z',Date.parse('2026-10-16T15:59:59Z')),false);
+ assert.equal(sevenFullDaysElapsed('2026-10-09T16:00:00Z',now),true);
+ assert.equal(sevenFullDaysElapsed('2026-10-30T16:00:00Z',Date.parse('2026-11-09T15:00:00Z')),true);
  const p=normalizePacket(packet(),now);assert.deepEqual(historyIssues(p,clean(),now),[]);
  for(const h of [null,{...clean(),complete:false},{...clean(),checkedAt:'2026-10-18T19:00:00Z'},{...clean(),received:[{messageId:'a1'}]},{...clean(),drafts:[{messageId:'a2'}]}])assert.ok(historyIssues(p,h,now).length);
 });
@@ -389,4 +389,38 @@ test('owner feedback withdraws approval and the exact revision stays held after 
  await registerMessage(c.db,p,now);await recordHistory(c.env,{...x,history:clean()},now,goodDns);
  assert.equal((await ownerOutreach(ownerRequest('approve',x),c.env,now)).status,409);
  assert.equal((await outreachRecords(c.db,now)).items[0].feedback.action,'changes');
+});
+
+test('a queued email is held when its final claim crosses the recipient window',async()=>{
+ const c=database(),identity=await queued(c),late=Date.parse('2026-10-19T21:00:00Z'); // 17:00 Eastern
+ await recordHistory(c.env,{...identity,history:{...clean(),checkedAt:new Date(late).toISOString()}},late,goodDns);
+ const response=await relayOutreach(c.env,{action:'claim',mailbox,...identity},late,goodDns);
+ assert.equal(response.status,409);assert.match((await response.json()).error,/09:00-17:00/);
+ assert.equal(c.sql.prepare('SELECT state FROM outreach_messages').get().state,'queued');
+});
+test('Local first email requires verified public listing and cannot create a duplicate second notice',async()=>{
+ const c=database(),p=packet();p.lane='local-provider';p.evidence.profileUrl='https://jobhackai.io/directory/provider/example';
+ const identity=await registerMessage(c.db,p,now);await recordHistory(c.env,{...identity,history:clean()},now,goodDns);
+ assert.equal((await ownerOutreach(ownerRequest('approve',identity),c.env,now)).status,200);
+ await relayOutreach(c.env,{action:'poll',mailbox,canSend:true},now);
+ assert.equal((await ownerOutreach(ownerRequest('send',identity),c.env,now)).status,409);
+ p.evidence.profileVerifiedAt=new Date(now).toISOString();p.message.text+='\n'+p.evidence.profileUrl;
+ const verified=await registerMessage(c.db,p,now);await recordHistory(c.env,{...verified,history:clean()},now,goodDns);
+ await ownerOutreach(ownerRequest('approve',verified),c.env,now);
+ assert.equal((await ownerOutreach(ownerRequest('send',verified),c.env,now)).status,200);
+ const claim=await (await relayOutreach(c.env,{action:'claim',mailbox,...verified},now,goodDns)).json();
+ await relayOutreach(c.env,{action:'receipt',mailbox,...verified,attemptId:claim.attemptId,outcome:'sent',messageId:'abc1',threadId:'abc2'},now);
+ p.id='second-notice';const duplicate=await registerMessage(c.db,p,now);
+ await recordHistory(c.env,{...duplicate,history:clean()},now,goodDns);
+ assert.equal((await ownerOutreach(ownerRequest('approve',duplicate),c.env,now)).status,409);
+ assert.equal(c.sql.prepare("SELECT count(*) n FROM outreach_messages WHERE state='sent'").get().n,1);
+});
+test('narrower delivery weekdays bind the exact revision and remain separate from seven-day eligibility',async()=>{
+ const c=database(),p=packet();p.deliveryWindow={timeZone:'America/New_York',weekdays:['Tue']};
+ const identity=await registerMessage(c.db,p,now);await recordHistory(c.env,{...identity,history:clean()},now,goodDns);
+ await ownerOutreach(ownerRequest('approve',identity),c.env,now);await relayOutreach(c.env,{action:'poll',mailbox,canSend:true},now);
+ const response=await ownerOutreach(ownerRequest('send',identity),c.env,now);
+ assert.equal(response.status,409);assert.match((await response.json()).error,/weekday restriction/);
+ p.deliveryWindow.weekdays=['Mon'];const changed=await registerMessage(c.db,p,now);
+ assert.notEqual(changed.revision,identity.revision);assert.equal(c.sql.prepare('SELECT approved_revision FROM outreach_messages').get().approved_revision,null);
 });
