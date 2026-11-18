@@ -89,11 +89,13 @@ test('deadline episode queues once, unchanged checks stay quiet and recovery pre
  // One real failed workflow rather than relying on fixture creation timestamps.
  f.sql.prepare("INSERT INTO workflow_runs(id,workflow,period,actor,status,started_at,finished_at,lease_until,baseline,result) VALUES('r','preparation','x','owner','failed',?,?,?,'{}',?)")
  .run(initial,initial,f.at(60).toISOString(),JSON.stringify({summary:'Source inaccessible'}));
- await checkWorkflowDeadlines(f.env,f.at(1));await checkWorkflowDeadlines(f.env,f.at(2));
+ await checkWorkflowDeadlines(f.env,f.at(1));
+ assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM owner_notifications WHERE kind='failure'").get().n,0);
+ await checkWorkflowDeadlines(f.env,f.at(240));await checkWorkflowDeadlines(f.env,f.at(241));
  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM owner_notifications WHERE kind='failure'").get().n,1);
  f.sql.prepare("UPDATE owner_notifications SET attempts=1,first_attempt_at=? WHERE kind='failure'").run(initial);
  f.env.DASHBOARD_WORKFLOW_POLICIES=JSON.stringify({preparation:{mode:'paused',reason:'Owner deliberately paused'}});
- await checkWorkflowDeadlines(f.env,f.at(3));await checkWorkflowDeadlines(f.env,f.at(4));
+ await checkWorkflowDeadlines(f.env,f.at(242));await checkWorkflowDeadlines(f.env,f.at(243));
  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM owner_notifications WHERE kind='recovery'").get().n,1);
  const read=await workflowApi(new Request('https://dashboard.jobhackai.io/api/workflow'),f.env,{role:'owner'},f.at(4));
  assert.equal((await read.json()).ownerNotifications.status,'missing_configuration');
@@ -122,7 +124,7 @@ test('only authenticated advanced receipts queue a brief, atomically with run co
  f.env.DASHBOARD_WORKFLOW_POLICIES=JSON.stringify({preparation:{mode:'paused',reason:'Deliberately paused'}});
  await checkWorkflowDeadlines(f.env,f.at(2));
  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM owner_notifications WHERE kind='recovery'").get().n,0);
- assert.equal(f.sql.prepare("SELECT last_reason FROM owner_notifications WHERE kind='failure'").get().last_reason,'resolved_before_dispatch');
+ assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM owner_notifications WHERE kind='failure'").get().n,0);
  f.env.OWNER_RESEND_API_KEY='fixture-only';await flushOwnerNotifications(f.env,f.at(3),noFetch);
  });
 
@@ -159,3 +161,14 @@ test('receipt polling precedes new dispatch so a newly observed bounce stops que
  f.db.prepare=query=>{if(query.includes("SET state='sending',attempts=attempts+1")&&!inserted){inserted=true;f.add('brief:complaint');f.sql.prepare("UPDATE owner_notifications SET state='failed',last_reason='provider_suppressed' WHERE id='brief:complaint'").run();}return original(query);};
  await flushOwnerNotifications(f.env,f.at(0),noFetch);assert.equal(f.row().attempts,0);assert.equal(inserted,true);
  });
+
+test('serious harm escalation can notify overnight while ordinary blocker waits through the weekend',async()=>{
+ for(const [escalation,count] of [[undefined,0],['serious_customer_harm',1],['uncontrolled_spending',1],['commitment_at_risk',1]]){
+  const f=fixture();delete f.env.OWNER_RESEND_API_KEY;
+  f.sql.prepare("INSERT INTO workflow_runs(id,workflow,period,actor,status,started_at,finished_at,lease_until,baseline,result) VALUES('r','preparation','x','owner','failed',?,?,?,'{}',?)")
+   .run(initial,initial,f.at(60).toISOString(),JSON.stringify({summary:'Verified failure evidence',...(escalation?{escalation}:{})}));
+  const saturday=new Date('2026-11-07T07:00:00Z');
+  await checkWorkflowDeadlines(f.env,saturday);
+  assert.equal(f.sql.prepare("SELECT count(*) n FROM owner_notifications WHERE kind='failure'").get().n,count);
+ }
+});

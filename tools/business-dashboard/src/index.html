@@ -20,7 +20,7 @@
     <div id="error" class="error" role="alert" hidden></div>
     <div id="campaign-error" class="error" role="alert" hidden></div>
     <section aria-label="Business numbers" class="numbers">
-      <div class="control-row"><label class="period-label"><span class="sr-only">Compare period</span><select id="period" aria-label="Choose comparison period" data-help="Compare complete Eastern days, ending yesterday, with the same number of days before them."><option value="7">Last 7 days</option><option value="28">Last 28 days</option></select></label><div class="goal"><span>Account goal <strong>250</strong></span><span id="goal-status">Loading count…</span><div class="track" aria-hidden="true"><span id="goal-fill"></span></div></div><details class="definitions"><summary>What counts?</summary><div id="metric-definitions"></div><p id="period-dates"></p></details></div>
+      <div class="control-row"><label class="period-label"><span class="sr-only">Compare period</span><select id="period" aria-label="Choose comparison period" data-help="Compare complete Eastern days, ending yesterday, with the same number of days before them."><option value="7">Last 7 days</option><option value="28">Last 28 days</option></select></label><div class="goal"><span>Combined monthly revenue milestone <strong>$5,000</strong></span><span id="goal-status">Progress not verified</span><div class="track" aria-hidden="true"><span id="goal-fill"></span></div></div><details class="definitions"><summary>What counts?</summary><div id="metric-definitions"></div><p id="period-dates"></p></details></div>
       <div id="kpi-grid" class="kpi-grid" aria-live="polite"><div class="metric skeleton">Loading business numbers…</div></div>
       <details class="data-line" id="freshness"><summary><span id="data-summary">Loading source status…</span><span id="checked">—</span></summary><div id="data-brief"></div><a href="#data-health">See all data sources ↓</a></details>
     </section>
@@ -53,12 +53,14 @@
         <label>Mailto address, when present<input type="email" name="mailtoEmail"></label>
         <label>Current service or workflow that makes this relevant<textarea name="fitFact" rows="3" required maxlength="2000"></textarea></label>
         <label>Published Local profile URL, for a provider<input type="url" name="profileUrl"></label>
+        <label class="check"><input type="checkbox" name="profileVerified"> I independently opened and verified this public Local listing now.</label>
+        <label>Known recipient timezone (otherwise Eastern)<input name="recipientTimeZone" placeholder="America/New_York"></label>
         <label class="check"><input type="checkbox" required>I checked this source now, confirmed the active business/role and exact email, and resolved any conflicting evidence.</label>
         <button type="submit">Save draft for checks</button><p id="outreach-status" role="status"></p>
       </form>
     </details>
 </details>
-    <footer>JobHackAI <span>Built around your goal: 250 users.</span></footer>
+    <footer>JobHackAI <span>Core + Local. Revenue, costs and owner income stay separate.</span></footer>
   </main>
   <dialog id="review-dialog" aria-labelledby="review-title"><header class="review-header"><div><p class="eyebrow">WORK DETAILS</p><h2 id="review-title"></h2></div><button type="button" id="review-close" class="icon-button" aria-label="Close review">×</button></header><div id="review-content"></div><p id="review-error" role="alert"></p><label id="review-note-label" for="review-note">Your note<textarea id="review-note" maxlength="4000" rows="3" placeholder="What should change?"></textarea></label><div id="review-actions"></div><p id="review-effect" class="muted"></p></dialog>
   <div id="help-tooltip" class="tooltip" role="tooltip" hidden></div>

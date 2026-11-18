@@ -104,11 +104,10 @@ function render(data){
   if(!costDirty){$('costs').value=data.costCents===null?'':(data.costCents/100).toFixed(2);$('complete').checked=data.costsComplete;}
   if(!costDirty)$('cost-status').textContent=data.costCents===null?'No costs recorded yet.':`${data.costsComplete?'Costs marked complete':'Some costs may be missing'} · saved ${time(data.costUpdatedAt)}`;
   $('available').textContent=data.estimatedAvailableCents===null?'Cash after costs: not known yet.':`Estimated cash after costs: ${money(data.estimatedAvailableCents)}`;
-  const paidVerified=data.stripe?.status==='current'&&Number.isSafeInteger(data.stripe.customers);
-  $('goal-status').textContent=paidVerified?`${data.stripe.customers} paying customers`:'Real user count unknown';
-  $('goal-fill').style.width=paidVerified?`${Math.min(100,data.stripe.customers/250*100)}%`:'0%';
-  if(paidVerified)$('goal-fill').parentElement?.classList.remove('unverified');else $('goal-fill').parentElement?.classList.add('unverified');
-  $('goal-status').setAttribute('data-help',paidVerified?`Current paid accounts checked against Stripe. Staff accounts excluded. Checked ${time(data.stripe.checkedAt)}.`:`${data.d1UserRecords??'Unknown'} account records are saved. Staff and test accounts have not been removed, so verified progress toward 250 users is not yet known.`);
+  $('goal-status').textContent='Combined customer revenue progress not verified';
+  $('goal-fill').style.width='0%';
+  $('goal-fill').parentElement?.classList.add('unverified');
+  $('goal-status').setAttribute('data-help','The $5,000 monthly milestone combines Core and Local customer revenue. Current account counts and payment totals with staff/test activity cannot establish progress. The $500 expense cap requires a complete cost audit. The first 30-day scorecard starts at actual activation.');
   $('error').hidden=true;renderMetrics();renderHealth();
 }
 function renderMetrics(){
@@ -362,7 +361,7 @@ async function outreachAction(item,action,button) {
 $('outreach-form').addEventListener('submit',async event=>{
   event.preventDefault();const form=event.currentTarget;const values=new FormData(form);const button=form.querySelector('button');button.disabled=true;actionPending=true;
   try{
-    const packet={id:values.get('id'),lane:values.get('lane'),phase:values.get('phase'),message:{recipient:values.get('recipient'),subject:values.get('subject'),text:values.get('text'),html:values.get('html'),threadId:values.get('threadId'),inReplyTo:values.get('inReplyTo'),references:values.get('references')},...(values.get('html')?{formatRequest:{reason:values.get('formatReason')}}:{}),evidence:{sourceUrl:values.get('sourceUrl'),profileUrl:values.get('profileUrl'),publishedEmail:values.get('publishedEmail'),mailtoEmail:values.get('mailtoEmail'),fit:'current',fitFact:values.get('fitFact'),checkedBy:'sebastian.larosa@jobhackai.io',checkedAt:new Date().toISOString()}};
+    const packet={...(values.get('recipientTimeZone')?{deliveryWindow:{timeZone:values.get('recipientTimeZone')}}:{}),id:values.get('id'),lane:values.get('lane'),phase:values.get('phase'),message:{recipient:values.get('recipient'),subject:values.get('subject'),text:values.get('text'),html:values.get('html'),threadId:values.get('threadId'),inReplyTo:values.get('inReplyTo'),references:values.get('references')},...(values.get('html')?{formatRequest:{reason:values.get('formatReason')}}:{}),evidence:{sourceUrl:values.get('sourceUrl'),profileUrl:values.get('profileUrl'),...(values.get('profileVerified')?{profileVerifiedAt:new Date().toISOString()}:{}),publishedEmail:values.get('publishedEmail'),mailtoEmail:values.get('mailtoEmail'),fit:'current',fitFact:values.get('fitFact'),checkedBy:'sebastian.larosa@jobhackai.io',checkedAt:new Date().toISOString()}};
     const response=await fetch('/api/outreach/prepare',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(packet)});
     const result=await response.json();if(!response.ok)throw new Error(result.error||'Could not save the prepared email.');
     $('outreach-status').textContent='Saved for source, routing and Gmail checks. This does not approve or send the email.';await refreshBoard(); refreshOpenReview();

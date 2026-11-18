@@ -1,3 +1,5 @@
+import { sevenFullDaysElapsed, outreachWindowOpen } from './operating-policy.js';
+export { sevenFullDaysElapsed } from './operating-policy.js';
 // Pure policy plus public DNS only. Neither this module nor preflight sends mail.
 const encoder = new TextEncoder();
 const EMAIL = /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}$/i;
@@ -51,17 +53,24 @@ export function normalizePacket(input, now = Date.now()) {
   if (!publicUrl(e.sourceUrl) || !fresh(e.checkedAt, now, SOURCE_TTL) || normalizeEmail(e.publishedEmail) !== recipient || (e.mailtoEmail && normalizeEmail(e.mailtoEmail) !== recipient)) throw new Error('Current first-party email evidence and matching mailto are required.');
   if (e.fit !== 'current' || typeof e.fitFact !== 'string' || !e.fitFact.trim() || e.fitFact.length > 2000 || !['Codex', OWNER].includes(e.checkedBy)) throw new Error('A reviewed current business-fit fact is required.');
   if (input.lane === 'local-provider' && (!publicUrl(e.profileUrl) || new URL(e.profileUrl).hostname !== 'jobhackai.io' || !new URL(e.profileUrl).pathname.startsWith('/directory/'))) throw new Error('A Local provider needs its real published profile URL.');
+  const deliveryWindow = input.deliveryWindow;
+  if (deliveryWindow !== undefined) {
+    if (!deliveryWindow || typeof deliveryWindow !== 'object' || Array.isArray(deliveryWindow) || Object.keys(deliveryWindow).some(k => !['timeZone','weekdays'].includes(k)) || typeof deliveryWindow.timeZone !== 'string') throw new Error('Invalid recipient delivery window.');
+    try { new Intl.DateTimeFormat('en-US', {timeZone: deliveryWindow.timeZone}); } catch { throw new Error('Invalid recipient timezone.'); }
+    if (deliveryWindow.weekdays !== undefined && (!Array.isArray(deliveryWindow.weekdays) || !deliveryWindow.weekdays.length || !deliveryWindow.weekdays.every(day => ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].includes(day)))) throw new Error('Invalid narrower recipient weekdays.');
+  }
   const businessKey = new URL(e.sourceUrl).hostname.toLowerCase().replace(/^www\./, '');
   const message = { recipient, subject: m.subject, text: m.text.replace(/\r\n/g, '\n'), html: html.replace(/\r\n/g, '\n'), threadId, inReplyTo, references };
   return { id: input.id, lane: input.lane, phase: input.phase, businessKey, message,
+    ...(deliveryWindow ? {deliveryWindow} : {}),
     ...(html ? { formatRequest: { reason: formatRequest.reason.trim() } } : {}),
-    evidence: { sourceUrl: e.sourceUrl, checkedAt: e.checkedAt, checkedBy: e.checkedBy, publishedEmail: recipient, mailtoEmail: e.mailtoEmail || '', fit: 'current', fitFact: e.fitFact, profileUrl: e.profileUrl || '' } };
+    evidence: { sourceUrl: e.sourceUrl, checkedAt: e.checkedAt, checkedBy: e.checkedBy, publishedEmail: recipient, mailtoEmail: e.mailtoEmail || '', fit: 'current', fitFact: e.fitFact, profileUrl: e.profileUrl || '', ...(e.profileVerifiedAt ? {profileVerifiedAt:e.profileVerifiedAt} : {}) } };
 }
 export function messageRevision(packet) {
   // Keep existing plain-text approval hashes unchanged. An HTML reason belongs
   // to its exact revision, so changing it cannot inherit a format decision.
   return digest({ lane: packet.lane, phase: packet.phase, businessKey: packet.businessKey, message: packet.message,
-    ...(packet.formatRequest ? { formatRequest: packet.formatRequest } : {}) });
+    ...(packet.formatRequest ? { formatRequest: packet.formatRequest } : {}), ...(packet.deliveryWindow ? {deliveryWindow:packet.deliveryWindow} : {}) });
 }
 export function validFormatRequest(value) {
   return !!value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 1 &&
@@ -81,18 +90,6 @@ function formatLinksVisible(text, html) {
     return (publicUrl(value) && text.includes(value)) || (value.startsWith('mailto:') && normalizeEmail(value.slice(7)) && text.includes(value.slice(7)));
   });
 }
-export function fiveBusinessDaysElapsed(sentAt, now) {
-  const start = Date.parse(sentAt);
-  if (!Number.isFinite(start) || start > now) return false;
-  // Conservative full weekdays, using Eastern calendar dates across DST.
-  const day = value => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(value));
-  const [y, m, d] = day(start).split('-').map(Number);
-  let cursor = Date.UTC(y, m - 1, d, 12), count = 0;
-  while (count < 5) { cursor += 86400000; if (![0, 6].includes(new Date(cursor).getUTCDay())) count++; }
-  // Start the following calendar day; never treat a partial fifth day as complete.
-  const weekday = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short' }).format(new Date(now));
-  return !['Sat', 'Sun'].includes(weekday) && day(now) > new Date(cursor).toISOString().slice(0, 10);
-}
 export function historyIssues(packet, history, now = Date.now()) {
   if (!history || history.complete !== true || !fresh(history.checkedAt, now) || history.scope !== 'all-folders-all-history') return ['Gmail history check is missing, incomplete or stale.'];
   const issues = [];
@@ -105,7 +102,7 @@ export function historyIssues(packet, history, now = Date.now()) {
     if (history.sent.length !== 1) issues.push('Exactly one verified original send is required; no repeated follow-up.');
     else {
       const original = history.sent[0];
-      if (original.threadId !== packet.message.threadId || original.rfcMessageId !== packet.message.inReplyTo || !fiveBusinessDaysElapsed(original.sentAt, now)) issues.push('Original thread, Message-ID or five-business-day wait is not verified.');
+      if (original.threadId !== packet.message.threadId || original.rfcMessageId !== packet.message.inReplyTo || !sevenFullDaysElapsed(original.sentAt, now)) issues.push('Original thread, Message-ID or seven-full-day wait is not verified.');
     }
   }
   return issues;
@@ -144,4 +141,17 @@ export async function routingCheck(domain, { fetcher = fetch, now = new Date() }
     }));
     return { ...result, targets, status: targets.some(t => t.resolved) ? 'routing_present_mailbox_unknown' : 'mx_target_unresolved' };
   } catch { return { ...result, status: 'dns_unavailable' }; }
+}
+
+export function releaseIssues(packet, now) {
+  const timeZone = packet.deliveryWindow?.timeZone || 'America/New_York';
+  const issues = [];
+  if (!outreachWindowOpen(now, timeZone)) issues.push('Direct outreach is limited to 09:00-17:00 in the recipient timezone (Eastern fallback).');
+  const days = packet.deliveryWindow?.weekdays;
+  if (days && !days.includes(new Intl.DateTimeFormat('en-US', {timeZone, weekday:'short'}).format(new Date(now)))) issues.push('This recipient has a narrower weekday restriction.');
+  if (packet.lane === 'local-provider') {
+    const url = packet.evidence.profileUrl;
+    if (!publicUrl(url) || new URL(url).hostname !== 'jobhackai.io' || !new URL(url).pathname.startsWith('/directory/') || !fresh(packet.evidence.profileVerifiedAt, now, 86400000) || !packet.message.text.includes(url)) issues.push('Verify the published Local listing within 24 hours and include its exact URL before the single listing email.');
+  }
+  return issues;
 }
