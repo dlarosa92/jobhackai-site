@@ -464,3 +464,19 @@ test('an unavailable original thread never produces clean follow-up history',()=
  c.context.Gmail.Users.Threads={get:()=>{throw Error('thread inaccessible');}};
  assert.throws(()=>c.context.outreachHistory(p),/inaccessible/);
 });
+
+test('relevant personal-alias replies in separate threads hold cold follow-up without requiring domain match',()=>{
+ const c=googleContext(),p=normalizePacket(packet(),now);p.phase='followup';p.message.threadId='bb1';p.message.inReplyTo='<original@jobhackai.io>';c.props.MAILBOX_EMAIL=mailbox;
+ const original={id:'aa1',threadId:'bb1',internalDate:String(now-8*86400000),labelIds:['SENT'],payload:{headers:[{name:'From',value:mailbox},{name:'To',value:p.message.recipient},{name:'Message-ID',value:p.message.inReplyTo}]}};
+ const reply={id:'aa2',threadId:'bb2',internalDate:String(now-1000),labelIds:['INBOX'],payload:{headers:[{name:'From',value:'owner.personal@gmail.com'},{name:'To',value:mailbox},{name:'In-Reply-To',value:p.message.inReplyTo}]}};
+ const self={id:'aa3',threadId:'bb3',internalDate:String(now-500),labelIds:['INBOX'],payload:{headers:[{name:'From',value:mailbox},{name:'To',value:mailbox}]}};
+ const messages={[original.id]:original,[reply.id]:reply,[self.id]:self};
+ c.context.Gmail.Users.Messages.list=()=>({messages:Object.keys(messages).map(id=>({id}))});c.context.Gmail.Users.Messages.get=(_me,id)=>messages[id];
+ c.context.Gmail.Users.Threads={get:()=>({id:'bb1',messages:[original]})};
+ for(const references of [true,false]){
+   if(!references)reply.payload.headers=reply.payload.headers.filter(h=>h.name!=='In-Reply-To');
+   const h=c.context.outreachHistory(p);
+   assert.equal(h.sent.length,1);assert.equal(h.received.length,1);assert.equal(h.received[0].messageId,reply.id);
+   assert.ok(historyIssues(p,h,now).some(issue=>/received message/.test(issue)));
+ }
+});

@@ -221,7 +221,10 @@ function outreachHistory(packet) {
     }
     if(labels.indexOf('DRAFT')>=0){if(direct)drafts.push(evidence);return;}
     if(labels.indexOf('SENT')>=0&&direct){sent.push({messageId:message.id,threadId:message.threadId,rfcMessageId:outreachHeader(message,'Message-ID'),sentAt:new Date(Number(message.internalDate)).toISOString()});return;}
-    if(from===target||from.endsWith('@'+domain)||(inOriginal&&labels.indexOf('SENT')<0&&from!==mailbox))received.push(evidence);
+    // Every result already matched the bounded target/business all-history search
+    // or the original thread. A relevant personal-alias reply may be in a new
+    // thread; uncertainty requires conversation review, never a clean cold send.
+    if(labels.indexOf('SENT')<0 && from!==mailbox)received.push(evidence);
   });
   return {complete:true,scope:'all-folders-all-history',checkedAt:new Date().toISOString(),sent:sent,received:received,drafts:drafts,failures:failures};
 }
