@@ -15,7 +15,7 @@ export function briefStatement(db,run,result,now,env){
   const count=result.advancedItems.length+result.completedHandoffs.length;
   if(!count)return null; // A checked source or huddle alone is not a business result.
   const subject=`JobHackAI: ${names[run.workflow]||'work update'}`;
-  const body=`${clean(result.summary,1200)}\n\n${count} saved work update(s) were recorded. This notice reports the saved operating event above. Open the company brief for the latest saved context; it may not yet include this event:\n${COMPANY_BRIEF}\n\nRecorded ${now}. This notice does not verify customer growth or revenue.`;
+  const body=`${clean(result.summary,1200)}\n\n${count} saved work update(s) were recorded. This notice reports the saved operating event above. Return to the existing JobHackAI operations chat for decisions. Optional saved Page snapshot (it may be stale):\n${COMPANY_BRIEF}\n\nRecorded ${now}. This notice does not verify customer growth or revenue.`;
   return db.prepare(`INSERT OR IGNORE INTO owner_notifications(id,kind,environment,subject,body,created_at,next_attempt_at,updated_at)
     SELECT ?, 'brief', ?, ?, ?, ?, ?, ? FROM workflow_runs WHERE id=? AND status='advanced' AND finished_at=?`)
     .bind(`brief:${run.id}`,environment(env),subject,body,now,now,now,run.id,now);
@@ -23,20 +23,20 @@ export function briefStatement(db,run,result,now,env){
 
 // Queue from canonical alert rows inside the deadline check's transaction. Concurrent checks
 // use the persisted episode timestamp, not independent read-time timestamps.
-export function alertStatements(db,ids,now,env){
-  const active=JSON.stringify(ids);
+export function alertStatements(db,ids,now,env,dueIds=ids){
+  const active=JSON.stringify(ids), due=JSON.stringify(dueIds);
   return [
     db.prepare(`INSERT OR IGNORE INTO owner_notifications(id,kind,environment,subject,body,created_at,next_attempt_at,updated_at)
       SELECT 'failure:'||id||':'||first_seen_at,'failure',?,'JobHackAI needs attention',
         substr(detail,1,1200)||? ,?,?,? FROM workflow_alerts
       WHERE resolved_at IS NULL AND id IN (SELECT value FROM json_each(?))`)
-      .bind(environment(env),`\n\nThe team needs to investigate this issue. This notice reports the operating condition above. Open the company brief for the latest saved context; it may not yet include this event:\n${COMPANY_BRIEF}\n\nChecked ${now}. This is a monitoring alert, not permission to repeat an external action.`,now,now,now,active),
+      .bind(environment(env),`\n\nThe team needs to investigate this issue. This notice reports the operating condition above. Return to the existing JobHackAI operations chat for decisions. Optional saved Page snapshot (it may be stale):\n${COMPANY_BRIEF}\n\nChecked ${now}. This is a monitoring alert, not permission to repeat an external action.`,now,now,now,due),
     db.prepare(`INSERT OR IGNORE INTO owner_notifications(id,kind,environment,subject,body,created_at,next_attempt_at,updated_at)
       SELECT 'recovery:'||id||':'||first_seen_at,'recovery',?,'JobHackAI monitoring update',
         'This earlier alert is no longer active: '||substr(detail,1,1000)||?,?,?,? FROM workflow_alerts
       WHERE resolved_at IS NULL AND id NOT IN (SELECT value FROM json_each(?))
       AND EXISTS(SELECT 1 FROM owner_notifications n WHERE n.id='failure:'||workflow_alerts.id||':'||workflow_alerts.first_seen_at AND n.attempts>0)`)
-      .bind(environment(env),`\n\nThis clears the monitoring condition; it does not prove the underlying business work finished. Open the company brief for the latest saved context; it may not yet include this event:\n${COMPANY_BRIEF}\n\nChecked ${now}.`,now,now,now,active),
+      .bind(environment(env),`\n\nThis clears the monitoring condition; it does not prove the underlying business work finished. Return to the existing JobHackAI operations chat for decisions. Optional saved Page snapshot (it may be stale):\n${COMPANY_BRIEF}\n\nChecked ${now}.`,now,now,now,active),
     db.prepare(`UPDATE owner_notifications SET state='failed',last_reason='resolved_before_dispatch',updated_at=?
       WHERE kind='failure' AND state='pending' AND attempts=0 AND id IN (
         SELECT 'failure:'||id||':'||first_seen_at FROM workflow_alerts WHERE resolved_at IS NULL

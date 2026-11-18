@@ -254,7 +254,7 @@ test('queued, uncertain and scheduled work cannot be displayed as done',()=>{
 test('an older network response cannot replace a newer board; a failed read keeps the last cards and warning',async()=>{
  const requests=[];const uiState=ui({AbortController,setTimeout,clearTimeout,fetch:()=>new Promise(resolve=>requests.push(resolve))});
  const first=uiState.run('refresh()'),second=uiState.run('refresh()');
- const numbers={asOf:'2026-10-27T12:00:00Z',month:'2026-10',netCollectedCents:0,d1UserRecords:38,userGoal:250,costCents:null,costsComplete:false,estimatedAvailableCents:null};
+ const numbers={asOf:'2026-10-27T12:00:00Z',month:'2026-10',netCollectedCents:0,d1UserRecords:38,costCents:null,costsComplete:false,estimatedAvailableCents:null};
  const response=payload=>({ok:true,json:async()=>payload});
  requests[3](response(numbers));requests[2](response(data([item('Newest work','Product','hold')])));await second;
  requests[1](response(numbers));requests[0](response(data([item('Old work','Product','hold')])));await first;
@@ -334,7 +334,8 @@ for(let round=1;round<=3;round++)test(`verified Stripe indicators clear only wit
  const stripe=()=>view.nodes.get('source-health').children.find(c=>c.attributes['data-disclosure-key']==='Stripe');
  assert.match(text(stripe()),/Up to date.*match Stripe/s);assert.doesNotMatch(text(stripe()),/Needs attention/);
  assert.match(text(view.nodes.get('kpi-grid').children[0]),/0.*Verified with Stripe.*Staff accounts excluded/s);
- assert.equal(view.nodes.get('goal-status').textContent,'0 paying customers');
+ assert.equal(view.nodes.get('goal-status').textContent,'Combined customer revenue progress not verified');
+ assert.equal(view.nodes.get('goal-fill').style.width,'0%');
  view.run("overviewData.stripe={status:'incomplete',detail:'App records changed after the Stripe check.'};renderHealth()");
  assert.match(text(stripe()),/Needs attention.*App records changed/s);assert.doesNotMatch(text(stripe()),/Up to date/);
 });

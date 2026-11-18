@@ -50,7 +50,9 @@ test('Eastern month boundaries and current-month net collection', async () => {
   assert.equal(monthKey(new Date('2026-11-01T03:30:00Z')), '2026-10');
   assert.equal(monthKey(new Date('2026-11-01T04:30:00Z')), '2026-11');
   const result = await overview(database(), new Date('2026-10-16T12:00:00Z'));
-  assert.equal(result.userGoal, 250);
+  assert.equal(result.operatingTargets.monthlyCombinedRevenueCents,500000);
+  assert.equal(result.operatingTargets.activationAt,null);
+  assert.equal(result.userGoal,undefined);
   assert.equal(result.capturedCents, 1700);
   assert.equal(result.refundedCents, 1700);
   assert.equal(result.netCollectedCents, 0);
@@ -82,11 +84,11 @@ test('the owner can load the page and read a source-labelled overview', async ()
   const ctx = { access: { aud: '884df74e9be8546b0051980538c8e00a75efd2b1d2da5a04a4e4fbe78f3a4a40', getIdentity: async () => ({ email: 'sebastian.larosa@jobhackai.io' }) } };
   const page = await worker.fetch(new Request('https://dashboard.jobhackai.io/'), database(), ctx);
   assert.equal(page.status, 200);
-  assert.match(await page.text(), /Account goal/);
+  assert.match(await page.text(), /Combined monthly revenue milestone/);
   const api = await worker.fetch(new Request('https://dashboard.jobhackai.io/api/overview'), database(), ctx);
   assert.equal(api.status, 200);
   const payload = await api.json();
-  assert.equal(payload.userGoal, 250);
+  assert.equal(payload.operatingTargets.monthlyTotalExpenseCapCents,50000);
   assert.equal(payload.d1UserRecords, 38);
   assert.match(payload.basis, /not independently verified/);
 });

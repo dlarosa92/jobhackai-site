@@ -77,7 +77,7 @@ async function overview(env, now = new Date()) {
     business,
     stripe,
     month,
-    userGoal: 250,
+    operatingTargets: {monthlyCombinedRevenueCents:500000,monthlyTotalExpenseCapCents:50000,first30Days:{coreVisitorsExclusiveMin:100,localVisitorsExclusiveMin:100,coreSignupsMin:5,localProviderCategories:['ev','junk-removal','car-detailing']},activationAt:null},
     d1UserRecords: users?.count ?? null,
     d1UsersLatestUpdate: users?.latest_update ?? null,
     capturedCents,
@@ -145,7 +145,7 @@ export default {
       if (!allowed(identity,request.method,url.pathname)) return json({error:'Forbidden'},403);
       if(request.method!=='GET' && (request.headers.get('content-type')?.split(';')[0]!=='application/json' || (identity.role==='owner' && request.headers.get('origin')!==url.origin)))return json({error:'Invalid request origin or type'},403);
       if(request.method==='GET'&&url.pathname==='/api/session')return json({role:identity.role,capabilities:identity.capabilities||[]});
-      if(request.method==='GET'&&url.pathname==='/api/operating-guide')return json({version:'2026-10-31',text:GUIDE});
+      if(request.method==='GET'&&url.pathname==='/api/operating-guide')return json({version:'2026-11-17',text:GUIDE});
       if(url.pathname==='/api/workflow'||url.pathname.startsWith('/api/workflow/'))return workflowApi(request,env,identity,new Date(),async()=>workRecords(env.DASHBOARD_DB,await campaignRecords(env),new Date(),env.DASHBOARD_WORKFLOW_POLICIES));
       if(url.pathname==='/api/stripe-check')return stripeCheckApi(request,env);
       if(url.pathname==='/api/analytics')return analyticsApi(request,env);
