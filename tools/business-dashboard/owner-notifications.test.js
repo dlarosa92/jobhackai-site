@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
 import {d1Run} from './test-support/d1-result.js';
-import {flushOwnerNotifications,notificationStatus,OWNER_RECIPIENT,OWNER_SENDER,COMPANY_BRIEF} from './src/owner-notifications.js';
+import {flushOwnerNotifications,notificationStatus,alertStatements,OWNER_RECIPIENT,OWNER_SENDER,COMPANY_BRIEF} from './src/owner-notifications.js';
 import {workflowApi,checkWorkflowDeadlines} from './src/workflow.js';
 const initial='2026-11-05T12:00:00.000Z';
 function fixture(){
@@ -16,6 +16,10 @@ function fixture(){
  return {sql,db,env,add,row,at};
 }
 const noFetch=()=>{throw new Error('Unexpected transport');};
+const machine={role:'machine',id:'urgent-test',capabilities:['prepare']};
+const flowRequest=(action,body)=>new Request(`https://dashboard.jobhackai.io/api/workflow/${action}`,{method:'POST',body:JSON.stringify(body)});
+async function beginUrgent(f){return (await workflowApi(flowRequest('start',{workflow:'preparation'}),f.env,machine,f.at(0))).json();}
+const urgentInput=run=>({id:run.id,outcome:'failed',summary:'Verified serious issue needs attention.',escalation:'serious_customer_harm'});
 function receipt(row,last_event='delivered',extra={}){return Response.json({id:row.provider_id,to:[OWNER_RECIPIENT],from:OWNER_SENDER,subject:row.subject,text:row.body,last_event,cc:[],bcc:[],...extra});}
 
 test('off by default, missing credentials and missing migration are visible without transport',async()=>{
@@ -170,5 +174,100 @@ test('serious harm escalation can notify overnight while ordinary blocker waits 
   const saturday=new Date('2026-11-07T07:00:00Z');
   await checkWorkflowDeadlines(f.env,saturday);
   assert.equal(f.sql.prepare("SELECT count(*) n FROM owner_notifications WHERE kind='failure'").get().n,count);
+ }
+});
+
+test('urgent completion dispatches without a cron tick and bypasses ordinary backlog',async()=>{
+ const f=fixture();f.add();const run=await beginUrgent(f);let calls=0;
+ const response=await workflowApi(flowRequest('finish',urgentInput(run)),f.env,machine,f.at(1),null,{transport:async(url,r)=>{
+  calls++;assert.equal(r.headers['Idempotency-Key'],`owner-notice/prod/urgent:${run.id}`);
+  const body=JSON.parse(r.body);assert.deepEqual(body.to,[OWNER_RECIPIENT]);assert.match(body.text,/Serious customer harm/);
+  return Response.json({id:'urgent_mail'});
+ }});
+ assert.equal(response.status,200);assert.equal(calls,1);assert.equal(f.row(`urgent:${run.id}`).state,'accepted');assert.equal(f.row().attempts,0);
+ const replay=await workflowApi(flowRequest('finish',urgentInput(run)),f.env,machine,f.at(1),null,{transport:noFetch});
+ assert.equal(replay.status,409);
+ delete f.env.OWNER_RESEND_API_KEY;
+ await checkWorkflowDeadlines(f.env,f.at(2));await checkWorkflowDeadlines(f.env,f.at(3));
+ assert.equal(f.sql.prepare("SELECT count(*) n FROM owner_notifications WHERE kind='failure'").get().n,1);
+});
+
+test('urgent persistence is atomic, rejects invalid callers and respects disabled transport',async()=>{
+ for(const mode of ['disabled','invalid','foreign','storage']){
+  const f=fixture(),run=await beginUrgent(f),input=urgentInput(run);let calls=0;
+  if(mode==='disabled')f.env.OWNER_NOTIFICATIONS_ENABLED='false';
+  if(mode==='invalid')input.escalation='send_anywhere';
+  if(mode==='storage')f.sql.exec("CREATE TRIGGER reject_notice BEFORE INSERT ON owner_notifications BEGIN SELECT RAISE(ABORT,'urgent_storage_failure'); END");
+  const action=()=>workflowApi(flowRequest('finish',input),f.env,mode==='foreign'?{...machine,id:'someone-else'}:machine,f.at(1),null,{transport:async()=>{calls++;return Response.json({id:'unexpected'});}});
+  if(mode==='storage')await assert.rejects(action,/urgent_storage_failure/);
+  else assert.equal((await action()).status,mode==='disabled'?200:mode==='foreign'?403:400);
+  assert.equal(calls,0);assert.equal(f.sql.prepare('SELECT count(*) n FROM owner_notifications').get().n,0);
+  assert.equal(f.sql.prepare('SELECT status FROM workflow_runs WHERE id=?').get(run.id).status,mode==='disabled'?'failed':'running');
+ }
+});
+
+test('waitUntil keeps urgent delivery alive, concurrent monitor cannot duplicate it, failures remain retryable',async()=>{
+ const f=fixture(),run=await beginUrgent(f);let entered,release,calls=0;const waiting=new Promise(r=>entered=r),gate=new Promise(r=>release=r),background=[];
+ const response=await workflowApi(flowRequest('finish',urgentInput(run)),f.env,machine,f.at(1),null,{ctx:{waitUntil:p=>background.push(p)},transport:async()=>{calls++;entered();await gate;throw new Error('ambiguous timeout');}});
+ assert.equal(response.status,200);await waiting;
+ await flushOwnerNotifications(f.env,f.at(1),async()=>{calls++;return Response.json({id:'unexpected'});});assert.equal(calls,1);
+ release();await Promise.all(background);const notice=f.row(`urgent:${run.id}`);assert.equal(notice.state,'pending');assert.equal(notice.attempts,1);
+ f.add();await flushOwnerNotifications(f.env,f.at(16),async(url,r)=>{assert.equal(r.headers['Idempotency-Key'],`owner-notice/prod/urgent:${run.id}`);return Response.json({id:'recovered'});});
+ assert.equal(f.row(`urgent:${run.id}`).state,'accepted');assert.equal(f.row().attempts,0);
+});
+
+test('urgent notice supersedes an unsent ordinary episode and survives a later healthy monitor read',async()=>{
+ const f=fixture();delete f.env.OWNER_RESEND_API_KEY;
+ f.sql.prepare("INSERT INTO workflow_alerts(id,detail,first_seen_at,last_seen_at) VALUES('workflow-preparation','Earlier ordinary failure',?,?)").run(initial,initial);
+ f.add(`failure:workflow-preparation:${initial}`);
+ const run=await beginUrgent(f);
+ const response=await workflowApi(flowRequest('finish',urgentInput(run)),f.env,machine,f.at(1),null,{transport:noFetch});assert.equal(response.status,200);
+ assert.equal(f.row(`failure:workflow-preparation:${initial}`).last_reason,'superseded_by_urgent');
+ f.env.DASHBOARD_WORKFLOW_POLICIES=JSON.stringify({preparation:{mode:'paused',reason:'Owner deliberately paused'}});
+ await checkWorkflowDeadlines(f.env,f.at(2));assert.equal(f.row(`urgent:${run.id}`).state,'pending');
+ f.env.OWNER_RESEND_API_KEY='fixture-only';await flushOwnerNotifications(f.env,f.at(3),async()=>Response.json({id:'urgent_mail'}));assert.equal(f.row(`urgent:${run.id}`).state,'accepted');
+});
+
+test('an urgent saved event cannot silence a later missed-run condition',async()=>{
+ const f=fixture();delete f.env.OWNER_RESEND_API_KEY;const run=await beginUrgent(f);
+ await workflowApi(flowRequest('finish',urgentInput(run)),f.env,machine,f.at(1),null,{transport:noFetch});
+ // A successful completion may also carry an urgent business escalation. Its
+ // notice must not satisfy the separate expectation for a later scheduled run.
+ f.sql.prepare("UPDATE workflow_runs SET status='checked' WHERE id=?").run(run.id);
+ const status=await checkWorkflowDeadlines(f.env,f.at(240));
+ assert.equal(status.workflows.find(w=>w.id==='preparation').status,'missing');
+ assert.equal(f.sql.prepare("SELECT count(*) n FROM owner_notifications WHERE kind='failure'").get().n,2);
+});
+
+test('a superseded ordinary episode can notify a later failed run without rewriting old notices',async()=>{
+ const f=fixture();delete f.env.OWNER_RESEND_API_KEY;
+ f.sql.prepare("INSERT INTO workflow_alerts(id,detail,first_seen_at,last_seen_at) VALUES('workflow-preparation','Earlier ordinary failure',?,?)").run(initial,initial);
+ const oldId=`failure:workflow-preparation:${initial}`;f.add(oldId);
+ const urgent=await beginUrgent(f);
+ await workflowApi(flowRequest('finish',urgentInput(urgent)),f.env,machine,f.at(1),null,{transport:noFetch});
+ const oldBody=f.row(oldId).body;
+ const later=await (await workflowApi(flowRequest('start',{workflow:'preparation'}),f.env,machine,f.at(121))).json();
+ await workflowApi(flowRequest('finish',{id:later.id,outcome:'failed',summary:'A separate later failure.'}),f.env,machine,f.at(122),null,{transport:noFetch});
+ await checkWorkflowDeadlines(f.env,f.at(241));
+ const nextId=`${oldId}:after:${later.id}`;
+ assert.equal(f.row(nextId)?.state,'pending');assert.match(f.row(nextId).body,/A separate later failure/);
+ assert.equal(f.row(oldId).body,oldBody);assert.equal(f.row(oldId).last_reason,'superseded_by_urgent');
+ await checkWorkflowDeadlines(f.env,f.at(242));
+ assert.equal(f.sql.prepare("SELECT count(*) n FROM owner_notifications WHERE id=?").get(nextId).n,1);
+ // A later urgent event must supersede this replacement notice as well.
+ const next=await (await workflowApi(flowRequest('start',{workflow:'preparation'}),f.env,machine,f.at(243))).json();
+ await workflowApi(flowRequest('finish',urgentInput(next)),f.env,machine,f.at(244),null,{transport:noFetch});
+ assert.equal(f.row(nextId).last_reason,'superseded_by_urgent');
+});
+
+test('later episode notices retain recovery and resolved-before-send behavior',async()=>{
+ for(const attempted of [false,true]){
+  const f=fixture(),id=`failure:workflow-preparation:${initial}:after:later-run`;
+  f.sql.prepare("INSERT INTO workflow_alerts(id,detail,first_seen_at,last_seen_at) VALUES('workflow-preparation','A later failure',?,?)").run(initial,initial);
+  f.sql.prepare("INSERT INTO owner_notifications(id,kind,environment,subject,body,created_at,next_attempt_at,updated_at) VALUES(?,'failure','prod','Later failure','Later failure',?,?,?)").run(id,initial,initial,initial);
+  if(attempted)f.sql.prepare("UPDATE owner_notifications SET state='accepted',attempts=1,provider_id='later-mail' WHERE id=?").run(id);
+  await f.db.batch(alertStatements(f.db,[],f.at(1).toISOString(),f.env));
+  if(attempted){assert.equal(f.row(id).state,'accepted');assert.equal(f.row(`recovery:workflow-preparation:${initial}`).state,'pending');}
+  else{assert.equal(f.row(id).last_reason,'resolved_before_dispatch');assert.equal(f.row(`recovery:workflow-preparation:${initial}`),undefined);}
  }
 });
