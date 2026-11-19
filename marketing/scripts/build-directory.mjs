@@ -11,10 +11,11 @@ const seen = new Set();
 for (const listing of data.listings) {
   if (!/^[a-z0-9-]+$/.test(listing.id) || seen.has(listing.id)) throw new Error('Invalid or duplicate listing ID');
   seen.add(listing.id);
-  for (const key of ['website', 'source']) {
+  for (const key of ['website', 'source', ...(listing.bookingUrl ? ['bookingUrl'] : [])]) {
     const url = new URL(listing[key]);
     if (url.protocol !== 'https:' || url.username || url.password) throw new Error('Unsafe provider URL');
   }
+  if (listing.bookingUrl && (!/^tel:\+[0-9]+$/.test(listing.phoneUrl || '') || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(listing.contactEmail || ''))) throw new Error('Invalid provider contact route');
 }
 mkdirSync(join(out, data.category), { recursive: true });
 const path = listing => `/directory/${data.category}/${listing.id}`;
@@ -42,9 +43,9 @@ for (const l of data.listings) {
   const correction = mail(`Directory correction: ${l.name}`, `Business: ${l.name}\nListing: https://jobhackai.io${path(l)}\nCorrection and source URL:\n`);
   writeFileSync(join(out, data.category, `${l.id}.html`), shell(`${l.name} — mobile detailing`, `Package details and booking requirements for ${l.name} in Northern Kentucky and Cincinnati.`, `
 <p class="breadcrumb"><a href="/directory">All detailers</a> / ${esc(l.name)}</p><section class="hero compact"><span class="eyebrow">${esc(l.regions.join(' + '))}</span><h1>${esc(l.name)}</h1><p class="lead">Mobile detailing, booked directly with the provider.</p><a class="button" href="${esc(l.website)}" rel="noopener noreferrer" data-directory-contact="${esc(l.id)}">Visit provider &amp; request a quote <span aria-hidden="true">↗</span></a></section>
-<aside class="notice">Details from the provider’s website, checked September 20, 2026. Confirm availability and service at your address. No paid placement or partnership is implied.</aside>
+<aside class="notice">Details from the provider’s website${l.sourceNote ? ' and provider-supplied corrections' : ''}, checked ${l.checkedAt ? esc(l.checkedAt) : 'September 20, 2026'}. Confirm availability and service at your address. No paid placement or partnership is implied.</aside>
 <section class="packages"><div class="panel"><h2>Interior package</h2><div class="price">${price(l.interiorPrice)}</div></div><div class="panel"><h2>Full detail package</h2><div class="price">${price(l.fullPrice)}</div></div></section>
-<section class="details"><h2>Before the appointment</h2><dl><dt>Water, power &amp; parking</dt><dd>${esc(l.waterPowerNote)}</dd><dt>Pet hair</dt><dd>${esc(l.petHairNote)}</dd><dt>Services mentioned</dt><dd>${esc(l.services.map(s=>s.replaceAll('-', ' ')).join(', '))}</dd><dt>Information source</dt><dd><a href="${esc(l.source)}" rel="noopener noreferrer">Provider website</a> · checked ${esc(data.checkedAt)}</dd></dl><a href="${esc(correction)}" data-directory-interest="correction">Suggest a correction by email</a></section>` , l.id));
+<section class="details"><h2>Before the appointment</h2><dl><dt>Water, power &amp; parking</dt><dd>${esc(l.waterPowerNote)}</dd><dt>Pet hair</dt><dd>${esc(l.petHairNote)}</dd><dt>Services mentioned</dt><dd>${l.serviceDetails ? `<ul class="service-list">${l.serviceDetails.map(s => `<li>${esc(s)}</li>`).join('')}</ul>` : esc(l.services.map(s=>s.replaceAll('-', ' ')).join(', '))}</dd><dt>Information source</dt><dd><a href="${esc(l.source)}" rel="noopener noreferrer">Provider website</a> · checked ${esc(l.checkedAt || data.checkedAt)}${l.sourceNote ? `<p class="small">${esc(l.sourceNote)}</p>` : ''}</dd></dl>${l.bookingUrl ? `<section class="provider-contact" aria-labelledby="provider-contact-heading"><h2 id="provider-contact-heading">Contact &amp; booking</h2><p>Contact the provider directly to confirm your quote and appointment.</p><a class="button" href="${esc(l.bookingUrl)}" rel="noopener noreferrer" data-directory-contact="${esc(l.id)}">View provider’s booking page <span aria-hidden="true">↗</span></a><ul><li><a href="${esc(l.phoneUrl)}" data-directory-contact="${esc(l.id)}">${esc(l.phone)}: call or text</a></li><li><a href="mailto:${esc(l.contactEmail)}" data-directory-contact="${esc(l.id)}">${esc(l.contactEmail)}</a></li></ul></section>` : ''}<a href="${esc(correction)}" data-directory-interest="correction">Suggest a correction by email</a></section>` , l.id));
 }
 writeFileSync(join(out, 'get-listed.html'), shell('Get listed', 'Suggest a local mobile detailing business for private editorial review.', `<section class="hero compact"><span class="eyebrow">For local businesses</span><h1>Help people find the right fit.</h1><p class="lead">Suggest a mobile detailing business serving Northern Kentucky or Cincinnati. We review the details before adding any public listing.</p></section>
 <section class="panel request-panel"><h2>Request a listing</h2><p>There is no listing fee during this pilot. A request does not guarantee inclusion. No account or phone number is needed.</p>
