@@ -1,5 +1,5 @@
 import { businessHoursElapsed, monthlyReportPeriod } from './operating-policy.js';
-import {notificationsEnabled,briefStatement,alertStatements,notificationStatus,flushOwnerNotifications} from './owner-notifications.js';
+import {notificationsEnabled,briefStatement,urgentStatements,alertStatements,notificationStatus,flushOwnerNotifications} from './owner-notifications.js';
 // Receipts and deadlines are separate from source freshness and external release authority.
 const policies = {preparation:'prepare', reconciliation:'reconcile', coordination:'coordinate'};
 const reconciliationSources = ['marblism','campaign','gmail','directory','github'];
@@ -195,8 +195,12 @@ async function finish(db,input,identity,now,loadBoard,env) {
   if(run.workflow==='coordination'&&['advanced','checked'].includes(input.outcome)&&!result.coordination.length)fail('Record the department assessment before completing coordination.');
   const update=db.prepare("UPDATE workflow_runs SET status=?,finished_at=?,result=? WHERE id=? AND status='running' AND lease_until>?")
     .bind(input.outcome,now,JSON.stringify(result),run.id,now);
-  const notice=notificationsEnabled(env)&&input.outcome==='advanced'?briefStatement(db,run,result,now,env):null;
-  const [saved]=await db.batch(notice?[update,notice]:[update]);
+  const notices=[];
+  if(notificationsEnabled(env)){
+    if(result.escalation)notices.push(...urgentStatements(db,run,result,now,env));
+    else if(input.outcome==='advanced'){const notice=briefStatement(db,run,result,now,env);if(notice)notices.push(notice);}
+  }
+  const [saved]=await db.batch([update,...notices]);
   if(!saved.meta?.changes)fail('Run changed.',409);
   return {saved:true,id:run.id,status:input.outcome,...result};
 }
@@ -294,7 +298,7 @@ export async function checkWorkflowDeadlines(env,now=new Date()) {
   console.log(JSON.stringify({event:'owner_notifications_checked',...status.ownerNotifications}));
   return status;
 }
-export async function workflowApi(request,env,identity,now=new Date(),loadBoard) {
+export async function workflowApi(request,env,identity,now=new Date(),loadBoard,execution={}) {
   try {
     const path=new URL(request.url).pathname,db=env.DASHBOARD_DB,overrides=workflowPolicyOverrides(env.DASHBOARD_WORKFLOW_POLICIES);
     if(request.method==='GET'&&path==='/api/workflow'){
@@ -308,7 +312,17 @@ export async function workflowApi(request,env,identity,now=new Date(),loadBoard)
     if(!input||typeof input!=='object'||Array.isArray(input))fail('A JSON object is required.');
     if(path==='/api/workflow/recover')result=await recover(db,input,identity,stamp);
     else if(path==='/api/workflow/start')result=await start(db,input,identity,stamp,overrides);
-    else if(path==='/api/workflow/finish')result=await finish(db,input,identity,stamp,loadBoard,env);
+    else if(path==='/api/workflow/finish'){
+      result=await finish(db,input,identity,stamp,loadBoard,env);
+      if(result.escalation&&notificationsEnabled(env)){
+        const dispatch=flushOwnerNotifications(env,now,execution.transport||fetch,`urgent:${result.id}`)
+          .catch(()=>({status:'dispatch_unverified',attempted:null}));
+        // Persisted completion must not be lost if the provider is unavailable.
+        // waitUntil keeps the bounded attempt alive after the HTTP response.
+        if(execution.ctx)execution.ctx.waitUntil(dispatch.then(outcome=>console.log(JSON.stringify({event:'urgent_owner_notification_checked',...outcome}))));
+        else result.ownerNotification=await dispatch;
+      }
+    }
     else if(path==='/api/workflow/handoff')result=await handoff(db,input,identity,stamp);
     else fail('Not found.',404);
     return Response.json(result,{headers:{'Cache-Control':'no-store'}});
