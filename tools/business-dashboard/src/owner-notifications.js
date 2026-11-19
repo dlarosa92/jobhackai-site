@@ -21,8 +21,10 @@ export function urgentStatements(db,run,result,now,env){
     WHERE changes()=1 AND id=? AND status<>'running' AND finished_at=? AND json_extract(result,'$.escalation')=?`)
     .bind(`urgent:${run.id}`,environment(env),body,now,now,now,run.id,now,result.escalation),
   db.prepare(`UPDATE owner_notifications SET state='failed',last_reason='superseded_by_urgent',updated_at=?
-    WHERE state='pending' AND attempts=0 AND id IN (
-      SELECT 'failure:'||id||':'||first_seen_at FROM workflow_alerts WHERE id=? AND resolved_at IS NULL)
+    WHERE state='pending' AND attempts=0 AND EXISTS (
+      SELECT 1 FROM workflow_alerts a WHERE a.id=? AND a.resolved_at IS NULL
+      AND (owner_notifications.id='failure:'||a.id||':'||a.first_seen_at
+        OR owner_notifications.id LIKE 'failure:'||a.id||':'||a.first_seen_at||':after:%'))
     AND EXISTS(SELECT 1 FROM owner_notifications WHERE id=?)`)
     .bind(now,`workflow-${run.workflow}`,`urgent:${run.id}`)];
 }
@@ -44,7 +46,12 @@ export function alertStatements(db,ids,now,env,dueIds=ids){
   const active=JSON.stringify(ids), due=JSON.stringify(dueIds);
   return [
     db.prepare(`INSERT OR IGNORE INTO owner_notifications(id,kind,environment,subject,body,created_at,next_attempt_at,updated_at)
-      SELECT 'failure:'||id||':'||first_seen_at,'failure',?,'JobHackAI needs attention',
+      SELECT 'failure:'||id||':'||first_seen_at||CASE WHEN EXISTS (
+        SELECT 1 FROM owner_notifications old WHERE old.id='failure:'||workflow_alerts.id||':'||first_seen_at
+        AND old.last_reason='superseded_by_urgent') THEN ':after:'||COALESCE((
+          SELECT r.id FROM workflow_runs r WHERE 'workflow-'||r.workflow=workflow_alerts.id
+          ORDER BY r.started_at DESC,r.id DESC LIMIT 1),'missing') ELSE '' END,
+        'failure',?,'JobHackAI needs attention',
         substr(detail,1,1200)||? ,?,?,? FROM workflow_alerts
       WHERE resolved_at IS NULL AND id IN (SELECT value FROM json_each(?))
       AND NOT EXISTS(SELECT 1 FROM owner_notifications n WHERE n.id='urgent:'||(
@@ -57,12 +64,16 @@ export function alertStatements(db,ids,now,env,dueIds=ids){
       SELECT 'recovery:'||id||':'||first_seen_at,'recovery',?,'JobHackAI monitoring update',
         'This earlier alert is no longer active: '||substr(detail,1,1000)||?,?,?,? FROM workflow_alerts
       WHERE resolved_at IS NULL AND id NOT IN (SELECT value FROM json_each(?))
-      AND EXISTS(SELECT 1 FROM owner_notifications n WHERE n.id='failure:'||workflow_alerts.id||':'||workflow_alerts.first_seen_at AND n.attempts>0)`)
+      AND EXISTS(SELECT 1 FROM owner_notifications n WHERE n.attempts>0
+        AND (n.id='failure:'||workflow_alerts.id||':'||workflow_alerts.first_seen_at
+          OR n.id LIKE 'failure:'||workflow_alerts.id||':'||workflow_alerts.first_seen_at||':after:%'))`)
       .bind(environment(env),`\n\nThis clears the monitoring condition; it does not prove the underlying business work finished. Return to the existing JobHackAI operations chat for decisions. Optional saved Page snapshot (it may be stale):\n${COMPANY_BRIEF}\n\nChecked ${now}.`,now,now,now,active),
     db.prepare(`UPDATE owner_notifications SET state='failed',last_reason='resolved_before_dispatch',updated_at=?
-      WHERE kind='failure' AND state='pending' AND attempts=0 AND id IN (
-        SELECT 'failure:'||id||':'||first_seen_at FROM workflow_alerts WHERE resolved_at IS NULL
-        AND id NOT IN (SELECT value FROM json_each(?)))`).bind(now,active)
+      WHERE kind='failure' AND state='pending' AND attempts=0 AND EXISTS (
+        SELECT 1 FROM workflow_alerts a WHERE a.resolved_at IS NULL
+        AND a.id NOT IN (SELECT value FROM json_each(?))
+        AND (owner_notifications.id='failure:'||a.id||':'||a.first_seen_at
+          OR owner_notifications.id LIKE 'failure:'||a.id||':'||a.first_seen_at||':after:%'))`).bind(now,active)
   ];
 }
 
