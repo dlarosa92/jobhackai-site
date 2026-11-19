@@ -138,6 +138,7 @@ function initialFormFor(search) {
 test('signup CTA mode opens signup without a plan, preserving plan precedence', () => {
   assert.deepEqual(initialFormFor('?mode=signup&utm_source=pinterest'), [['signup']]);
   assert.deepEqual(initialFormFor('?mode=signup&plan=free'), [['signup', 'free', true]]);
+  assert.deepEqual(initialFormFor('?plan=free'), [['signup', 'free', true]]);
   assert.deepEqual(initialFormFor('?mode=login'), [['login']]);
   assert.deepEqual(initialFormFor(''), [['login']]);
 });
