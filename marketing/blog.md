@@ -28,6 +28,18 @@ May 23, 2026 · 7 min read · Resume
 
 [
 
+Interview Prep
+
+### How to Prepare for a Second Round Interview with Multiple Interviewers
+
+Prepare for a second-round interview with several interviewers. Build a truthful evidence bank, handle repeat questions, and tailor questions to each person.
+
+November 19, 20267 min read
+
+
+
+](https://jobhackai.io/blog/second-round-interview-preparation)[
+
 Resume
 
 ### Below 1.0: How the New Leverage Gap Is Rewriting the Rules of Your Resume
