@@ -9,10 +9,11 @@ function harness({host = 'app.jobhackai.io', consent = true, config, pendingServ
   const scripts = [], insertedScripts = [], appendedElements = [], elements = new Map(), timers = [], requests = [], listeners = {};
   if (consent !== null) store.set('jha_cookie_consent_v1', JSON.stringify({version:1,analytics: consent}));
   function element(tag = 'div') {
-    return { tagName: tag, style: {}, innerHTML: '', classList: {add(){},remove(){},contains(){return false;}},
+    const classes = new Set();
+    return { tagName: tag, style: {}, innerHTML: '', classList: {add(name){classes.add(name);},remove(name){classes.delete(name);},contains(name){return classes.has(name);}},
       setAttribute(k,v){this[k]=v;}, getAttribute(k){return this[k];}, events:{}, addEventListener(type,fn){this.events[type]=fn;}, focus(){},
-      remove(){ const i = scripts.indexOf(this); if(i >= 0) scripts.splice(i,1); },
-      querySelector(){return element();}, parentNode: {insertBefore(e){scripts.push(e);insertedScripts.push(e);}} };
+      remove(){ for (const list of [scripts, appendedElements]) { const i = list.indexOf(this); if(i >= 0) list.splice(i,1); } },
+      querySelector(selector){return selector?.startsWith('#') ? node(selector.slice(1)) : element();}, parentNode: {insertBefore(e){scripts.push(e);insertedScripts.push(e);}} };
   }
   const node = id => { if(!elements.has(id)) elements.set(id, element()); return elements.get(id); };
   const document = {
@@ -21,7 +22,7 @@ function harness({host = 'app.jobhackai.io', consent = true, config, pendingServ
     head: {appendChild(e){scripts.push(e);insertedScripts.push(e);}}, body: {style:{},appendChild(e){appendedElements.push(e);}},
     addEventListener(type,fn){listeners[type]=fn;},
     querySelector(selector){ if(accountAuthPage && selector === 'script[type="module"][src*="firebase-auth.js"]')return {}; if(footerPreferences && selector === 'footer') return {querySelector(){return null;},appendChild(e){appendedElements.push(e);elements.set(e.id,e);}}; return this.querySelectorAll(selector)[0] || null; },
-    querySelectorAll(selector){const needle=selector.match(/src\*="([^"]+)"/)?.[1]; return needle ? scripts.filter(s => (s.src||'').includes(needle)) : [];},
+    querySelectorAll(selector){if(selector.startsWith('#'))return appendedElements.filter(e=>e.id===selector.slice(1));const needle=selector.match(/src\*="([^"]+)"/)?.[1]; return needle ? scripts.filter(s => (s.src||'').includes(needle)) : [];},
     getElementsByTagName(){return [element('script')];}
   };
   Object.defineProperty(document, 'cookie', {
@@ -52,6 +53,47 @@ function harness({host = 'app.jobhackai.io', consent = true, config, pendingServ
     setConsent(analytics){ctx.JHA.cookieConsent.openPreferences();node('jha-toggle-analytics').checked=analytics;node('jha-save-preferences').onclick();}
   };
 }
+for (const action of ['accept', 'reject', 'manage']) test('one working banner after delayed auth: '+action, async()=>{
+  const h=harness({host:'dev.jobhackai.io',accountAuthPage:true,consent:null,pendingServer:true});
+  const banners=()=>h.appendedElements.filter(e=>e.id==='jha-cookie-banner');
+  await h.init();
+  assert.equal(banners().length,1);
+  const first=banners()[0];
+  const resume=h.authReady(null);
+  await h.authReady(null);
+  h.finishServer(null);await resume;
+  assert.equal(banners().length,1,'auth restoration must not stack an inert banner over the first');
+  assert.equal(banners()[0],first,'retain the connected banner and its controls');
+  if(action==='manage') {
+    h.node('jha-manage').onclick();
+    assert.ok(h.appendedElements.find(e=>e.id==='jha-cookie-modal').classList.contains('active'));
+    h.node('jha-toggle-analytics').checked=false;
+    h.node('jha-save-preferences').onclick();
+  } else h.node(action==='accept'?'jha-accept-all':'jha-reject-all').onclick();
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(banners().length,0);
+  assert.equal(h.ctx.JHA.cookieConsent.getConsent().analytics,action==='accept');
+  assert.equal(h.requests.filter(r=>r.options.method==='POST').length,1);
+  assert.equal(h.scripts.length,0,'development must not load production analytics');
+});
+for (const analytics of [true,false]) test('restored account decision removes the early undecided banner: '+analytics,async()=>{
+  const h=harness({accountAuthPage:true,consent:null,pendingServer:true});
+  await h.init();
+  assert.equal(h.appendedElements.filter(e=>e.id==='jha-cookie-banner').length,1);
+  const resume=h.authReady({getIdToken:async()=>'fixture-auth-token'});
+  h.finishServer(analytics);await resume;
+  assert.equal(h.appendedElements.filter(e=>e.id==='jha-cookie-banner').length,0);
+  assert.equal(h.ctx.JHA.cookieConsent.getConsent().analytics,analytics);
+});
+test('saving a choice retires all stale banner copies',async()=>{
+  const h=harness({consent:null});await h.init();
+  const stale=h.ctx.document.createElement('div');stale.id='jha-cookie-banner';
+  h.ctx.document.body.appendChild(stale);
+  assert.equal(h.appendedElements.filter(e=>e.id==='jha-cookie-banner').length,2);
+  h.node('jha-reject-all').onclick();
+  assert.equal(h.appendedElements.filter(e=>e.id==='jha-cookie-banner').length,0);
+  assert.equal(h.ctx.JHA.cookieConsent.getConsent().analytics,false);
+});
 test('account pages wait for restored authentication and the server consent decision',async()=>{
   const h=harness({accountAuthPage:true,consent:true,pendingServer:true});
   const startup=h.init();await Promise.resolve();await Promise.resolve();h.runTimers();
