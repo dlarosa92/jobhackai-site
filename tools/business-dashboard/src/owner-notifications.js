@@ -1,4 +1,5 @@
-// Fixed private operational route, never a general mail API. Sends only from the existing cron.
+// Fixed private operational route, never a general mail API. Urgent saved events dispatch
+// immediately; the existing monitor handles missed runs, receipts and bounded retries.
 export const OWNER_RECIPIENT='sebastian.larosa@jobhackai.io';
 export const OWNER_SENDER='JobHackAI <noreply@jobhackai.io>';
 export const COMPANY_BRIEF='https://chatgpt.com/space/page_fed12c661ba88191b522b9dad45a115b';
@@ -9,6 +10,24 @@ const configured=env=>['dev','qa','prod'].includes(env.OWNER_NOTIFICATION_ENVIRO
 const clean=(value,max=800)=>String(value||'').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g,'').slice(0,max);
 const stamp=value=>new Date(value).toISOString();
 const names={preparation:'Work completed',reconciliation:'Source checks',coordination:'Team priorities'};
+const urgentReasons={serious_customer_harm:'Serious customer harm',uncontrolled_spending:'Uncontrolled spending',commitment_at_risk:'A commitment is at risk'};
+
+// Commit the notice with the run, before any network call. An urgent event remains
+// actionable even if the next monitor read is paused or a later run looks healthy.
+export function urgentStatements(db,run,result,now,env){
+  const body=`${urgentReasons[result.escalation]}\n\n${clean(result.summary,1200)}\n\nDetected by ${names[run.workflow]||'the operating team'} at ${now}. Investigate promptly in the existing JobHackAI operations chat. This alert does not authorize additional spending or repeating an external action.`;
+  return [db.prepare(`INSERT OR IGNORE INTO owner_notifications(id,kind,environment,subject,body,created_at,next_attempt_at,updated_at)
+    SELECT ?,'failure',?,'JobHackAI: urgent attention required',?,?,?,? FROM workflow_runs
+    WHERE changes()=1 AND id=? AND status<>'running' AND finished_at=? AND json_extract(result,'$.escalation')=?`)
+    .bind(`urgent:${run.id}`,environment(env),body,now,now,now,run.id,now,result.escalation),
+  db.prepare(`UPDATE owner_notifications SET state='failed',last_reason='superseded_by_urgent',updated_at=?
+    WHERE state='pending' AND attempts=0 AND EXISTS (
+      SELECT 1 FROM workflow_alerts a WHERE a.id=? AND a.resolved_at IS NULL
+      AND (owner_notifications.id='failure:'||a.id||':'||a.first_seen_at
+        OR owner_notifications.id LIKE 'failure:'||a.id||':'||a.first_seen_at||':after:%'))
+    AND EXISTS(SELECT 1 FROM owner_notifications WHERE id=?)`)
+    .bind(now,`workflow-${run.workflow}`,`urgent:${run.id}`)];
+}
 
 // Statement belongs to the same D1 batch as the successfully completed run.
 export function briefStatement(db,run,result,now,env){
@@ -27,20 +46,34 @@ export function alertStatements(db,ids,now,env,dueIds=ids){
   const active=JSON.stringify(ids), due=JSON.stringify(dueIds);
   return [
     db.prepare(`INSERT OR IGNORE INTO owner_notifications(id,kind,environment,subject,body,created_at,next_attempt_at,updated_at)
-      SELECT 'failure:'||id||':'||first_seen_at,'failure',?,'JobHackAI needs attention',
+      SELECT 'failure:'||id||':'||first_seen_at||CASE WHEN EXISTS (
+        SELECT 1 FROM owner_notifications old WHERE old.id='failure:'||workflow_alerts.id||':'||first_seen_at
+        AND old.last_reason='superseded_by_urgent') THEN ':after:'||COALESCE((
+          SELECT r.id FROM workflow_runs r WHERE 'workflow-'||r.workflow=workflow_alerts.id
+          ORDER BY r.started_at DESC,r.id DESC LIMIT 1),'missing') ELSE '' END,
+        'failure',?,'JobHackAI needs attention',
         substr(detail,1,1200)||? ,?,?,? FROM workflow_alerts
-      WHERE resolved_at IS NULL AND id IN (SELECT value FROM json_each(?))`)
+      WHERE resolved_at IS NULL AND id IN (SELECT value FROM json_each(?))
+      AND NOT EXISTS(SELECT 1 FROM owner_notifications n WHERE n.id='urgent:'||(
+        SELECT r.id FROM workflow_runs r WHERE 'workflow-'||r.workflow=workflow_alerts.id ORDER BY r.started_at DESC,r.id DESC LIMIT 1)
+        AND EXISTS(SELECT 1 FROM workflow_runs r WHERE n.id='urgent:'||r.id AND r.status IN ('failed','blocked'))
+        AND NOT EXISTS(SELECT 1 FROM workflow_runs r WHERE 'workflow-'||r.workflow=workflow_alerts.id AND r.status='running'
+          AND NOT EXISTS(SELECT 1 FROM workflow_recoveries recovery WHERE recovery.run_id=r.id)))`)
       .bind(environment(env),`\n\nThe team needs to investigate this issue. This notice reports the operating condition above. Return to the existing JobHackAI operations chat for decisions. Optional saved Page snapshot (it may be stale):\n${COMPANY_BRIEF}\n\nChecked ${now}. This is a monitoring alert, not permission to repeat an external action.`,now,now,now,due),
     db.prepare(`INSERT OR IGNORE INTO owner_notifications(id,kind,environment,subject,body,created_at,next_attempt_at,updated_at)
       SELECT 'recovery:'||id||':'||first_seen_at,'recovery',?,'JobHackAI monitoring update',
         'This earlier alert is no longer active: '||substr(detail,1,1000)||?,?,?,? FROM workflow_alerts
       WHERE resolved_at IS NULL AND id NOT IN (SELECT value FROM json_each(?))
-      AND EXISTS(SELECT 1 FROM owner_notifications n WHERE n.id='failure:'||workflow_alerts.id||':'||workflow_alerts.first_seen_at AND n.attempts>0)`)
+      AND EXISTS(SELECT 1 FROM owner_notifications n WHERE n.attempts>0
+        AND (n.id='failure:'||workflow_alerts.id||':'||workflow_alerts.first_seen_at
+          OR n.id LIKE 'failure:'||workflow_alerts.id||':'||workflow_alerts.first_seen_at||':after:%'))`)
       .bind(environment(env),`\n\nThis clears the monitoring condition; it does not prove the underlying business work finished. Return to the existing JobHackAI operations chat for decisions. Optional saved Page snapshot (it may be stale):\n${COMPANY_BRIEF}\n\nChecked ${now}.`,now,now,now,active),
     db.prepare(`UPDATE owner_notifications SET state='failed',last_reason='resolved_before_dispatch',updated_at=?
-      WHERE kind='failure' AND state='pending' AND attempts=0 AND id IN (
-        SELECT 'failure:'||id||':'||first_seen_at FROM workflow_alerts WHERE resolved_at IS NULL
-        AND id NOT IN (SELECT value FROM json_each(?)))`).bind(now,active)
+      WHERE kind='failure' AND state='pending' AND attempts=0 AND EXISTS (
+        SELECT 1 FROM workflow_alerts a WHERE a.resolved_at IS NULL
+        AND a.id NOT IN (SELECT value FROM json_each(?))
+        AND (owner_notifications.id='failure:'||a.id||':'||a.first_seen_at
+          OR owner_notifications.id LIKE 'failure:'||a.id||':'||a.first_seen_at||':after:%'))`).bind(now,active)
   ];
 }
 
@@ -71,8 +104,9 @@ async function persist(db,row,values,now){
       values.next||now,values.poll||null,now,row.id,row.token).run();
 }
 
-// At most one POST and one receipt GET per 15-minute invocation. No sleeps or unbounded work.
-export async function flushOwnerNotifications(env,now=new Date(),transport=fetch){
+// At most one POST and one receipt GET per invocation. A targeted urgent dispatch
+// cannot drain unrelated pending mail. No sleeps or unbounded work.
+export async function flushOwnerNotifications(env,now=new Date(),transport=fetch,targetId=null){
   if(!notificationsEnabled(env))return {status:'disabled',attempted:0,polled:0};
   const db=env.DASHBOARD_DB,at=now.toISOString(),retryCutoff=stamp(now.getTime()-23*HOUR),old=stamp(now.getTime()-24*HOUR);
   if(!configured(env))return {status:'missing_configuration',attempted:0,polled:0};
@@ -111,9 +145,10 @@ export async function flushOwnerNotifications(env,now=new Date(),transport=fetch
   const row=await db.prepare(`UPDATE owner_notifications SET state='sending',attempts=attempts+1,token=?,lease_until=?,
     first_attempt_at=COALESCE(first_attempt_at,?),updated_at=? WHERE id=(SELECT id FROM owner_notifications
     WHERE environment=? AND (state='pending' OR (state='sending' AND lease_until<=?)) AND next_attempt_at<=? AND attempts<5
-    AND (first_attempt_at IS NULL OR first_attempt_at>?)
-    AND NOT EXISTS(SELECT 1 FROM owner_notifications stop WHERE stop.last_reason IN ('provider_bounced','provider_complained','provider_suppressed')) ORDER BY created_at,id LIMIT 1)
-    RETURNING *`).bind(token,lease,at,at,environment(env),at,at,retryCutoff).first();
+    AND (first_attempt_at IS NULL OR first_attempt_at>?) AND (? IS NULL OR id=?)
+    AND NOT EXISTS(SELECT 1 FROM owner_notifications stop WHERE stop.last_reason IN ('provider_bounced','provider_complained','provider_suppressed'))
+    ORDER BY CASE WHEN id LIKE 'urgent:%' THEN 0 ELSE 1 END,created_at,id LIMIT 1)
+    RETURNING *`).bind(token,lease,at,at,environment(env),at,at,retryCutoff,targetId,targetId).first();
   if(row){
     const body=JSON.stringify({from:OWNER_SENDER,to:[OWNER_RECIPIENT],subject:row.environment==='prod'?row.subject:`[${row.environment.toUpperCase()} TEST] ${row.subject}`,text:row.body});
     let outcome={state:'pending',reason:'send_outcome_unknown',next:stamp(now.getTime()+Math.min(60,15*2**(row.attempts-1))*60000)};
