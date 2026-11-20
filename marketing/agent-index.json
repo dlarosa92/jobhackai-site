@@ -18,9 +18,9 @@
       "path": "/blog.md",
       "title": "JobHackAI Blog | Job Search Tips, Resume & LinkedIn Guides",
       "description": "Actionable job search tips, resume optimization guides, LinkedIn strategies, and interview prep from the JobHackAI team. Published weekly.",
-      "source_sha256": "7e5ea4570e1b44071c12b3f10481ecdfc9bee22770040f6a53612aa80a4632d3",
-      "markdown_sha256": "faccf36a080bf7fd6198b5fc40b9075de78ed702aaa17643c62a67495e2841cb",
-      "bytes": 4487
+      "source_sha256": "ab64252d3c7e9e62c77c4b1a2058c9f3e8c4781364bdbc4aca5943c7f3230885",
+      "markdown_sha256": "91e828445063cd183b9186ca9af0427cd54eabbee4332cd97383345494c2ee0e",
+      "bytes": 4835
     },
     {
       "url": "https://jobhackai.io/blog/68-5-days-response-gap-job-search-burnout",
@@ -111,6 +111,16 @@
       "source_sha256": "137c9280705722ae894045f82676b81b898534fac6b2669ade33c051e6389a2a",
       "markdown_sha256": "e94d3ce69538c9913a201c1e38aef41fb56cfea1c97454c09fc7defc31928170",
       "bytes": 6452
+    },
+    {
+      "url": "https://jobhackai.io/blog/second-round-interview-preparation",
+      "markdown": "https://jobhackai.io/blog/second-round-interview-preparation.md",
+      "path": "/blog/second-round-interview-preparation.md",
+      "title": "How to Prepare for a Second Round Interview with Multiple Interviewers | JobHackAI Blog",
+      "description": "Prepare for a second-round interview with several interviewers. Build a truthful evidence bank, handle repeat questions, and tailor questions to each person.",
+      "source_sha256": "6764dcee883e26b64a5571ac00daae1641fbc391d4f85408be2bed71376c238a",
+      "markdown_sha256": "e186836ed0fc64f1840ed19689cd3fdbeb82e96a7e2436c7694bcc6ecc83d0d1",
+      "bytes": 12347
     },
     {
       "url": "https://jobhackai.io/blog/the-2-percent-rule",
