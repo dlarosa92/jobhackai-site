@@ -13,6 +13,16 @@
 
 window.BLOG_POSTS = [
   {
+    "slug": "second-round-interview-preparation",
+    "title": "How to Prepare for a Second Round Interview with Multiple Interviewers",
+    "category": "Interview Prep",
+    "author": "JobHackAI",
+    "excerpt": "Prepare for a second-round interview with several interviewers. Build a truthful evidence bank, handle repeat questions, and tailor questions to each person.",
+    "date": "2026-11-19",
+    "readTime": 7,
+    "featured": false
+  },
+  {
     "slug": "compare-mobile-detailing-cincinnati-nky",
     "title": "Comparing mobile detailers in Cincinnati and Northern Kentucky",
     "excerpt": "A practical guide to comparing mobile detailing quotes in Cincinnati and Northern Kentucky: what packages include, how vehicle condition and on-site requirements change the price, and the questions to ask before you book.",
