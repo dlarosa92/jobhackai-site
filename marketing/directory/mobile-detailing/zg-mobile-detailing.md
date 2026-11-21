@@ -51,13 +51,14 @@ Cincinnati and surrounding areas; confirm service at your address.
 -   Interior, exterior and complete detailing
 -   Paint correction, polishing and waxing
 -   Stain and pet-hair removal
+-   Ceramic coating, headlight restoration and vinyl wraps
 -   Boat and RV detailing reported in the submission; confirm scope and pricing directly
 
 **Information source**
 
 [Provider website](https://zgdetails.com/) · checked 2026-10-22
 
-Website reviewed October 22, 2026, alongside the October 20 directory submission. Boat/RV coverage and package-specific utility exceptions are provider-submitted details.
+Website reviewed October 22, 2026, alongside the October 20 directory submission. Boat/RV coverage and package-specific utility exceptions are provider-submitted details. Service additions checked against the provider website November 19, 2026.
 
 ## Contact & booking
 
