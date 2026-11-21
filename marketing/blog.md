@@ -30,6 +30,18 @@ October 10, 20268 min readInterview Prep
 
 Interview Prep
 
+### How to Prepare for a Second Round Interview with Multiple Interviewers
+
+Prepare for a second-round interview with several interviewers. Build a truthful evidence bank, handle repeat questions, and tailor questions to each person.
+
+November 21, 20267 min read
+
+
+
+](https://jobhackai.io/blog/second-round-interview-preparation)[
+
+Interview Prep
+
 ### How to Prepare for a Phone Screen Interview
 
 Prepare for a phone screen with a practical plan for your space, materials, spoken answers, salary and scheduling questions, and a read-aloud practice drill.
