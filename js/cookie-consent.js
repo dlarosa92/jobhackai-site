@@ -554,6 +554,26 @@
         if ('page_location' in params) params.page_location = analyticsUrl(params.page_location, true);
         if ('page_referrer' in params) params.page_referrer = analyticsUrl(params.page_referrer);
         if ('page_path' in params) params.page_path = String(params.page_path).split(/[?#]/)[0];
+        // Navigation must wait for signup processing, not just this queue stub.
+        // The local deadline also works when the vendor script is blocked.
+        if (args[1] === 'sign_up') {
+          const previousCallback = params.event_callback;
+          let finish;
+          const completion = new Promise(resolve => { finish = resolve; });
+          _pendingSignupCompletions.add(completion);
+          const settle = () => {
+            _pendingSignupCompletions.delete(completion);
+            finish();
+          };
+          window.setTimeout(settle, 1500);
+          params.event_callback = function() {
+            settle();
+            if (typeof previousCallback === 'function') {
+              try { previousCallback(); } catch (_) { /* analytics cannot block auth */ }
+            }
+          };
+          params.event_timeout = 1500;
+        }
         args[2] = params;
       }
       if (args[0] === 'event' && args[1] === 'page_view') {
@@ -814,6 +834,7 @@
   // "Accept Analytics". If analytics was explicitly declined, the call
   // is dropped. The pre-decision queue is cleared when the user rejects.
   const _pendingGtagCalls = [];
+  const _pendingSignupCompletions = new Set();
   const _pendingClarityIdentify = [];
   const MAX_PENDING_CALLS = 50;
   function flushPendingGtagCalls() {
@@ -841,48 +862,17 @@
     }
   }
 
-  // Wait until cookie-consent init() has created window.gtag (so queued
-  // identify/event calls are flushed) before full-page navigation; otherwise
-  // in-memory _pendingGtagCalls is lost when the document unloads.
-  // Cap the wait tightly: returning visitors with consent in localStorage
-  // can race init()'s server consent fetch — if gtag still isn't loaded,
-  // kick off loadGAScript() ourselves so we aren't stuck waiting on a
-  // network round-trip that will never produce gtag.
-  function flushAnalyticsBeforeNavigate() {
-    if (!GA_MEASUREMENT_ID || !hasAnalyticsConsent()) return Promise.resolve();
-    if (typeof window.gtag === 'function') {
+  // Wait for consented signup processing, not merely the local gtag queue.
+  // Each completion has a local deadline if the vendor tag is blocked.
+  async function flushAnalyticsBeforeNavigate() {
+    if (!GA_MEASUREMENT_ID || !hasAnalyticsConsent()) return;
+    try {
+      loadGAScript();
       flushPendingGtagCalls();
       flushPendingClarityIdentify();
-      return Promise.resolve();
-    }
-    try { loadGAScript(); } catch (_) { /* ignore */ }
-    const timeoutMs = 1500;
-    const start = typeof performance !== 'undefined' && performance.now
-      ? performance.now()
-      : Date.now();
-    return new Promise((resolve) => {
-      function tick() {
-        if (!hasAnalyticsConsent()) {
-          resolve();
-          return;
-        }
-        if (typeof window.gtag === 'function') {
-          flushPendingGtagCalls();
-          flushPendingClarityIdentify();
-          resolve();
-          return;
-        }
-        const now = typeof performance !== 'undefined' && performance.now
-          ? performance.now()
-          : Date.now();
-        if (now - start >= timeoutMs) {
-          resolve();
-          return;
-        }
-        setTimeout(tick, 25);
-      }
-      tick();
-    });
+      // A callback confirms processing, not receipt in GA4 reports.
+      await Promise.all(Array.from(_pendingSignupCompletions));
+    } catch (_) { /* measurement must never prevent authentication */ }
   }
   // Queue-aware generic gtag wrapper. All identity/event/config calls
   // should flow through this so they're applied in correct order
