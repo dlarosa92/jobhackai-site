@@ -4,8 +4,9 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import test from 'node:test';
 const source = readFileSync(new URL('../../../../js/cookie-consent.js', import.meta.url), 'utf8');
+const directoryConsentSource = readFileSync(new URL('../../../../marketing/directory/consent.js', import.meta.url), 'utf8');
 const GA = 'G-SQYSWPFM5X';
-function harness({host = 'app.jobhackai.io', consent = true, config, pendingServer = false, pendingPost = false, search = '', cookies = new Map(), store = new Map(), scopedCookies = null, footerPreferences = false, accountAuthPage = false} = {}) {
+function harness({runtime = source, host = 'app.jobhackai.io', consent = true, config, pendingServer = false, pendingPost = false, search = '', cookies = new Map(), store = new Map(), scopedCookies = null, footerPreferences = false, accountAuthPage = false, onScriptAppend = () => {}} = {}) {
   const scripts = [], insertedScripts = [], appendedElements = [], elements = new Map(), timers = [], requests = [], listeners = {};
   if (consent !== null) store.set('jha_cookie_consent_v1', JSON.stringify({version:1,analytics: consent}));
   function element(tag = 'div') {
@@ -19,7 +20,7 @@ function harness({host = 'app.jobhackai.io', consent = true, config, pendingServ
   const document = {
     readyState: 'loading', title: 'JobHackAI', referrer: 'https://example.com/?email=private@example.com', cookie: '',
     createElement: element, getElementById: id => footerPreferences && id === 'open-cookie-preferences' ? (elements.get(id) || null) : node(id),
-    head: {appendChild(e){scripts.push(e);insertedScripts.push(e);}}, body: {style:{},appendChild(e){appendedElements.push(e);}},
+    head: {appendChild(e){scripts.push(e);insertedScripts.push(e);onScriptAppend(e);}}, body: {style:{},appendChild(e){appendedElements.push(e);}},
     addEventListener(type,fn){listeners[type]=fn;},
     querySelector(selector){ if(accountAuthPage && selector === 'script[type="module"][src*="firebase-auth.js"]')return {}; if(footerPreferences && selector === 'footer') return {querySelector(){return null;},appendChild(e){appendedElements.push(e);elements.set(e.id,e);}}; return this.querySelectorAll(selector)[0] || null; },
     querySelectorAll(selector){if(selector.startsWith('#'))return appendedElements.filter(e=>e.id===selector.slice(1));const needle=selector.match(/src\*="([^"]+)"/)?.[1]; return needle ? scripts.filter(s => (s.src||'').includes(needle)) : [];},
@@ -38,11 +39,11 @@ function harness({host = 'app.jobhackai.io', consent = true, config, pendingServ
     JHA_CONFIG: config, URL, CustomEvent: class {constructor(type){this.type=type;}}, HTMLScriptElement: class {},
     localStorage:{getItem:k=>store.get(k)??null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)},
     setTimeout:fn=>{timers.push(fn);return timers.length;}, performance:{now:()=>0},
-    dispatchEvent(){}, console:{log(){},warn(){}},
+    addEventListener(type,fn){listeners['window:'+type]=fn;}, dispatchEvent(){}, console:{log(){},warn(){}},
     fetch:async(url,options)=>{requests.push({url,options}); if(options.method==='GET'&&pendingServer)return server; if(options.method==='POST'&&pendingPost)return post; return {ok:true,json:async()=>({ok:true})};}
   };
   ctx.window=ctx;
-  vm.createContext(ctx); vm.runInContext(source,ctx);
+  vm.createContext(ctx); vm.runInContext(runtime,ctx);
   return {ctx, scripts, insertedScripts, appendedElements, requests, node, cookies, store,
     init:()=>listeners.DOMContentLoaded(),
     authReady(user){ctx.__REAL_AUTH_READY=true;ctx.FirebaseAuthManager={getCurrentUser:()=>user};return listeners['firebase-auth-ready']?.();},
@@ -220,6 +221,120 @@ test('revoking and regranting reuse the same GA runtime and configuration',async
   assert.equal(h.events('page_view').length,1);
 });
 
+for (const {name,host,runtime,ga,noReplay} of [
+  {name:'jobhackai.io',host:'jobhackai.io'},
+  {name:'app.jobhackai.io',host:'app.jobhackai.io'},
+  {name:'directory production',host:'jobhackai.io',runtime:directoryConsentSource,ga:GA},
+  {name:'directory QA preview',host:'directory-qa.jobhackai-app-marketing-seo.pages.dev',runtime:directoryConsentSource,ga:'G-VH888WWY3M',noReplay:true}
+]) {
+  test(name+' sets Google consent v2 before loading the tag or sending measurement',async()=>{
+    let atLoad;
+    const h=harness({host,runtime,onScriptAppend(script){
+      if(script.src.includes('googletagmanager.com')) atLoad=Array.from(h.ctx.dataLayer||[],args=>Array.from(args));
+    }});
+    h.ctx.JHA.trackEventSafe('queued_event',{});
+    await h.init();h.runTimers();
+    const defaults={analytics_storage:'denied',ad_storage:'denied',ad_user_data:'denied',ad_personalization:'denied'};
+    assert.equal(atLoad[0]?.[0],'consent');assert.equal(atLoad[0]?.[1],'default');
+    assert.deepEqual({...atLoad[0][2]},defaults);
+    assert.equal(atLoad[1]?.[0],'consent');assert.equal(atLoad[1]?.[1],'update');
+    assert.deepEqual({...atLoad[1][2]},{...defaults,analytics_storage:'granted'});
+    const commands=Array.from(h.ctx.dataLayer,args=>Array.from(args));
+    assert.ok(commands.findIndex(args=>args[0]==='config')>1);
+    assert.ok(commands.findIndex(args=>args[0]==='event')>1);
+    assert.equal(h.events('queued_event').length,1);
+    assert.equal(h.events('page_view').length,1);
+    if(ga) assert.equal(commands.find(args=>args[0]==='config')[1],ga);
+    if(noReplay) assert.ok(h.insertedScripts.every(script=>!script.src.includes('clarity.ms')));
+    else assert.ok(h.insertedScripts.some(script=>script.src==='https://www.clarity.ms/tag/wskzma4clw'));
+  });
+}
+for (const [name,runtime] of [['shared',source],['directory',directoryConsentSource]]) {
+for (const consent of [null,false]) {
+  test(name+' Google consent mode remains fully unloaded without analytics consent: '+consent,async()=>{
+    const h=harness({runtime,consent});await h.init();h.runTimers();
+    h.ctx.JHA.trackEventSafe('must_not_send',{});
+    assert.equal(h.scripts.length,0);
+    assert.equal(h.ctx.dataLayer?.length||0,0,'no Google commands or denied-mode pings before opt-in');
+    h.setConsent(true);h.runTimers();
+    const commands=Array.from(h.ctx.dataLayer,args=>Array.from(args));
+    assert.equal(commands[0][0],'consent');assert.equal(commands[0][1],'default');
+    assert.equal(commands[1][0],'consent');assert.equal(commands[1][1],'update');
+    assert.equal(commands[1][2].analytics_storage,'granted');
+  });
+}
+test(name+' withdrawal updates the existing Google consent state immediately and never grants advertising',async()=>{
+  const h=harness({runtime,pendingPost:true,config:{CLARITY_ID:''}});await h.init();h.runTimers();
+  h.setConsent(false);
+  const denied=h.ctx.dataLayer.at(-1);
+  assert.equal(denied[0],'consent');assert.equal(denied[1],'update');
+  assert.equal(denied[2].analytics_storage,'denied');
+  assert.equal(h.ctx['ga-disable-'+GA],true);
+  h.ctx.JHA.trackEventSafe('after_withdrawal',{});
+  assert.equal(h.events('after_withdrawal').length,0);
+  h.setConsent(true);h.runTimers();
+  const consentCommands=h.ctx.dataLayer.filter(args=>args[0]==='consent');
+  assert.equal(consentCommands.filter(args=>args[1]==='default').length,1);
+  assert.deepEqual(Array.from(consentCommands,args=>args[2].analytics_storage),['denied','granted','denied','granted']);
+  for(const args of consentCommands) {
+    for(const key of ['ad_storage','ad_user_data','ad_personalization']) assert.equal(args[2][key],'denied');
+  }
+  assert.equal(h.insertedScripts.length,1);
+  assert.equal(h.events('page_view').length,1);
+});
+}
+
+test('directory runtime retains consented Local campaign fields and never replays withdrawn contact clicks',async()=>{
+  const h=harness({runtime:directoryConsentSource,host:'jobhackai.io',
+    search:'?utm_source=instagram&utm_medium=organic_social&utm_campaign=local_directory_2026_09&utm_content=local_profile_01'});
+  await h.init();h.runTimers();
+  const pageEvents={},windowEvents={};
+  assert.equal(h.events('page_view').length,1);
+  assert.equal(h.events('page_view')[0][2].jha_first_campaign,'local_directory_2026_09');
+  h.ctx.document.body.dataset={listing:'pearls',directoryCategory:'mobile-detailing',categoryPage:'false'};
+  h.ctx.document.visibilityState='visible';
+  const getElement=h.ctx.document.getElementById;
+  h.ctx.document.getElementById=()=>null;
+  h.ctx.document.addEventListener=(name,fn)=>{pageEvents[name]=fn;};
+  h.ctx.addEventListener=(name,fn)=>{windowEvents[name]=fn;};
+  h.ctx.dispatchEvent=event=>windowEvents[event.type]?.();
+  vm.runInContext(readFileSync(new URL('../../../../marketing/directory/directory.js',import.meta.url),'utf8'),h.ctx);
+  h.ctx.document.getElementById=getElement;
+  const click=()=>pageEvents.click({target:{closest:()=>({dataset:{directoryContact:'pearls'},getAttribute:()=> 'https://provider.example/'})}});
+  assert.equal(h.events('directory_listing_view').length,1);
+  click();assert.equal(h.events('directory_contact_click').length,1);
+  const params=h.events('directory_contact_click')[0][2];
+  assert.equal(params.business_line,'local_directory');
+  assert.equal(params.jha_first_campaign,'local_directory_2026_09');
+  assert.equal(params.jha_last_asset,'local_profile_01');
+  h.setConsent(false);click();
+  assert.equal(h.cookies.has('jha_campaign_prod'),false);
+  h.setConsent(true);h.runTimers();
+  assert.equal(h.events('directory_contact_click').length,1);
+  assert.equal(h.events('directory_listing_view').length,1);
+  assert.equal(h.insertedScripts.filter(script=>script.src.includes('googletagmanager.com')).length,1,'Local keeps one Google runtime');
+  assert.equal(h.insertedScripts.filter(script=>script.src.includes('clarity.ms/tag/')).length,1,'Local keeps one Clarity runtime without restarting it on regrant');
+});
+
+test('directory queued events gain only consented campaign fields and bounded page asset IDs',async()=>{
+  const h=harness({runtime:directoryConsentSource,host:'jobhackai.io',consent:null,
+    search:'?utm_source=linkedin&utm_medium=organic_social&utm_campaign=local_directory_2026_09&utm_content=local_article_01'});
+  h.ctx.document.body.getAttribute=()=> 'local_detailing_guide';
+  h.ctx.JHA.trackEventSafe('article_cta_view',{cta_label:'view_local_directory'});
+  await h.init();assert.equal(h.cookies.has('jha_campaign_prod'),false);
+  assert.equal(h.events('article_cta_view').length,0);
+  h.setConsent(true);h.runTimers();
+  const params=h.events('article_cta_view')[0][2];
+  assert.equal(params.jha_first_source,'linkedin');
+  assert.equal(params.jha_last_campaign,'local_directory_2026_09');
+  assert.equal(params.jha_last_asset,'local_article_01');
+  assert.equal(params.asset_id,'local_detailing_guide');
+  assert.equal(params.cta_label,'view_local_directory');
+  h.ctx.document.body.getAttribute=()=> 'private@example.test';
+  h.ctx.JHA.trackEventSafe('article_cta_click',{});
+  assert.equal(h.events('article_cta_click')[0][2].asset_id,undefined);
+});
+
 test('Clarity receives analytics-only consent before loading, never advertising consent',async()=>{
   const h=harness({config:{GA_ID:'',CLARITY_ID:'test-project'}});await h.init();
   assert.equal(h.insertedScripts.length,1);
@@ -326,6 +441,33 @@ function gaIdentifiers(h) {
     if(command === 'get') callback(field === 'client_id' ? '123456.1789800000' : '1789800000');
   };
 }
+test('a checkout clicked during account consent restoration waits for the verified grant and GA identifiers',async()=>{
+  const h=harness({accountAuthPage:true,pendingServer:true,search:tagged});await h.init();
+  const restoring=h.authReady({getIdToken:async()=>'fixture-auth-token'});
+  let settled=false;
+  const checkout=h.ctx.JHA.cookieConsent.getCheckoutAnalyticsContext().then(value=>{settled=true;return value;});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(settled,false,'pending account consent is not an immediate unattributed checkout');
+  assert.equal(h.scripts.length,0,'no Analytics before the authoritative grant');
+  h.finishServer(true);await restoring;await new Promise(resolve=>setImmediate(resolve));
+  for(const args of h.ctx.dataLayer||[])if(args[0]==='get')args[3](args[2]==='client_id'?'123456.1789800000':'1789800000');
+  const context=await checkout;
+  assert.equal(context.gaClientId,'123456.1789800000');assert.equal(context.gaSessionId,'1789800000');
+  assert.equal(context.lastTouch.campaign,'voice_beta_2026_09');
+});
+test('checkout consent restoration is bounded and cannot override a rejection',async()=>{
+  for(const decision of ['timeout','server-reject','local-reject']){
+    const h=harness({accountAuthPage:true,pendingServer:true,search:tagged});await h.init();
+    const restoring=h.authReady({getIdToken:async()=>'fixture-auth-token'});
+    const checkout=h.ctx.JHA.cookieConsent.getCheckoutAnalyticsContext();
+    await new Promise(resolve=>setImmediate(resolve));
+    if(decision==='timeout')h.runTimers();
+    else if(decision==='local-reject')h.setConsent(false);
+    h.finishServer(decision!=='server-reject');await restoring;
+    assert.equal(await checkout,null);
+    if(decision!=='timeout')assert.equal(h.scripts.length,0);
+  }
+});
 test('campaign capture waits for consent and stores only controlled tags', async()=>{
   const h=harness({consent:null,search:tagged+'&email=private@example.com&oobCode=secret'});
   await h.init();assert.equal(h.cookies.has('jha_campaign_prod'),false);
@@ -338,6 +480,16 @@ test('campaign capture waits for consent and stores only controlled tags', async
   assert.equal(context.firstTouch.campaign,'voice_beta_2026_09');
   assert.equal(h.requests.at(-1).options.method,'POST','checkout explicitly persists the current consent');
 });
+test('marketing fallback page view includes its content asset and consented campaign',async()=>{
+  const h=harness({host:'jobhackai.io',search:tagged});
+  h.ctx.document.body.getAttribute=key=>key==='data-asset-id'?'voice_features_01':null;
+  await h.init();h.runTimers();
+  assert.equal(h.events('page_view').length,1);
+  const params=h.events('page_view')[0][2];
+  assert.equal(params.asset_id,'voice_features_01');
+  assert.equal(params.jha_first_source,'linkedin');
+  assert.equal(params.jha_last_asset,'answer_li_01');
+});
 test('marketing-to-app navigation preserves first and last touch despite internal UTMs', async()=>{
   const marketing=harness({host:'jobhackai.io',search:tagged});await marketing.init();
   const original=marketing.cookies.get('jha_campaign_prod');
@@ -347,11 +499,193 @@ test('marketing-to-app navigation preserves first and last touch despite interna
   gaIdentifiers(app);const context=await app.ctx.JHA.cookieConsent.getCheckoutAnalyticsContext();
   assert.equal(context.firstTouch.source,'linkedin');assert.equal(context.lastTouch.source,'linkedin');
 });
+for (const [name, runtime] of [['shared', source], ['directory', directoryConsentSource]]) {
+  for (const serverDecision of [true, false]) {
+    test(`${name}: reconcile a cached app rejection before erasing a newer consented campaign (server=${serverDecision})`, async()=>{
+      const marketing=harness({host:'jobhackai.io',search:tagged});await marketing.init();
+      const original=marketing.cookies.get('jha_campaign_prod');
+      const store=new Map([['jha_cookie_consent_v1',JSON.stringify({version:1,analytics:false,updatedAt:new Date(Date.now()-86400000).toISOString()})]]);
+      const app=harness({runtime,cookies:marketing.cookies,store,consent:null,accountAuthPage:true,pendingServer:true});
+      app.ctx.document.referrer='https://jobhackai.io/features';
+      await app.init();
+      assert.equal(app.cookies.get('jha_campaign_prod'),original,'an unresolved identity is not a new withdrawal');
+      assert.equal(app.insertedScripts.length,0,'do not collect while the authoritative decision is pending');
+      const ready=app.authReady(null);app.finishServer(serverDecision);await ready;
+      app.ctx.JHA.trackEventSafe('cta_click',{cta_label:'fixture'});
+      if(serverDecision){
+        assert.equal(app.events('cta_click').at(-1)[2].jha_first_campaign,'voice_beta_2026_09');
+      }else{
+        assert.equal(app.cookies.has('jha_campaign_prod'),false);
+        assert.equal(app.events('cta_click').length,0);
+        assert.equal(app.insertedScripts.length,0);
+      }
+    });
+  }
+  test(`${name}: a pending explicit rejection still erases campaign context before authentication`,async()=>{
+    const marketing=harness({host:'jobhackai.io',search:tagged});await marketing.init();
+    const store=new Map([['jha_cookie_consent_pending_v1',JSON.stringify({version:1,analytics:false})]]);
+    const app=harness({runtime,cookies:marketing.cookies,store,consent:false,accountAuthPage:true,pendingServer:true});
+    await app.init();
+    assert.equal(app.cookies.has('jha_campaign_prod'),false);
+    assert.equal(app.insertedScripts.length,0);
+  });
+  test(`${name}: campaign ordering cannot resurrect tracking across a withdrawal`,async()=>{
+    for (const scenario of ['missing-date','invalid-date','future-date','newer-rejection','old-first-touch']) {
+      const marketing=harness({host:'jobhackai.io',search:tagged});await marketing.init();
+      const campaign=campaignValue(marketing);
+      const at=campaign.last.at;
+      const dates={'missing-date':undefined,'invalid-date':'invalid','future-date':new Date(Date.now()+86400000).toISOString(),
+        'newer-rejection':new Date(at).toISOString(),'old-first-touch':new Date(at-1000).toISOString()};
+      if(scenario==='old-first-touch'){
+        campaign.first.at=at-2000;
+        marketing.cookies.set('jha_campaign_prod',encodeURIComponent(JSON.stringify(campaign)));
+      }
+      const store=new Map([['jha_cookie_consent_v1',JSON.stringify({version:1,analytics:false,updatedAt:dates[scenario]})]]);
+      const app=harness({runtime,cookies:marketing.cookies,store,consent:null,accountAuthPage:true,pendingServer:true});
+      await app.init();
+      assert.equal(app.cookies.has('jha_campaign_prod'),false,scenario);
+      assert.equal(app.insertedScripts.length,0,scenario);
+    }
+  });
+}
+test('consented signup and completion events retain campaign context across the app handoff', async()=>{
+  const marketing=harness({host:'jobhackai.io',search:tagged});await marketing.init();
+  const app=harness({cookies:marketing.cookies});
+  app.ctx.document.referrer='https://jobhackai.io/features';await app.init();
+  app.ctx.JHA.trackEventSafe('sign_up',{method:'google'});
+  app.ctx.JHA.trackEventSafe('voice_session_complete',{mode:'free',interview_id:'fixture-interview'});
+  for (const event of ['sign_up','voice_session_complete']) {
+    const params=app.events(event).at(-1)[2];
+    assert.equal(params.jha_first_source,'linkedin');
+    assert.equal(params.jha_last_asset,'answer_li_01');
+    assert.equal(params.jha_first_campaign,'voice_beta_2026_09');
+    assert.equal(params.session_id,undefined);
+    assert(!JSON.stringify(params).includes('private@example.com'));
+  }
+  app.setConsent(false);
+  app.ctx.JHA.trackEventSafe('voice_session_complete',{mode:'free'});
+  assert.equal(app.events('voice_session_complete').length,1);
+});
+
+// Run pricing's actual button handlers against the real consent module. Direct
+// gtag calls bypass campaign enrichment even when the GA event itself appears.
+function mountPricing(h) {
+  const html = readFileSync(new URL('../../../../pricing.html', import.meta.url), 'utf8');
+  const script = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)]
+    .map(match => match[1]).find(value => value.includes('function trackBeginCheckout('));
+  assert.ok(script, 'pricing checkout script exists');
+  const buttons = [...html.matchAll(/<button class="vp-buy" data-plan="([^"]+)"[^>]*>([^<]+)<\/button>/g)]
+    .map(([,plan,textContent]) => ({dataset:{plan},textContent,events:{},
+      addEventListener(type,callback){this.events[type]=callback;}}));
+  assert.equal(buttons.length, 3);
+  const document = h.ctx.document;
+  const query = document.querySelectorAll.bind(document);
+  document.querySelectorAll = selector => selector === '.vp-buy' ? buttons : query(selector);
+  const listen = document.addEventListener;
+  let ready;
+  document.addEventListener = (type,callback) => { if(type === 'DOMContentLoaded') ready=callback; };
+  const session = new Map();
+  h.ctx.sessionStorage = {getItem:key=>session.get(key)??null,setItem:(key,value)=>session.set(key,value)};
+  vm.runInContext(script, h.ctx);
+  document.addEventListener = listen;
+  ready();
+  return plan => buttons.find(button=>button.dataset.plan===plan).events.click({preventDefault(){}});
+}
+
+for (const [plan,value] of [['weekly',17],['monthly',34],['pack',39]]) {
+  test('pricing '+plan+' click emits one campaign-enriched checkout event before signup',async()=>{
+    const marketing=harness({host:'jobhackai.io',search:tagged});await marketing.init();
+    const app=harness({cookies:marketing.cookies});
+    app.ctx.document.referrer='https://jobhackai.io/features';await app.init();
+    const tracked=[];
+    const track=app.ctx.JHA.trackEventSafe;
+    app.ctx.JHA.trackEventSafe=(...args)=>{tracked.push(args);track(...args);};
+    mountPricing(app)(plan);
+    assert.equal(tracked.length,1,'the shared tracker owns the event');
+    assert.equal(tracked[0][0],'begin_checkout');
+    const events=app.events('begin_checkout');
+    assert.equal(events.length,1,'no duplicate direct gtag event');
+    const params=events[0][2];
+    assert.equal(params.jha_first_source,'linkedin');
+    assert.equal(params.jha_first_campaign,'voice_beta_2026_09');
+    assert.equal(params.jha_last_asset,'answer_li_01');
+    assert.equal(params.plan,plan);assert.equal(params.value,value);assert.equal(params.currency,'USD');
+    assert.equal(params.items[0].item_id,plan);
+    assert.equal(app.ctx.location.href,'login.html?plan='+plan);
+  });
+}
+test('pricing checkout respects denied consent without blocking signup navigation',async()=>{
+  const h=harness({consent:false,search:tagged});await h.init();
+  mountPricing(h)('pack');
+  assert.equal(h.events('begin_checkout').length,0);
+  assert.equal(h.cookies.has('jha_campaign_prod'),false);
+  assert.equal(h.ctx.location.href,'login.html?plan=pack');
+});
+test('pricing never bypasses the shared tracker when analytics is unavailable',async()=>{
+  const h=harness();await h.init();
+  delete h.ctx.JHA.trackEventSafe;
+  mountPricing(h)('monthly');
+  assert.equal(h.events('begin_checkout').length,0);
+  assert.equal(h.ctx.location.href,'login.html?plan=monthly');
+});
+test('a queued event gains only the campaign captured after analytics consent', async()=>{
+  const h=harness({consent:null,search:tagged});await h.init();
+  h.ctx.JHA.trackEventSafe('sign_up',{method:'google'});
+  assert.equal(h.events('sign_up').length,0);
+  h.setConsent(true);
+  assert.equal(h.events('sign_up').at(-1)[2].jha_first_source,'linkedin');
+});
+for(const analytics of [true,false])test('signup waits for restored account consent before navigation: '+analytics,async()=>{
+  const h=harness({accountAuthPage:true,consent:true,pendingServer:true});await h.init();
+  const restoring=h.authReady({getIdToken:async()=>'fixture-auth-token'});
+  h.ctx.JHA.trackEventSafe('sign_up',{method:'google'});
+  const flushing=h.ctx.JHA.cookieConsent.flushAnalyticsBeforeNavigate();
+  assert.equal(h.events('sign_up').length,0);
+  let navigable=false;flushing.then(()=>{navigable=true;});
+  h.finishServer(analytics);await restoring;
+  await new Promise(resolve=>setImmediate(resolve));
+  if(analytics){
+    assert.equal(navigable,false,'account grant must still wait for signup processing');
+    h.events('sign_up')[0][2].event_callback();
+  }
+  await flushing;
+  assert.equal(h.events('sign_up').length,analytics?1:0);
+});
 test('a later external tagged visit updates last touch while retaining first touch', async()=>{
   const first=harness({search:tagged});await first.init();
   const next=harness({cookies:first.cookies,search:tagged.replace('linkedin','instagram')});await next.init();
   assert.equal(campaignValue(next).first.source,'linkedin');assert.equal(campaignValue(next).last.source,'instagram');
 });
+for (const runtime of [source, directoryConsentSource]) {
+  for (const decision of [true, false, null]) test('campaign survives authentication restoration only with confirmed consent: '+decision+' '+(runtime===source?'shared':'directory'),async()=>{
+    const marketing=harness({host:'jobhackai.io',search:tagged});await marketing.init();
+    const app=harness({runtime,cookies:marketing.cookies,accountAuthPage:true,pendingServer:true});
+    app.ctx.document.referrer='https://jobhackai.io/features';
+    const original=app.cookies.get('jha_campaign_prod');
+    await app.init();
+    assert.equal(app.cookies.get('jha_campaign_prod'),original,'waiting for auth must not erase the previous consented visit');
+    assert.equal(app.scripts.length,0);
+    assert.equal(await app.ctx.JHA.cookieConsent.getCheckoutAnalyticsContext(),null);
+    const resumed=app.authReady({getIdToken:async()=>'fixture-auth-token'});
+    app.finishServer(decision);await resumed;
+    if(decision===true){
+      gaIdentifiers(app);
+      const context=await app.ctx.JHA.cookieConsent.getCheckoutAnalyticsContext();
+      assert.equal(context.firstTouch.source,'linkedin');
+      assert.equal(context.lastTouch.asset,'answer_li_01');
+    }else{
+      assert.equal(app.cookies.has('jha_campaign_prod'),false);
+      assert.equal(app.scripts.length,0);
+    }
+  });
+  test('explicit rejection still erases the campaign before auth restoration '+(runtime===source?'shared':'directory'),async()=>{
+    const marketing=harness({host:'jobhackai.io',search:tagged});await marketing.init();
+    const app=harness({runtime,cookies:marketing.cookies,accountAuthPage:true,consent:false});
+    await app.init();
+    assert.equal(app.cookies.has('jha_campaign_prod'),false);
+    assert.equal(app.scripts.length,0);
+  });
+}
 test('QA cannot inherit the production campaign cookie', async()=>{
   const prod=harness({search:tagged});await prod.init();
   const qa=harness({host:'qa.jobhackai.io',cookies:prod.cookies});await qa.init();gaIdentifiers(qa);
@@ -527,6 +861,31 @@ test('marketing footer reopens its own consent controls after a prior rejection'
   assert.equal(h.cookies.has('jha_campaign_qa_v2'),false);
 });
 
+test('explicit staff validation is temporary, crosses production subdomains and never grants consent',async()=>{
+  const cookies=new Map();
+  const staff=harness({host:'jobhackai.io',search:'?jha_staff_test=1',cookies});
+  await staff.init();staff.runTimers();
+  assert.equal(staff.ctx.dataLayer.find(a=>a[0]==='config')[2].debug_mode,true);
+  const app=harness({cookies});await app.init();app.runTimers();
+  app.ctx.JHA.trackEventSafe('voice_session_complete',{mode:'free'});
+  assert.equal(app.events('voice_session_complete')[0][2].debug_mode,true);
+  const denied=harness({search:'?jha_staff_test=1',consent:false});await denied.init();denied.runTimers();
+  assert.equal(denied.scripts.length,0);
+  const stop=harness({search:'?jha_staff_test=0',cookies});await stop.init();stop.runTimers();
+  assert.equal(stop.ctx.dataLayer.find(a=>a[0]==='config')[2].debug_mode,undefined);
+  assert.equal(cookies.has('jha_staff_test_prod'),false);
+  const qa=harness({host:'qa.jobhackai.io',search:'?jha_staff_test=1',cookies});await qa.init();qa.runTimers();
+  assert.equal(cookies.has('jha_staff_test_prod'),false);
+  const ordinary=harness();await ordinary.init();ordinary.runTimers();
+  assert.equal(ordinary.ctx.dataLayer.find(a=>a[0]==='config')[2].debug_mode,undefined);
+});
+
+for (const runtime of [source, directoryConsentSource]) test('staff validation applies on the shared app and Local runtimes', async () => {
+  const h=harness({runtime,host:'jobhackai.io',search:'?jha_staff_test=1'});
+  await h.init();h.ctx.JHA.gtagSafe('event','staff_runtime_check',{});
+  assert.equal(h.events('staff_runtime_check')[0][2].debug_mode,true);
+  assert.equal(h.cookies.get('jha_staff_test_prod'),'1');
+});
 // A callable gtag is initially only a dataLayer queue, not a loaded vendor tag.
 test('signup navigation waits for event processing instead of the local gtag stub', async()=>{
   const h=harness();await h.init();

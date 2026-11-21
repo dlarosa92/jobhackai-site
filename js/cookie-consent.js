@@ -13,6 +13,19 @@
   const VALID_CLIENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const hostname = (window.location.hostname || '').toLowerCase();
   const productionHost = ['jobhackai.io', 'www.jobhackai.io', 'app.jobhackai.io'].includes(hostname);
+  // Explicit, temporary staff validation mode. This is a browser preference,
+  // never an inferred customer identity or a replacement for analytics consent.
+  const STAFF_TEST_COOKIE = 'jha_staff_test_prod';
+  let staffTest = false;
+  if (productionHost) {
+    try {
+      const mode = new URL(window.location.href).searchParams.get('jha_staff_test');
+      if (mode === '1' || mode === '0') {
+        document.cookie = `${STAFF_TEST_COOKIE}=${mode}; Max-Age=${mode === '1' ? 43200 : 0}; Path=/; Domain=.jobhackai.io; SameSite=Lax; Secure`;
+      }
+      staffTest = mode === '1' || (mode !== '0' && document.cookie.split(';').some(c => c.trim() === STAFF_TEST_COOKIE + '=1'));
+    } catch (_) { /* validation preferences must not affect the product */ }
+  }
   const qaHosts = ['qa.jobhackai.io', 'qa-marketing.jobhackai.io'];
   const qaHost = qaHosts.includes(hostname);
   const CLIENT_ID_COOKIE = productionHost ? 'jha_client_id' : qaHost ? 'jha_client_id_qa' : 'jha_client_id_dev';
@@ -64,6 +77,32 @@
   let bannerElement = null;
   let gaLoadingPrevented = false;
   let escHandler = null; // Persistent ESC handler for modal
+  let googleConsentInitialized = false;
+  let googleAnalyticsConsent = null;
+
+  function updateGoogleConsent(analytics) {
+    // Basic consent mode: keep Google completely unloaded until our existing
+    // consent checks pass. Advertising is never an option in this banner.
+    if (!GA_MEASUREMENT_ID || (!googleConsentInitialized && !analytics)) return;
+    window.dataLayer = window.dataLayer || [];
+    function consentCommand() { window.dataLayer.push(arguments); }
+    const state = {
+      analytics_storage: analytics ? 'granted' : 'denied',
+      ad_storage: 'denied',
+      ad_user_data: 'denied',
+      ad_personalization: 'denied'
+    };
+    if (!googleConsentInitialized) {
+      consentCommand('consent', 'default', { ...state, analytics_storage: 'denied' });
+      googleConsentInitialized = true;
+    }
+    if (googleAnalyticsConsent !== analytics) {
+      // Use the command queue directly: the event wrapper correctly blocks
+      // calls after withdrawal, but Google must still receive this denial.
+      consentCommand('consent', 'update', state);
+      googleAnalyticsConsent = analytics;
+    }
+  }
 
   // Helper: Get consent from localStorage (UI performance)
   function getConsent() {
@@ -85,7 +124,7 @@
     const revision = consentRevision;
     try {
       const clientId = getOrCreateClientId();
-      
+
       // Get auth token if user is logged in
       let authToken = null;
       if (window.FirebaseAuthManager?.getCurrentUser) {
@@ -216,7 +255,7 @@
     if (!consentIdentityReady()) return false;
     try {
       const clientId = getOrCreateClientId();
-      
+
       // Get auth token if user is logged in
       let authToken = null;
       if (window.FirebaseAuthManager?.getCurrentUser) {
@@ -304,6 +343,22 @@
     return result.source && result.medium && result.campaign ? result : null;
   }
 
+  // A shared campaign can be newer than this origin's cached rejection.
+  // Inspect only its timestamps while auth restores; this never grants consent.
+  function hasCampaignAfterCachedRejection(consent) {
+    const rejectedAt = Date.parse(consent?.updatedAt || '');
+    if (!Number.isFinite(rejectedAt) || rejectedAt > Date.now()) return false;
+    try {
+      const matches = document.cookie.split(';').map(c => c.trim()).filter(c => c.startsWith(CAMPAIGN_COOKIE + '='));
+      if (new Set(matches).size !== 1) return false;
+      const value = JSON.parse(decodeURIComponent(matches[0].slice(CAMPAIGN_COOKIE.length + 1)));
+      const touches = [value.first, value.last].filter(Boolean).map(campaignTouch);
+      // Never restore an older first touch across a withdrawal, or guess when
+      // the cached decision/campaign has no valid ordering information.
+      return touches.length > 0 && touches.every(touch => touch && touch.at > rejectedAt);
+    } catch (_) { return false; }
+  }
+
   function readCampaign() {
     if (!hasAnalyticsConsent()) return null;
     try {
@@ -333,7 +388,10 @@
   }
 
   async function getCheckoutAnalyticsContext() {
-    if (!hasAnalyticsConsent()) return null;
+    // Checkout has restored authentication, but the initial consent fetch can
+    // still be pending. Reconcile it below instead of dropping a saved grant.
+    // Explicit local rejection and unresolved identity remain private.
+    if (!consentIdentityReady() || (getPendingConsent() || getConsent())?.analytics === false) return null;
     const revision = consentRevision;
     // Reconcile account-wide withdrawal before allowing a cached grant to be
     // persisted at checkout. A deliberate unsaved choice is retried instead.
@@ -342,6 +400,7 @@
       : fetchConsentFromServer();
     const latest = await Promise.race([receipt, new Promise(resolve => window.setTimeout(() => resolve(undefined), 1500))]);
     if (latest === undefined || latest === false || revision !== consentRevision || !hasAnalyticsConsent()) return null;
+    loadGAScript(); // Queue identifier reads even when initialization is still finishing.
     // Missing GA identifiers remain missing. Never invent a server/client ID.
     const getGaValue = (field) => new Promise(resolve => {
       let settled = false;
@@ -407,11 +466,12 @@
   }
 
   // Analytics Script Loading: Prevent if consent denied (covers GA + Clarity)
-  function preventGALoading() {
-    clearCampaign();
+  function preventGALoading({ preserveCampaign = false } = {}) {
+    if (!preserveCampaign) clearCampaign();
     // Removing a script does not stop listeners that already ran. Google's
     // disable flag also blocks collection by the previously loaded tag.
     if (GA_MEASUREMENT_ID) window['ga-disable-' + GA_MEASUREMENT_ID] = true;
+    updateGoogleConsent(false);
     // Keep the loaded GA tag: removing it does not unload its runtime, and
     // reinserting it after re-grant would leave two collectors in memory.
     // The disable flag and consent-gated gtag wrapper pause this instance.
@@ -528,6 +588,9 @@
       return;
     }
 
+    // Defaults and the analytics-only update must precede tag loading, config,
+    // and every queued event. Regrant updates the existing runtime as well.
+    updateGoogleConsent(true);
     window['ga-disable-' + GA_MEASUREMENT_ID] = false;
 
     // Check if already loaded
@@ -586,7 +649,7 @@
     gtag('js', new Date());
     gtag('config', GA_MEASUREMENT_ID, {
       send_page_view: false,
-      ...(!productionHost ? { debug_mode: true } : {}),
+      ...(!productionHost || staffTest ? { debug_mode: true } : {}),
       page_location: analyticsUrl(window.location.href, true),
       page_referrer: document.referrer ? analyticsUrl(document.referrer) : '',
       cookie_domain: (productionHost || qaHost) ? 'jobhackai.io' : hostname,
@@ -618,7 +681,7 @@
         if (!hasAnalyticsConsent() || pageViewSent) return;
         if (flushPendingGtagCalls()) return;
         try {
-          window.gtag('event', 'page_view', {
+          window.JHA.gtagSafe('event', 'page_view', {
             page_location: window.location.href,
             page_path: window.location.pathname + window.location.search,
             page_title: document.title
@@ -753,7 +816,7 @@
     };
 
     modal.querySelector('.jha-cookie-modal-backdrop').onclick = closeModal;
-    
+
     // ESC key handler (persistent, doesn't remove itself)
     escHandler = function(e) {
       if (e.key === 'Escape' && modal && modal.classList.contains('active')) {
@@ -770,13 +833,13 @@
     if (!modal) {
       modal = createModal();
     }
-    
+
     // Sync checkbox state to current consent (fixes stale state issue)
     const analyticsCheckbox = document.getElementById('jha-toggle-analytics');
     if (analyticsCheckbox) {
       analyticsCheckbox.checked = hasAnalyticsConsent();
     }
-    
+
     modal.classList.add('active');
     if (analyticsCheckbox) {
       analyticsCheckbox.focus();
@@ -837,6 +900,20 @@
   const _pendingSignupCompletions = new Set();
   const _pendingClarityIdentify = [];
   const MAX_PENDING_CALLS = 50;
+  function withCampaignContext(args) {
+    if (args[0] !== 'event') return args;
+    const params = { ...(args[2] || {}) };
+    if (staffTest) params.debug_mode = true;
+    const campaign = readCampaign();
+    for (const prefix of ['first', 'last']) {
+      for (const field of ['source', 'medium', 'campaign', 'asset', 'id']) {
+        if (campaign?.[prefix]?.[field]) params[`jha_${prefix}_${field}`] = campaign[prefix][field];
+      }
+    }
+    const asset = document.body?.getAttribute?.('data-asset-id');
+    if (asset && /^[a-z0-9_.-]{1,100}$/i.test(asset)) params.asset_id = asset;
+    return [args[0], args[1], params];
+  }
   function flushPendingGtagCalls() {
     if (!GA_MEASUREMENT_ID || !hasAnalyticsConsent() || !window.gtag) return false;
     let flushedPageView = false;
@@ -846,7 +923,7 @@
         if (args[0] === 'event' && args[1] === 'page_view') {
           flushedPageView = true;
         }
-        window.gtag.apply(null, args);
+        window.gtag.apply(null, withCampaignContext(args));
       } catch (_) { /* ignore */ }
     }
     return flushedPageView;
@@ -865,6 +942,11 @@
   // Wait for consented signup processing, not merely the local gtag queue.
   // Each completion has a local deadline if the vendor tag is blocked.
   async function flushAnalyticsBeforeNavigate() {
+    // A redirect signup can finish before the account consent read. Keep its
+    // queued event private until that read confirms consent, with a bounded wait.
+    if (GA_MEASUREMENT_ID && consentIdentityReady() && !accountConsentReady) {
+      await Promise.race([fetchConsentFromServer(), new Promise(resolve => window.setTimeout(resolve, 1500))]);
+    }
     if (!GA_MEASUREMENT_ID || !hasAnalyticsConsent()) return;
     try {
       loadGAScript();
@@ -880,7 +962,8 @@
   window.JHA.gtagSafe = function(...args) {
     if (!GA_MEASUREMENT_ID) return;
     if (!hasAnalyticsConsent()) {
-      if (getConsent() === null && _pendingGtagCalls.length < MAX_PENDING_CALLS) {
+      const cachedConsent = getConsent();
+      if ((cachedConsent === null || (!accountConsentReady && cachedConsent.analytics === true)) && _pendingGtagCalls.length < MAX_PENDING_CALLS) {
         _pendingGtagCalls.push(args);
       }
       return;
@@ -891,7 +974,7 @@
       }
       return;
     }
-    window.gtag.apply(null, args);
+    window.gtag.apply(null, withCampaignContext(args));
   };
   // Queues / bootstraps Clarity like gtagSafe: init() may still be awaiting
   // server consent when identifyUser runs, so window.clarity may not exist yet.
@@ -986,7 +1069,12 @@
       controlsInitialized = true;
     }
     if (!consentIdentityReady()) {
-      preventGALoading();
+      // A newer consented handoff may follow this origin's cached rejection.
+      // Preserve only demonstrably newer context while the server reconciles;
+      // no collection is allowed here. Current/ambiguous rejection still wins.
+      const cached = getConsent();
+      preventGALoading({ preserveCampaign: getPendingConsent()?.analytics !== false &&
+        (cached?.analytics !== false || hasCampaignAfterCachedRejection(cached)) });
       createBanner();
       return;
     }
