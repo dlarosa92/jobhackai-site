@@ -248,4 +248,10 @@
   <url><loc>https://jobhackai.io/directory/ev-charger-installation/velasco-electric</loc><changefreq>weekly</changefreq></url>
   <url><loc>https://jobhackai.io/directory/ev-charger-installation/veneman-electric</loc><changefreq>weekly</changefreq></url>
   <!-- DIRECTORY CATEGORIES END -->
+  <url>
+    <loc>https://jobhackai.io/blog/second-round-interview-preparation</loc>
+    <lastmod>2026-11-21</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
 </urlset>

@@ -13,6 +13,16 @@
 
 window.BLOG_POSTS = [
   {
+    "slug": "second-round-interview-preparation",
+    "title": "How to Prepare for a Second Round Interview with Multiple Interviewers",
+    "category": "Interview Prep",
+    "author": "JobHackAI",
+    "excerpt": "Prepare for a second-round interview with several interviewers. Build a truthful evidence bank, handle repeat questions, and tailor questions to each person.",
+    "date": "2026-11-21",
+    "readTime": 7,
+    "featured": false
+  },
+  {
     "slug": "how-to-prepare-for-a-phone-screen-interview",
     "title": "How to Prepare for a Phone Screen Interview",
     "excerpt": "Prepare for a phone screen with a practical plan for your space, materials, spoken answers, salary and scheduling questions, and a read-aloud practice drill.",
