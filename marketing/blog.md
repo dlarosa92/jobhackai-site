@@ -34,7 +34,7 @@ Interview Prep
 
 Prepare for a second-round interview with several interviewers. Build a truthful evidence bank, handle repeat questions, and tailor questions to each person.
 
-November 19, 20267 min read
+November 21, 20267 min read
 
 
 
