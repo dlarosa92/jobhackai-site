@@ -18,9 +18,9 @@
       "path": "/blog.md",
       "title": "JobHackAI Blog | Job Search Tips, Resume & LinkedIn Guides",
       "description": "Actionable job search tips, resume optimization guides, LinkedIn strategies, and interview prep from the JobHackAI team. Published weekly.",
-      "source_sha256": "d84b343d58a1ac5489e50451bd3ff306785f8e26a77cb2b93ac13eb3ee26b475",
-      "markdown_sha256": "cb2e125837fa41aa49fe4c992840aee15ae2aaef2a8f985eddcc0d4d56a4884c",
-      "bytes": 4835
+      "source_sha256": "1a5fa86d0ac32c516e145739e8d0342a78a60d2c753c183cd586d1ff7dc35411",
+      "markdown_sha256": "386f2d4d026b2c70be9e432d2c89146e1ed9e7123d680a9d59d651c9738d9cf4",
+      "bytes": 4732
     },
     {
       "url": "https://jobhackai.io/blog/68-5-days-response-gap-job-search-burnout",
@@ -56,11 +56,11 @@
       "url": "https://jobhackai.io/blog/behavioral-interview-anxiety",
       "markdown": "https://jobhackai.io/blog/behavioral-interview-anxiety.md",
       "path": "/blog/behavioral-interview-anxiety.md",
-      "title": "Behavioral Interview Anxiety: Why 85% of Job Seekers Feel Unprepared (And the Fix) | JobHackAI Blog",
-      "description": "85% of job seekers feel unprepared for behavioral interviews. Learn the SAO framework and text-based practice method that closes the Experience Gap and beats anxiety.",
-      "source_sha256": "0b16b0efacbb322ff681d63b8ef4f0c4ba6d219ec4a0f8bf0ae21d4a0fef2b59",
-      "markdown_sha256": "2d8e47efec97efba4fe987cd599114a652bdd4a4c820f1876413e2a4d8c35a37",
-      "bytes": 11012
+      "title": "Behavioral Interview Anxiety: How to Prepare When Speaking Under Pressure | JobHackAI Blog",
+      "description": "Build interview answers from your own experience, practice them aloud, and review one change at a time with this practical preparation routine.",
+      "source_sha256": "6aef5e2b04da309991f69e70c1a237455c2eaffbafb1859c56d10b0871628a3b",
+      "markdown_sha256": "dea0084b01f99043bf180718f8adeda5642db230994f5c6778f5d954494070f8",
+      "bytes": 6484
     },
     {
       "url": "https://jobhackai.io/blog/below-1-0-leverage-gap-resume",
@@ -126,11 +126,11 @@
       "url": "https://jobhackai.io/blog/the-2-percent-rule",
       "markdown": "https://jobhackai.io/blog/the-2-percent-rule.md",
       "path": "/blog/the-2-percent-rule.md",
-      "title": "The 2% Rule: 98% of Job Applications Are Ghosted in 2026. | JobHackAI Blog",
-      "description": "Only 2% of generic job applications get a response. Learn why tailored resumes, AI-optimized cover letters, and LinkedIn branding get you into the 5% interview club.",
-      "source_sha256": "ad7351ce1ce7648110e3e52d10069e85496086d06ff0e21f9b8f8e5ecdcc1837",
-      "markdown_sha256": "1db41302766904eb2502066f73ec25cabf865a99ca2b690564de518551500595",
-      "bytes": 10945
+      "title": "How to Tailor a Job Application to the Role | JobHackAI Blog",
+      "description": "Match your application to a job posting using truthful examples, a relevant resume, and a practical review checklist before you submit.",
+      "source_sha256": "46fc672741d258c81bdf53c8fac70c300074bcfcfd275422ae7a06209b886206",
+      "markdown_sha256": "c41516a829479ca7a2be01aa114178d1dddbb574036cf2aa346558169c3e4edd",
+      "bytes": 6641
     },
     {
       "url": "https://jobhackai.io/features",
