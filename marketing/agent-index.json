@@ -18,8 +18,8 @@
       "path": "/blog.md",
       "title": "JobHackAI Blog | Job Search Tips, Resume & LinkedIn Guides",
       "description": "Actionable job search tips, resume optimization guides, LinkedIn strategies, and interview prep from the JobHackAI team. Published weekly.",
-      "source_sha256": "ab64252d3c7e9e62c77c4b1a2058c9f3e8c4781364bdbc4aca5943c7f3230885",
-      "markdown_sha256": "91e828445063cd183b9186ca9af0427cd54eabbee4332cd97383345494c2ee0e",
+      "source_sha256": "d84b343d58a1ac5489e50451bd3ff306785f8e26a77cb2b93ac13eb3ee26b475",
+      "markdown_sha256": "cb2e125837fa41aa49fe4c992840aee15ae2aaef2a8f985eddcc0d4d56a4884c",
       "bytes": 4835
     },
     {
@@ -118,8 +118,8 @@
       "path": "/blog/second-round-interview-preparation.md",
       "title": "How to Prepare for a Second Round Interview with Multiple Interviewers | JobHackAI Blog",
       "description": "Prepare for a second-round interview with several interviewers. Build a truthful evidence bank, handle repeat questions, and tailor questions to each person.",
-      "source_sha256": "6764dcee883e26b64a5571ac00daae1641fbc391d4f85408be2bed71376c238a",
-      "markdown_sha256": "e186836ed0fc64f1840ed19689cd3fdbeb82e96a7e2436c7694bcc6ecc83d0d1",
+      "source_sha256": "196c81b196c0f81197d81a4a3c74f2a96e46974490345fb76fa9d39147a8a656",
+      "markdown_sha256": "f0eac839e510c8e7d62bdfff43adaf1dcf94d744b3ef7d32093f7f63ed62e1e3",
       "bytes": 12347
     },
     {
