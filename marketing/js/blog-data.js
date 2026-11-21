@@ -18,7 +18,7 @@ window.BLOG_POSTS = [
     "category": "Interview Prep",
     "author": "JobHackAI",
     "excerpt": "Prepare for a second-round interview with several interviewers. Build a truthful evidence bank, handle repeat questions, and tailor questions to each person.",
-    "date": "2026-11-19",
+    "date": "2026-11-21",
     "readTime": 7,
     "featured": false
   },
