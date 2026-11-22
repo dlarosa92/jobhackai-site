@@ -15,6 +15,10 @@ on:
       - 'js/auth-action.js'
       - 'js/linkedin-optimizer.js'
       - 'js/voice-cta.js'
+      - 'js/tool-preview-telemetry.js'
+      - 'js/cookie-consent.js'
+      - 'marketing/js/cookie-consent.js'
+      - 'js/firebase-auth.js'
       - 'js/allowance-reset.js'
       - 'js/voice-interview.js'
       - 'css/header.css'
@@ -42,14 +46,15 @@ jobs:
       # Candidate fixtures only: no deployed auth, billing, or email requests.
       - run: npx playwright install --with-deps chromium webkit
         working-directory: app
-      - run: node --test tests/ui/linkedin-preview.test.cjs tests/ui/auth-tool-return.test.cjs tests/ui/tool-preview.test.cjs
+      - run: node --test tests/ui/linkedin-preview.test.cjs tests/ui/auth-tool-return.test.cjs tests/ui/tool-preview.test.cjs tests/ui/tool-preview-telemetry.test.cjs
         working-directory: app
-      - run: node --test tests/ui/linkedin-preview.test.cjs tests/ui/auth-tool-return.test.cjs tests/ui/tool-preview.test.cjs
+      - run: node --test tests/ui/linkedin-preview.test.cjs tests/ui/auth-tool-return.test.cjs tests/ui/tool-preview.test.cjs tests/ui/tool-preview-telemetry.test.cjs
         working-directory: app
         env:
           LINKEDIN_TEST_BROWSER: webkit
           AUTH_TEST_BROWSER: webkit
           PREVIEW_TEST_BROWSER: webkit
+          TOOL_TELEMETRY_TEST_BROWSER: webkit
       - run: node --test app/functions/_lib/__tests__/allowance-reset.test.mjs
       - run: npm run test:ui:pricing-navigation
         working-directory: app

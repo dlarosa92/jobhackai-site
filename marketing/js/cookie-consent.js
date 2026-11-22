@@ -598,6 +598,9 @@
       // Still try to load Clarity if it hasn't loaded yet
       loadClarityScript();
       flushPendingClarityIdentify();
+      // Visibility-based consumers must also see a later re-grant. They own
+      // impression deduplication; the page_view guard remains authoritative.
+      window.dispatchEvent(new CustomEvent('cookie-consent-granted'));
       return; // Already loaded
     }
 
@@ -1036,14 +1039,18 @@
       try {
         const el = e.target && e.target.closest && e.target.closest('[data-cta]');
         if (!el) return;
+        if (el.getAttribute('data-analytics-consent') === 'required' && !hasAnalyticsConsent()) return;
         const label = el.getAttribute('data-cta') || 'unknown';
         const plan = el.getAttribute('data-plan') || undefined;
+        const action = el.getAttribute('data-analytics-consent') === 'required' && ['signup', 'login'].includes(el.getAttribute('data-analytics-action'))
+          ? el.getAttribute('data-analytics-action') : undefined;
         const path = (window.location.pathname || '').toLowerCase();
         const variantMatch = path.match(/pricing-([ab])(?:\.html)?\/?$/);
         if (window.JHA?.trackEventSafe) {
           window.JHA.trackEventSafe('cta_click', {
             cta_label: label,
             cta_plan: plan,
+            ...(action ? { action } : {}),
             page_path: window.location.pathname,
             pricing_variant: variantMatch ? variantMatch[1] : undefined
           });
