@@ -4,6 +4,10 @@
   if (!form) return;
   const button = document.getElementById('request-submit');
   const error = document.getElementById('request-error');
+  const categories = ['mobile-detailing', 'junk-removal', 'ev-charger-installation'];
+  const categoryField = document.getElementById('directory-category');
+  const requestedCategory = new URLSearchParams(window.location.search || '').get('category');
+  if (categoryField && categories.includes(requestedCategory)) categoryField.value = requestedCategory;
   const host = window.location.hostname;
   // Only the canonical dev marketing alias can send to the isolated dev API.
   // Arbitrary previews, QA and production cannot accidentally write dev data.
@@ -23,6 +27,9 @@
     event.preventDefault();
     if (pending || !form.reportValidity()) return;
     const data = Object.fromEntries(new FormData(form));
+    // Older cached forms omit category; retain their detailing meaning.
+    data.category = data.category || 'mobile-detailing';
+    if (!categories.includes(data.category)) { showError('Choose a listed business category.'); return; }
     const payload = JSON.stringify(data);
     if (previousPayload && previousPayload !== payload) key = crypto.randomUUID();
     previousPayload = payload;
@@ -43,7 +50,7 @@
       const success = document.getElementById('request-success'); success.hidden = false; success.focus();
       // Storage, not a sale or an inbox receipt. Never include form fields/IDs.
       if (!result.duplicate && window.JHA?.cookieConsent?.hasAnalyticsConsent?.() === true) {
-        window.JHA?.gtagSafe?.('event','directory_request_saved',{business_line:'local_directory',directory_category:'mobile_detailing',directory_market:'nky_cincinnati',interest_type:'listing'});
+        window.JHA?.gtagSafe?.('event','directory_request_saved',{business_line:'local_directory',directory_category:data.category.replaceAll('-','_'),directory_market:data.category === 'mobile-detailing' ? 'nky_cincinnati' : 'greater_cincinnati_tri_state',interest_type:'listing'});
       }
     } catch (_) { showError('We could not confirm that your request was saved. Your details are still here. Please try again; the same request will not be added twice.'); }
     finally { clearTimeout(timer); pending = false; button.disabled = false; button.textContent = 'Save listing request'; }
