@@ -478,7 +478,7 @@ Greater Cincinnati and Northern Kentucky.
 
 **How to get a quote**
 
-Unknown in the checked sources. Ask the provider to confirm in writing.
+Request service using the provider contact form, email info@leitnerelectric.com, or call/text Ohio 513-351-9024 or Kentucky 859-282-9024. No quote price is published on the contact page.
 
 **Published installation scope**
 
