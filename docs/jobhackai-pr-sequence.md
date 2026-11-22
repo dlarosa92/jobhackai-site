@@ -11,7 +11,7 @@
 
 Execution plan for Claude Code, one PR at a time. Pairs with `jobhackai-repositioning-brief.md` (each PR references its brief section).
 
-**Pipeline:** feature branch off `dev` → merge to `dev` (dev env) → PR `dev` to `develop` (QA env) → PR `develop` to `main` (prod). All three branches auto deploy on Cloudflare. **Marketing `main` deploys to production immediately on merge**, so some PRs below have an explicit hold point.
+**Pipeline:** feature branch off `dev0` → merge to `dev0` (dev env) → PR `dev0` to `develop` (QA env) → PR `develop` to `main` (prod). All three branches auto deploy on Cloudflare. **Marketing `main` deploys to production immediately on merge**, so some PRs below have an explicit hold point. Historical references to the `dev` branch below mean `dev0`; the environment is still called dev.
 
 **Sites:** [MKT] = jobhackai.io marketing site. [APP] = app.jobhackai.io.
 
