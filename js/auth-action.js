@@ -13,8 +13,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
 import { firebaseConfig } from "/js/firebase-config.js";
 import authManager from "/js/firebase-auth.js";
-import { createAuthToolReturn } from "/js/auth-tool-return.js";
-const toolReturn = createAuthToolReturn(window.location);
+import { createVerificationToolReturn } from "/js/auth-tool-return.js";
+const toolReturn = createVerificationToolReturn(window.location);
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);

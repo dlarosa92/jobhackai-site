@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import vm from 'node:vm';
 
@@ -115,4 +117,50 @@ test('formatting failures preserve the hidden hint and static fallback', () => {
 
 test('marketing deployable copy is identical to the shared helper', () => {
   assert.equal(readFileSync(new URL('../../../../marketing/js/allowance-reset.js', import.meta.url), 'utf8'), source);
+});
+
+
+const repository = fileURLToPath(new URL('../../../../', import.meta.url));
+function publicHtmlFiles(directory, recursive = false) {
+  const excluded = new Set(['node_modules', 'dist', 'tests', 'scripts', 'data', '.git']);
+  return readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
+    const path = join(directory, entry.name);
+    if (entry.isFile() && entry.name.endsWith('.html')) return [path];
+    if (recursive && entry.isDirectory() && !excluded.has(entry.name)) return publicHtmlFiles(path, true);
+    return [];
+  });
+}
+function pageScripts(html, pagePath) {
+  const path = relative(repository, pagePath).replace(/^marketing\//, '');
+  const base = new URL(path, 'https://fixture.invalid/');
+  return [...html.matchAll(/<script\b[^>]*\bsrc\s*=\s*(["'])([^"']+)\1[^>]*>/gi)]
+    .map(match => ({ tag: match[0], index: match.index, url: new URL(match[2], base) }));
+}
+
+test('every public page with a reset hint loads its local shared helper', () => {
+  const pages = [...publicHtmlFiles(repository), ...publicHtmlFiles(join(repository, 'marketing'), true)];
+  const found = [];
+  for (const page of pages) {
+    const html = readFileSync(page, 'utf8');
+    if (!/<[^>]+\bdata-allowance-reset(?:\s|=|>)/i.test(html)) continue;
+    const name = relative(repository, page);
+    found.push(name);
+    const helpers = pageScripts(html, page).filter(script =>
+      script.url.origin === 'https://fixture.invalid' && script.url.pathname === '/js/allowance-reset.js');
+    assert.equal(helpers.length, 1, `${name}: reset hint requires exactly one local allowance-reset.js include`);
+  }
+  assert.ok(found.includes('pricing.html'), 'canonical pricing must retain its local reset hint');
+  assert.ok(found.includes('marketing/index.html'), 'marketing homepage must retain its local reset hint');
+});
+
+test('voice page loads the reset helper before its deferred client can render a limit banner', () => {
+  const page = join(repository, 'voice-interview.html');
+  const scripts = pageScripts(readFileSync(page, 'utf8'), page);
+  const helper = scripts.find(script => script.url.origin === 'https://fixture.invalid' && script.url.pathname === '/js/allowance-reset.js');
+  const client = scripts.find(script => script.url.origin === 'https://fixture.invalid' && script.url.pathname === '/js/voice-interview.js');
+  assert.ok(helper, 'voice page needs its local reset helper');
+  assert.ok(client, 'voice page needs its client');
+  assert.ok(helper.index < client.index, 'reset helper must load before the voice client');
+  assert.doesNotMatch(helper.tag, /\basync(?:\s|=|>)/i, 'async loading would lose the required order');
+  assert.match(client.tag, /\bdefer(?:\s|=|>)/i, 'voice client must preserve ordered deferred execution');
 });

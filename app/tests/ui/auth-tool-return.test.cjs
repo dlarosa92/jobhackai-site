@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { chromium, webkit } = require('playwright');
+const ts = require('typescript');
 const root = process.env.UI_SOURCE_ROOT || path.resolve(__dirname, '../../..');
 const origin = 'http://localhost:4180';
 const key = 'jha-auth-tool-return-v1';
@@ -111,10 +112,40 @@ test('same-window LinkedIn callback resumes stored intent, ignores callback quer
   }
 });
 
-async function fixture(t, { query = '?redirect=%2Flinkedin-optimizer.html', existing = false, verified = true, storedPlan = null, returningEmail = false } = {}) {
+// Exercise the real outgoing email-settings builder and sender method. Only
+// Firebase's sendEmailVerification transport is intercepted, never invoked.
+function verificationSenderFixture() {
+  const text = fs.readFileSync(path.join(root,'js/firebase-auth.js'),'utf8');
+  const source = ts.createSourceFile('firebase-auth.js',text,ts.ScriptTarget.Latest,true,ts.ScriptKind.JS);
+  const names = new Set(['getVerificationActionCodeSettings','isRecoverableActionSettingsError','PROD_APP_ORIGIN','VERIFICATION_ACTION_PATH','ACTION_SETTINGS_RECOVERABLE_CODES']);
+  const parts=[];
+  let method;
+  function visit(node) {
+    if (ts.isFunctionDeclaration(node) && names.has(node.name?.text)) parts.push(node.getText(source));
+    if (ts.isVariableDeclaration(node) && names.has(node.name.getText(source))) parts.push('const '+node.getText(source)+';');
+    if (ts.isMethodDeclaration(node) && node.name.getText(source)==='_sendVerificationEmail') method=node.getText(source);
+    ts.forEachChild(node,visit);
+  }
+  visit(source);
+  assert.equal(parts.length,names.size);
+  assert.ok(method);
+  return `import {createAuthToolReturn} from '/js/auth-tool-return.js';
+    ${parts.join('\n')}
+    window.__capturedVerificationSettings=[];
+    async function sendEmailVerification(_user,settings){window.__capturedVerificationSettings.push(settings || null);}
+    class FixtureSender { ${method} }
+    const sender=new FixtureSender();
+    window.__authFixture.sendVerificationEmail=async()=>{
+      await sender._sendVerificationEmail(window.__authFixture.getCurrentUser(),'fixture');
+      return {success:true};
+    };
+  `;
+}
+
+async function fixture(t, { query = '?redirect=%2Flinkedin-optimizer.html', existing = false, verified = true, storedPlan = null, returningEmail = false, initialPath = '/login.html', captureEmail = false } = {}) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   context.setDefaultTimeout(5000);
-  t.after(() => context.close());
+  t.after(async () => { await context.unrouteAll({ behavior: 'wait' }); await context.close(); });
   const requests = [], errors = [];
   await context.addInitScript(({ existing, verified, storedPlan, returningEmail }) => {
     // A returning user's remembered email selects Login without clicking the
@@ -155,6 +186,20 @@ async function fixture(t, { query = '?redirect=%2Flinkedin-optimizer.html', exis
   }, { existing, verified, storedPlan, returningEmail });
   await context.route('**/*', async route => {
     const req = route.request(), url = new URL(req.url());
+    // No Firebase network request is sent. These SDK boundaries record the
+    // synthetic action code while the shipped handler and return helper run.
+    if (url.href === 'https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js') {
+      return route.fulfill({contentType:'application/javascript',body:'export const initializeApp=()=>({});'});
+    }
+    if (url.href === 'https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js') {
+      return route.fulfill({contentType:'application/javascript',body:`
+        export const getAuth=()=>({currentUser:window.__authFixture.getCurrentUser()});
+        export const applyActionCode=async(_auth,code)=>{window.__appliedEmailCode=code;};
+        export const checkActionCode=async()=>({data:{email:'synthetic@example.test'}});
+        export const verifyPasswordResetCode=async()=> 'synthetic@example.test';
+        export const confirmPasswordReset=async()=>{};
+      `});
+    }
     if (url.origin !== origin) return route.abort();
     if (url.pathname.startsWith('/api/')) {
       requests.push({ path: url.pathname, method: req.method(), body: req.postData(), authorization: req.headers().authorization });
@@ -166,24 +211,28 @@ async function fixture(t, { query = '?redirect=%2Flinkedin-optimizer.html', exis
       return route.fulfill({ status: 404, json: { error: 'Unexpected fixture API request' } });
     }
     if (url.pathname === '/js/firebase-auth.js') {
-      return route.fulfill({ contentType: 'application/javascript', body: 'export default window.__authFixture; export const waitForAuthReady=window.__authFixture.waitForAuthReady; export const AUTH_PENDING={_authPending:true};' });
+      const sender = captureEmail ? verificationSenderFixture() : '';
+      return route.fulfill({ contentType: 'application/javascript', body: sender + 'export default window.__authFixture; export const waitForAuthReady=window.__authFixture.waitForAuthReady; export const AUTH_PENDING={_authPending:true};' });
     }
+    if (url.pathname === '/js/firebase-config.js') return route.fulfill({contentType:'application/javascript',body:'export const firebaseConfig={};'});
     if (url.pathname === '/js/analytics.js') return route.fulfill({ contentType: 'application/javascript', body: 'export function identifyUser(){}' });
-    if (url.pathname.startsWith('/js/') && !['/js/login-page.js', '/js/auth-tool-return.js', '/js/verify-email.js'].includes(url.pathname)) {
+    if (url.pathname.startsWith('/js/') && !['/js/login-page.js', '/js/auth-tool-return.js', '/js/verify-email.js', '/js/auth-action.js'].includes(url.pathname)) {
       return route.fulfill({ contentType: 'application/javascript', body: '' });
     }
-    if (!['/login.html', '/verify-email.html'].includes(url.pathname) && !/^\/(css|js|assets)\//.test(url.pathname)) {
+    if (!['/login.html', '/verify-email.html', '/auth/action'].includes(url.pathname) && !/^\/(css|js|assets)\//.test(url.pathname)) {
       return route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Local return destination</title>' });
     }
-    const file = path.resolve(root, '.' + url.pathname);
+    const file = url.pathname === '/auth/action'
+      ? path.join(root, 'app/public/auth/action/index.html')
+      : path.resolve(root, '.' + url.pathname);
     if (!file.startsWith(root + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) return route.fulfill({ status: 404, body: '' });
     const types = { '.html': 'text/html', '.css': 'text/css', '.js': 'application/javascript', '.png': 'image/png', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' };
     return route.fulfill({ contentType: types[path.extname(file)] || 'application/octet-stream', body: fs.readFileSync(file) });
   });
   const page = await context.newPage();
   page.on('pageerror', e => errors.push(e.message));
-  await page.goto(origin + '/login.html' + query);
-  return { page, requests, errors };
+  await page.goto(origin + initialPath + query);
+  return { page, context, requests, errors };
 }
 
 async function emailLogin(page) {
@@ -305,3 +354,75 @@ for (const provider of ['email', 'google', 'linkedin']) {
     assert.deepEqual(errors, []);
   });
 }
+
+
+test('verification continue URL recovers only a same-origin action route and an exact tool path', () => {
+  const good = origin+'/auth/action?redirect='+encodeURIComponent(target);
+  const verify = value => location('?mode=verifyEmail&continueUrl='+encodeURIComponent(value));
+  const original=storage();
+  helper.createAuthToolReturn(location('?redirect='+encodeURIComponent(target)),original);
+  const fresh=storage();
+  assert.equal(fresh.getItem(key),null);
+  assert.equal(helper.createVerificationToolReturn(verify(good),fresh).destination(),target);
+  for (const value of [
+    'https://evil.test/auth/action?redirect='+encodeURIComponent(target),
+    '//evil.test/auth/action?redirect='+encodeURIComponent(target),
+    origin+'/login.html?redirect='+encodeURIComponent(target),
+    origin+'/auth/action?redirect='+encodeURIComponent('//evil.test'),
+    origin+'/auth/action?redirect='+encodeURIComponent(target+'?secret=1'),
+    origin+'/auth/action?redirect='+encodeURIComponent('%2Flinkedin-optimizer.html'),
+    origin+'/auth/action?redirect='+encodeURIComponent(target)+'#fragment',
+    'http://user:password@localhost:4180/auth/action?redirect='+encodeURIComponent(target),
+    'not a URL'
+  ]) {
+    fresh.setItem(key,JSON.stringify({path:target,createdAt:Date.now()}));
+    assert.equal(helper.createVerificationToolReturn(verify(value),fresh).destination(),'/dashboard.html',value);
+    assert.equal(fresh.getItem(key),null);
+  }
+  assert.equal(helper.createVerificationToolReturn(location('?mode=resetPassword&continueUrl='+encodeURIComponent(good)),storage()).destination(),'/dashboard.html');
+  assert.equal(helper.createVerificationToolReturn(location('?mode=verifyEmail&redirect=https%3A%2F%2Fevil.test&continueUrl='+encodeURIComponent(good)),storage()).destination(),'/dashboard.html');
+});
+
+for (const tool of ['/interview-questions.html','/resume-feedback-pro.html','/linkedin-optimizer.html']) {
+  test(`intercepted verification email resumes ${tool} in a fresh tab without session intent`, async t => {
+    const original = await fixture(t, {initialPath:'/verify-email.html',query:'?sent=1&redirect='+encodeURIComponent(tool),existing:true,verified:false,captureEmail:true});
+    await original.page.locator('#resendVerifyBtn').click();
+    await original.page.waitForFunction(()=>window.__capturedVerificationSettings?.length===1);
+    const settings=await original.page.evaluate(()=>window.__capturedVerificationSettings[0]);
+    const continuation=new URL(settings.url);
+    assert.equal(continuation.origin,origin);
+    assert.equal(continuation.pathname,'/auth/action');
+    assert.equal(continuation.searchParams.get('redirect'),tool);
+    assert.deepEqual(original.requests,[]);
+    assert.deepEqual(original.errors,[]);
+    await original.page.close();
+
+    // A separate context proves no sessionStorage or opener copy is needed.
+    const fresh=await fixture(t,{initialPath:'/auth/action',query:'?mode=verifyEmail&oobCode=synthetic-code&continueUrl='+encodeURIComponent(settings.url)});
+    await fresh.page.waitForURL(origin+tool);
+    assert.equal(await fresh.page.evaluate(key=>sessionStorage.getItem(key),key),null);
+    assert.deepEqual(fresh.requests,[]);
+    assert.deepEqual(fresh.errors,[]);
+  });
+}
+
+test('verification handler rejects a hostile continuation in a fresh tab', async t => {
+  const fresh=await fixture(t,{initialPath:'/auth/action',query:'?mode=verifyEmail&oobCode=synthetic-code&continueUrl='+encodeURIComponent('https://evil.test/auth/action?redirect=%2Finterview-questions.html')});
+  await fresh.page.waitForURL(origin+'/dashboard.html');
+  assert.deepEqual(fresh.requests,[]);
+  assert.deepEqual(fresh.errors,[]);
+});
+
+test('fresh verification keeps a selected paid checkout ahead of the recovered tool intent', async t => {
+  const continuation=origin+'/auth/action?redirect='+encodeURIComponent(target);
+  const fresh=await fixture(t,{
+    initialPath:'/auth/action', query:'?mode=verifyEmail&oobCode=synthetic-code&continueUrl='+encodeURIComponent(continuation),
+    storedPlan:'monthly', existing:true, verified:true
+  });
+  await fresh.page.waitForURL('**/fixture-checkout?plan=monthly');
+  const checkout=fresh.requests.filter(r=>r.path==='/api/stripe-checkout');
+  assert.equal(checkout.length,1);
+  assert.equal(JSON.parse(checkout[0].body).plan,'monthly');
+  assert.equal(checkout[0].authorization,'Bearer synthetic-auth-token');
+  assert.deepEqual(fresh.errors,[]);
+});
