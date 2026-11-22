@@ -31,7 +31,17 @@
 .features-page .tour-detail strong { display: block; font-size: 12px; margin-bottom: 6px; }
 .features-page .tour-detail p { color: var(--color-text-secondary); font-size: 12px; line-height: 1.65; }
 .features-page .tour-copy .tour-access { display: inline-block; margin-top: 20px; color: #31583e; font-size: 11px; font-weight: 600; }
+.features-page #tour-feedback { align-items: start; }
+.features-page #tour-feedback .tour-copy { padding-top: 12px; }
+.features-page .report-preview { min-width: 0; }
+.features-page .report-switch { display: flex; gap: 6px; padding: 5px; margin-bottom: 16px; border: 1px solid #d7e3da; border-radius: 10px; width: fit-content; background: #e9f0eb; }
+.features-page .report-switch button { min-height: 44px; border: 1px solid transparent; border-radius: 7px; padding: 10px 16px; background: transparent; color: var(--color-text-secondary); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.features-page .report-switch button:hover { background: #f5f9f6; }
+.features-page .report-switch button[aria-selected='true'] { color: var(--color-cta-green); background: white; border-color: #d7e3da; box-shadow: 0 1px 3px #203b2a05; }
+.features-page [data-report-panel] + [data-report-panel]:not([hidden]) { margin-top: 24px; }
+.features-page .report-preview.is-enhanced [data-report-panel] { margin-top: 0; }
 .features-page .product-shot { margin: 0; min-width: 0; }
+.features-page .score-capture { margin-top: 28px; }
 .features-page .product-window { border: 1px solid #d9e2dc; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 16px 35px #1a382b0c; }
 .features-page .window-bar { display: flex; align-items: center; justify-content: space-between; padding: 13px 18px; border-bottom: 1px solid var(--color-divider); }
 .features-page .mini-brand { display: inline-flex; align-items: center; gap: 6px; color: var(--color-text-main); font-size: 11px; font-weight: 800; letter-spacing: -.02em; }
@@ -147,6 +157,8 @@
   .features-page .access-card { padding: 24px; }
 }
 @media (max-width: 540px) {
+  .features-page .report-switch { width: 100%; }
+  .features-page .report-switch button { flex: 1; padding: 10px 8px; font-size: 11px; }
   .features-page .site-header .nav-logo { font-size: 18px; gap: 6px; }
   .features-page h1 { font-size: 39px; }
   .features-page .feature-actions { gap: 18px; }
