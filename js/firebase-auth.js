@@ -8,6 +8,7 @@
 console.log('🔧 firebase-auth.js VERSION: fix-auth-cache-loop-v1 - ' + new Date().toISOString());
 
 import { firebaseConfig } from './firebase-config.js';
+import { createAuthToolReturn } from './auth-tool-return.js';
 
 import UserProfileManager from './firestore-profiles.js';
 import { storeTokens, clearTokens, isAuthenticated as tokenManagerIsAuthenticated, getIdTokenSync } from './token-manager.js';
@@ -254,9 +255,11 @@ function getVerificationActionCodeSettings() {
     ? `${origin}${VERIFICATION_ACTION_PATH}`
     : fallbackUrl;
 
-  return {
-    url: actionUrl
-  };
+  const toolReturn = createAuthToolReturn(window.location);
+  const continuation = new URL(actionUrl);
+  // Keep the already-validated origin and carry only the allowlisted tool path.
+  continuation.search = new URL(toolReturn.carryTo(actionUrl), actionUrl).search;
+  return { url: continuation.href };
 }
 
 function isRecoverableActionSettingsError(error) {

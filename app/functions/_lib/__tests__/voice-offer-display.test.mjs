@@ -11,7 +11,7 @@ const cases = [
   { name: 'subscriber', voice: { enabled: true, canStart: true, mode: 'subscription' }, label: 'Start a voice interview', href: 'voice-interview.html', text: 'full scored report' },
   { name: 'pack holder', voice: { enabled: true, canStart: true, mode: 'pack' }, label: 'Start a voice interview', href: 'voice-interview.html', text: 'full scored report' },
   { name: 'free session exhausted', voice: { enabled: true, canStart: false, reason: 'paywall' }, label: 'Explore voice interview plans', href: 'pricing.html', text: 'Choose a plan' },
-  { name: 'monthly cap reached', voice: { enabled: true, canStart: false, mode: 'subscription', reason: 'limit_reached' }, label: 'View your interview history', href: 'voice-interview.html#vi-history-list', text: 'UTC calendar month' },
+  { name: 'monthly cap reached', voice: { enabled: true, canStart: false, mode: 'subscription', reason: 'limit_reached' }, label: 'View your interview history', href: 'voice-interview.html#vi-history-list', text: 'monthly interview allowance' },
   { name: 'feature disabled', voice: { enabled: false }, label: null },
   { name: 'unavailable entitlement', voice: null, label: null },
   { name: 'partial entitlement', voice: { enabled: true }, label: null },
@@ -39,9 +39,12 @@ async function render(fixture, page, delayedAuth = false) {
   };
   const user = fixture.signedOut ? null : { getIdToken: async () => 'fixture-token' };
   const manager = { getCurrentUser: () => user, waitForAuthReady: async () => user };
+  const windowEvents = new EventTarget();
   const context = {
     document, console,
     window: { location: { pathname: '/' + page },
+      addEventListener: windowEvents.addEventListener.bind(windowEvents),
+      removeEventListener: windowEvents.removeEventListener.bind(windowEvents),
       FirebaseAuthManager: delayedAuth ? undefined : manager,
       PlanCache: { getPlan: async () => ({ voice: fixture.voice }) } },
     fetch: async () => ({ ok: false }),

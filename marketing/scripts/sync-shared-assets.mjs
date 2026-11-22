@@ -2,7 +2,7 @@
 // Keep these deployable copies reproducible from the app's shared source.
 import { readFileSync, writeFileSync } from 'node:fs';
 const check = process.argv.includes('--check');
-for (const name of ['cookie-consent.js', 'blog-cta.js']) {
+for (const name of ['cookie-consent.js', 'blog-cta.js', 'allowance-reset.js']) {
   const source = new URL('../../js/' + name, import.meta.url);
   const destination = new URL('../js/' + name, import.meta.url);
   const content = readFileSync(source, 'utf8');

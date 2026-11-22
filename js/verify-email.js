@@ -1,11 +1,13 @@
 import authManager from './firebase-auth.js';
+import { createAuthToolReturn } from './auth-tool-return.js';
+const toolReturn = createAuthToolReturn(window.location);
 
 document.addEventListener('DOMContentLoaded', async () => {
   await authManager.waitForAuthReady(4000);
 
   const user = authManager.getCurrentUser();
   if (!user) {
-    window.location.replace('login.html');
+    window.location.replace(toolReturn.carryTo('/login.html'));
     return;
   }
 
@@ -372,7 +374,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 window.opener = null;
               }
 
-              window.location.replace('dashboard.html');
+              window.location.replace(toolReturn.destination());
               return true;
             }
           }
@@ -422,7 +424,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         sessionStorage.removeItem('selectedPlan');
         localStorage.removeItem('selectedPlan');
       } catch (_) {}
-      window.location.href = 'dashboard.html';
+      window.location.href = toolReturn.destination();
       return true;
     }
   }
