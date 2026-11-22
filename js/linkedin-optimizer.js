@@ -274,6 +274,7 @@ function setLockedView(kind) {
   if (els.preview) {
     els.preview.hidden = !locked;
     els.preview.style.display = locked ? '' : 'none';
+    if (locked) window.JHA?.toolPreviewTelemetry?.observe(els.preview);
   }
   if (locked && wasVisible) {
     // A session ending must hide private results and cancel pending analysis.
