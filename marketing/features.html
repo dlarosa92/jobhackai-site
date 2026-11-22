@@ -3,27 +3,29 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>JobHackAI Features | Smarter Resume + LinkedIn Feedback</title>
-  <meta name="description" content="Explore JobHackAI features: ATS scoring, resume feedback, LinkedIn optimization, and interview prep tools built for modern job seekers.">
+  <title>Voice Mock Interview & Preparation Tools | JobHackAI Features</title>
+  <meta name="description" content="Take a visual tour of JobHackAI. Explore voice mock interviews, answer-specific feedback, resume rewrites, and free preparation tools with real interface previews.">
   <link rel="canonical" href="https://jobhackai.io/features">
   <meta property="og:title" content="JobHackAI Features">
-  <meta property="og:description" content="ATS scoring, resume feedback, LinkedIn optimization, and interview prep in one workflow.">
+  <meta property="og:description" content="Practice aloud with Voice Mock Interview. Choose a role, answer follow-ups, and review feedback. Your first interview includes a free feedback preview.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://jobhackai.io/features">
   <meta property="og:image" content="https://jobhackai.io/assets/jobhackai_icon_only_128.png">
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="JobHackAI Features">
-  <meta name="twitter:description" content="ATS scoring, resume feedback, LinkedIn optimization, and interview prep in one workflow.">
+  <meta name="twitter:description" content="Practice aloud with Voice Mock Interview. Choose a role, answer follow-ups, and review feedback. Your first interview includes a free feedback preview.">
   <meta name="twitter:image" content="https://jobhackai.io/assets/jobhackai_icon_only_128.png">
-  <link rel="icon" type="image/png" sizes="128x128" href="assets/jobhackai_icon_Favicon_128.png">
-  <link rel="apple-touch-icon" sizes="180x180" href="assets/jobhackai_apple_touch_icon_180.png">
+  <link rel="icon" type="image/png" sizes="128x128" href="assets/jobhackai_icon_only_128.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/jobhackai_icon_only_128.png">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
   <link rel="stylesheet" href="css/reset.css">
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/main.css">
-  <link rel="stylesheet" href="css/header.css">
+  <link rel="stylesheet" href="css/header.css?v=20260930-voice-nav-1">
   <link rel="stylesheet" href="css/footer.css?v=20261031-footer-1">
   <link rel="stylesheet" href="css/marketing.css">
+  <link rel="stylesheet" href="css/features.css">
+  <script src="js/features-tour.js" defer></script>
   <script src="/js/cookie-consent.js?v=20261031-footer-1" defer></script>
 
   <!-- Structured Data: Organization -->
@@ -52,7 +54,8 @@
 <link rel="describedby" type="text/markdown" href="/llms.txt">
 <!-- END AGENT DISCOVERY -->
 </head>
-<body>
+<body class="features-page" data-asset-id="voice_features_01">
+  <a class="feature-skip" href="#main-content">Skip to content</a>
   <!-- Component: components/header.html -->
   <header class="site-header" id="top">
     <div class="container">
@@ -90,96 +93,144 @@
     <a href="https://jobhackai.io/directory/">Local directory</a>
   </nav>
   <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
-  <script src="js/mobile-menu.js?v=20250115-1"></script>
+  <script src="js/mobile-menu.js?v=20260930-voice-nav-1"></script>
 
-  <main>
-    <div class="container">
-      <section class="hero">
-        <div class="hero-grid">
-          <div class="hero-content">
-            <span class="eyebrow">Features</span>
-            <h1 class="hero-title">A focused toolset for your entire job search.</h1>
-            <p class="hero-subtitle">JobHackAI brings resume accuracy, LinkedIn alignment, and interview prep into one streamlined workflow.</p>
-            <div class="hero-actions">
-              <a class="btn btn-primary" href="https://app.jobhackai.io/login?plan=free" data-cta="features-free-tools">Explore free prep tools</a>
-              <a class="btn btn-ghost" href="https://app.jobhackai.io/pricing">See Pricing</a>
+  <main id="main-content">
+    <div class="feature-shell">
+      <section class="feature-intro" aria-labelledby="features-title">
+        <span class="feature-eyebrow">Inside JobHackAI</span>
+        <h1 id="features-title">Find your words.<br><span>Then make them yours.</span></h1>
+        <p>From the first draft to the follow-up question. Take a look inside the tools that help you prepare, practice, and tell your story.</p>
+        <div class="feature-actions">
+          <a class="btn btn-primary" href="https://app.jobhackai.io/login?plan=free" data-cta="features-free-voice">Try your first interview free <span aria-hidden="true">&nbsp; →</span></a>
+          <a class="text-link" href="#prep-tools">Explore the prep tools ↓</a>
+        </div>
+        <div class="feature-meta"><span>One free voice interview</span> <span>No card needed to start</span></div>
+      </section>
+
+      <section class="tour" data-product-tour aria-label="Explore the voice interview experience">
+        <div class="tour-tabs" data-tour-tabs aria-label="Interview walkthrough" hidden>
+          <button type="button" class="tour-tab" id="tab-setup" data-tour-tab="setup" aria-controls="tour-setup"><span>01</span> Set the scene</button>
+          <button type="button" class="tour-tab" id="tab-conversation" data-tour-tab="conversation" aria-controls="tour-conversation"><span>02</span> Have the conversation</button>
+          <button type="button" class="tour-tab" id="tab-feedback" data-tour-tab="feedback" aria-controls="tour-feedback"><span>03</span> Find your next step</button>
+        </div>
+        <div class="tour-panel" id="tour-setup" data-tour-panel="setup">
+          <div class="tour-copy">
+            <span class="feature-eyebrow">01 / Make it relevant</span>
+            <h2>Your role.<br>Your next opportunity.</h2>
+            <p>Choose your target role and experience level. Add a job description to give your practice more context.</p>
+            <div class="tour-detail"><strong>A moment to get comfortable</strong><p>Check your microphone and sound before the interview begins. The audio check does not use an interview.</p></div>
+            <span class="tour-access">In your browser · Up to 20 minutes</span>
+          </div>
+          <figure class="product-shot">
+            <div class="product-window">
+              <div class="window-bar"><span class="mini-brand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>JOBHACKAI<sup>™</sup></span> <span class="window-tag">Voice Mock Interview / Setup</span></div>
+              <img src="/assets/features/voice-setup.png" width="1640" height="1334" alt="JobHackAI setup: Product Manager, Mid seniority, a sample job description, and the Check audio button." loading="lazy">
             </div>
+            <figcaption><span>Product screenshot with example content.</span><a href="/assets/features/voice-setup.png" data-expand-capture data-capture-caption="Interview setup. Actual product interface with a sample Product Manager role and job description." aria-label="Enlarge the interview setup screenshot">View larger ↗</a></figcaption>
+          </figure>
+        </div>
+        <div class="tour-panel" id="tour-conversation" data-tour-panel="conversation">
+          <div class="tour-copy">
+            <span class="feature-eyebrow">02 / Voice Mock Interview</span>
+            <h2>Less rehearsing<br>in your head.<br>More finding your flow.</h2>
+            <p>Talk with an AI interviewer. Work through follow-up questions. Give yourself space to think, explain, and try saying it out loud.</p>
+            <div class="tour-detail"><strong>A conversation you can follow</strong><p>See the interviewer’s question and your captured words. Open the answer structure tip when you need a little direction.</p></div>
+            <span class="tour-access">Your first interview includes a feedback preview</span>
           </div>
-          <div class="hero-card">
-            <h3>Built for job seekers</h3>
-            <p>Every feature is designed to help you move faster with clarity, from the first resume scan to interview preparation.</p>
+          <figure class="product-shot">
+            <div class="product-window">
+              <div class="window-bar"><span class="mini-brand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>JOBHACKAI<sup>™</sup></span> <span class="window-tag">Voice Mock Interview / Conversation</span></div>
+              <img src="/assets/features/voice-conversation.png" width="1640" height="1062" alt="JobHackAI voice interview showing a follow-up question about prioritization, a sample spoken answer, time remaining, and microphone controls." fetchpriority="high">
+            </div>
+            <figcaption><span>Product screenshot with example content.</span><a href="/assets/features/voice-conversation.png" data-expand-capture data-capture-caption="Voice interview. Actual product interface with a scripted example conversation. This preview does not use your microphone." aria-label="Enlarge the voice conversation screenshot">View larger ↗</a></figcaption>
+          </figure>
+        </div>
+        <div class="tour-panel" id="tour-feedback" data-tour-panel="feedback">
+          <div class="tour-copy">
+            <span class="feature-eyebrow">03 / Feedback you can use</span>
+            <h2>Finish with a next step.<br>Not a question mark.</h2>
+            <p>See what worked and what to work on. Full feedback connects coaching to moments from your answers, so you can return with a clearer story.</p>
+            <div class="tour-detail"><strong>Go deeper when you’re ready</strong><p>Explore the evidence, practice score details, and full transcript. Download a summary PDF to keep your feedback close.</p></div>
+            <span class="tour-access">Full report shown · Paid plan or Interview Pack</span>
           </div>
+          <figure class="product-shot">
+            <div class="product-window">
+              <div class="window-bar"><span class="mini-brand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>JOBHACKAI<sup>™</sup></span> <span class="window-tag">Voice Mock Interview / Full report</span></div>
+              <img src="/assets/features/voice-feedback.png" width="1640" height="1512" alt="JobHackAI practice feedback with Your next step, What worked, a summary PDF, evidence, practice score details, and full transcript." loading="lazy">
+            </div>
+            <figcaption><span>Full report interface with example feedback.</span><a href="/assets/features/voice-feedback.png" data-expand-capture data-capture-caption="Paid full-report interface with illustrative feedback. The free interview includes one strength and one area to improve. Results depend on the captured session." aria-label="Enlarge the practice feedback screenshot">View larger ↗</a></figcaption>
+          </figure>
+        </div>
+      </section>
+      <div class="tour-footnote"><span>An inside look, using example content. No recording or microphone access in this tour.</span><a href="/blog/what-to-expect-from-a-voice-mock-interview">Read the interview walkthrough →</a></div>
+
+      <section class="feature-section feedback-story" id="feedback" aria-labelledby="feedback-title">
+        <div class="feedback-copy">
+          <span class="feature-eyebrow">A clearer answer starts here</span>
+          <h2 id="feedback-title">See the moment.<br>Find the improvement.</h2>
+          <p>Useful feedback gives you something to do next. Look at the decisions you explained, the details you left out, and the outcome you could make clearer.</p>
+          <ul class="feedback-inclusions">
+            <li><span><strong>Keep what works.</strong> Recognize the strengths in your answer.</span></li>
+            <li><span><strong>Make it specific.</strong> Connect your actions to the result.</span></li>
+            <li><span><strong>Build on your practice.</strong> Take one focus into your next interview.</span></li>
+          </ul>
+          <a class="text-link" href="#access">See what’s free and what’s included →</a>
+        </div>
+        <div class="coaching-canvas">
+          <span class="example-label">ILLUSTRATIVE COACHING EXAMPLE</span>
+          <div class="quote-card"><span class="quote-label">A moment from your answer</span><blockquote>“I brought sales and support together, then <mark>we decided to prioritize onboarding.</mark>”</blockquote></div>
+          <span class="coaching-connector" aria-hidden="true"></span>
+          <div class="coaching-note"><strong>Your next step</strong><p>Make your own contribution clearer. What evidence did you bring to the decision, and what changed after the team acted on it?</p></div>
+          <p class="coaching-caption">Full reports include coaching tied to your answers. Feedback reflects your practice session, not a hiring prediction.</p>
         </div>
       </section>
 
-      <section class="section">
-        <div class="section-header">
-          <h2 class="section-title">Core features</h2>
-          <p class="section-lead">Everything you need to be confident before you hit apply.</p>
-        </div>
-        <div class="card-grid">
-          <article class="card">
-            <h3>ATS Score + Detailed Feedback</h3>
-            <p>Get a clear, actionable scoring report with targeted improvements.</p>
-            <ul>
-              <li>Section-by-section diagnostics</li>
-              <li>Keyword gap analysis</li>
-              <li>Resume rewrite highlights</li>
-            </ul>
+      <section class="feature-section" id="prep-tools" aria-labelledby="prep-title">
+        <div class="section-heading"><div><span class="feature-eyebrow">Before you press start</span><h2 id="prep-title">Prepare the story.<br>Then practice telling it.</h2></div><p>Give your experience a clearer shape with free preparation tools. Review every suggestion and make it sound like you.</p></div>
+        <div class="prep-grid">
+          <article class="prep-card">
+            <div class="prep-visual" aria-label="Illustrative interview question examples"><div class="mini-sheet"><div class="mini-top"><strong>Interview Questions</strong> <span class="mini-pill">Product Manager · Mid</span></div><div class="mini-row"><span class="mini-number">01</span><p>Tell me about a time you had to prioritize competing customer needs.</p></div><div class="mini-row"><span class="mini-number">02</span><p>How did you know your product decision was working?</p></div><div class="mini-row"><span class="mini-number">03</span><p>Describe a trade-off you would approach differently today.</p></div></div></div>
+            <div class="prep-description"><h3>Go beyond “tell me about yourself.”</h3><p>Generate interview questions for your role and experience level. Find the examples you want to bring into the conversation.</p><a href="https://app.jobhackai.io/interview-questions.html" data-cta="features-interview-questions">Explore Interview Questions →</a></div>
           </article>
-          <article class="card">
-            <h3>Role-Specific Guidance</h3>
-            <p>Tailor your resume to the exact role and industry you want.</p>
-            <ul>
-              <li>Job title alignment</li>
-              <li>Impact-focused bullet edits</li>
-              <li>Skills signal improvements</li>
-            </ul>
+          <article class="prep-card">
+            <div class="prep-visual" aria-label="Illustrative resume rewrite example"><div class="mini-sheet"><div class="mini-top"><strong>Resume Rewrite</strong> <span class="mini-pill">Suggested rewrite</span></div><div class="rewrite-label">Your Original Snippet</div><p class="rewrite-before">Worked with sales and support on onboarding.</p><div class="rewrite-label">Rewritten Snippet</div><p class="rewrite-after">Partnered with sales and support to identify onboarding friction and prioritize improvements for new customers.</p></div></div>
+            <div class="prep-description"><h3>Let your experience come through.</h3><p>Turn a rough resume bullet into a clearer description of your work. Review feedback and rewrite suggestions before you apply.</p><a href="https://app.jobhackai.io/resume-feedback-pro.html" data-cta="features-resume-tools">Explore Resume Rewrite →</a></div>
           </article>
-          <article class="card">
-            <h3>LinkedIn Optimizer</h3>
-            <p>Translate resume wins into a LinkedIn profile recruiters notice.</p>
-            <ul>
-              <li>Headline + about suggestions</li>
-              <li>Experience rewrites</li>
-              <li>Profile completeness checks</li>
-            </ul>
+          <article class="prep-card">
+            <div class="prep-visual" aria-label="Illustrative cover letter draft"><div class="mini-sheet"><div class="mini-top"><strong>Cover Letter</strong> <span class="mini-pill">A starting draft</span></div><p class="letter-text">Dear Hiring Team,</p><p class="letter-text">I’m drawn to this Product Manager role because it brings together customer research and practical product decisions.</p><p class="letter-text">In my recent work, I partnered with sales and support to understand where new customers needed more help...</p></div></div>
+            <div class="prep-description"><h3>Start with something to say.</h3><p>Draft a cover letter for your target role. Add the details, motivation, and personal voice that make it yours.</p><a href="https://app.jobhackai.io/cover-letter-generator.html" data-cta="features-cover-letter">Explore Cover Letter →</a></div>
+          </article>
+          <article class="prep-card">
+            <div class="prep-visual" aria-label="Illustrative LinkedIn headline suggestion"><div class="mini-sheet"><div class="mini-top"><strong>LinkedIn Optimizer</strong> <span class="mini-pill">Headline suggestion</span></div><div class="profile-heading"><span class="profile-avatar" aria-hidden="true">AL</span><div><strong>Alex Lee</strong><p>Example profile</p></div></div><p class="letter-text">Product Manager | Turning customer insights into thoughtful onboarding experiences</p><div class="mini-row"><span class="mini-number">✓</span><p>A clear role, a specific focus, and language you can stand behind.</p></div></div></div>
+            <div class="prep-description"><h3>Bring your professional story together.</h3><p>Review suggestions for your headline, About section, and experience. Help your profile reflect the work you want to do next.</p><a href="https://app.jobhackai.io/linkedin-optimizer.html" data-cta="features-linkedin">Explore LinkedIn Optimizer →</a></div>
           </article>
         </div>
+        <p class="prep-note">Illustrative output previews, not customer results. Free tools require an account. Always review AI suggestions for accuracy.</p>
       </section>
 
-      <section class="section">
-        <div class="section-header">
-          <h2 class="section-title">Interview readiness</h2>
-          <p class="section-lead">Round out your job search with prep tools that build confidence.</p>
+      <section class="feature-section access-section" id="access" aria-labelledby="access-title">
+        <div class="section-heading"><div><span class="feature-eyebrow">Start with a little practice</span><h2 id="access-title">Try it. Then choose your next step.</h2></div></div>
+        <div class="access-grid">
+          <article class="access-card"><span class="feature-eyebrow">Your free account</span><h3>A real first conversation.</h3><p>One voice interview per account, lifetime, up to 20 minutes. A feedback preview with one strength and one area to improve. Plus the free preparation tools.</p><a href="https://app.jobhackai.io/login?plan=free" data-cta="features-access-free">Start free →</a></article>
+          <article class="access-card"><span class="feature-eyebrow">Paid plans &amp; Interview Pack</span><h3>More depth. More practice.</h3><p>Unlock the full feedback report, practice score details, transcript, and summary PDF. Continue practicing within your plan or pack allowance.</p><a href="https://app.jobhackai.io/pricing" data-cta="features-paid-options">Compare plans and the Interview Pack →</a></article>
         </div>
-        <div class="card-grid">
-          <article class="card">
-            <h3>Curated Question Sets</h3>
-            <p>Practice with tailored prompts for your role, seniority, and industry focus.</p>
-          </article>
-          <article class="card">
-            <h3>Mock Interview Mode</h3>
-            <p>Simulate real interviews and build momentum with structured practice.</p>
-          </article>
-          <article class="card">
-            <h3>Actionable Insights</h3>
-            <p>Review where you need to sharpen answers before live interviews.</p>
-          </article>
-        </div>
+        <p class="prep-note">Very short interviews may not provide enough material for a practice score.</p>
       </section>
 
-      <section class="section">
-        <div class="cta-band">
-          <div>
-            <h3>See it in action</h3>
-            <p>Jump into the app to upload your resume and get feedback in minutes.</p>
-          </div>
-          <a class="btn btn-primary" href="https://app.jobhackai.io/resume-feedback-pro.html" data-cta="features-resume-tools">Open resume tools</a>
-        </div>
+      <section class="feature-close" aria-labelledby="close-title">
+        <h2 id="close-title">Your experience is worth hearing.</h2><p>Give yourself a little room to practice telling it.</p>
+        <a class="btn btn-primary" href="https://app.jobhackai.io/login?plan=free" data-cta="features-bottom-free-voice">Try your first interview free <span aria-hidden="true">&nbsp; →</span></a>
+        <small>One free voice interview. No card needed to start.</small>
       </section>
     </div>
   </main>
+  <dialog class="capture-dialog" data-capture-dialog aria-labelledby="capture-title" aria-describedby="capture-caption">
+    <header><h2 id="capture-title">Inside the product</h2><button type="button" autofocus>Close ×</button></header>
+    <p class="capture-hint">Swipe or scroll sideways to explore the full-size screen.</p>
+    <div class="capture-image-scroll" tabindex="0" role="region" aria-label="Full-size product screenshot. Scroll horizontally on smaller screens."><img alt="" width="1640" height="1062"></div>
+    <p id="capture-caption" data-capture-caption></p>
+  </dialog>
 
   <!-- Footer (inline for crawler visibility) -->
   <!-- Source: components/footer.html - update there and run scripts/sync-footer.sh -->
@@ -208,7 +259,7 @@
 
   <script src="js/component-loader.js?v=20260920-marketing-2"></script>
   <script src="js/plan-cache.js"></script>
-  <script type="module" src="js/firebase-auth.js?v=20260207-2"></script>
+  <script type="module" src="js/firebase-auth.js?v=20260930-voice-nav-2"></script>
   <script src="js/auth-persistence.js"></script>
   <script src="js/navigation.js?v=20261031-directory-nav-1"></script>
   <script src="js/universal-logout.js?v=20260208-1"></script>
