@@ -51,7 +51,8 @@
 .features-page .window-tag { font-size: 10px; color: var(--color-text-muted); }
 .features-page .product-shot img { display: block; width: 100%; height: auto; }
 .features-page .product-shot figcaption { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-top: 13px; color: #5a6960; font-size: 11px; line-height: 1.5; }
-.features-page .product-shot figcaption a { color: #365442; font-weight: 600; white-space: nowrap; text-underline-offset: 3px; }
+.features-page .product-shot figcaption a { display: inline-flex; align-items: center; gap: 6px; color: #365442; font-weight: 600; white-space: nowrap; text-underline-offset: 3px; }
+.features-page .expand-icon { flex: none; }
 .features-page .tour-footnote { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 17px 4px 0; color: var(--color-text-muted); font-size: 11px; line-height: 1.6; }
 .features-page .tour-footnote a { color: var(--color-text-secondary); text-underline-offset: 3px; white-space: nowrap; }
 .features-page .feature-section { padding-top: 108px; scroll-margin-top: 85px; }
