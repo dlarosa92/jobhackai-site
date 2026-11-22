@@ -3,7 +3,7 @@
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
-const root = path.resolve(__dirname, '../../..');
+const root = process.env.UI_SOURCE_ROOT || path.resolve(__dirname, '../../..');
 const types = {'.html':'text/html','.css':'text/css','.js':'text/javascript','.json':'application/json','.svg':'image/svg+xml','.png':'image/png'};
 const plans = ['free','weekly','monthly','pack','trial','essential','pro','premium','visitor'];
 const saved = {

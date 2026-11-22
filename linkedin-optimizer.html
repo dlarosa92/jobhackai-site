@@ -4,8 +4,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <script src="js/cookie-consent.js?v=20261103-banner-1" defer></script>
-  <title>JobHackAI</title>
+  <script src="js/tool-preview-telemetry.js?v=20261122-1" defer></script>
+  <script src="js/cookie-consent.js?v=20261122-preview-1" defer></script>
+  <title>LinkedIn Optimizer | JobHackAI</title>
   <link rel="icon" type="image/png" sizes="128x128" href="assets/jobhackai_icon_Favicon_128.png">
   <link rel="apple-touch-icon" sizes="180x180" href="assets/jobhackai_apple_touch_icon_180.png">
   <script src="js/dynamic-favicon.js?v=20260418-3" defer></script>
@@ -55,9 +56,41 @@
   <!-- page content -->
   <main class="lo-main">
       <div class="lo-container">
-      <!-- Locked states removed: LinkedIn optimizer no longer shows login/upgrade card here -->
+      <section class="lo-card" id="lo-preview" aria-labelledby="lo-preview-title">
+        <div class="lo-card-header">
+          <div class="lo-card-title-row">
+            <h1 class="lo-card-main-title" id="lo-preview-title">LinkedIn Optimizer</h1>
+            <span class="lo-plan-pill">Free with an account</span>
+          </div>
+          <p class="lo-card-subtitle">Explore an example, then review your own headline, About section, and experience with a free account.</p>
+        </div>
+        <div class="lo-field">
+          <h2 class="lo-section-title">A clearer introduction to your work</h2>
+          <p class="lo-section-tip">Illustrative example for a Product Manager. These suggestions are not a customer result.</p>
+        </div>
+        <div class="lo-before-after">
+          <div>
+            <h3 class="lo-before-after-label">Original headline</h3>
+            <p class="lo-before-text">Product Manager | Passionate about building products</p>
+          </div>
+          <div>
+            <h3 class="lo-before-after-label">Example headline suggestion</h3>
+            <p class="lo-after-text">Product Manager | Turning customer insights into thoughtful onboarding experiences</p>
+          </div>
+        </div>
+        <p class="lo-section-tip">Name your role and focus. Use only skills and experience you can support.</p>
+        <div class="lo-field">
+          <h2 class="lo-section-title">Make the rest of your profile work together</h2>
+          <p>Get section-by-section feedback, relevant keyword suggestions, and rewrites you can review before updating your profile. Your headline, About section, experience, and skills stay in your control.</p>
+        </div>
+        <div class="lo-actions">
+          <a class="btn-primary" href="/login.html?mode=signup&amp;redirect=%2Flinkedin-optimizer.html" data-cta="linkedin-preview-signup" data-analytics-consent="required" data-analytics-action="signup">Sign up free to review your profile</a>
+          <a class="btn-outline" href="/login.html?redirect=%2Flinkedin-optimizer.html" data-cta="linkedin-preview-login" data-analytics-consent="required" data-analytics-action="login">Log in to continue</a>
+        </div>
+        <p class="lo-section-tip">Already have an account? Log in and return here. Always review AI suggestions for accuracy.</p>
+      </section>
 
-      <div class="lo-layout" id="lo-app">
+      <div class="lo-layout" id="lo-app" hidden inert style="display: none;">
         <!-- LEFT: Inputs + Results -->
         <div class="lo-left">
           <section class="lo-card" aria-labelledby="lo-form-title">
@@ -344,7 +377,7 @@
   <!-- Load role selector -->
   <script src="js/role-selector.js?v=20261017-page-tag-1" type="module"></script>
   <!-- LinkedIn Optimizer page logic -->
-  <script src="js/linkedin-optimizer.js?v=20251212-1" type="module"></script>
+  <script src="js/linkedin-optimizer.js?v=20261122-preview-analytics-1" type="module"></script>
   <script>
     // Initialize navigation system
     if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {

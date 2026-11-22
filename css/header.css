@@ -230,100 +230,6 @@
     font-weight: 800;
   }
   
-  /* Mobile Navigation Groups (Resume Tools, Interview Prep, etc.) */
-  .mobile-nav-group {
-    margin-bottom: 1rem;
-    border-bottom: 1px solid #F3F4F6;
-    padding-bottom: 0.75rem;
-  }
-  
-  .mobile-nav-group:last-child {
-    border-bottom: none;
-    margin-bottom: 0;
-    padding-bottom: 0;
-  }
-  
-  /* Group trigger button (Resume Tools, Interview Prep) */
-  .mobile-nav-trigger {
-    width: 100%;
-    background: #F9FAFB;
-    border: 1px solid #E5E7EB;
-    border-radius: 8px;
-    padding: 0.75rem 1rem;
-    color: #374151;
-    font-weight: 600;
-    font-size: 0.95rem;
-    text-align: left;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    transition: background 0.2s, border-color 0.2s, color 0.2s;
-    margin-bottom: 0.5rem;
-  }
-  
-  .mobile-nav-trigger:hover {
-    background: #F3F4F6;
-    border-color: #D1D5DB;
-    color: #1F2937;
-  }
-  
-  .mobile-nav-trigger::after {
-    content: '▼';
-    font-size: 0.7rem;
-    color: #6B7280;
-    transition: transform 0.2s;
-    margin-left: 0.5rem;
-  }
-  
-  .mobile-nav-group.open .mobile-nav-trigger::after {
-    transform: rotate(180deg);
-  }
-  
-  /* Submenu container */
-  .mobile-nav-submenu {
-    display: none;
-    padding-left: 0.5rem;
-    margin-top: 0.25rem;
-  }
-  
-  .mobile-nav-group.open .mobile-nav-submenu {
-    display: block;
-  }
-  
-  /* Submenu links (Resume Feedback, Resume Rewrite, etc.) */
-  .mobile-nav-submenu a {
-    display: block;
-    color: #1F2937;
-    font-weight: 500;
-    font-size: 0.95rem;
-    text-decoration: none;
-    padding: 0.625rem 1rem;
-    margin-bottom: 0.25rem;
-    border-radius: 6px;
-    transition: background 0.2s, color 0.2s, padding-left 0.2s;
-    position: relative;
-    padding-left: 1.5rem;
-  }
-  
-  .mobile-nav-submenu a::before {
-    content: '•';
-    position: absolute;
-    left: 0.75rem;
-    color: #9CA3AF;
-    font-weight: 700;
-  }
-  
-  .mobile-nav-submenu a:hover {
-    background: #F9FAFB;
-    color: #007BFF;
-    padding-left: 1.75rem;
-  }
-  
-  .mobile-nav-submenu a:hover::before {
-    color: #007BFF;
-  }
-  
   /* Separator for Account/Logout section */
   .mobile-nav > div[style*="height: 1px"] {
     margin: 1.25rem 0;
@@ -640,6 +546,100 @@
 
 .nav-dropdown-menu a:hover {
   background-color: #F9FAFB;
+}
+
+/* Both navigation renderers can populate the drawer: mobile-nav-* groups
+   and the verified-user nav-dropdown variant. Keep their layout in sync. */
+@media (max-width: 1200px) {
+  .mobile-nav .mobile-nav-group,
+  .mobile-nav .nav-dropdown {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .mobile-nav .mobile-nav-trigger,
+  .mobile-nav .nav-dropdown-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    width: 100%;
+    min-height: 44px;
+    padding: 0.75rem 1rem;
+    border: 1px solid #E5E7EB;
+    border-radius: 8px;
+    background: #F9FAFB;
+    color: #374151;
+    font-family: inherit;
+    font-size: 0.95rem;
+    font-weight: 600;
+    line-height: 1.5;
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .mobile-nav .mobile-nav-trigger::after {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: rotate(45deg);
+    flex-shrink: 0;
+  }
+
+  .mobile-nav .mobile-nav-group.open .mobile-nav-trigger::after {
+    transform: rotate(225deg);
+  }
+
+  .mobile-nav .dropdown-arrow { flex-shrink: 0; }
+
+  .mobile-nav .mobile-nav-submenu,
+  .mobile-nav .nav-dropdown-menu {
+    display: none;
+    position: static;
+    min-width: 0;
+    margin: 0.5rem 0 0;
+    padding: 0 0 0 0.5rem;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .mobile-nav .mobile-nav-group.open .mobile-nav-submenu,
+  .mobile-nav .nav-dropdown.open .nav-dropdown-menu { display: block; }
+
+  .mobile-nav .mobile-nav-submenu a,
+  .mobile-nav .nav-dropdown-menu a {
+    display: block;
+    min-height: 44px;
+    padding: 0.625rem 1rem;
+    border-radius: 6px;
+    color: #1F2937;
+    font-size: 0.95rem;
+    font-weight: 500;
+    line-height: 1.5;
+    text-decoration: none;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .mobile-nav .mobile-nav-trigger:hover,
+  .mobile-nav .nav-dropdown-toggle:hover,
+  .mobile-nav .mobile-nav-submenu a:hover,
+  .mobile-nav .nav-dropdown-menu a:hover { background: #F3F4F6; }
+
+  .mobile-nav .mobile-nav-trigger:focus-visible,
+  .mobile-nav .nav-dropdown-toggle:focus-visible,
+  .mobile-nav .mobile-nav-submenu a:focus-visible,
+  .mobile-nav .nav-dropdown-menu a:focus-visible {
+    outline: 2px solid #007BFF;
+    outline-offset: 2px;
+  }
 }
 
 /* Prevent flicker: hide header until navigation is resolved */

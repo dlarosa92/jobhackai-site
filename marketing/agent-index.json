@@ -8,9 +8,9 @@
       "path": "/index.md",
       "title": "JobHackAI | Practice Your Next Interview Out Loud",
       "description": "Practice a live voice mock interview for your target role. Your first interview is free with a feedback preview. Continue with $17/week, $34/month, or five interviews for $39.",
-      "source_sha256": "227bc119101926301954bb8ece0fb544d3e156f3d3cb34d56c71838982d0eb8b",
-      "markdown_sha256": "499ca68f52c58f03e6d4d2d5f334d84d3bfa3d3d1e40e95ef525444037f878ea",
-      "bytes": 5661
+      "source_sha256": "c74b44715d59513e5c5eae2f32d6c473c4e0bbca13b3055d49ed855f5b085acd",
+      "markdown_sha256": "21f671ea8a7ff44dd3d0866d22fd205e7e604d7f3c50e704605cf3a4200a248e",
+      "bytes": 5644
     },
     {
       "url": "https://jobhackai.io/blog",
@@ -378,9 +378,9 @@
       "path": "/features.md",
       "title": "Voice Mock Interview & Preparation Tools | JobHackAI Features",
       "description": "Take a visual tour of JobHackAI. Explore voice mock interviews, answer-specific feedback, resume rewrites, and free preparation tools with real interface previews.",
-      "source_sha256": "3d986a7091df4fcf4bb92d702274d642fd72332c6317bd93520eb53ea4a7122b",
-      "markdown_sha256": "547c1308cd6e365a480b3061adf9233319bd2562fd743d624e2fe240a829215c",
-      "bytes": 8655
+      "source_sha256": "c687f7b97001efb9544faa6a9b0f9727c72868166370e24a33f6f4ec7ec5fd52",
+      "markdown_sha256": "1f5dcd104d4258783be457d256b7cc0f6f123268091856ec5dde342878e75cf2",
+      "bytes": 8635
     },
     {
       "url": "https://jobhackai.io/interview-questions/",

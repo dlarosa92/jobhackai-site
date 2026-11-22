@@ -43,3 +43,17 @@ For a real generation check, use only an authorized dev test account and an
 isolated candidate surface. The fixture alone is not evidence of a successful
 OpenAI request or a deployed change. Keep credentials and test-account evidence
 out of source control.
+
+Anonymous entry and delayed-auth browser regression (from the repository root):
+
+```sh
+node --test app/tests/ui/tool-preview.test.cjs
+PREVIEW_TEST_BROWSER=webkit node --test app/tests/ui/tool-preview.test.cjs
+```
+
+These checks run the actual Interview Questions and Resume Feedback pages on an
+isolated local fixture, block external requests, and cover the inline preview,
+keyboard links, mobile menu, five viewport widths, anonymous API gating, delayed
+Firebase restoration, preserved hidden panels, and one synthetic question run.
+`UI_SOURCE_ROOT` can point the fixture at a separate checkout. Install the matching
+Playwright Chromium and WebKit browsers before running the browser checks.

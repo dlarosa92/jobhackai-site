@@ -81,7 +81,7 @@ Five voice interviews, valid for 90 days. No subscription.
 
 [View Interview Pack](https://app.jobhackai.io/pricing)
 
-Subscription limits reset on the first of each month at 00:00 UTC, not each billing date. End your free interview or a pack session within the first 2 minutes and it does not count. This applies once per account. Ending later still uses a session. Reconnecting to the same session does not use another.
+Subscription limits reset monthly, separately from your billing renewal. End your free interview or a pack session within the first 2 minutes and it does not count. This applies once per account. Ending later still uses a session. Reconnecting to the same session does not use another.
 
 ## Free: The 12-Point ATS Resume Checklist
 
@@ -2026,7 +2026,7 @@ JOBHACKAI™ Voice Mock Interview / Setup
 
 ![JobHackAI setup: Product Manager, Mid seniority, a sample job description, and the Check audio button.](https://jobhackai.io/assets/features/voice-setup.png)
 
-Product screenshot with example content.[View larger ↗](https://jobhackai.io/assets/features/voice-setup.png)
+Product screenshot with example content.[View larger](https://jobhackai.io/assets/features/voice-setup.png)
 
 02 / Voice Mock Interview
 
@@ -2044,7 +2044,7 @@ JOBHACKAI™ Voice Mock Interview / Conversation
 
 ![JobHackAI voice interview showing a follow-up question about prioritization, a sample spoken answer, time remaining, and microphone controls.](https://jobhackai.io/assets/features/voice-conversation.png)
 
-Product screenshot with example content.[View larger ↗](https://jobhackai.io/assets/features/voice-conversation.png)
+Product screenshot with example content.[View larger](https://jobhackai.io/assets/features/voice-conversation.png)
 
 03 / Feedback you can use
 
@@ -2062,19 +2062,19 @@ JOBHACKAI™ Voice Mock Interview / Full report
 
 ![JobHackAI practice feedback with Your next step, What worked, a summary PDF, evidence, practice score details, and full transcript.](https://jobhackai.io/assets/features/voice-feedback.png)
 
-Full report interface with example feedback.[View larger ↗](https://jobhackai.io/assets/features/voice-feedback.png)
+Full report interface with example feedback.[View larger](https://jobhackai.io/assets/features/voice-feedback.png)
 
 JOBHACKAI™ Full report / Evidence & coaching
 
 ![Expanded report evidence: Communicating impact needs practice. A quote about prioritizing onboarding is paired with coaching to explain the customer outcome and how it was measured.](https://jobhackai.io/assets/features/voice-evidence.png)
 
-Expanded evidence with example interview content. [View larger ↗](https://jobhackai.io/assets/features/voice-evidence.png)
+Expanded evidence with example interview content. [View larger](https://jobhackai.io/assets/features/voice-evidence.png)
 
 JOBHACKAI™ Full report / Practice scores
 
 ![Illustrative practice scores: 72 out of 100 overall. Green bars for Communication 82, Answer structure 74, and Role fit 70; an amber bar for Content depth 62.](https://jobhackai.io/assets/features/voice-scores.png)
 
-Illustrative example scores. Find a focus for your next practice. [View larger ↗](https://jobhackai.io/assets/features/voice-scores.png)
+Illustrative example scores. Find a focus for your next practice. [View larger](https://jobhackai.io/assets/features/voice-scores.png)
 
 An inside look, using example content. No recording or microphone access in this tour.[Read the interview walkthrough →](https://jobhackai.io/blog/what-to-expect-from-a-voice-mock-interview)
 

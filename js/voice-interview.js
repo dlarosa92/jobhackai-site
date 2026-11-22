@@ -413,7 +413,8 @@
         banner.className = 'vi-banner vi-banner-ok';
       } else if (voice.reason === 'limit_reached' || voice.mode === 'subscription' || voice.unlimited) {
         startBtn.disabled = true;
-        banner.textContent = 'You have reached your voice interview limit for this calendar month. Your allowance resets on the first day of next month at 00:00 UTC, with an active subscription.';
+        banner.innerHTML = 'You have reached your voice interview limit for this calendar month. Your allowance resets monthly with an active subscription. <span data-allowance-reset hidden>Next reset: <time></time> (your local time).</span>';
+        if (window.JobHackAIAllowanceReset) window.JobHackAIAllowanceReset.refresh();
         banner.className = 'vi-banner';
       } else {
         startBtn.disabled = true;
