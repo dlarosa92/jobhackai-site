@@ -1,10 +1,13 @@
 import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {buildEVDirectory} from './build-ev-directory.mjs';
 import { buildAgentMarkdown } from './build-agent-markdown.mjs';
 
 export function buildMarketingSite({ root = fileURLToPath(new URL('..', import.meta.url)) } = {}) {
   root = resolve(root);
+  // Rebuild source-backed EV pages before discovery, including stale asset URLs.
+  if (existsSync(join(root,'data/directory/ev-charger-installation.json')) || existsSync(join(root,'directory/ev-charger-installation/index.html'))) buildEVDirectory({root});
   const result = buildAgentMarkdown({ root });
   const out = join(root, 'dist');
   rmSync(out, { recursive: true, force: true });

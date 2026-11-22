@@ -18,7 +18,7 @@ function setup({ consent = false, visible = true, listing = 'pearls', owner = tr
   return { calls,
     consent(value) { consent = value; windowListeners['cookie-consent-granted'](); },
     visible(value) { document.visibilityState = value ? 'visible' : 'hidden'; documentListeners.visibilitychange(); },
-    click(dataset) { documentListeners.click({ target: { closest: () => ({ dataset }) } }); }
+    click(dataset) { documentListeners.click({ target: { closest: () => ({ dataset, getAttribute: () => 'https://provider.example/' }) } }); }
   };
 }
 test('unconsented interactions are dropped, not replayed after acceptance', () => {
