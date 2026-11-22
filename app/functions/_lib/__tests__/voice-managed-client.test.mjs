@@ -647,7 +647,8 @@ test('retry after cancellation refreshes access and respects a newly exhausted a
   const f=audioFixture(t,{routes:{'/api/plan/me':()=>({voice:{...PLAN_PAYLOAD.voice,transport:'managed',canStart:++plans===1,reason:'paywall'}})}});
   await f.check();await f.h.endInterview();await f.h.click('vi-audio-restart');
   assert.equal(plans,2);assert.equal(f.h.el('vi-start-btn').disabled,true);
-  assert.match(f.h.el('vi-entitlement').textContent,/reached your voice interview limit/);
+  assert.match(f.h.el('vi-entitlement').innerHTML,/reached your voice interview limit/);
+  assert.match(f.h.el('vi-entitlement').innerHTML,/data-allowance-reset/);
 });
 
 for(const result of ['failed','pending','review']) {
