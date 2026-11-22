@@ -136,11 +136,11 @@
       "url": "https://jobhackai.io/features",
       "markdown": "https://jobhackai.io/features.md",
       "path": "/features.md",
-      "title": "JobHackAI Features | Smarter Resume + LinkedIn Feedback",
-      "description": "Explore JobHackAI features: ATS scoring, resume feedback, LinkedIn optimization, and interview prep tools built for modern job seekers.",
-      "source_sha256": "8a68e24c88f13d6d2021231f1b1829bc6a785e8e4612280e7c316aa02973437f",
-      "markdown_sha256": "20abd5b9b3ac43d2dc23f0554c22d83a4b8574be29e87bc235e327dd52e69e74",
-      "bytes": 2419
+      "title": "Voice Mock Interview & Preparation Tools | JobHackAI Features",
+      "description": "Take a visual tour of JobHackAI. Explore voice mock interviews, answer-specific feedback, resume rewrites, and free preparation tools with real interface previews.",
+      "source_sha256": "f10e0b3b1b55dcf46791164cc34911ecd103de7bd29f53259236aac0fef2e337",
+      "markdown_sha256": "547c1308cd6e365a480b3061adf9233319bd2562fd743d624e2fe240a829215c",
+      "bytes": 8655
     },
     {
       "url": "https://jobhackai.io/interview-questions/",
