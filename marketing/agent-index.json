@@ -967,10 +967,10 @@
       "markdown": "https://jobhackai.io/features.md",
       "path": "/features.md",
       "title": "Voice Mock Interview & Preparation Tools | JobHackAI Features",
-      "description": "Choose your role, answer aloud, handle follow-up questions, and review feedback. See the free interview preview and paid full report in JobHackAI.",
-      "source_sha256": "a2daee96942c86646849cb9bc9b99cddf5c2c2b4361327ce6f9bf9a062dcc98e",
-      "markdown_sha256": "bba45384aa390cf6eff59a441a65b60fc77feaf84106993ed2ac3c4d18e836c5",
-      "bytes": 4384
+      "description": "Take a visual tour of JobHackAI. Explore voice mock interviews, answer-specific feedback, resume rewrites, and free preparation tools with real interface previews.",
+      "source_sha256": "3d986a7091df4fcf4bb92d702274d642fd72332c6317bd93520eb53ea4a7122b",
+      "markdown_sha256": "547c1308cd6e365a480b3061adf9233319bd2562fd743d624e2fe240a829215c",
+      "bytes": 8655
     },
     {
       "url": "https://jobhackai.io/interview-prep-kit",

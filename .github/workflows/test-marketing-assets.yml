@@ -52,3 +52,27 @@ jobs:
       - run: node --test marketing/tests/directory-consent.test.mjs marketing/tests/directory-consent-runtime.test.mjs marketing/tests/instagram-entry.test.mjs
       - run: node --test marketing/tests/partner-kits.test.mjs marketing/tests/partner-kit-model.test.mjs
       - run: node --test marketing/tests/subscription-reset.test.mjs
+  features-browser:
+    # Test the checked-out candidate with intercepted APIs and analytics.
+    # This job never visits a deployment or sends collection to GA/Clarity.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm --prefix app ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium
+        working-directory: app
+      - run: node --test marketing/tests/features-tour-e2e.cjs
+        env:
+          FEATURES_VENDOR_MODE: stub
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: features-browser-evidence
+          path: output/playwright/features-analytics-e2e-stub.json
+          if-no-files-found: warn
