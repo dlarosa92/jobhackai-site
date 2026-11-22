@@ -1,11 +1,14 @@
 // Static, source-backed directory prototype. Preview only until release review.
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import {createHash} from 'node:crypto';
 import { dirname, join } from 'node:path';
+import {buildEVDirectory} from './build-ev-directory.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const data = JSON.parse(readFileSync(join(root, 'data/directory/mobile-detailing.json'), 'utf8'));
 const out = join(root, 'directory');
+const runtimeAsset = name => `/directory/${name}?v=${createHash('sha256').update(readFileSync(join(out,name))).digest('hex').slice(0,12)}`;
 const esc = value => String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
 const seen = new Set();
 for (const listing of data.listings) {
@@ -30,7 +33,7 @@ const shell = (title, description, body, listing = '') => `<!doctype html>
 </head><body data-listing="${esc(listing)}"><a class="skip" href="#main">Skip to content</a>
 <header><a class="brand" href="/directory">JobHackAI <span>LOCAL</span></a><nav aria-label="Directory"><a href="/directory">Find a detailer</a><a href="/directory/get-listed">Get listed</a></nav></header>
 <main id="main" tabindex="-1">${body}</main><footer><p>A local directory experiment from <a href="/">JobHackAI</a>. No paid placements.</p><p><a href="https://app.jobhackai.io/privacy">Privacy</a> · <a href="https://app.jobhackai.io/cookies">Cookies</a> · <a href="/directory/get-listed">Suggest a correction</a></p><button type="button" id="open-cookie-preferences">Cookie preferences</button></footer>
-<script src="/directory/directory.js" defer></script></body></html>`;
+<script src="${runtimeAsset('directory.js')}" defer></script></body></html>`;
 const cards = data.listings.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(l => `<article class="listing" data-region="${esc(l.regions.join('|'))}" data-service="${esc(l.services.join('|'))}" data-utilities="${esc(l.waterPower)}"><div><span class="eyebrow">Mobile service</span><h2><a href="${path(l)}">${esc(l.name)}</a></h2><p>${esc(l.regions.join(' · '))}</p></div><div class="price">${price(l.interiorPrice)}</div><p>${esc(l.waterPowerNote)}</p><a class="more" href="${path(l)}">See packages &amp; booking details <span aria-hidden="true">→</span></a></article>`).join('\n');
 writeFileSync(join(out, 'index.html'), shell('Mobile detailing in Northern Kentucky & Cincinnati', 'Compare local mobile detailers by package scope, starting prices, and water and power requirements.', `
 <section class="hero"><span class="eyebrow">Northern Kentucky + Cincinnati · Directory pilot</span><h1>A cleaner car.<br>Fewer tabs to open.</h1><p class="lead">Compare mobile detailers by what they actually include, what they charge to start, and what they need at your home.</p><p>Browse freely. Book directly with the provider.</p></section>
@@ -47,20 +50,23 @@ for (const l of data.listings) {
 <section class="packages"><div class="panel"><h2>Interior package</h2><div class="price">${price(l.interiorPrice)}</div></div><div class="panel"><h2>Full detail package</h2><div class="price">${price(l.fullPrice)}</div></div></section>
 <section class="details"><h2>Before the appointment</h2><dl><dt>Water, power &amp; parking</dt><dd>${esc(l.waterPowerNote)}</dd><dt>Pet hair</dt><dd>${esc(l.petHairNote)}</dd><dt>Services mentioned</dt><dd>${l.serviceDetails ? `<ul class="service-list">${l.serviceDetails.map(s => `<li>${esc(s)}</li>`).join('')}</ul>` : esc(l.services.map(s=>s.replaceAll('-', ' ')).join(', '))}</dd><dt>Information source</dt><dd><a href="${esc(l.source)}" rel="noopener noreferrer">Provider website</a> · checked ${esc(l.checkedAt || data.checkedAt)}${l.sourceNote ? `<p class="small">${esc(l.sourceNote)}</p>` : ''}</dd></dl>${l.bookingUrl ? `<section class="provider-contact" aria-labelledby="provider-contact-heading"><h2 id="provider-contact-heading">Contact &amp; booking</h2><p>Contact the provider directly to confirm your quote and appointment.</p><a class="button" href="${esc(l.bookingUrl)}" rel="noopener noreferrer" data-directory-contact="${esc(l.id)}">View provider’s booking page <span aria-hidden="true">↗</span></a><ul><li><a href="${esc(l.phoneUrl)}" data-directory-contact="${esc(l.id)}">${esc(l.phone)}: call or text</a></li><li><a href="mailto:${esc(l.contactEmail)}" data-directory-contact="${esc(l.id)}">${esc(l.contactEmail)}</a></li></ul></section>` : ''}<a href="${esc(correction)}" data-directory-interest="correction">Suggest a correction by email</a></section>` , l.id));
 }
-writeFileSync(join(out, 'get-listed.html'), shell('Get listed', 'Suggest a local mobile detailing business for private editorial review.', `<section class="hero compact"><span class="eyebrow">For local businesses</span><h1>Help people find the right fit.</h1><p class="lead">Suggest a mobile detailing business serving Northern Kentucky or Cincinnati. We review the details before adding any public listing.</p></section>
+writeFileSync(join(out, 'get-listed.html'), shell('Get listed', 'Suggest a local business for private editorial review.', `<section class="hero compact"><span class="eyebrow">For local businesses</span><h1>Help people find the right fit.</h1><p class="lead">Suggest a local business serving Northern Kentucky, Cincinnati or Southeast Indiana. We review the details before adding any public listing.</p></section>
 <section class="panel request-panel"><h2>Request a listing</h2><p>There is no listing fee during this pilot. A request does not guarantee inclusion. No account or phone number is needed.</p>
 <p id="request-environment" class="notice">This form is available for development testing only.</p>
 <form id="directory-request" aria-describedby="request-privacy">
 <div id="request-error" role="alert" tabindex="-1" hidden></div>
+<label for="directory-category">Business category</label><select id="directory-category" name="category" required><option value="mobile-detailing">Mobile detailing</option><option value="junk-removal">Junk removal</option><option value="ev-charger-installation">Home Level 2 EV charger installation</option></select>
 <label for="business-name">Business name</label><input id="business-name" name="business_name" autocomplete="organization" maxlength="120" required>
 <label for="business-website">Business website</label><input id="business-website" name="website" type="url" inputmode="url" autocomplete="url" placeholder="https://example.com" maxlength="500" required>
 <label for="service-area">Service area</label><input id="service-area" name="service_area" placeholder="For example: Covington, Florence and Cincinnati" maxlength="240" required>
-<label for="service-details">Services and useful details</label><textarea id="service-details" name="service_details" rows="5" maxlength="2000" aria-describedby="service-help" required></textarea><p id="service-help" class="small">Tell us about your mobile services, packages, and water or power requirements. Include corrections here if your business is already listed.</p>
+<label for="service-details">Services and useful details</label><textarea id="service-details" name="service_details" rows="5" maxlength="2000" aria-describedby="service-help" required></textarea><p id="service-help" class="small">Describe your services, service area, and any requirements or limitations. Include corrections here if your business is already listed.</p>
 <label for="contact-email">Contact email</label><input id="contact-email" name="contact_email" type="email" inputmode="email" autocomplete="email" maxlength="254" required>
 <div class="request-honeypot" aria-hidden="true"><label for="company-fax">Leave this field empty</label><input id="company-fax" name="company_fax" tabindex="-1" autocomplete="off"></div>
 <p id="request-privacy" class="small">Your request is saved privately for editorial review and follow-up by email. Your contact email is not added to a public listing or a marketing list. Do not include sensitive personal information. <a href="https://app.jobhackai.io/privacy">Privacy policy</a>.</p>
 <button class="button" id="request-submit" type="submit" disabled>Save listing request</button>
 <noscript><p>JavaScript is needed to submit this form. You can email support@jobhackai.io instead.</p></noscript>
 </form><div id="request-success" role="status" tabindex="-1" hidden><h2>Request saved</h2><p>Your details are saved privately for review. Nothing has been published. Keep this reference if you need to contact us.</p><p id="request-reference"></p><p class="small">This confirms storage of your request, not email delivery or acceptance of a listing.</p></div>
-<p class="small">Need help? <a href="mailto:support@jobhackai.io">support@jobhackai.io</a></p></section><p><a href="/directory">Back to the directory</a></p><script src="/directory/request-form.js" defer></script>`));
+<p class="small">Need help? <a href="mailto:support@jobhackai.io">support@jobhackai.io</a></p></section><p><a href="/directory">Back to the directory</a></p><script src="${runtimeAsset('request-form.js')}" defer></script>`));
 console.log(`Built directory hub, ${data.listings.length} provider pages and Get listed.`);
+
+buildEVDirectory({root});
