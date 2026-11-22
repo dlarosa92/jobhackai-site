@@ -41,6 +41,7 @@ Your free interview includes a feedback preview: one strength and one area to im
 - [Mock Interview Online: How to Run a Useful Practice Session | JobHackAI Blog](https://jobhackai.io/blog/mock-interview-online.md): Choose a relevant question, practice a specific example, and review one change at a time. A practical guide to typed and spoken interview preparation. [HTML](https://jobhackai.io/blog/mock-interview-online)
 - [How to Prepare for a Second Round Interview with Multiple Interviewers | JobHackAI Blog](https://jobhackai.io/blog/second-round-interview-preparation.md): Prepare for a second-round interview with several interviewers. Build a truthful evidence bank, handle repeat questions, and tailor questions to each person. [HTML](https://jobhackai.io/blog/second-round-interview-preparation)
 - [How to Tailor a Job Application to the Role | JobHackAI Blog](https://jobhackai.io/blog/the-2-percent-rule.md): Match your application to a job posting using truthful examples, a relevant resume, and a practical review checklist before you submit. [HTML](https://jobhackai.io/blog/the-2-percent-rule)
+- [What to expect from a JobHackAI Voice Mock Interview | JobHackAI Blog](https://jobhackai.io/blog/what-to-expect-from-a-voice-mock-interview.md): See how to choose your role, answer aloud, handle follow-up questions, and review feedback. Includes the free preview and paid full report. [HTML](https://jobhackai.io/blog/what-to-expect-from-a-voice-mock-interview)
 
 ## Optional
 
