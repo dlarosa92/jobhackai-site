@@ -2748,109 +2748,217 @@ Markdown: https://jobhackai.io/features.md
 
 ---
 title: "Voice Mock Interview & Preparation Tools | JobHackAI Features"
-description: "Choose your role, answer aloud, handle follow-up questions, and review feedback. See the free interview preview and paid full report in JobHackAI."
+description: "Take a visual tour of JobHackAI. Explore voice mock interviews, answer-specific feedback, resume rewrites, and free preparation tools with real interface previews."
 url: "https://jobhackai.io/features"
 language: "en"
 generated_by: "jobhackai-agent-markdown"
 ---
 
-Voice Mock Interview
+Inside JobHackAI
 
-# Practice your next interview out loud.
+# Find your words. Then make them yours.
 
-Choose your role. Answer an AI interviewer, work through follow-up questions, and review what to improve before your next interview.
+From the first draft to the follow-up question. Take a look inside the tools that help you prepare, practice, and tell your story.
 
-Up to 20 minutes. Your first interview is free and includes a feedback preview.
+[Try your first interview free](https://app.jobhackai.io/login?plan=free) [Explore the prep tools ↓](https://jobhackai.io/features#prep-tools)
 
-[Try your first interview free](https://app.jobhackai.io/login?plan=free) [Compare the feedback](https://jobhackai.io/features#feedback)
+One free voice interview No card needed to start
 
-01 / Set up your interview
+01 / Make it relevant
 
-![JobHackAI interview setup with Product Manager selected, Mid seniority, and an optional job-description field.](https://jobhackai.io/assets/voice/interview-setup.jpg)
+## Your role. Your next opportunity.
 
-Actual JobHackAI setup screen. Choose the role and level you want to practice.
+Choose your target role and experience level. Add a job description to give your practice more context.
 
-## From the first question to your feedback
+**A moment to get comfortable**
 
-Bring an example from your own work. Give yourself room to answer in your own words.
+Check your microphone and sound before the interview begins. The audio check does not use an interview.
 
-1.  ### Choose your role
+In your browser · Up to 20 minutes
 
-    Set your target role and seniority. Add a job description if you have a particular opening in mind.
+JOBHACKAI™ Voice Mock Interview / Setup
 
-2.  ### Answer aloud
+![JobHackAI setup: Product Manager, Mid seniority, a sample job description, and the Check audio button.](https://jobhackai.io/assets/features/voice-setup.png)
 
-    Use your microphone to speak with the AI interviewer. Explain the situation, what you did, and what happened.
+Product screenshot with example content.[View larger ↗](https://jobhackai.io/assets/features/voice-setup.png)
 
-3.  ### Handle follow-ups
+02 / Voice Mock Interview
 
-    Respond when the interviewer asks for more detail. Practice explaining your decisions beyond the first answer.
+## Less rehearsing in your head. More finding your flow.
 
-4.  ### Review your feedback
+Talk with an AI interviewer. Work through follow-up questions. Give yourself space to think, explain, and try saying it out loud.
 
-    Read what worked and what to improve. Choose one thing to work on in your next practice session.
+**A conversation you can follow**
 
+See the interviewer’s question and your captured words. Open the answer structure tip when you need a little direction.
 
-[Read the full Voice Mock Interview walkthrough →](https://jobhackai.io/blog/what-to-expect-from-a-voice-mock-interview)
+Your first interview includes a feedback preview
 
-## What you get free. What paid access adds.
+JOBHACKAI™ Voice Mock Interview / Conversation
 
-The free interview lets you try the conversation and see a feedback preview. Paid access adds the full report, transcript, and more interviews.
+![JobHackAI voice interview showing a follow-up question about prioritization, a sample spoken answer, time remaining, and microphone controls.](https://jobhackai.io/assets/features/voice-conversation.png)
 
-Your first interview
+Product screenshot with example content.[View larger ↗](https://jobhackai.io/assets/features/voice-conversation.png)
 
-### Free feedback preview
+03 / Feedback you can use
 
--   One voice interview per account, lifetime
--   Up to 20 minutes with follow-up questions
--   One strength and one area to improve
+## See why. Know what to try next.
 
-The complete score breakdown and transcript require paid access.
+Follow the feedback back to your own words. See a specific moment, understand what it demonstrates, and find a concrete way to strengthen your next answer.
 
-Paid plans and Interview Pack
+**Your words, in context**
 
-### Full report and more practice
+The full report brings together evidence, coaching, practice score details, and your transcript. Keep the next step close with a summary PDF.
 
--   Feedback on communication, answer structure, content depth, and role fit
--   Answer-content breakdown and coaching tied to your answers
--   Full interview transcript
--   More interviews within your plan or pack allowance
+Full report shown · Paid plan or Interview Pack
+
+JOBHACKAI™ Voice Mock Interview / Full report
+
+![JobHackAI practice feedback with Your next step, What worked, a summary PDF, evidence, practice score details, and full transcript.](https://jobhackai.io/assets/features/voice-feedback.png)
+
+Full report interface with example feedback.[View larger ↗](https://jobhackai.io/assets/features/voice-feedback.png)
+
+JOBHACKAI™ Full report / Evidence & coaching
+
+![Expanded report evidence: Communicating impact needs practice. A quote about prioritizing onboarding is paired with coaching to explain the customer outcome and how it was measured.](https://jobhackai.io/assets/features/voice-evidence.png)
+
+Expanded evidence with example interview content. [View larger ↗](https://jobhackai.io/assets/features/voice-evidence.png)
+
+JOBHACKAI™ Full report / Practice scores
+
+![Illustrative practice scores: 72 out of 100 overall. Green bars for Communication 82, Answer structure 74, and Role fit 70; an amber bar for Content depth 62.](https://jobhackai.io/assets/features/voice-scores.png)
+
+Illustrative example scores. Find a focus for your next practice. [View larger ↗](https://jobhackai.io/assets/features/voice-scores.png)
+
+An inside look, using example content. No recording or microphone access in this tour.[Read the interview walkthrough →](https://jobhackai.io/blog/what-to-expect-from-a-voice-mock-interview)
+
+A clearer answer starts here
+
+## See the moment. Find the improvement.
+
+Useful feedback gives you something to do next. Look at the decisions you explained, the details you left out, and the outcome you could make clearer.
+
+-   **Keep what works.** Recognize the strengths in your answer.
+-   **Make it specific.** Connect your actions to the result.
+-   **Build on your practice.** Take one focus into your next interview.
+
+[See what’s free and what’s included →](https://jobhackai.io/features#access)
+
+ILLUSTRATIVE COACHING EXAMPLE
+
+A moment from your answer
+
+> “I brought sales and support together, then we decided to prioritize onboarding.”
+
+**Your next step**
+
+Make your own contribution clearer. What evidence did you bring to the decision, and what changed after the team acted on it?
+
+Full reports include coaching tied to your answers. Feedback reflects your practice session, not a hiring prediction.
+
+Before you press start
+
+## Prepare the story. Then practice telling it.
+
+Give your experience a clearer shape with free preparation tools. Review every suggestion and make it sound like you.
+
+**Interview Questions** Product Manager · Mid
+
+01
+
+Tell me about a time you had to prioritize competing customer needs.
+
+02
+
+How did you know your product decision was working?
+
+03
+
+Describe a trade-off you would approach differently today.
+
+### Go beyond “tell me about yourself.”
+
+Generate interview questions for your role and experience level. Find the examples you want to bring into the conversation.
+
+[Explore Interview Questions →](https://app.jobhackai.io/interview-questions.html)
+
+**Resume Rewrite** Suggested rewrite
+
+Your Original Snippet
+
+Worked with sales and support on onboarding.
+
+Rewritten Snippet
+
+Partnered with sales and support to identify onboarding friction and prioritize improvements for new customers.
+
+### Let your experience come through.
+
+Turn a rough resume bullet into a clearer description of your work. Review feedback and rewrite suggestions before you apply.
+
+[Explore Resume Rewrite →](https://app.jobhackai.io/resume-feedback-pro.html)
+
+**Cover Letter** A starting draft
+
+Dear Hiring Team,
+
+I’m drawn to this Product Manager role because it brings together customer research and practical product decisions.
+
+In my recent work, I partnered with sales and support to understand where new customers needed more help...
+
+### Start with something to say.
+
+Draft a cover letter for your target role. Add the details, motivation, and personal voice that make it yours.
+
+[Explore Cover Letter →](https://app.jobhackai.io/cover-letter-generator.html)
+
+**LinkedIn Optimizer** Headline suggestion
+
+**Alex Lee**
+
+Example profile
+
+Product Manager | Turning customer insights into thoughtful onboarding experiences
+
+✓
+
+A clear role, a specific focus, and language you can stand behind.
+
+### Bring your professional story together.
+
+Review suggestions for your headline, About section, and experience. Help your profile reflect the work you want to do next.
+
+[Explore LinkedIn Optimizer →](https://app.jobhackai.io/linkedin-optimizer.html)
+
+Illustrative output previews, not customer results. Free tools require an account. Always review AI suggestions for accuracy.
+
+Start with a little practice
+
+## Try it. Then choose your next step.
+
+Your free account
+
+### A real first conversation.
+
+One voice interview per account, lifetime, up to 20 minutes. A feedback preview with one strength and one area to improve. Plus the free preparation tools.
+
+[Start free →](https://app.jobhackai.io/login?plan=free)
+
+Paid plans & Interview Pack
+
+### More depth. More practice.
+
+Unlock the full feedback report, practice score details, transcript, and summary PDF. Continue practicing within your plan or pack allowance.
 
 [Compare plans and the Interview Pack →](https://app.jobhackai.io/pricing)
 
-02 / Inside the full report
+Very short interviews may not provide enough material for a practice score.
 
-![Actual internal test report showing communication, answer structure, content depth, role fit, and an answer-content breakdown.](https://jobhackai.io/assets/voice/interview-report-test.jpg)
+## Your experience is worth hearing.
 
-Actual report from an internal test interview. The scores illustrate the interface, not a customer result or hiring prediction.
+Give yourself a little room to practice telling it.
 
-Very short interviews may not provide enough material for a score. Feedback reflects what you said in that session.
-
-## More tools for your preparation
-
-Work on your resume, prepare interview questions, and shape examples from your experience before starting a conversation.
-
-### Interview Questions
-
-Prepare questions for the role and experience level you want to practice.
-
-### Resume Rewrite
-
-Revise your resume using feedback and suggestions you can review before applying.
-
-### Cover Letter
-
-Draft a cover letter for your target role, then edit it to reflect your own experience.
-
-### LinkedIn Optimizer
-
-Review suggestions for your headline, About section, and experience descriptions.
-
-### Try the conversation for yourself
-
-Choose a role and take your first Voice Mock Interview. The feedback preview is free.
-
-[Try your first interview free](https://app.jobhackai.io/login?plan=free)
+[Try your first interview free](https://app.jobhackai.io/login?plan=free) One free voice interview. No card needed to start.
 
 ## Structured data
 

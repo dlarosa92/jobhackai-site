@@ -3041,6 +3041,25 @@ function renderMarketingNav(desktop, mobile) {
     <a class="btn-link" href="${APP_BASE_URL}/login">Login</a>
   `;
   if (mobile) mobile.innerHTML = desktop.innerHTML;
+
+  // Auth restoration can resolve to a visitor after the fallback nav has
+  // rendered. Rebuild its signup actions as well as its links in that path.
+  const createSignup = (isMobile) => {
+    const cta = document.createElement('a');
+    cta.href = NAVIGATION_CONFIG.visitor.cta.href;
+    cta.textContent = NAVIGATION_CONFIG.visitor.cta.text;
+    cta.className = isMobile ? 'cta-button btn btn-primary' : 'btn btn-primary';
+    attachPlanSelectionHandler(cta, 'free', isMobile ? 'navigation-cta-mobile' : 'navigation-cta-desktop');
+    return cta;
+  };
+  const navGroup = desktop.closest('.nav-group') || desktop.parentElement;
+  if (navGroup) {
+    const actions = document.createElement('div');
+    actions.className = 'nav-actions';
+    actions.appendChild(createSignup(false));
+    navGroup.appendChild(actions);
+  }
+  if (mobile) mobile.appendChild(createSignup(true));
 }
 
 function renderUnverifiedNav(desktop, mobile) {
