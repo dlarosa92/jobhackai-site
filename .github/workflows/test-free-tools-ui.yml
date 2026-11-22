@@ -5,6 +5,21 @@ on:
     paths:
       - 'interview-questions.html'
       - 'resume-feedback-pro.html'
+      - 'linkedin-optimizer.html'
+      - 'pricing.html'
+      - 'voice-interview.html'
+      - 'js/auth-tool-return.js'
+      - 'js/login-page.js'
+      - 'js/verify-email.js'
+      - 'js/auth-action.js'
+      - 'js/linkedin-optimizer.js'
+      - 'js/voice-cta.js'
+      - 'js/allowance-reset.js'
+      - 'js/voice-interview.js'
+      - 'css/header.css'
+      - 'marketing/css/header.css'
+      - 'app/functions/api/auth/linkedin/callback.js'
+      - 'app/functions/_lib/__tests__/allowance-reset.test.mjs'
       - 'app/tests/ui/**'
       - 'app/package*.json'
       - '.github/workflows/test-free-tools-ui.yml'
@@ -13,7 +28,7 @@ permissions:
   contents: read
 jobs:
   candidate-ui:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -23,6 +38,18 @@ jobs:
           cache-dependency-path: app/package-lock.json
       - run: npm ci --no-audit --no-fund
         working-directory: app
+      # Candidate fixtures only: no deployed auth, billing, or email requests.
+      - run: npx playwright install --with-deps chromium webkit
+        working-directory: app
+      - run: node --test tests/ui/linkedin-preview.test.cjs tests/ui/auth-tool-return.test.cjs tests/ui/tool-preview.test.cjs
+        working-directory: app
+      - run: node --test tests/ui/linkedin-preview.test.cjs tests/ui/auth-tool-return.test.cjs tests/ui/tool-preview.test.cjs
+        working-directory: app
+        env:
+          LINKEDIN_TEST_BROWSER: webkit
+          AUTH_TEST_BROWSER: webkit
+          PREVIEW_TEST_BROWSER: webkit
+      - run: node --test app/functions/_lib/__tests__/allowance-reset.test.mjs
       - run: npm run test:ui:free-tools
         working-directory: app
       - run: npm run build

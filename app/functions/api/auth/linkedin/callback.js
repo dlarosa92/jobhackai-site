@@ -403,8 +403,17 @@ export async function onRequest(context) {
                     console.error('Failed to store tokens in same-window flow:', e);
                     throw new Error('Failed to store authentication tokens');
                   }
-                  // Redirect to dashboard
-                  window.location.href = frontendOrigin + '/dashboard.html';
+                  // Resume a tool selected before same-window OAuth. Callback
+                  // query parameters never participate in destination selection.
+                  let destination = '/dashboard.html';
+                  try {
+                    const { createAuthToolReturn } = await import(frontendOrigin + '/js/auth-tool-return.js');
+                    destination = createAuthToolReturn({ href: frontendOrigin + '/login.html', search: '' }).destination();
+                  } catch (_) {
+                    // Authentication has succeeded; the dashboard stays usable
+                    // if the optional return helper or session storage fails.
+                  }
+                  window.location.href = frontendOrigin + destination;
                 }
               } catch (error) {
                 console.error('Authentication error:', error);

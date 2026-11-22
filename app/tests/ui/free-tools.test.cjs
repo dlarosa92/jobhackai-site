@@ -156,3 +156,94 @@ test('signed-out Resume Feedback and Rewrite cannot send an API request', async 
   await assert.rejects(c.getResumeFeedback('synthetic','QA Engineer'),/Not authenticated/);
   assert.equal(requests,0);
 });
+
+for (const [name, source, helper] of [
+  ['Interview Questions', iq, 'JobHackAIInterviewQuestionsAuth'],
+  ['Resume Feedback', rf, 'JobHackAIResumeFeedbackAuth']
+]) {
+  for (const navigationReady of [true, false]) {
+    test(`${name}: anonymous entry keeps the tool DOM and requests one preview (${navigationReady ? 'navigation' : 'fallback'})`, async () => {
+      const events = [];
+      const main = {};
+      Object.defineProperty(main, 'innerHTML', { set() { assert.fail('anonymous auth check must not destroy the tool DOM'); } });
+      const {context:c} = harness('visitor', source, ['checkAuthentication'], {
+        CustomEvent: class { constructor(type) { this.type = type; } },
+        document: { documentElement: element(), querySelector: () => main, dispatchEvent: event => events.push(event.type) },
+      });
+      c.window.__JHA_ALLOW_PREVIEW__ = true;
+      c.window.FirebaseAuthManager = { waitForAuthReady: async () => null };
+      c.window[helper] = { hasSameTabAuthEvidence: () => false };
+      if (navigationReady) c.window.JobHackAINavigation = { getAuthState: () => ({isAuthenticated:false}) };
+      assert.equal(await c.checkAuthentication(), false, 'anonymous tool initialization stays blocked');
+      assert.equal(c.window.__JHA_PREVIEW_MODE__, true);
+      assert.deepEqual(events, ['jha-preview-mode']);
+      assert.equal(c.window.__JOBHACKAI_ACCESS_VERIFIED__, undefined);
+    });
+  }
+  test(`${name}: verified and authenticated visitors continue to the real tool`, async () => {
+    const {context:c} = harness('free', source, ['checkAuthentication']);
+    c.window.__JOBHACKAI_ACCESS_VERIFIED__ = true;
+    assert.equal(await c.checkAuthentication(), true);
+    delete c.window.__JOBHACKAI_ACCESS_VERIFIED__;
+    c.window.FirebaseAuthManager = { waitForAuthReady: async () => ({uid:'fixture'}) };
+    c.window.JobHackAINavigation = { getAuthState: () => ({isAuthenticated:true}) };
+    assert.equal(await c.checkAuthentication(), true);
+    assert.equal(c.window.__JHA_PREVIEW_MODE__, undefined);
+  });
+}
+
+for (const [name, source] of [['Interview Questions', iq], ['Resume Feedback', rf]]) {
+  test(`${name}: pending auth stays in preview and a late real user initializes once`, async () => {
+    let user = {_authPending:true};
+    let initialized = 0;
+    const listeners = new Map();
+    const {context:c} = harness('visitor', source, ['checkAuthentication','runOnToolAuthentication'], {
+      CustomEvent: class { constructor(type) { this.type = type; } },
+      document: {
+        readyState:'complete', documentElement:element(),
+        addEventListener(type, fn) { if (!listeners.has(type)) listeners.set(type,new Set()); listeners.get(type).add(fn); },
+        removeEventListener(type, fn) { listeners.get(type)?.delete(fn); },
+        dispatchEvent(event) { for (const fn of listeners.get(event.type) || []) fn(event); }
+      }
+    });
+    c.window.__JHA_ALLOW_PREVIEW__ = true;
+    c.window.FirebaseAuthManager = { getCurrentUser:()=>user, waitForAuthReady:async()=>user };
+    c.window.JobHackAINavigation = { getAuthState:()=>({isAuthenticated:false}) };
+    c.runOnToolAuthentication(async()=>{ initialized++; });
+    await new Promise(setImmediate);
+    assert.equal(initialized,0);
+    assert.equal(c.window.__JHA_PREVIEW_MODE__,true);
+    user = null;
+    c.document.dispatchEvent({type:'jha-preview-authenticated'});
+    await new Promise(setImmediate);
+    assert.equal(initialized,0,'resolved anonymous auth cannot start the tool');
+    user = {uid:'synthetic-late-user'};
+    c.document.dispatchEvent({type:'jha-preview-authenticated'});
+    c.document.dispatchEvent({type:'jha-preview-authenticated'});
+    await new Promise(setImmediate);
+    assert.equal(initialized,1,'real Firebase user wins over stale navigation state without duplicate initialization');
+    c.document.dispatchEvent({type:'jha-preview-authenticated'});
+    await new Promise(setImmediate);
+    assert.equal(initialized,1);
+  });
+}
+
+test('voice preview and CTA events use the consent-safe analytics helper without a direct fallback', () => {
+  const text = fs.readFileSync(path.join(root,'js/voice-cta.js'),'utf8');
+  const source = ts.createSourceFile('voice-cta.js',text,ts.ScriptTarget.Latest,true,ts.ScriptKind.JS);
+  let trackSource;
+  function visit(node) {
+    if (ts.isFunctionDeclaration(node) && node.name?.text==='track') trackSource=node.getText(source);
+    ts.forEachChild(node,visit);
+  }
+  visit(source);
+  assert.ok(trackSource);
+  const events=[];
+  const c=vm.createContext({window:{JHA:{trackEventSafe:(name,params)=>events.push({name,params})},gtag:()=>assert.fail('direct gtag bypasses the consent helper')}});
+  vm.runInContext(trackSource,c);
+  c.track('sign_up_gate_view',{page:'interview-questions'});
+  assert.deepEqual(events,[{name:'sign_up_gate_view',params:{page:'interview-questions'}}]);
+  c.window.JHA={analytics:{track:()=>assert.fail('legacy analytics bypasses the consent helper')}};
+  c.track('sign_up_gate_view',{page:'resume-feedback-pro'});
+  assert.equal(events.length,1);
+});
