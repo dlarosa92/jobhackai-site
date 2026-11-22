@@ -98,7 +98,6 @@
   <link rel="stylesheet" href="css/header.css?v=20260930-voice-nav-1">
   <link rel="stylesheet" href="css/footer.css?v=20261031-footer-1">
   <link rel="stylesheet" href="css/marketing.css?v=20261005-pricing-layout-1">
-  <script src="js/subscription-reset.js?v=20261005-1" defer></script>
 <!-- BEGIN AGENT DISCOVERY -->
 <link rel="alternate" type="text/markdown" href="/index.md">
 <link rel="describedby" type="text/markdown" href="/llms.txt">
@@ -238,7 +237,7 @@
           </article>
         </div>
         <div class="plan-limits">
-          <p>Subscription limits reset monthly, separate from your billing date. <span id="subscription-reset">The next reset is at midnight UTC on the first of the month.</span></p>
+          <p>Subscription limits reset monthly, separate from your billing date. <span data-allowance-reset hidden>Next reset: <time></time> (your local time).</span></p>
           <p>Ending an interview early still uses a session. Reconnecting to the same session does not use another.</p>
         </div>
       </section>
@@ -294,6 +293,7 @@
   </footer>
 
   <script src="https://app.jobhackai.io/js/lead-magnet.js?v=20260505-1" defer></script>
+  <script src="js/allowance-reset.js" defer></script>
   <script src="js/component-loader.js?v=20260920-marketing-2"></script>
   <script src="js/plan-cache.js"></script>
   <script type="module" src="js/firebase-auth.js?v=20260930-voice-nav-2"></script>

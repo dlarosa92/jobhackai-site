@@ -76,7 +76,7 @@ Five voice interviews, valid for 90 days. No subscription.
 
 [View Interview Pack](https://app.jobhackai.io/pricing)
 
-Subscription limits reset monthly, separate from your billing date. The next reset is at midnight UTC on the first of the month.
+Subscription limits reset monthly, separate from your billing date.
 
 Ending an interview early still uses a session. Reconnecting to the same session does not use another.
 

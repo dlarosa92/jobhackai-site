@@ -1,6 +1,6 @@
 import { showToast } from './modals.js';
 
-// LinkedIn Optimizer (MVP) - Premium-only, D1-backed history
+// LinkedIn Optimizer - free with signup, D1-backed history
 // - Left: Inputs + Results
 // - Right: History (last 10)
 // - Download PDF: window.print() with print-only container
@@ -212,10 +212,7 @@ function waitForAuthReadyTimeout(ms = 800) {
 
 const els = {
   app: null,
-  locked: null,
-  lockedInner: null,
-  login: null,
-  upgrade: null,
+  preview: null,
   form: null,
   role: null,
   headline: null,
@@ -262,29 +259,29 @@ let _historyHasError = false;
 
 function setLockedView(kind) {
   // kind: 'none'|'login'|'upgrade'
-  // If locked UI exists, use it. Otherwise fallback to redirect so user sees an actionable gating path.
-  if (!els.locked || !els.app) {
-    if (kind === 'login') {
-      window.location.replace('/login.html?redirect=' + encodeURIComponent(window.location.pathname));
-      return;
-    }
-    if (kind === 'upgrade') {
-      window.location.replace('/pricing?redirect=' + encodeURIComponent(window.location.pathname));
-      return;
-    }
-    // none: nothing to do if page UI is not present
+  if (kind === 'upgrade') {
+    // Preserve the server-denied access path. Previewing never bypasses API gates.
+    window.location.replace('/pricing?redirect=' + encodeURIComponent(window.location.pathname));
     return;
   }
+  if (!els.app) return;
 
-  if (kind === 'none') {
-    els.locked.style.display = 'none';
-    els.app.style.display = '';
-    return;
+  const locked = kind !== 'none';
+  const wasVisible = !els.app.hidden;
+  els.app.hidden = locked;
+  els.app.inert = locked;
+  els.app.style.display = locked ? 'none' : '';
+  if (els.preview) {
+    els.preview.hidden = !locked;
+    els.preview.style.display = locked ? '' : 'none';
+    if (locked) window.JHA?.toolPreviewTelemetry?.observe(els.preview);
   }
-  els.locked.style.display = 'block';
-  els.app.style.display = 'none';
-  els.login.hidden = kind !== 'login';
-  els.upgrade.hidden = kind !== 'upgrade';
+  if (locked && wasVisible) {
+    // A session ending must hide private results and cancel pending analysis.
+    historyItems = [];
+    resetForm();
+    closeDeleteModal();
+  }
 }
 
 function setLoading(on, text) {
@@ -1561,7 +1558,7 @@ function bindEvents() {
 async function init() {
   // elements
   els.app = $('#lo-app');
-  // locked/login/upgrade UI removed from page; init code will handle absent elements gracefully
+  els.preview = $('#lo-preview');
   els.form = $('#lo-form');
   els.role = $('#lo-role');
   els.headline = $('#lo-headline');
@@ -1594,7 +1591,7 @@ async function init() {
     const auth = nav?.getAuthState?.() || getAuthState();
     const plan = nav?.getEffectivePlan?.() || getEffectivePlan();
 
-    // Enforce gate: if missing locked UI, fallback to redirect so users see a clear path
+    // Signed-out visitors can explore the static example without leaving the page.
     if (!auth || !auth.isAuthenticated) {
       setLoading(false);
       setResultsVisible(false);
@@ -1612,14 +1609,16 @@ async function init() {
       return;
     }
 
-    // Authorized signed-in user — initialize page if not already done
+    // Authorized signed-in user — bind once, but reload history after a new session.
+    const wasVisible = !els.app.hidden;
     setLockedView('none');
     setPlanPill(plan);
-    if (unlockedInitialized) return;
-    unlockedInitialized = true;
-
-    bindEvents();
-    initRoleSelector();
+    if (unlockedInitialized && wasVisible) return;
+    if (!unlockedInitialized) {
+      unlockedInitialized = true;
+      bindEvents();
+      initRoleSelector();
+    }
 
     // Load history once auth is ready for token (best-effort)
     try {

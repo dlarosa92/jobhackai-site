@@ -311,7 +311,7 @@
           <button class="vp-buy" data-plan="pack" data-cta="pricing-card-pack">Get the Pack</button>
         </div>
       </div>
-      <p class="vp-free-note">Subscription access requires an active plan. The 60-session allowance resets on the first day of each month at 00:00 UTC, not each billing renewal. Sessions started this month count toward it, including sessions ended early. Reconnecting to the same session does not use another slot.</p>
+      <p class="vp-free-note">Subscription access requires an active plan. The 60-session allowance resets monthly, separately from your billing renewal. <span data-allowance-reset hidden>Next reset: <time></time> (your local time).</span> Sessions started this month count toward it, including sessions ended early. Reconnecting to the same session does not use another slot.</p>
       <p class="vp-free-note">Just exploring? The resume, cover letter, and interview question tools are <a href="login.html?mode=signup">free with an account</a>, and your first voice interview is on us.</p>
     </section>
 
@@ -417,6 +417,7 @@
   <script src="js/universal-logout.js?v=20260208-1" defer></script>
   <script src="js/stripe-integration.js?v=20261003-navigation-1" defer></script>
   <script src="js/analytics.js" type="module"></script>
+  <script src="js/allowance-reset.js" defer></script>
   <script src="js/voice-cta.js?v=20260930-tracking-1" defer></script>
   <script src="js/main.js" type="module"></script>
 

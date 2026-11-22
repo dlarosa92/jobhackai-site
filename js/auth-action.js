@@ -13,6 +13,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
 import { firebaseConfig } from "/js/firebase-config.js";
 import authManager from "/js/firebase-auth.js";
+import { createVerificationToolReturn } from "/js/auth-tool-return.js";
+const toolReturn = createVerificationToolReturn(window.location);
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -341,7 +343,7 @@ async function routeAfterVerification() {
       }, 500);
     }
     // Use replace to avoid adding to browser history
-    window.location.replace('/dashboard.html');
+    window.location.replace(toolReturn.destination());
   }
 }
 
@@ -641,7 +643,7 @@ async function initialize() {
     // Preserve plan selection so the user can retry verification without losing their plan
     const selectedPlan = getSelectedPlanFromStorage();
     const loginUrl = selectedPlan ? `/login.html?plan=${encodeURIComponent(selectedPlan)}` : '/login.html';
-    window.location.href = loginUrl;
+    window.location.href = toolReturn.carryTo(loginUrl);
   });
   
   goToDashboardBtn.addEventListener('click', (e) => {

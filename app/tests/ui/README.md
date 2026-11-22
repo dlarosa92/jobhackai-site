@@ -72,3 +72,17 @@ Prep on desktop and inside the mobile drawer to verify the grouped Voice link.
 An open drawer should remain open from 390 to 1024px and close at 1440px.
 This local fixture does not verify production cookie-only authentication handoff.
 Restore the browser viewport and stop the loopback server after checking.
+
+Anonymous entry and delayed-auth browser regression (from the repository root):
+
+```sh
+node --test app/tests/ui/tool-preview.test.cjs
+PREVIEW_TEST_BROWSER=webkit node --test app/tests/ui/tool-preview.test.cjs
+```
+
+These checks run the actual Interview Questions and Resume Feedback pages on an
+isolated local fixture, block external requests, and cover the inline preview,
+keyboard links, mobile menu, five viewport widths, anonymous API gating, delayed
+Firebase restoration, preserved hidden panels, and one synthetic question run.
+`UI_SOURCE_ROOT` can point the fixture at a separate checkout. Install the matching
+Playwright Chromium and WebKit browsers before running the browser checks.
