@@ -517,6 +517,100 @@
   background-color: #F9FAFB;
 }
 
+/* Both navigation renderers can populate the drawer: mobile-nav-* groups
+   and the verified-user nav-dropdown variant. Keep their layout in sync. */
+@media (max-width: 1200px) {
+  .mobile-nav .mobile-nav-group,
+  .mobile-nav .nav-dropdown {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .mobile-nav .mobile-nav-trigger,
+  .mobile-nav .nav-dropdown-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    width: 100%;
+    min-height: 44px;
+    padding: 0.75rem 1rem;
+    border: 1px solid #E5E7EB;
+    border-radius: 8px;
+    background: #F9FAFB;
+    color: #374151;
+    font-family: inherit;
+    font-size: 0.95rem;
+    font-weight: 600;
+    line-height: 1.5;
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .mobile-nav .mobile-nav-trigger::after {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: rotate(45deg);
+    flex-shrink: 0;
+  }
+
+  .mobile-nav .mobile-nav-group.open .mobile-nav-trigger::after {
+    transform: rotate(225deg);
+  }
+
+  .mobile-nav .dropdown-arrow { flex-shrink: 0; }
+
+  .mobile-nav .mobile-nav-submenu,
+  .mobile-nav .nav-dropdown-menu {
+    display: none;
+    position: static;
+    min-width: 0;
+    margin: 0.5rem 0 0;
+    padding: 0 0 0 0.5rem;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .mobile-nav .mobile-nav-group.open .mobile-nav-submenu,
+  .mobile-nav .nav-dropdown.open .nav-dropdown-menu { display: block; }
+
+  .mobile-nav .mobile-nav-submenu a,
+  .mobile-nav .nav-dropdown-menu a {
+    display: block;
+    min-height: 44px;
+    padding: 0.625rem 1rem;
+    border-radius: 6px;
+    color: #1F2937;
+    font-size: 0.95rem;
+    font-weight: 500;
+    line-height: 1.5;
+    text-decoration: none;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .mobile-nav .mobile-nav-trigger:hover,
+  .mobile-nav .nav-dropdown-toggle:hover,
+  .mobile-nav .mobile-nav-submenu a:hover,
+  .mobile-nav .nav-dropdown-menu a:hover { background: #F3F4F6; }
+
+  .mobile-nav .mobile-nav-trigger:focus-visible,
+  .mobile-nav .nav-dropdown-toggle:focus-visible,
+  .mobile-nav .mobile-nav-submenu a:focus-visible,
+  .mobile-nav .nav-dropdown-menu a:focus-visible {
+    outline: 2px solid #007BFF;
+    outline-offset: 2px;
+  }
+}
+
 /* Prevent flicker: hide header until navigation is resolved */
 html.nav-loading header.site-header { opacity: 0; pointer-events: none; transition: opacity .15s ease; }
 html.nav-ready  header.site-header { opacity: 1; pointer-events: auto;  transition: opacity .18s ease; }
