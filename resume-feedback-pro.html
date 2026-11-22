@@ -1309,11 +1309,34 @@
   </script>
   <script>
     // --- AUTHENTICATION CHECK ---
-    async function checkAuthentication() {
-      // Skip if head guard already verified access (prevents DOM destruction race)
-      if (window.__JOBHACKAI_ACCESS_VERIFIED__) {
-        return true;
+    // A slow Firebase restore may finish after the anonymous preview appears.
+    // Run each tool initializer once, after either initial or restored auth.
+    function runOnToolAuthentication(initialize) {
+      let initialized = false;
+      let checking = false;
+      let retry = false;
+      async function start() {
+        if (initialized) return;
+        if (checking) { retry = true; return; }
+        checking = true;
+        try {
+          if (await checkAuthentication()) {
+            initialized = true;
+            document.removeEventListener('jha-preview-authenticated', start);
+            await initialize();
+          }
+        } finally {
+          checking = false;
+          if (retry && !initialized) { retry = false; start(); }
+        }
       }
+      document.addEventListener('jha-preview-authenticated', start);
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
+      else start();
+    }
+
+    async function checkAuthentication() {
+      if (window.__JOBHACKAI_ACCESS_VERIFIED__) return true;
       if (window.FirebaseAuthManager && window.FirebaseAuthManager.waitForAuthReady) {
         try {
           await window.FirebaseAuthManager.waitForAuthReady(3000);
@@ -1321,54 +1344,27 @@
           console.warn('[RESUME-FEEDBACK] Auth ready timeout in checkAuthentication:', e);
         }
       }
-      if (window.__JOBHACKAI_ACCESS_VERIFIED__) {
-        return true;
+      if (window.__JOBHACKAI_ACCESS_VERIFIED__) return true;
+      const manager = window.FirebaseAuthManager;
+      const realUser = manager && typeof manager.getCurrentUser === 'function' ? manager.getCurrentUser() : null;
+      if (realUser && !realUser._authPending) return true;
+
+      const pageAuth = window.JobHackAIResumeFeedbackAuth;
+      const isAuthenticated = window.JobHackAINavigation
+        ? !!window.JobHackAINavigation.getAuthState().isAuthenticated
+        : !!(pageAuth && typeof pageAuth.hasSameTabAuthEvidence === 'function' && pageAuth.hasSameTabAuthEvidence());
+      if (isAuthenticated) return true;
+
+      // Keep the real tool DOM intact. The shared preview owns the single
+      // signed-out view; returning false still prevents tool initialization.
+      if (window.__JHA_ALLOW_PREVIEW__) {
+        window.__JHA_PREVIEW_MODE__ = true;
+        document.documentElement.classList.remove('auth-pending', 'plan-pending');
+        document.dispatchEvent(new CustomEvent('jha-preview-mode'));
+      } else {
+        window.location.href = 'login.html';
       }
-      // Head guard's 10s wait runs in enforceAccess (DOMContentLoaded); avoid duplicating it here
-      // so init is not blocked by Firebase wait + two sequential polls (~13s).
-
-      // SECURITY: Check Firebase SDK keys synchronously (works before FirebaseAuthManager is ready)
-      // FirebaseAuthManager.getCurrentUser() returns null until onAuthStateChanged fires
-      const loginRequiredHtml = `
-          <div style="max-width: 600px; margin: 4rem auto; text-align: center; padding: 2rem;">
-            <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
-            <h1 style="font-size: 2rem; font-weight: 700; color: var(--color-text-main); margin-bottom: 1rem;">
-              Login Required
-            </h1>
-            <p style="font-size: 1.1rem; color: var(--color-text-secondary); margin-bottom: 2rem; line-height: 1.6;">
-              Resume Feedback Pro requires you to be logged in to access this tool.
-              Please sign in to get started.
-            </p>
-            <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
-              <a href="login.html" class="btn-primary" style="text-decoration: none;">
-                Sign In
-              </a>
-              <a href="pricing.html" class="btn-outline" style="text-decoration: none;">
-                View Pricing
-              </a>
-            </div>
-          </div>
-        `;
-
-      if (window.JobHackAINavigation) {
-        const authState = window.JobHackAINavigation.getAuthState();
-        if (!authState.isAuthenticated) {
-          const mainContent = document.querySelector('main');
-          mainContent.innerHTML = loginRequiredHtml;
-          return false;
-        }
-        return true;
-      }
-
-      const rfAuth = window.JobHackAIResumeFeedbackAuth;
-      const isAuthenticated = !!(rfAuth && typeof rfAuth.hasSameTabAuthEvidence === 'function' && rfAuth.hasSameTabAuthEvidence());
-      const mainContent = document.querySelector('main');
-
-      if (!isAuthenticated) {
-        mainContent.innerHTML = loginRequiredHtml;
-        return false;
-      }
-      return true;
+      return false;
     }
 
     function resetRewriteUIToDefaults() {
@@ -1452,7 +1448,7 @@
     }
 
     // --- Initialize on load ---
-    document.addEventListener('DOMContentLoaded', async function() {
+    runOnToolAuthentication(async function() {
       // Check authentication first
       if (!(await checkAuthentication())) {
         return; // Stop here if not authenticated
@@ -3209,7 +3205,7 @@
     };
 
     // --- DEV-ONLY PLAN TOGGLE LOGIC ---
-    document.addEventListener('DOMContentLoaded', function() {
+    runOnToolAuthentication(async function() {
       // Wait for navigation system to be ready before initializing
       function waitForNavigationAndInit() {
         if (window.JobHackAINavigation && typeof window.JobHackAINavigation.getEffectivePlan === 'function') {

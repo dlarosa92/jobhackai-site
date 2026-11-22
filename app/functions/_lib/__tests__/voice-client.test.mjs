@@ -555,7 +555,7 @@ test('the client adds no fixed silence cutoff and no artificial turn delay', asy
 // The subscription limit is distinct from spending the lifetime free session.
 for (const [name, voice, expected, disabled] of [
   ['subscriber balance', { canStart: true, unlimited: true, mode: 'subscription', monthlyLimit: 60, monthlyRemaining: 7 }, '7 of 60', false],
-  ['capped subscriber', { canStart: false, unlimited: true, mode: 'subscription', reason: 'limit_reached', monthlyLimit: 60, monthlyRemaining: 0 }, '00:00 UTC', true],
+  ['capped subscriber', { canStart: false, unlimited: true, mode: 'subscription', reason: 'limit_reached', monthlyLimit: 60, monthlyRemaining: 0 }, 'Your allowance resets monthly', true],
   ['older subscriber API', { canStart: true, unlimited: true, mode: 'subscription' }, 'calendar-month session limit', false],
   ['free first session', { canStart: true, unlimited: false, mode: 'free' }, 'first voice interview is free', false],
   ['pack balance', { canStart: true, unlimited: false, mode: 'pack', sessionsRemaining: 3 }, '3 sessions', false]
@@ -566,7 +566,7 @@ for (const [name, voice, expected, disabled] of [
     } });
     try {
       await h.ready();
-      assert.ok(h.el('vi-entitlement').textContent.includes(expected));
+      assert.ok(h.el('vi-entitlement').innerHTML.includes(expected));
       assert.equal(h.el('vi-start-btn').disabled, disabled);
       assert.ok(!h.el('vi-entitlement').textContent.includes('unlimited'));
       if (voice.mode === 'subscription') {

@@ -8,6 +8,16 @@ console.log('🔧 login-page.js VERSION: fix-auth-cache-loop-v1 - ' + new Date()
 
 import authManager, { waitForAuthReady, AUTH_PENDING } from './firebase-auth.js';
 import { identifyUser } from './analytics.js';
+import { createAuthToolReturn } from './auth-tool-return.js';
+
+const toolReturn = createAuthToolReturn(window.location);
+function authenticatedDestination() {
+  const user = authManager.getCurrentUser();
+  if (user && authManager.isEmailPasswordUser(user) && user.emailVerified === false) {
+    return toolReturn.carryTo('/verify-email.html');
+  }
+  return toolReturn.destination();
+}
 
 function getResolvedStoredAuthFlagValue() {
   const ap = window.JobHackAIAuthPersistence;
@@ -100,7 +110,7 @@ async function handlePostAuthRedirect(plan) {
   } else {
     sessionStorage.removeItem('selectedPlan');
     try { localStorage.removeItem('selectedPlan'); } catch (_) {}
-    window.location.href = 'dashboard.html';
+    window.location.href = authenticatedDestination();
   }
 }
 
@@ -200,7 +210,9 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
   
   // Priority: URL param > sessionStorage planId
-  let selectedPlan = planParam || storedPlanData?.planId || null;
+  // A tool sign-in link should resume that tool, not revive an earlier pricing
+  // selection. An explicitly selected plan still owns the checkout flow.
+  let selectedPlan = planParam || (toolReturn.hasDestination ? null : storedPlanData?.planId) || null;
   
   console.log('🔍 Plan Detection Debug (sessionStorage):', { 
     planParam, 
@@ -333,13 +345,18 @@ document.addEventListener('DOMContentLoaded', async function() {
         
         // EDGE CASE FIX: Try redirect with error handling
         try {
-          location.replace('/dashboard.html');
+          const needsVerification = authManager.isEmailPasswordUser(user) && user.emailVerified === false;
+          if (!needsVerification && planRequiresPayment(selectedPlan)) {
+            await handlePostAuthRedirect(selectedPlan);
+            return true;
+          }
+          location.replace(authenticatedDestination());
           return true;
         } catch (redirectError) {
           console.error('[LOGIN] checkAuth: Redirect failed:', redirectError.message);
           // Fallback: try window.location.href
           try {
-            window.location.href = '/dashboard.html';
+            window.location.href = authenticatedDestination();
             return true;
           } catch (fallbackError) {
             console.error('[LOGIN] checkAuth: Fallback redirect also failed:', fallbackError.message);
@@ -425,7 +442,7 @@ document.addEventListener('DOMContentLoaded', async function() {
           console.log('🚫 Logout in progress, canceling redirect to dashboard');
           return;
         }
-        window.location.href = 'dashboard.html';
+        window.location.href = authenticatedDestination();
       }, 200);
       // Guard against non-function unsubscribe (prevents TypeError and loops)
       if (typeof unsubscribe === 'function') unsubscribe();
@@ -468,7 +485,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         console.log('⚠️ Fallback redirect triggered - redirecting to dashboard');
         sessionStorage.removeItem('selectedPlan');
         try { localStorage.removeItem('selectedPlan'); } catch (_) {}
-        window.location.href = 'dashboard.html';
+        window.location.href = authenticatedDestination();
       }
     }, 8000); // 8 second timeout
     
@@ -534,7 +551,7 @@ document.addEventListener('DOMContentLoaded', async function() {
           sessionStorage.removeItem('selectedPlan');
           try { localStorage.removeItem('selectedPlan'); } catch (_) {}
           console.log('🚀 Redirecting to dashboard (existing user or free plan)');
-          window.location.href = 'dashboard.html';
+          window.location.href = authenticatedDestination();
         }
       } else if (result.error) {
         clearTimeout(fallbackRedirectTimeout);
@@ -574,7 +591,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         console.log('⚠️ Fallback redirect triggered - redirecting to dashboard');
         sessionStorage.removeItem('selectedPlan');
         try { localStorage.removeItem('selectedPlan'); } catch (_) {}
-        window.location.href = 'dashboard.html';
+        window.location.href = authenticatedDestination();
       }
     }, 8000); // 8 second timeout
     
@@ -641,7 +658,7 @@ document.addEventListener('DOMContentLoaded', async function() {
           sessionStorage.removeItem('selectedPlan');
           try { localStorage.removeItem('selectedPlan'); } catch (_) {}
           console.log('🚀 Redirecting to dashboard (existing user or free plan)');
-          window.location.href = 'dashboard.html';
+          window.location.href = authenticatedDestination();
         }
       } else if (result.error) {
         clearTimeout(fallbackRedirectTimeout);
@@ -697,7 +714,7 @@ document.addEventListener('DOMContentLoaded', async function() {
       if (result.success) {
         const signedInUser = authManager.getCurrentUser();
         if (signedInUser && authManager.isEmailPasswordUser(signedInUser) && signedInUser.emailVerified === false) {
-          window.location.href = 'verify-email.html';
+          window.location.href = toolReturn.carryTo('/verify-email.html');
           return;
         }
         const plan = selectedPlan || 'free';
@@ -843,7 +860,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             console.warn('Analytics flush before navigate failed (non-blocking):', flushErr);
           }
         }
-        window.location.href = `${verifyUrl.pathname}${verifyUrl.search}`;
+        window.location.href = toolReturn.carryTo(verifyUrl.href);
         return;
       } else {
         // Show error
