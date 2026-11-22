@@ -4,7 +4,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <script src="js/cookie-consent.js?v=20261103-banner-1" defer></script>
+  <script src="js/tool-preview-telemetry.js?v=20261122-1" defer></script>
+  <script src="js/cookie-consent.js?v=20261122-preview-1" defer></script>
   <title>LinkedIn Optimizer | JobHackAI</title>
   <link rel="icon" type="image/png" sizes="128x128" href="assets/jobhackai_icon_Favicon_128.png">
   <link rel="apple-touch-icon" sizes="180x180" href="assets/jobhackai_apple_touch_icon_180.png">
@@ -83,8 +84,8 @@
           <p>Get section-by-section feedback, relevant keyword suggestions, and rewrites you can review before updating your profile. Your headline, About section, experience, and skills stay in your control.</p>
         </div>
         <div class="lo-actions">
-          <a class="btn-primary" href="/login.html?mode=signup&amp;redirect=%2Flinkedin-optimizer.html" data-cta="linkedin-preview-signup">Sign up free to review your profile</a>
-          <a class="btn-outline" href="/login.html?redirect=%2Flinkedin-optimizer.html" data-cta="linkedin-preview-login">Log in to continue</a>
+          <a class="btn-primary" href="/login.html?mode=signup&amp;redirect=%2Flinkedin-optimizer.html" data-cta="linkedin-preview-signup" data-analytics-consent="required" data-analytics-action="signup">Sign up free to review your profile</a>
+          <a class="btn-outline" href="/login.html?redirect=%2Flinkedin-optimizer.html" data-cta="linkedin-preview-login" data-analytics-consent="required" data-analytics-action="login">Log in to continue</a>
         </div>
         <p class="lo-section-tip">Already have an account? Log in and return here. Always review AI suggestions for accuracy.</p>
       </section>
@@ -376,7 +377,7 @@
   <!-- Load role selector -->
   <script src="js/role-selector.js?v=20261017-page-tag-1" type="module"></script>
   <!-- LinkedIn Optimizer page logic -->
-  <script src="js/linkedin-optimizer.js?v=20261122-preview-1" type="module"></script>
+  <script src="js/linkedin-optimizer.js?v=20261122-preview-analytics-1" type="module"></script>
   <script>
     // Initialize navigation system
     if (window.JobHackAINavigation && typeof window.JobHackAINavigation.initializeNavigation === 'function') {

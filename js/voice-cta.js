@@ -54,6 +54,7 @@
     try {
       if (window.JHA && typeof window.JHA.trackEventSafe === 'function') {
         window.JHA.trackEventSafe(eventName, params || {});
+        return true;
       }
     } catch (_) {}
   }
@@ -96,7 +97,7 @@
       }
       if (voice.reason === 'limit_reached') {
         return { label: 'View your interview history', href: 'voice-interview.html#vi-history-list',
-          message: 'You have reached your subscription session limit for this UTC calendar month. Your previous reports are still available.' };
+          message: 'You have used your current monthly interview allowance. Your previous reports are still available.' };
       }
       if (voice.reason === 'paywall') {
         return { label: 'Explore voice interview plans', href: 'pricing.html',
@@ -131,16 +132,38 @@
     if (!config) return;
 
     var offerPromise = null;
+    var outputObserver = null;
+
+    function recordVisibleOutput() {
+      if (outputSeen || window.JHA?.cookieConsent?.hasAnalyticsConsent?.() !== true) return;
+      var output = document.querySelector(config.watch);
+      if (!output || !config.ready(output) || !output.getClientRects().length || document.visibilityState === 'hidden') return;
+      var bounds = output.getBoundingClientRect();
+      if (bounds.width <= 0 || bounds.height <= 0 || bounds.bottom <= 0 || bounds.top >= window.innerHeight) return;
+      if (!track('tool_output_viewed', { tool: config.tool, page_path: window.location.pathname, business_line: 'career_product' })) return;
+      outputSeen = true;
+      outputObserver?.disconnect();
+      window.removeEventListener('cookie-consent-granted', recordVisibleOutput);
+      window.removeEventListener('scroll', recordVisibleOutput);
+      document.removeEventListener('visibilitychange', recordVisibleOutput);
+    }
+    window.addEventListener('cookie-consent-granted', recordVisibleOutput);
+    window.addEventListener('scroll', recordVisibleOutput, { passive: true });
+    document.addEventListener('visibilitychange', recordVisibleOutput);
+    // Offers can settle before a result arrives (or be unavailable entirely).
+    // Keep measurement independent of that short-lived CTA polling interval.
+    var outputRegion = document.querySelector('main');
+    if (outputRegion && typeof MutationObserver === 'function') {
+      outputObserver = new MutationObserver(recordVisibleOutput);
+      outputObserver.observe(outputRegion, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['style', 'hidden', 'class'] });
+    }
 
     var interval = setInterval(async function () {
       if (injected) { clearInterval(interval); return; }
       var watchEl = document.querySelector(config.watch);
       if (!watchEl || !config.ready(watchEl)) return;
 
-      if (!outputSeen) {
-        outputSeen = true;
-        track('tool_output_viewed', { tool: config.tool });
-      }
+      recordVisibleOutput();
 
       if (!offerPromise) offerPromise = getVoiceOffer();
       var offer = await offerPromise;
@@ -220,14 +243,15 @@
       '</style>' +
       '<div><p class="jha-preview-label">Free with a JobHackAI account</p>' +
       '<h1 id="jha-preview-title">' + preview.title + '</h1><p>' + preview.description + '</p>' +
-      '<a class="jha-gate-btn" data-cta="preview-gate-signup">Create your free account</a>' +
-      '<a class="jha-gate-login">Already have an account? Log in</a></div>' +
+      '<a class="jha-gate-btn" data-cta="preview-gate-signup" data-analytics-consent="required">Create your free account</a>' +
+      '<a class="jha-gate-login" data-analytics-consent="required">Already have an account? Log in</a></div>' +
       '<div class="jha-preview-example">' + preview.example + '</div>';
     // Return only to this page, never preserve an arbitrary query or hash.
     var redirect = encodeURIComponent(window.location.pathname);
     section.querySelector('.jha-gate-btn').href = '/login.html?mode=signup&redirect=' + redirect;
     section.querySelector('.jha-gate-login').href = '/login.html?redirect=' + redirect;
     main.appendChild(section);
+    window.JHA?.toolPreviewTelemetry?.observe(section);
   }
 
   function showPreviewGate() {
@@ -239,7 +263,6 @@
       var user = manager && typeof manager.getCurrentUser === 'function' ? manager.getCurrentUser() : null;
       if (user && !user._authPending) return;
       showInlineToolPreview(preview);
-      track('sign_up_gate_view', { page: currentPage() });
       return;
     }
     var overlay = document.createElement('div');
