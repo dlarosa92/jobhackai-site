@@ -9,8 +9,8 @@
 //
 // 2. Signup preview gate (logged-out visitors): pages that set
 //    window.__JHA_ALLOW_PREVIEW__ no longer bounce straight to login; the
-//    static content stays visible (crawlers always saw it; humans now do too)
-//    under an interaction-blocking overlay with a single signup CTA.
+//    Interview Questions and Resume Feedback show an inline example with
+//    one signup action. Their real tool controls remain hidden and inert.
 (function () {
   'use strict';
 
@@ -52,10 +52,8 @@
 
   function track(eventName, params) {
     try {
-      if (window.JHA && window.JHA.analytics && typeof window.JHA.analytics.track === 'function') {
-        window.JHA.analytics.track(eventName, params || {});
-      } else if (typeof window.gtag === 'function') {
-        window.gtag('event', eventName, params || {});
+      if (window.JHA && typeof window.JHA.trackEventSafe === 'function') {
+        window.JHA.trackEventSafe(eventName, params || {});
       }
     } catch (_) {}
   }
@@ -159,8 +157,91 @@
 
   // ---------- 2. Signup preview gate for logged-out visitors ----------
 
+  var TOOL_PREVIEWS = {
+    'interview-questions': {
+      title: 'Interview Questions',
+      description: 'Practice starts with a good question. Create your free account to generate questions for your target role and save the ones you want to practice.',
+      example: '<p class="jha-preview-label">Example questions · Product Manager</p>' +
+        '<h2>Turn your experience into a story.</h2>' +
+        '<ol class="jha-preview-questions"><li>Tell me about a time you had to prioritize competing customer needs.</li>' +
+        '<li>How did you know your product decision was working?</li></ol>' +
+        '<p class="jha-preview-note">Illustrative examples. Your questions are tailored to the role you choose.</p>'
+    },
+    'resume-feedback-pro': {
+      title: 'Resume Feedback',
+      description: 'Make your experience easier to understand. Create your free account to check your resume, get role-specific feedback, and work on a clearer rewrite.',
+      example: '<p class="jha-preview-label">Example feedback · Experience</p>' +
+        '<h2>Make your contribution clear.</h2>' +
+        '<div class="jha-preview-excerpt"><h3>Original</h3><p>Worked with sales and support on onboarding.</p></div>' +
+        '<div class="jha-preview-excerpt jha-preview-rewrite"><h3>Suggested rewrite</h3><p>Partnered with sales and support to identify onboarding friction and prioritize improvements for new customers.</p></div>' +
+        '<p class="jha-preview-note">Illustrative example. Add a measurable outcome when you can support it.</p>'
+    }
+  };
+
+  var previewContentState = [];
+
+  function showInlineToolPreview(preview) {
+    var main = document.querySelector('main');
+    if (!main) return;
+    // Preserve node identity and page listeners. Hiding the actual controls
+    // keeps the example separate from the authenticated tool and its actions.
+    Array.prototype.forEach.call(main.children, function (child) {
+      if (child.tagName === 'SCRIPT' || child.tagName === 'STYLE') return;
+      previewContentState.push({ element: child, hidden: child.hidden, inert: child.inert });
+      child.setAttribute('data-jha-preview-content', '');
+      child.hidden = true;
+      child.inert = true;
+    });
+    var section = document.createElement('section');
+    section.id = 'jha-preview-gate';
+    section.setAttribute('aria-labelledby', 'jha-preview-title');
+    section.innerHTML =
+      '<style>' +
+      '[data-jha-preview-content]{display:none!important}' +
+      '#jha-preview-gate{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:clamp(1.5rem,4vw,3rem);align-items:center;max-width:1100px;margin:0 auto;padding:clamp(1.25rem,4vw,3rem);background:var(--color-card-bg,#fff);border:1px solid var(--color-divider,#e5e7eb);border-radius:var(--radius-xl,16px);box-sizing:border-box}' +
+      '#jha-preview-gate *{box-sizing:border-box;min-width:0}' +
+      '#jha-preview-gate h1{font-size:clamp(1.8rem,4vw,2.5rem);line-height:1.15;letter-spacing:-.03em;margin:0 0 1rem;color:var(--color-text-main,#1f2937)}' +
+      '#jha-preview-gate p{font-size:1rem;line-height:1.65;color:var(--color-text-secondary,#4b5563);margin:0 0 1.25rem}' +
+      '#jha-preview-gate .jha-preview-label{font-size:.75rem;line-height:1.5;letter-spacing:.06em;font-weight:700;color:var(--color-cta-green,#007a30);margin:0 0 .75rem}' +
+      '#jha-preview-gate .jha-gate-btn{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:.85rem 1.3rem;border-radius:var(--radius-button,8px);background:var(--color-cta-green,#007a30);color:#fff;font-size:1rem;font-weight:700;text-decoration:none;text-align:center}' +
+      '#jha-preview-gate .jha-gate-btn:hover{background:var(--color-cta-green-hover,#006627)}' +
+      '#jha-preview-gate .jha-gate-login{display:block;width:fit-content;padding:.75rem 0;color:var(--color-accent-blue,#007bff);font-weight:600;text-underline-offset:3px;line-height:1.5}' +
+      '#jha-preview-gate a:focus-visible{outline:3px solid var(--color-accent-blue,#007bff);outline-offset:4px}' +
+      '#jha-preview-gate .jha-preview-example{background:#f3f8f5;border:1px solid #dce9df;border-radius:12px;padding:clamp(1.15rem,3vw,1.75rem)}' +
+      '#jha-preview-gate h2{font-size:1.2rem;line-height:1.4;margin:0 0 1rem;color:var(--color-text-main,#1f2937)}' +
+      '#jha-preview-gate .jha-preview-questions{padding-left:1.4rem;margin:0 0 1.25rem;color:var(--color-text-main,#1f2937);line-height:1.6}' +
+      '#jha-preview-gate .jha-preview-questions li+li{margin-top:1rem}' +
+      '#jha-preview-gate .jha-preview-excerpt{padding:1rem;background:#fff;border:1px solid var(--color-divider,#e5e7eb);border-radius:8px;margin-bottom:.75rem}' +
+      '#jha-preview-gate .jha-preview-rewrite{border-left:3px solid var(--color-cta-green,#007a30)}' +
+      '#jha-preview-gate h3{font-size:.8rem;line-height:1.5;margin:0 0 .4rem;color:var(--color-text-main,#1f2937)}' +
+      '#jha-preview-gate .jha-preview-excerpt p{font-size:.9rem;margin:0}' +
+      '#jha-preview-gate .jha-preview-note{font-size:.8rem;margin:0;line-height:1.6}' +
+      '@media(max-width:700px){#jha-preview-gate{grid-template-columns:minmax(0,1fr)}#jha-preview-gate .jha-gate-btn{width:100%}}' +
+      '</style>' +
+      '<div><p class="jha-preview-label">Free with a JobHackAI account</p>' +
+      '<h1 id="jha-preview-title">' + preview.title + '</h1><p>' + preview.description + '</p>' +
+      '<a class="jha-gate-btn" data-cta="preview-gate-signup">Create your free account</a>' +
+      '<a class="jha-gate-login">Already have an account? Log in</a></div>' +
+      '<div class="jha-preview-example">' + preview.example + '</div>';
+    // Return only to this page, never preserve an arbitrary query or hash.
+    var redirect = encodeURIComponent(window.location.pathname);
+    section.querySelector('.jha-gate-btn').href = '/login.html?mode=signup&redirect=' + redirect;
+    section.querySelector('.jha-gate-login').href = '/login.html?redirect=' + redirect;
+    main.appendChild(section);
+  }
+
   function showPreviewGate() {
     if (document.getElementById('jha-preview-gate')) return;
+    var preview = TOOL_PREVIEWS[currentPage()];
+    if (preview) {
+      if (window.__JOBHACKAI_ACCESS_VERIFIED__) return;
+      var manager = window.FirebaseAuthManager;
+      var user = manager && typeof manager.getCurrentUser === 'function' ? manager.getCurrentUser() : null;
+      if (user && !user._authPending) return;
+      showInlineToolPreview(preview);
+      track('sign_up_gate_view', { page: currentPage() });
+      return;
+    }
     var overlay = document.createElement('div');
     overlay.id = 'jha-preview-gate';
     overlay.innerHTML =
@@ -186,7 +267,33 @@
     track('sign_up_gate_view', { page: currentPage() });
   }
 
+  function restoreToolAfterAuth() {
+    if (!TOOL_PREVIEWS[currentPage()] || !previewContentState.length) return;
+    var manager = window.FirebaseAuthManager;
+    var user = manager && typeof manager.getCurrentUser === 'function' ? manager.getCurrentUser() : null;
+    if (!user || user._authPending) return;
+    var gate = document.getElementById('jha-preview-gate');
+    var moveFocus = gate && gate.contains(document.activeElement);
+    if (gate) gate.remove();
+    previewContentState.forEach(function (state) {
+      state.element.removeAttribute('data-jha-preview-content');
+      state.element.hidden = state.hidden;
+      state.element.inert = state.inert;
+    });
+    previewContentState = [];
+    window.__JHA_PREVIEW_MODE__ = false;
+    // The page still performs its normal auth and plan checks. This event only
+    // restarts initializers that were paused for an anonymous visitor.
+    document.dispatchEvent(new CustomEvent('jha-preview-authenticated'));
+    if (moveFocus) {
+      var main = document.querySelector('main');
+      main.setAttribute('tabindex', '-1');
+      main.focus();
+    }
+  }
+
   function initPreviewGate() {
+    document.addEventListener('firebase-auth-ready', restoreToolAfterAuth);
     if (window.__JHA_PREVIEW_MODE__) {
       showPreviewGate();
       return;
@@ -199,6 +306,8 @@
   var offersStarted = false;
   function startPersonalizedOffers() {
     if (offersStarted || !window.FirebaseAuthManager) return;
+    var user = typeof window.FirebaseAuthManager.getCurrentUser === 'function' ? window.FirebaseAuthManager.getCurrentUser() : null;
+    if (!user || user._authPending) return;
     offersStarted = true;
     document.removeEventListener('firebase-auth-ready', startPersonalizedOffers);
     if (!window.__JHA_PREVIEW_MODE__) startCtaWatcher();
@@ -220,7 +329,7 @@
     // The Firebase module may still be loading. No polling or pending offer
     // promise is needed until it signals readiness. If its imports fail, the
     // neutral CTA remains usable and no tool watcher is started.
-    document.addEventListener('firebase-auth-ready', startPersonalizedOffers, { once: true });
+    document.addEventListener('firebase-auth-ready', startPersonalizedOffers);
     var manager = window.FirebaseAuthManager;
     var user = manager && typeof manager.getCurrentUser === 'function' ? manager.getCurrentUser() : null;
     // Support navigation after auth has already resolved, when its event fired
