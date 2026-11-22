@@ -156,7 +156,9 @@ async function fixture(t, { query = '?redirect=%2Flinkedin-optimizer.html', exis
     }
     if (storedPlan && !sessionStorage.getItem('__fixture_plan_seeded')) {
       sessionStorage.setItem('__fixture_plan_seeded', '1');
-      sessionStorage.setItem('selectedPlan', JSON.stringify({ planId: storedPlan, timestamp: Date.now() }));
+      const selection = JSON.stringify({ planId: storedPlan, timestamp: Date.now() });
+      sessionStorage.setItem('selectedPlan', selection);
+      localStorage.setItem('selectedPlan', selection);
     }
     const persisted = JSON.parse(sessionStorage.getItem('__fixture_auth') || 'null');
     let user = null;
@@ -170,14 +172,23 @@ async function fixture(t, { query = '?redirect=%2Flinkedin-optimizer.html', exis
     }
     if (persisted) signIn(persisted.provider, persisted.emailVerified);
     else if (existing) signIn();
+    function recordAuthBoundary(method) {
+      sessionStorage.setItem('__fixture_auth_boundary', JSON.stringify({method,
+        sessionPlan:sessionStorage.getItem('selectedPlan'), localPlan:localStorage.getItem('selectedPlan')}));
+    }
+    window.JHA = {trackEventSafe(name,params) {
+      const events=JSON.parse(sessionStorage.getItem('__fixture_auth_events') || '[]');
+      events.push({name,params});
+      sessionStorage.setItem('__fixture_auth_events',JSON.stringify(events));
+    }};
     window.__authFixture = {
       getCurrentUser: () => user,
       waitForAuthReady: async () => user,
       isAuthReady: () => true,
       isEmailPasswordUser: u => u?.provider === 'password',
       onAuthStateChange: listener => { listeners.add(listener); return () => listeners.delete(listener); },
-      signIn: async () => signIn(),
-      signUp: async () => signIn('password', false),
+      signIn: async () => { recordAuthBoundary('login'); return signIn(); },
+      signUp: async () => { recordAuthBoundary('signup'); return signIn('password', false); },
       signInWithGoogle: async () => signIn('google', true),
       signInWithLinkedIn: async () => signIn('linkedin', true),
       sendVerificationEmail: async () => { throw Error('Fixture must never send an email'); }
@@ -426,3 +437,36 @@ test('fresh verification keeps a selected paid checkout ahead of the recovered t
   assert.equal(checkout[0].authorization,'Bearer synthetic-auth-token');
   assert.deepEqual(fresh.errors,[]);
 });
+
+
+for (const mode of ['signup','login']) {
+  test(`free-tool ${mode} clears both stale paid selections before unverified auth and stays free through verification`, async t => {
+    const f=await fixture(t,{
+      query:'?mode='+mode+'&redirect='+encodeURIComponent(target), storedPlan:'monthly',
+      verified:false, returningEmail:mode==='login'
+    });
+    assert.deepEqual(await f.page.evaluate(()=>({session:sessionStorage.getItem('selectedPlan'),local:localStorage.getItem('selectedPlan')})),{session:null,local:null});
+    if (mode==='signup') {
+      assert.equal(await f.page.locator('#signupForm').isVisible(),true);
+      for (const [id,value] of [['firstName','Synthetic'],['lastName','Candidate'],['signupEmail','synthetic@example.test'],['signupPassword','SyntheticPass123']]) await f.page.locator('#'+id).fill(value);
+      await f.page.locator('#acceptTerms').check();
+      await f.page.locator('#signupContinueBtn').click();
+    } else {
+      assert.equal(await f.page.locator('#loginForm').isVisible(),true,'no form toggle may clear the fixture plan first');
+      await emailLogin(f.page);
+    }
+    await f.page.waitForURL('**/verify-email.html?*');
+    assert.equal(new URL(f.page.url()).searchParams.get('redirect'),target);
+    assert.deepEqual(await f.page.evaluate(()=>JSON.parse(sessionStorage.getItem('__fixture_auth_boundary'))),{method:mode,sessionPlan:null,localPlan:null});
+    if (mode==='signup') {
+      const events=await f.page.evaluate(()=>JSON.parse(sessionStorage.getItem('__fixture_auth_events') || '[]'));
+      assert.equal(events.filter(e=>e.name==='sign_up').length,1);
+      assert.equal(events.find(e=>e.name==='sign_up').params.plan,'free');
+    }
+    assert.equal(f.requests.filter(r=>r.path==='/api/stripe-checkout').length,0);
+    await f.page.locator('#alreadyVerifiedLink').click();
+    await f.page.waitForURL(origin+target);
+    assert.equal(f.requests.filter(r=>r.path==='/api/stripe-checkout').length,0);
+    assert.deepEqual(f.errors,[]);
+  });
+}
