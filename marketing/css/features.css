@@ -2,6 +2,7 @@
 .features-page { background: #fff; }
 .features-page .site-header { padding: 0; }
 .features-page .site-header > .container { width: 100%; }
+.features-page .site-header .nav-actions .btn { padding: var(--space-xs) var(--space-sm); border-radius: var(--radius-button); font-weight: var(--font-weight-semibold); }
 .features-page main { padding: 0 0 80px; }
 .features-page main section { padding: 0; }
 .features-page .feature-shell { width: min(1200px, calc(100% - 64px)); margin: 0 auto; }
@@ -12,7 +13,7 @@
 .features-page h1 span { color: var(--color-cta-green); }
 .features-page .feature-intro > p { max-width: 615px; margin: 0 auto; color: var(--color-text-secondary); line-height: 1.7; font-size: 17px; }
 .features-page .feature-actions { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 22px; margin-top: 26px; }
-.features-page .btn { min-height: 48px; font-size: 14px; }
+.features-page main .btn { min-height: 48px; font-size: 14px; }
 .features-page .text-link { color: var(--color-text-main); font-size: 14px; font-weight: 600; text-underline-offset: 5px; }
 .features-page .feature-meta { display: flex; justify-content: center; gap: 24px; margin-top: 18px; color: var(--color-text-muted); font-size: 12px; }
 .features-page .feature-meta span::before { content: '✓'; color: var(--color-cta-green); padding-right: 7px; }
