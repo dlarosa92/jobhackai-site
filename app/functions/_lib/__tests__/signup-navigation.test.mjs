@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
 const source = readFileSync(new URL('../../../../js/login-page.js', import.meta.url), 'utf8');
+const toolReturnSource = readFileSync(new URL('../../../../js/auth-tool-return.js', import.meta.url), 'utf8').replace(/^export /gm, '');
 function section(start, end) {
   const a = source.indexOf(start);
   const b = source.indexOf(end, a);
@@ -18,23 +19,23 @@ const deferred = () => {
 
 // Run the actual page handlers together. Firebase publishes the signed-in user
 // before verification mail/profile work resolves, as it did in production.
-function harness({ fail = false } = {}) {
+function harness({ fail = false, search = '' } = {}) {
   const signup = deferred(), flush = deferred(), authReady = deferred();
   const events = [], timers = [], redirects = [];
   let authListener, submit, signups = 0;
   const values = new Map();
-  const storage = { getItem: k => values.get(k) ?? null, removeItem: k => values.delete(k) };
+  const storage = { getItem: k => values.get(k) ?? null, setItem: (k, v) => values.set(k, v), removeItem: k => values.delete(k) };
   const fields = Object.fromEntries(Object.entries({
     firstName: 'Staff', lastName: 'Test', signupEmail: 'staff@example.test',
     signupPassword: 'Test-only-password-1', signupContinueBtn: '', acceptTerms: ''
   }).map(([id, value]) => [id, { value, checked: true, style: {}, textContent: 'Sign Up' }]));
   const user = { uid: 'staff-fixture', email: 'staff@example.test' };
-  const location = { replace: v => redirects.push(v) };
-  Object.defineProperty(location, 'href', { get: () => 'https://app.jobhackai.io/login', set: v => redirects.push(v) });
+  const location = { search, replace: v => redirects.push(v) };
+  Object.defineProperty(location, 'href', { get: () => 'https://app.jobhackai.io/login' + search, set: v => redirects.push(v) });
   const ctx = {
-    URL, console: { log() {}, warn() {}, error() {} },
+    URL, URLSearchParams, console: { log() {}, warn() {}, error() {} },
     document: { getElementById: id => fields[id] ?? null, body: { style: {} } },
-    window: { location, FirebaseAuthManager: { isAuthReady: () => true }, JHA: {
+    window: { location, sessionStorage: storage, FirebaseAuthManager: { isAuthReady: () => true }, JHA: {
       trackEventSafe: (...args) => events.push(args),
       cookieConsent: { flushAnalyticsBeforeNavigate: () => flush.promise }
     } },
@@ -44,6 +45,7 @@ function harness({ fail = false } = {}) {
     authManager: {
       onAuthStateChange: callback => { authListener = callback; return () => {}; },
       getCurrentUser: () => user,
+      isEmailPasswordUser: () => true,
       signUp: async () => {
         signups++;
         authListener(user);
@@ -61,6 +63,7 @@ function harness({ fail = false } = {}) {
     identifyUser: uid => events.push(['identity', uid])
   };
   vm.createContext(ctx);
+  vm.runInContext(toolReturnSource + '\n' + section('const toolReturn =', 'function getResolvedStoredAuthFlagValue'), ctx);
   vm.runInContext('let loginInProgress = false;\n' +
     section('  const checkAuth = async () => {', '  // UX FIX: Run auth check') +
     section('  const unsubscribe = authManager.onAuthStateChange', '  // ===== FORM TOGGLING') +
@@ -74,8 +77,8 @@ function harness({ fail = false } = {}) {
     get signups() { return signups; }, user };
 }
 
-test('signup owns navigation until account setup and analytics flush finish', async () => {
-  const h = harness();
+for (const search of ['', '?redirect=%2Flinkedin-optimizer.html']) test('signup owns navigation until account setup and analytics flush finish: ' + (search || 'default route'), async () => {
+  const h = harness({ search });
   const check = h.backgroundCheck(); // A restore check already waiting on Firebase.
   h.publishAuth(); // A passive redirect already queued before the submission.
   const attempt = h.submit();
@@ -92,7 +95,11 @@ test('signup owns navigation until account setup and analytics flush finish', as
   h.flush.resolve();
   await Promise.all([attempt, duplicate]);
   assert.equal(h.redirects.length, 1);
-  assert.match(h.redirects[0], /^\/verify-email\.html\?email=staff%40example\.test&sent=1$/);
+  const destination = new URL(h.redirects[0], 'https://app.jobhackai.io');
+  assert.equal(destination.pathname, '/verify-email.html');
+  assert.equal(destination.searchParams.get('email'), 'staff@example.test');
+  assert.equal(destination.searchParams.get('sent'), '1');
+  assert.equal(destination.searchParams.get('redirect'), search ? '/linkedin-optimizer.html' : null);
 });
 
 test('failed signup unlocks retry and produces no signup conversion', async () => {
@@ -112,7 +119,7 @@ test('an ordinary restored login still redirects without reporting a signup', ()
   const h = harness();
   h.publishAuth();
   h.runTimers();
-  assert.deepEqual(h.redirects, ['dashboard.html']);
+  assert.deepEqual(h.redirects, ['/dashboard.html']);
   assert.equal(h.events.filter(x => x[0] === 'sign_up').length, 0);
 });
 
@@ -120,8 +127,8 @@ function initialFormFor(search) {
   const shown = [];
   const storage = { getItem: () => null, setItem() {}, removeItem() {} };
   const ctx = {
-    URLSearchParams, Date,
-    window: { location: { search } },
+    URL, URLSearchParams, Date,
+    window: { location: { search, href: 'https://app.jobhackai.io/login' + search }, sessionStorage: storage },
     sessionStorage: storage, localStorage: storage,
     resetPasswordSuccess: null,
     console: { log() {}, warn() {} },
@@ -131,7 +138,7 @@ function initialFormFor(search) {
     showLoginForm: () => shown.push(['login']),
     getStoredFirebaseAuthRecord: () => null
   };
-  vm.runInNewContext(section('  // === PLAN DETECTION', '  // === AUTH CHECK'), ctx);
+  vm.runInNewContext(toolReturnSource + '\n' + section('const toolReturn =', 'function getResolvedStoredAuthFlagValue') + '\n' + section('  // === PLAN DETECTION', '  // === AUTH CHECK'), ctx);
   return shown;
 }
 

@@ -11,21 +11,26 @@ const tagged = '?utm_source=linkedin&utm_medium=organic_social&utm_campaign=voic
 // collected but never executed, so these tests send no Analytics traffic.
 function harness({ consent = true, preview = false } = {}) {
   const listeners = new Map(), nodes = new Map(), cookies = new Map();
-  const scripts = [], timers = [], intervals = [], legacyCalls = [];
+  const scripts = [], timers = [], intervals = [], legacyCalls = [], visibilityObservers = [];
   const store = new Map([['jha_cookie_consent_v1', JSON.stringify({ version: 1, analytics: consent })]]);
   function element(tagName = 'div') {
-    return { tagName, style: {}, children: [{}], classList: { add() {}, remove() {}, contains() { return false; } },
+    return { tagName, style: {}, children: [], isConnected: true, hidden: false,
+      classList: { add() {}, remove() {}, contains() { return false; } },
       setAttribute(k, v) { this[k] = v; }, getAttribute(k) { return this[k]; }, addEventListener() {}, focus() {},
+      getClientRects() { return this.hidden ? [] : [{ width: 400, height: 100 }]; },
+      getBoundingClientRect() { return { top: 100, bottom: 200, width: 400, height: 100 }; },
+      matches(selector) { return selector === '#' + this.id; },
+      appendChild(child) { this.children.push(child); child.isConnected = true; if (child.id) nodes.set(child.id, child); },
       remove() {}, querySelector() { return element(); }, parentNode: { insertBefore(e) { scripts.push(e); } } };
   }
   const node = id => { if (!nodes.has(id)) nodes.set(id, element()); return nodes.get(id); };
   const document = {
-    readyState: 'loading', title: 'Interview Questions', referrer: 'https://www.linkedin.com/',
-    createElement: element, getElementById: id => id === 'jha-preview-gate' ? null : node(id),
-    head: { appendChild(e) { scripts.push(e); } }, body: { style: {}, appendChild() {} },
+    readyState: 'loading', visibilityState: 'visible', title: 'Interview Questions', referrer: 'https://www.linkedin.com/',
+    createElement: element, getElementById: id => id === 'jha-preview-gate' ? nodes.get(id) || null : node(id),
+    head: { appendChild(e) { scripts.push(e); } }, body: element('body'),
     addEventListener(type, callback) { listeners.set(type, [...(listeners.get(type) || []), callback]); },
     removeEventListener() {},
-    querySelector(selector) { return selector === '#iq-questions' ? node(selector) : this.querySelectorAll(selector)[0] || null; },
+    querySelector(selector) { return ['#iq-questions', 'main'].includes(selector) ? node(selector) : this.querySelectorAll(selector)[0] || null; },
     querySelectorAll(selector) { const part = selector.match(/src\*="([^"]+)"/)?.[1]; return part ? scripts.filter(s => (s.src || '').includes(part)) : []; },
     getElementsByTagName() { return [element('script')]; }
   };
@@ -35,25 +40,35 @@ function harness({ consent = true, preview = false } = {}) {
       if (attrs.some(a => a.trim() === 'Max-Age=0')) cookies.delete(pair.slice(0, at));
       else cookies.set(pair.slice(0, at), pair.slice(at + 1)); }
   });
-  const ctx = { document, URL, CustomEvent: class {}, HTMLScriptElement: class {},
+  node('#iq-questions').children = [{}];
+  const ctx = { document, URL, CustomEvent: class {}, HTMLScriptElement: class {}, innerHeight: 900,
+    IntersectionObserver: class {
+      constructor(callback) { this.callback = callback; visibilityObservers.push(this); }
+      observe(target) { this.target = target; }
+      disconnect() { this.disconnected = true; }
+    },
     location: { hostname: 'app.jobhackai.io', protocol: 'https:', pathname: '/interview-questions',
       href: 'https://app.jobhackai.io/interview-questions' + tagged, search: tagged },
     __REAL_AUTH_READY: true, __JHA_PREVIEW_MODE__: preview, JHA_CONFIG: { CLARITY_ID: '' },
     JHA: { analytics: { track(...args) { legacyCalls.push(args); } } },
-    FirebaseAuthManager: { getCurrentUser: () => ({ getIdToken: async () => 'fixture-only' }) },
+    FirebaseAuthManager: { getCurrentUser: () => preview ? null : ({ getIdToken: async () => 'fixture-only' }) },
     localStorage: { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, v), removeItem: k => store.delete(k) },
     setTimeout(fn) { timers.push(fn); return timers.length; }, setInterval(fn) { intervals.push(fn); return intervals.length; },
-    clearInterval() {}, dispatchEvent() {}, addEventListener() {}, console: { log() {}, warn() {} },
+    clearInterval() {}, dispatchEvent() {}, addEventListener() {}, removeEventListener() {}, console: { log() {}, warn() {} },
     fetch: async url => ({ ok: !url.includes('/api/plan/me'), json: async () => ({ ok: true, consent: { version: 1, analytics: consent } }) }) };
   ctx.window = ctx;
   vm.createContext(ctx);
+  vm.runInContext(read('js/tool-preview-telemetry.js'), ctx);
   vm.runInContext(read('js/cookie-consent.js'), ctx);
   // Only strip ESM export declarations; exercise the real class method below.
   vm.runInContext(read('js/role-selector.js').replace(/^export /gm, ''), ctx);
   return { ctx, legacyCalls, scripts,
     async initVoice() { vm.runInContext(read('js/voice-cta.js'), ctx); await this.init(); },
     async init() { for (const callback of listeners.get('DOMContentLoaded') || []) await callback(); while (timers.length) timers.shift()(); },
-    async output() { for (const callback of intervals) await callback(); },
+    async output() {
+      for (const observer of visibilityObservers) if (!observer.disconnected && observer.target) observer.callback([{ isIntersecting: true, intersectionRatio: 1 }]);
+      for (const callback of intervals) await callback();
+    },
     role(name) { const selector = Object.create(ctx.RoleSelector.prototype); selector.roles = [{ name: 'Product Manager' }]; selector.trackSelection(name); },
     events: name => (ctx.dataLayer || []).filter(args => args[0] === 'event' && args[1] === name)
   };
