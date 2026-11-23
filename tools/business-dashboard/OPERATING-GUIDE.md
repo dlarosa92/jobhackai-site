@@ -1,6 +1,6 @@
 # JobHackAI operating guide
 
-Version: 2026-11-17. This is the agreed operating contract. Configuration is not activation or proof of a successful run. Historical instructions remain evidence, not authority to restart retired executors. Preserve original receipts, decisions, suppressions and exhausted sequences.
+Version: 2026-11-23. This is the agreed operating contract. Configuration is not activation or proof of a successful run. Historical instructions remain evidence, not authority to restart retired executors. Preserve original receipts, decisions, suppressions and exhausted sequences.
 
 ## Outcomes and ownership
 
@@ -28,7 +28,7 @@ Ordinary blockers escalate after two business hours of unsuccessful recovery, Mo
 
 ## Outreach and authority
 
-Research accepted Core segments, verify fit and first-party contact details, personalize the existing plain-text copy and inspect full mail history. Eligible routine initials and the single eligible follow-up may proceed under documented standing authority through the one selected verified sender. Do not invent blanket per-email approval when standing authority covers the action. Positive replies and commercial commitments become owner-review drafts.
+Research accepted Core segments, verify fit and first-party contact details, personalize the existing simple correspondence template and inspect full mail history. Eligible routine initials and the single eligible follow-up may proceed under documented standing authority through the one selected verified sender. Do not invent blanket per-email approval when standing authority covers the action. Positive replies and commercial commitments become owner-review drafts.
 
 For Local, first verify business facts, use the supported catalog release path and verify the public listing. Then send one personalized listing email containing that exact URL. The obsolete introduction-then-second-listing-notice sequence is retired. Existing conversations never receive a fresh cold introduction. Preserve provider corrections, failed-contact holds, suppressions and exhausted sequences; no retroactive catch-up flood.
 
@@ -40,11 +40,15 @@ Stan's native business Gmail and the optional dashboard Google Apps Script relay
 
 For the optional relay, `deliveryWindow.timeZone` and optional `deliveryWindow.weekdays` retain narrower restrictions in the revision. A Local packet must include its published `evidence.profileUrl`, that exact visible URL in its plain-text body, and a current `evidence.profileVerifiedAt` from independent public verification. Queue and claim both enforce the release window and listing evidence. Old Local packets must refresh evidence; historical sends are untouched.
 
-Preserve plain text, visible tracked URLs, researched personalization and the existing signature/footer. Do not invent short URLs or remove attribution tags. The optional relay's HTML exception still requires a specific reason and Sebastian's exact format decision. A changed message/window invalidates its approval; changing contact evidence alone does not silently change copy. Never automatically strip HTML at send time.
+The November 22 owner correction requires the established simple HTML correspondence format: natural paragraphs, short descriptive clickable link labels, a bold sender name, and the existing separate small postal-address/opt-out footer. Retain full tracking destinations in href attributes; do not expose UTM query strings as visible HTML text, manually hard-wrap prose, or accept whitespace-normalized copy equality as visual approval. Gmail Plain text mode must be off. Save the actual draft, verify its native HTML/MIME and exact links, and inspect phone-width rendering before sending. A generated plain-text alternative may retain the full URL for compatibility; it must not replace HTML delivery. Keep source claims, personalization, signature, suppressions and recipient windows unchanged. Reuse an existing draft by identity and never resend an already-sent email to repair appearance.
+
+This correction supersedes older plain-text-only and visible-UTM instructions. It does not activate or bypass the optional relay: its existing plain-text evidence field and exact-packet approval checks still apply, and the selected sender must support the approved HTML output before use. A changed message/window invalidates any relay approval; changing contact evidence alone does not silently change copy.
 
 ## Evidence, handoffs and measurement
 
-Prefer connected MCP tools or authenticated APIs, then supported native access. A successful read does not prove write/send access. Read narrow changes first; independently inspect full final copy, links, image, destination and timing before acceptance. Stable IDs and expected-version writes prevent stale overwrites. Do not mark drafts sent, approvals scheduled or schedules published. Source failures preserve last-success evidence and remain unknown, never zero activity.
+Prefer connected MCP tools or authenticated APIs, then supported native access. A successful read does not prove write/send access. Read narrow changes first; independently inspect full final copy, links, image, destination and timing before acceptance. Before scheduling social content, compare normalized full captions and actual artwork against published and scheduled records on the same platform. Ignore URL/UTM differences, punctuation, case and paragraph layout when checking caption duplicates; a different image does not make identical copy new. Compare visually equivalent artwork as well as asset identity, prevent back-to-back reuse, and require a recorded distinct purpose and materially different content for artwork reused within 30 days. Approved useful image reuse remains allowed. Hold only a matching candidate; retain unrelated unique scheduled items, and do not delete or repost published content to repair records.
+
+Stable IDs and expected-version writes prevent stale overwrites. Do not mark drafts sent, approvals scheduled or schedules published. Source failures preserve last-success evidence and remain unknown, never zero activity.
 
 The actor completing an authorized external action saves its original receipt immediately and reads the item back. If reporting fails, retry reporting only. An optional Page refresh cannot block independent work or cause a duplicate action. Gmail, native Marblism/publications, public listings, GitHub/Cloudflare and live payment evidence prove their own results.
 
