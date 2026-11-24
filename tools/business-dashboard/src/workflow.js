@@ -100,13 +100,37 @@ async function start(db,input,identity,now,overrides={}) {
   if(!canRun(identity,input.workflow))fail('Workflow capability required.',403);
   if(input.workflow==='preparation')await retirementPreflight(db,overrides);
   if(overrides[input.workflow]&&overrides[input.workflow].mode!=='active')fail('This workflow is paused or retired. Follow its recorded replacement instead of restarting it.',409);
-  const workflow=input.workflow,period=periodFor(workflow,now,overrides[workflow]);
-  let old=await db.prepare('SELECT id,actor,status,lease_until FROM workflow_runs WHERE workflow=? AND period=?').bind(workflow,period).first();
+  const workflow=input.workflow,logicalPeriod=periodFor(workflow,now,overrides[workflow]);
+  let period=logicalPeriod,retryOf=null;
+  if(input.retryOf!==undefined){
+    if(workflow!=='coordination')fail('Explicit recovery retries apply only to daily coordination.');
+    key(input.retryOf);
+  }
+  // A recovery acknowledges the old attempt; a retry gets its own immutable identity.
+  // Normal starts return the latest attempt, so a lost response cannot fork the day.
+  let old=workflow==='coordination'
+    ?await db.prepare('SELECT id,actor,status,lease_until,period FROM workflow_runs WHERE workflow=? AND (period=? OR period LIKE ?) ORDER BY started_at DESC,rowid DESC LIMIT 1')
+      .bind(workflow,period,`${period}:retry:%`).first()
+    :await db.prepare('SELECT id,actor,status,lease_until FROM workflow_runs WHERE workflow=? AND period=?').bind(workflow,period).first();
   // Preserve an hourly receipt created before the cadence change in its actual half-hour slot.
   if(!old&&workflow==='reconciliation'&&!overrides[workflow]?.dailySlots)old=await db.prepare(`SELECT id,actor,status,lease_until FROM workflow_runs
     WHERE workflow=? AND period=? AND started_at>=? AND started_at<?`)
     .bind(workflow,now.slice(0,13),`${period}:00.000Z`,new Date(Date.parse(`${period}:00.000Z`)+30*60000).toISOString()).first();
-  if(old){if(old.actor!==actor(identity))fail('This period is owned by another executor.',409);return {...old,reused:true};}
+  if(old){
+    if(old.actor!==actor(identity))fail('This period is owned by another executor.',409);
+    const reused=()=>workflow==='coordination'
+      ?{...old,period:logicalPeriod,attemptPeriod:old.period,...(old.period.includes(':retry:')?{retryOf:old.period.split(':retry:')[1]}:{}),reused:true}
+      :{...old,reused:true};
+    if(input.retryOf===undefined)return reused();
+    if(old.id!==input.retryOf){
+      if(old.period===`${logicalPeriod}:retry:${input.retryOf}`)return reused();
+      fail('Retry must reference the latest inspected attempt for this Eastern day.',409);
+    }
+    if(old.status!=='running'||old.lease_until>now)fail('Only an expired recovered attempt may be retried.',409);
+    const recovery=await db.prepare('SELECT run_id FROM workflow_recoveries WHERE run_id=?').bind(old.id).first();
+    if(!recovery)fail('Inspect side effects and record recovery before retrying daily coordination.',409);
+    retryOf=old.id;period=`${logicalPeriod}:retry:${retryOf}`;
+  }else if(input.retryOf!==undefined)fail('No matching daily attempt exists in the current Eastern day.',409);
   const id=crypto.randomUUID(),lease=new Date(Date.parse(now)+60*60000).toISOString(),before=await baseline(db);
   // Check and insert atomically: a slow previous check must not overlap the next slot.
   const result=await db.prepare(`INSERT INTO workflow_runs(id,workflow,period,actor,started_at,lease_until,baseline)
@@ -115,7 +139,7 @@ async function start(db,input,identity,now,overrides={}) {
     ) ON CONFLICT DO NOTHING`)
     .bind(id,workflow,period,actor(identity),now,lease,JSON.stringify(before),workflow,now).run();
   if(!result.meta?.changes)fail('Another run already owns this period or this workflow is still running. Read workflow status and wait for the next scheduled check.',409);
-  return {id,workflow,period,status:'running',startedAt:now,leaseUntil:lease};
+  return {id,workflow,period:logicalPeriod,...(retryOf?{retryOf,attemptPeriod:period}:{}),status:'running',startedAt:now,leaseUntil:lease};
 }
 async function activeRun(db,id,identity,now) {
   const run=await db.prepare('SELECT * FROM workflow_runs WHERE id=?').bind(key(id)).first();
@@ -180,7 +204,8 @@ async function finish(db,input,identity,now,loadBoard,env) {
   result.checkedSources=latestSources.filter(w=>w.result.checked&&w.result.status==='current').map(w=>w.reference);
   if(run.workflow==='reconciliation')result.coverage=sourceCoverage(writes);
   result.checkedItems=refs('item',r=>r.checked);
-  result.coordination=refs('coordination',r=>r.cadence==='daily'&&r.period===run.period);
+  const assessmentPeriod=run.workflow==='coordination'?run.period.split(':retry:')[0]:run.period;
+  result.coordination=refs('coordination',r=>r.cadence==='daily'&&r.period===assessmentPeriod);
   result.completedHandoffs=(await db.prepare("SELECT decision_id FROM work_handoffs WHERE claimed_by=? AND status='completed' AND updated_at>=?").bind(run.id,run.started_at).all()).results.map(h=>h.decision_id);
   const handoffs=(await db.prepare("SELECT h.* FROM work_handoffs h JOIN work_items w ON w.id=h.item_id WHERE h.status IN ('pending','claimed','blocked') AND w.native_state NOT IN ('sent','published','closed','scheduled')").all()).results;
   if(input.outcome==='advanced'&&!result.advancedItems.length&&!result.completedHandoffs.length)fail('No saved work changed. A run cannot claim advancement without an artifact.');

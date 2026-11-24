@@ -330,7 +330,20 @@ export async function workApi(request,env,identity,loadBoard) {
       if(['daily','weekly'].includes(input.cadence)&&(!departments.every(d=>document.assessments.some(a=>a.department===d&&typeof a.summary==='string'&&a.summary.trim()))||document.assessments.length!==3))fail('All three department assessments are required.');
       const id=key(input.id),period=text(input.period,100);
       const result=await db.prepare('INSERT INTO coordination_runs(id,cadence,period,document,created_at) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING').bind(id,input.cadence,period,JSON.stringify(document),now).run();
-      if(!result.meta?.changes){const old=await db.prepare('SELECT document FROM coordination_runs WHERE cadence=? AND period=?').bind(input.cadence,period).first();if(old?.document!==JSON.stringify(document))fail('This coordination period already has a different record.',409);}
+      if(!result.meta?.changes){
+        const old=await db.prepare('SELECT id,document,created_at FROM coordination_runs WHERE cadence=? AND period=?').bind(input.cadence,period).first();
+        if(old?.document!==JSON.stringify(document))fail('This coordination period already has a different record.',409);
+        // Explicitly rereading the exact saved assessment can recover a lost finish.
+        // Never rewrite it, borrow an unrelated record, or count recovery alone as work.
+        const parent=run?.period?.split(':retry:')[1];
+        if(parent&&input.cadence==='daily'&&period===run.period.split(':retry:')[0]){
+          if(id!==old.id)fail('Revalidate the original saved assessment identity.',409);
+          const owned=await db.prepare("SELECT 1 AS found FROM workflow_run_writes WHERE run_id=? AND kind='coordination' AND reference=?").bind(parent,old.id).first();
+          if(!owned)fail('The recovered attempt did not own this assessment.',409);
+          const repeated=await db.prepare("SELECT 1 AS found FROM workflow_run_writes WHERE run_id=? AND kind='coordination' AND reference=?").bind(run.id,old.id).first();
+          if(!repeated)await recordRunWrite(db,run,'coordination',old.id,1,{cadence:input.cadence,period,revalidated:true,originalCreatedAt:old.created_at},now);
+        }
+      }
       else await recordRunWrite(db,run,'coordination',id,1,{cadence:input.cadence,period},now);
       return reply({saved:true});
     }
