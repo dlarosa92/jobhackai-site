@@ -12,6 +12,7 @@ The existing 15-minute deadline cron remains the scheduled dispatcher. Authentic
 - Deadline checks atomically record one failure notice per canonical alert episode and one recovery when that episode closes. Repeated unchanged checks remain quiet. Recovery describes a monitoring change, not proof that business work finished.
 - A failure resolved before any dispatch attempt is held as `resolved_before_dispatch`; it and its unnecessary recovery are not sent. If a send was already attempted, recovery remains eligible because the failure might have reached the owner.
 - Notifications are queued only when the feature flag is explicitly true. Existing historical completed runs are not replayed on activation. Existing still-active alerts may produce their first notice when the route is enabled.
+- Episode matching uses literal `instr(...)=1` prefixes. Do not replace this with LIKE/GLOB: real episode identifiers exceed [D1's 50-byte pattern limit](https://developers.cloudflare.com/d1/platform/limits/), which aborts the shared monitor before dispatch.
 - The same alert episode does not generate an email for each wording change. A resolved and later recurring episode gets a new identity. More elaborate severity escalation is outside this bounded implementation.
 
 ## Routine-email retirement
