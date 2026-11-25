@@ -320,3 +320,22 @@ test('real deadline checker retires briefs while preserving its scheduled monito
  assert.equal(f.row('brief:legacy').last_reason,'routine_notice_retired');
  assert.equal(f.sql.prepare('SELECT count(*) n FROM owner_notifications').get().n,1);
 });
+
+// D1 limits LIKE/GLOB patterns to 50 bytes. Real episode prefixes exceed that.
+test('episode matching uses literal prefixes without D1 wildcard limits or cross-episode matches',async()=>{
+ const f=fixture();delete f.env.OWNER_RESEND_API_KEY;
+ const episode='workflow-preparation';
+ f.sql.prepare("INSERT INTO workflow_alerts(id,detail,first_seen_at,last_seen_at) VALUES(?,?,?,?)").run(episode,'Realistic long episode',initial,initial);
+ const matching=`failure:${episode}:${initial}:after:later-run`;
+ assert.ok(Buffer.byteLength(matching)>50);f.add(matching);
+ f.sql.prepare("UPDATE owner_notifications SET attempts=1,first_attempt_at=? WHERE id=?").run(initial,matching);
+ const prepare=f.db.prepare;f.db.prepare=query=>{assert.doesNotMatch(query,/\b(?:LIKE|GLOB)\s*'failure:/i);return prepare(query);};
+ await f.db.batch(alertStatements(f.db,[],f.at(1).toISOString(),f.env));
+ assert.equal(f.sql.prepare("SELECT count(*) n FROM owner_notifications WHERE kind='recovery'").get().n,1);
+ const g=fixture();delete g.env.OWNER_RESEND_API_KEY;
+ g.sql.prepare("INSERT INTO workflow_alerts(id,detail,first_seen_at,last_seen_at) VALUES('handoff-a_b','Literal underscore',?,?)").run(initial,initial);
+ g.add(`failure:handoff-aXb:${initial}:after:other`);
+ g.sql.exec("UPDATE owner_notifications SET attempts=1");
+ await g.db.batch(alertStatements(g.db,[],g.at(1).toISOString(),g.env));
+ assert.equal(g.sql.prepare("SELECT count(*) n FROM owner_notifications WHERE kind='recovery'").get().n,0);
+});
