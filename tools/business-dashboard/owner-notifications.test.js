@@ -10,8 +10,8 @@ function fixture(){
  const sql=new DatabaseSync(':memory:');sql.exec(readFileSync(new URL('./schema.sql',import.meta.url),'utf8'));
  const db={prepare(query){return {args:[],bind(...args){this.args=args;return this;},async first(){return sql.prepare(query).get(...this.args)||null;},async all(){return {results:sql.prepare(query).all(...this.args)};},async run(){return d1Run(sql,query,this.args);},query};},async batch(statements){sql.exec('BEGIN');try{const r=statements.map(s=>d1Run(sql,s.query,s.args));sql.exec('COMMIT');return r;}catch(e){sql.exec('ROLLBACK');throw e;}}};
  const env={DASHBOARD_DB:db,OWNER_NOTIFICATIONS_ENABLED:'true',OWNER_NOTIFICATION_ENVIRONMENT:'prod',OWNER_RESEND_API_KEY:'fixture-only'};
- const add=(id='brief:test',created=initial)=>sql.prepare("INSERT INTO owner_notifications(id,kind,environment,subject,body,created_at,next_attempt_at,updated_at) VALUES (?,'brief','prod','JobHackAI update',?,?,?,?)").run(id,`Useful result\n${COMPANY_BRIEF}`,created,created,created);
- const row=(id='brief:test')=>sql.prepare('SELECT * FROM owner_notifications WHERE id=?').get(id);
+ const add=(id='failure:test',created=initial)=>sql.prepare("INSERT INTO owner_notifications(id,kind,environment,subject,body,created_at,next_attempt_at,updated_at) VALUES (?,'failure','prod','JobHackAI update',?,?,?,?)").run(id,`Useful result\n${COMPANY_BRIEF}`,created,created,created);
+ const row=(id='failure:test')=>sql.prepare('SELECT * FROM owner_notifications WHERE id=?').get(id);
  const at=minutes=>new Date(Date.parse(initial)+minutes*60000);
  return {sql,db,env,add,row,at};
 }
@@ -36,7 +36,7 @@ test('one fixed-recipient send retains provider ID; later exact receipt alone es
  await flushOwnerNotifications(f.env,f.at(0),async(url,request)=>{posted={url,...request};return Response.json({id:'mail_1'});});
  assert.equal(f.row().state,'accepted');assert.equal(f.row().provider_id,'mail_1');assert.equal(f.row().delivered_at,null);
  assert.deepEqual(JSON.parse(posted.body),{from:OWNER_SENDER,to:[OWNER_RECIPIENT],subject:'JobHackAI update',text:f.row().body});
- assert.match(posted.headers['Idempotency-Key'],/^owner-notice\/prod\/brief:test$/);
+ assert.match(posted.headers['Idempotency-Key'],/^owner-notice\/prod\/failure:test$/);
  await flushOwnerNotifications(f.env,f.at(15),async(url,request)=>{assert.equal(request.method,'GET');assert.equal(url,'https://api.resend.com/emails/mail_1');return receipt(f.row());});
  assert.equal(f.row().state,'delivered');assert.equal(f.row().attempts,1);assert.equal(f.row().delivered_at,f.at(15).toISOString());
  await flushOwnerNotifications(f.env,f.at(30),noFetch);
@@ -47,7 +47,7 @@ test('ambiguous response retries exact immutable payload/key within window, neve
  const unknown=async(url,r)=>{calls.push(r);throw new Error('connection lost after acceptance');};
  await flushOwnerNotifications(f.env,f.at(0),unknown);await flushOwnerNotifications(f.env,f.at(15),unknown);
  assert.equal(calls.length,2);assert.equal(calls[0].body,calls[1].body);assert.deepEqual(calls[0].headers,calls[1].headers);
- assert.throws(()=>f.sql.prepare("UPDATE owner_notifications SET body='changed' WHERE id=?").run('brief:test'),/immutable/);
+ assert.throws(()=>f.sql.prepare("UPDATE owner_notifications SET body='changed' WHERE id=?").run('failure:test'),/immutable/);
  await flushOwnerNotifications(f.env,f.at(23*60),noFetch);assert.equal(f.row().state,'uncertain');assert.equal(f.row().attempts,2);
  await flushOwnerNotifications(f.env,f.at(48*60),noFetch);
 });
@@ -56,8 +56,8 @@ test('a crashed sending lease can recover same key; concurrent flush cannot send
  const f=fixture();f.add();let release,entered;const waiting=new Promise(r=>entered=r),gate=new Promise(r=>release=r);let calls=0;
  const sending=flushOwnerNotifications(f.env,f.at(0),async()=>{calls++;entered();await gate;return Response.json({id:'mail_1'});});
  await waiting;await flushOwnerNotifications(f.env,f.at(0),noFetch);release();await sending;assert.equal(calls,1);
- const g=fixture();g.add();g.sql.prepare("UPDATE owner_notifications SET state='sending',attempts=1,first_attempt_at=?,lease_until=?,token='crashed' WHERE id=?").run(initial,g.at(1).toISOString(),'brief:test');
- await flushOwnerNotifications(g.env,g.at(2),async(url,r)=>{assert.equal(r.headers['Idempotency-Key'],'owner-notice/prod/brief:test');return Response.json({id:'original_mail'});});
+ const g=fixture();g.add();g.sql.prepare("UPDATE owner_notifications SET state='sending',attempts=1,first_attempt_at=?,lease_until=?,token='crashed' WHERE id=?").run(initial,g.at(1).toISOString(),'failure:test');
+ await flushOwnerNotifications(g.env,g.at(2),async(url,r)=>{assert.equal(r.headers['Idempotency-Key'],'owner-notice/prod/failure:test');return Response.json({id:'original_mail'});});
  assert.equal(g.row().provider_id,'original_mail');assert.equal(g.row().attempts,2);
 });
 
@@ -76,7 +76,7 @@ test('receipt failures cannot resend and polling stops visibly; a bounce suppres
  assert.equal(f.row().state,'accepted');assert.equal(f.row().last_reason,'delivery_receipt_requires_review');assert.equal(f.row().next_poll_at,null);
  await flushOwnerNotifications(f.env,f.at(3000),noFetch);assert.equal(f.row().attempts,1);
  const g=fixture();g.add();await flushOwnerNotifications(g.env,g.at(0),async()=>Response.json({id:'mail_1'}));
- await flushOwnerNotifications(g.env,g.at(15),async()=>receipt(g.row(),'bounced'));g.add('brief:new');
+ await flushOwnerNotifications(g.env,g.at(15),async()=>receipt(g.row(),'bounced'));g.add('failure:new');
  assert.equal((await flushOwnerNotifications(g.env,g.at(30),noFetch)).status,'suppressed');
 });
 
@@ -105,20 +105,20 @@ test('deadline episode queues once, unchanged checks stay quiet and recovery pre
  assert.equal((await read.json()).ownerNotifications.status,'missing_configuration');
 });
 
-test('only authenticated advanced receipts queue a brief, atomically with run completion',async()=>{
- const f=fixture(),identity={role:'machine',id:'test',capabilities:['prepare']};delete f.env.OWNER_RESEND_API_KEY;
- const request=(action,body)=>new Request(`https://dashboard.jobhackai.io/api/workflow/${action}`,{method:'POST',body:JSON.stringify(body)});
- const begin=await workflowApi(request('start',{workflow:'preparation'}),f.env,identity,f.at(0));const run=await begin.json();
+test('advanced completion keeps work evidence without queuing email or depending on its outbox',async()=>{
+ const f=fixture(),identity={role:'machine',id:'test',capabilities:['prepare']};
+ f.sql.exec("CREATE TRIGGER reject_notice BEFORE INSERT ON owner_notifications BEGIN SELECT RAISE(ABORT,'unexpected_notice'); END");
+ const run=await (await workflowApi(flowRequest('start',{workflow:'preparation'}),f.env,identity,f.at(0))).json();
  f.sql.prepare("INSERT INTO workflow_run_writes(run_id,kind,reference,version,result,recorded_at) VALUES (?,'item','result',1,?,?)").run(run.id,JSON.stringify({advanced:true,checked:true}),initial);
- const input={id:run.id,outcome:'advanced',summary:'Partner readiness evidence was completed.',evidence:[{url:'https://example.test/proof',fact:'Independent acceptance read'}],to:'unwanted@example.test',body:'Cannot choose message payload'};
- const finished=await workflowApi(request('finish',input),f.env,identity,f.at(1),async()=>({items:[]}));assert.equal(finished.status,200);
- const notice=f.sql.prepare('SELECT * FROM owner_notifications').get();assert.equal(notice.id,`brief:${run.id}`);assert.match(notice.body,/Partner readiness/);assert.doesNotMatch(notice.body,/unwanted|Cannot choose/);
- assert.equal((await workflowApi(request('finish',input),f.env,identity,f.at(1))).status,409);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM owner_notifications').get().n,1);
- const g=fixture();delete g.env.OWNER_RESEND_API_KEY;const second=await workflowApi(request('start',{workflow:'preparation'}),g.env,identity,g.at(0));const another=await second.json();
- g.sql.prepare("INSERT INTO workflow_run_writes(run_id,kind,reference,version,result,recorded_at) VALUES (?,'item','result',1,?,?)").run(another.id,JSON.stringify({advanced:true,checked:true}),initial);
- g.sql.exec("CREATE TRIGGER reject_notice BEFORE INSERT ON owner_notifications BEGIN SELECT RAISE(ABORT,'test_storage_failure'); END");
- await assert.rejects(workflowApi(request('finish',{...input,id:another.id}),g.env,identity,g.at(1)),/test_storage_failure/);
- assert.equal(g.sql.prepare('SELECT status FROM workflow_runs WHERE id=?').get(another.id).status,'running');
+ const input={id:run.id,outcome:'advanced',summary:'Partner readiness evidence was completed.',evidence:[{url:'https://example.test/proof',fact:'Independent acceptance read'}]};
+ const finished=await workflowApi(flowRequest('finish',input),f.env,identity,f.at(1),async()=>({items:[]}));
+ assert.equal(finished.status,200);
+ const saved=f.sql.prepare('SELECT status,result FROM workflow_runs WHERE id=?').get(run.id);
+ assert.equal(saved.status,'advanced');assert.equal(JSON.parse(saved.result).summary,input.summary);
+ assert.deepEqual(JSON.parse(saved.result).advancedItems,['result']);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM owner_notifications').get().n,0);
+ assert.equal((await workflowApi(flowRequest('finish',input),f.env,identity,f.at(1))).status,409);
+ await flushOwnerNotifications(f.env,f.at(15),noFetch);
 });
 
  test('a failure resolved before any dispatch is held without sending an obsolete recovery',async()=>{
@@ -133,17 +133,17 @@ test('only authenticated advanced receipts queue a brief, atomically with run co
  });
 
 test('receipt polling precedes new dispatch so a newly observed bounce stops queued notices',async()=>{
- const f=fixture();f.add();await flushOwnerNotifications(f.env,f.at(0),async()=>Response.json({id:'mail_1'}));f.add('brief:second');
+ const f=fixture();f.add();await flushOwnerNotifications(f.env,f.at(0),async()=>Response.json({id:'mail_1'}));f.add('failure:second');
  let reads=0;const status=await flushOwnerNotifications(f.env,f.at(15),async(url,r)=>{assert.equal(r.method,'GET');reads++;return receipt(f.row(),'complained');});
- assert.equal(reads,1);assert.equal(status.status,'suppressed');assert.equal(f.row('brief:second').attempts,0);
+ assert.equal(reads,1);assert.equal(status.status,'suppressed');assert.equal(f.row('failure:second').attempts,0);
 });
 
  test('delivered receipts remain monitored for late complaint and provider suppression stops the route',async()=>{
  for(const terminal of ['complained','suppressed']){
  const f=fixture();f.add();await flushOwnerNotifications(f.env,f.at(0),async()=>Response.json({id:'mail_1'}));
- await flushOwnerNotifications(f.env,f.at(15),async()=>receipt(f.row()));const delivered=f.row().delivered_at;f.add('brief:second',f.at(1455).toISOString());
+ await flushOwnerNotifications(f.env,f.at(15),async()=>receipt(f.row()));const delivered=f.row().delivered_at;f.add('failure:second',f.at(1455).toISOString());
  await flushOwnerNotifications(f.env,f.at(1455),async(url,r)=>{assert.equal(r.method,'GET');return receipt(f.row(),terminal);});
- assert.equal(f.row().state,'failed');assert.equal(f.row().delivered_at,delivered);assert.equal(f.row('brief:second').attempts,0);
+ assert.equal(f.row().state,'failed');assert.equal(f.row().delivered_at,delivered);assert.equal(f.row('failure:second').attempts,0);
  assert.equal((await notificationStatus(f.env)).status,'suppressed');
  }
  });
@@ -162,7 +162,7 @@ test('receipt polling precedes new dispatch so a newly observed bounce stops que
  });
  test('atomic dispatch claim rechecks a concurrently recorded suppression',async()=>{
  const f=fixture();f.add();const original=f.db.prepare.bind(f.db);let inserted=false;
- f.db.prepare=query=>{if(query.includes("SET state='sending',attempts=attempts+1")&&!inserted){inserted=true;f.add('brief:complaint');f.sql.prepare("UPDATE owner_notifications SET state='failed',last_reason='provider_suppressed' WHERE id='brief:complaint'").run();}return original(query);};
+ f.db.prepare=query=>{if(query.includes("SET state='sending',attempts=attempts+1")&&!inserted){inserted=true;f.add('failure:complaint');f.sql.prepare("UPDATE owner_notifications SET state='failed',last_reason='provider_suppressed' WHERE id='failure:complaint'").run();}return original(query);};
  await flushOwnerNotifications(f.env,f.at(0),noFetch);assert.equal(f.row().attempts,0);assert.equal(inserted,true);
  });
 
@@ -189,7 +189,7 @@ test('urgent completion dispatches without a cron tick and bypasses ordinary bac
  assert.equal(replay.status,409);
  delete f.env.OWNER_RESEND_API_KEY;
  await checkWorkflowDeadlines(f.env,f.at(2));await checkWorkflowDeadlines(f.env,f.at(3));
- assert.equal(f.sql.prepare("SELECT count(*) n FROM owner_notifications WHERE kind='failure'").get().n,1);
+ assert.equal(f.sql.prepare("SELECT count(*) n FROM owner_notifications WHERE kind='failure'").get().n,2);
 });
 
 test('urgent persistence is atomic, rejects invalid callers and respects disabled transport',async()=>{
@@ -270,4 +270,53 @@ test('later episode notices retain recovery and resolved-before-send behavior',a
   if(attempted){assert.equal(f.row(id).state,'accepted');assert.equal(f.row(`recovery:workflow-preparation:${initial}`).state,'pending');}
   else{assert.equal(f.row(id).last_reason,'resolved_before_dispatch');assert.equal(f.row(`recovery:workflow-preparation:${initial}`),undefined);}
  }
+});
+
+function legacyBrief(f,id='brief:legacy',state='pending',attempts=0,environment='prod'){
+ f.sql.prepare("INSERT INTO owner_notifications(id,kind,environment,subject,body,created_at,next_attempt_at,updated_at,state,attempts,first_attempt_at) VALUES(?,'brief',?,'JobHackAI: Work completed','Original internal work summary',?,?,?,?,?,?)")
+  .run(id,environment,initial,initial,initial,state,attempts,attempts?initial:null);
+ return id;
+}
+test('existing routine backlog is retired without deletion or sends across repeated ticks',async()=>{
+ const f=fixture();const id=legacyBrief(f);let calls=0;
+ const transport=async()=>{calls++;return Response.json({id:'unexpected'});};
+ const before=f.row(id);
+ for(const minute of [0,15,30])await flushOwnerNotifications(f.env,f.at(minute),transport);
+ assert.equal(calls,0);assert.equal(f.row(id).state,'failed');assert.equal(f.row(id).last_reason,'routine_notice_retired');
+ for(const key of ['body','subject','created_at','attempts','provider_id'])assert.equal(f.row(id)[key],before[key]);
+ assert.deepEqual((await notificationStatus(f.env)).reviewRequired,[]);
+});
+test('uncertain routine attempts are held, live leases survive, and other environments are untouched',async()=>{
+ const f=fixture();legacyBrief(f,'brief:pending','pending',1);legacyBrief(f,'brief:expired','sending',1);legacyBrief(f,'brief:live','sending',1);legacyBrief(f,'brief:qa','pending',0,'qa');
+ f.sql.prepare("UPDATE owner_notifications SET token='old-lease',lease_until=? WHERE id IN ('brief:expired','brief:live')").run(f.at(1).toISOString());
+ let calls=0;const transport=async()=>{calls++;return Response.json({id:'unexpected'});};
+ await flushOwnerNotifications(f.env,f.at(0),transport);
+ assert.equal(f.row('brief:live').state,'sending');assert.equal(f.row('brief:live').token,'old-lease');assert.equal(f.row('brief:qa').state,'pending');
+ await flushOwnerNotifications(f.env,f.at(2),transport);
+ for(const id of ['brief:pending','brief:expired','brief:live']){assert.equal(f.row(id).state,'uncertain');assert.equal(f.row(id).attempts,1);assert.equal(f.row(id).last_reason,'routine_send_outcome_requires_review');}
+ assert.equal(calls,0);assert.equal((await notificationStatus(f.env)).reviewRequired.some(r=>r.last_reason==='routine_send_outcome_requires_review'),true);
+});
+test('a stale writer inserting a routine notice at the send claim cannot bypass the policy',async()=>{
+ const f=fixture(),prepare=f.db.prepare;let inserted=false,calls=0;
+ f.db.prepare=query=>{if(query.includes("SET state='sending',attempts=attempts+1")&&!inserted){inserted=true;legacyBrief(f);}return prepare(query);};
+ await flushOwnerNotifications(f.env,f.at(0),async()=>{calls++;return Response.json({id:'unexpected'});});
+ assert.equal(inserted,true);assert.equal(calls,0);assert.equal(f.row('brief:legacy').attempts,0);
+ await flushOwnerNotifications(f.env,f.at(15),async()=>{calls++;return Response.json({id:'unexpected'});});
+ assert.equal(calls,0);assert.equal(f.row('brief:legacy').last_reason,'routine_notice_retired');
+});
+test('already accepted routine mail still gets receipt monitoring and complaint protection',async()=>{
+ const f=fixture();const id=legacyBrief(f,'brief:accepted','accepted',1);
+ f.sql.prepare("UPDATE owner_notifications SET provider_id='historical-provider',accepted_at=?,next_poll_at=? WHERE id=?").run(initial,initial,id);
+ f.add();let reads=0,posts=0;
+ await flushOwnerNotifications(f.env,f.at(0),async(url,r)=>{if(r.method==='POST'){posts++;return Response.json({id:'unexpected'});}reads++;return receipt(f.row(id),'complained');});
+ assert.equal(reads,1);assert.equal(posts,0);assert.equal(f.row(id).last_reason,'provider_complained');assert.equal(f.row(id).provider_id,'historical-provider');
+ assert.equal(f.row().attempts,0);assert.equal((await notificationStatus(f.env)).status,'suppressed');
+});
+test('real deadline checker retires briefs while preserving its scheduled monitoring work',async()=>{
+ const f=fixture();legacyBrief(f);
+ // Pause fixture workflows to avoid fabricating an incident and any real transport.
+ f.env.DASHBOARD_WORKFLOW_POLICIES=JSON.stringify(Object.fromEntries(['preparation','reconciliation','coordination'].map(k=>[k,{mode:'paused',reason:'isolated test'}])));
+ for(const minute of [0,15,30]){const result=await checkWorkflowDeadlines(f.env,f.at(minute));assert.equal(result.ownerNotifications.attempted,0);assert.equal(result.ownerNotifications.polled,0);}
+ assert.equal(f.row('brief:legacy').last_reason,'routine_notice_retired');
+ assert.equal(f.sql.prepare('SELECT count(*) n FROM owner_notifications').get().n,1);
 });
