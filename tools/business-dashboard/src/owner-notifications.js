@@ -29,17 +29,6 @@ export function urgentStatements(db,run,result,now,env){
     .bind(now,`workflow-${run.workflow}`,`urgent:${run.id}`)];
 }
 
-// Statement belongs to the same D1 batch as the successfully completed run.
-export function briefStatement(db,run,result,now,env){
-  const count=result.advancedItems.length+result.completedHandoffs.length;
-  if(!count)return null; // A checked source or huddle alone is not a business result.
-  const subject=`JobHackAI: ${names[run.workflow]||'work update'}`;
-  const body=`${clean(result.summary,1200)}\n\n${count} saved work update(s) were recorded. This notice reports the saved operating event above. Return to the existing JobHackAI operations chat for decisions. Optional saved Page snapshot (it may be stale):\n${COMPANY_BRIEF}\n\nRecorded ${now}. This notice does not verify customer growth or revenue.`;
-  return db.prepare(`INSERT OR IGNORE INTO owner_notifications(id,kind,environment,subject,body,created_at,next_attempt_at,updated_at)
-    SELECT ?, 'brief', ?, ?, ?, ?, ?, ? FROM workflow_runs WHERE id=? AND status='advanced' AND finished_at=?`)
-    .bind(`brief:${run.id}`,environment(env),subject,body,now,now,now,run.id,now);
-}
-
 // Queue from canonical alert rows inside the deadline check's transaction. Concurrent checks
 // use the persisted episode timestamp, not independent read-time timestamps.
 export function alertStatements(db,ids,now,env,dueIds=ids){
@@ -81,7 +70,7 @@ export async function notificationStatus(env){
   if(!notificationsEnabled(env))return {status:'disabled',detail:'Owner email notifications are off.'};
   let rows;try{rows=await env.DASHBOARD_DB.prepare('SELECT state,COUNT(*) AS count FROM owner_notifications GROUP BY state').all();}
   catch{return {status:'unavailable',detail:'Owner notification storage could not be read. Delivery is unverified.'};}
-  const reviews=await env.DASHBOARD_DB.prepare("SELECT state,last_reason,COUNT(*) AS count FROM owner_notifications WHERE state IN ('failed','uncertain') OR last_reason IN ('delivery_receipt_requires_review','complaint_monitoring_window_closed') OR environment<>? GROUP BY state,last_reason").bind(environment(env)).all();
+  const reviews=await env.DASHBOARD_DB.prepare("SELECT state,last_reason,COUNT(*) AS count FROM owner_notifications WHERE (state IN ('failed','uncertain') AND COALESCE(last_reason,'')<>'routine_notice_retired') OR last_reason IN ('delivery_receipt_requires_review','complaint_monitoring_window_closed') OR environment<>? GROUP BY state,last_reason").bind(environment(env)).all();
   const suppressed=reviews.results.some(r=>['provider_bounced','provider_complained','provider_suppressed'].includes(r.last_reason));
   return {status:suppressed?'suppressed':configured(env)?'configured':'missing_configuration',reviewRequired:reviews.results,
     detail:suppressed?'Owner email stopped after a bounce, complaint or provider suppression. Investigate before resuming.':configured(env)?'Provider acceptance, delivery and phone visibility are separate checks. Delivered receipts are monitored for seven days only.':'Owner email is enabled but its dedicated Resend credential or explicit environment binding is missing. No send can occur.',
@@ -110,6 +99,14 @@ export async function flushOwnerNotifications(env,now=new Date(),transport=fetch
   if(!notificationsEnabled(env))return {status:'disabled',attempted:0,polled:0};
   const db=env.DASHBOARD_DB,at=now.toISOString(),retryCutoff=stamp(now.getTime()-23*HOUR),old=stamp(now.getTime()-24*HOUR);
   if(!configured(env))return {status:'missing_configuration',attempted:0,polled:0};
+  // Retire only obsolete routine work emails. Keep immutable content and receipts.
+  // Never touch a live lease: an older invocation may already have posted the message.
+  await db.prepare(`UPDATE owner_notifications SET
+    state=CASE WHEN attempts=0 AND first_attempt_at IS NULL THEN 'failed' ELSE 'uncertain' END,
+    last_reason=CASE WHEN attempts=0 AND first_attempt_at IS NULL THEN 'routine_notice_retired' ELSE 'routine_send_outcome_requires_review' END,
+    token=NULL,lease_until=NULL,updated_at=?
+    WHERE kind='brief' AND environment=? AND state IN ('pending','sending')
+    AND (lease_until IS NULL OR lease_until<=?)`).bind(at,environment(env),at).run();
   const suppressed=await db.prepare("SELECT 1 FROM owner_notifications WHERE last_reason IN ('provider_bounced','provider_complained','provider_suppressed') LIMIT 1").first();
   if(suppressed)return {status:'suppressed',attempted:0,polled:0};
   // Expired ambiguous attempts never get a new key or a blind retry outside provider's window.
@@ -144,7 +141,7 @@ export async function flushOwnerNotifications(env,now=new Date(),transport=fetch
   const token=crypto.randomUUID();
   const row=await db.prepare(`UPDATE owner_notifications SET state='sending',attempts=attempts+1,token=?,lease_until=?,
     first_attempt_at=COALESCE(first_attempt_at,?),updated_at=? WHERE id=(SELECT id FROM owner_notifications
-    WHERE environment=? AND (state='pending' OR (state='sending' AND lease_until<=?)) AND next_attempt_at<=? AND attempts<5
+    WHERE kind IN ('failure','recovery') AND environment=? AND (state='pending' OR (state='sending' AND lease_until<=?)) AND next_attempt_at<=? AND attempts<5
     AND (first_attempt_at IS NULL OR first_attempt_at>?) AND (? IS NULL OR id=?)
     AND NOT EXISTS(SELECT 1 FROM owner_notifications stop WHERE stop.last_reason IN ('provider_bounced','provider_complained','provider_suppressed'))
     ORDER BY CASE WHEN id LIKE 'urgent:%' THEN 0 ELSE 1 END,created_at,id LIMIT 1)
