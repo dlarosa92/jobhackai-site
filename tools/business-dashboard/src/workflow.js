@@ -1,5 +1,5 @@
 import { businessHoursElapsed, monthlyReportPeriod } from './operating-policy.js';
-import {notificationsEnabled,briefStatement,urgentStatements,alertStatements,notificationStatus,flushOwnerNotifications} from './owner-notifications.js';
+import {notificationsEnabled,urgentStatements,alertStatements,notificationStatus,flushOwnerNotifications} from './owner-notifications.js';
 // Receipts and deadlines are separate from source freshness and external release authority.
 const policies = {preparation:'prepare', reconciliation:'reconcile', coordination:'coordinate'};
 const reconciliationSources = ['marblism','campaign','gmail','directory','github'];
@@ -198,7 +198,6 @@ async function finish(db,input,identity,now,loadBoard,env) {
   const notices=[];
   if(notificationsEnabled(env)){
     if(result.escalation)notices.push(...urgentStatements(db,run,result,now,env));
-    else if(input.outcome==='advanced'){const notice=briefStatement(db,run,result,now,env);if(notice)notices.push(notice);}
   }
   const [saved]=await db.batch([update,...notices]);
   if(!saved.meta?.changes)fail('Run changed.',409);
