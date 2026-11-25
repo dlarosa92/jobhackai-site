@@ -24,7 +24,7 @@ export function urgentStatements(db,run,result,now,env){
     WHERE state='pending' AND attempts=0 AND EXISTS (
       SELECT 1 FROM workflow_alerts a WHERE a.id=? AND a.resolved_at IS NULL
       AND (owner_notifications.id='failure:'||a.id||':'||a.first_seen_at
-        OR owner_notifications.id LIKE 'failure:'||a.id||':'||a.first_seen_at||':after:%'))
+        OR instr(owner_notifications.id,'failure:'||a.id||':'||a.first_seen_at||':after:')=1))
     AND EXISTS(SELECT 1 FROM owner_notifications WHERE id=?)`)
     .bind(now,`workflow-${run.workflow}`,`urgent:${run.id}`)];
 }
@@ -55,14 +55,14 @@ export function alertStatements(db,ids,now,env,dueIds=ids){
       WHERE resolved_at IS NULL AND id NOT IN (SELECT value FROM json_each(?))
       AND EXISTS(SELECT 1 FROM owner_notifications n WHERE n.attempts>0
         AND (n.id='failure:'||workflow_alerts.id||':'||workflow_alerts.first_seen_at
-          OR n.id LIKE 'failure:'||workflow_alerts.id||':'||workflow_alerts.first_seen_at||':after:%'))`)
+          OR instr(n.id,'failure:'||workflow_alerts.id||':'||workflow_alerts.first_seen_at||':after:')=1))`)
       .bind(environment(env),`\n\nThis clears the monitoring condition; it does not prove the underlying business work finished. Return to the existing JobHackAI operations chat for decisions. Optional saved Page snapshot (it may be stale):\n${COMPANY_BRIEF}\n\nChecked ${now}.`,now,now,now,active),
     db.prepare(`UPDATE owner_notifications SET state='failed',last_reason='resolved_before_dispatch',updated_at=?
       WHERE kind='failure' AND state='pending' AND attempts=0 AND EXISTS (
         SELECT 1 FROM workflow_alerts a WHERE a.resolved_at IS NULL
         AND a.id NOT IN (SELECT value FROM json_each(?))
         AND (owner_notifications.id='failure:'||a.id||':'||a.first_seen_at
-          OR owner_notifications.id LIKE 'failure:'||a.id||':'||a.first_seen_at||':after:%'))`).bind(now,active)
+          OR instr(owner_notifications.id,'failure:'||a.id||':'||a.first_seen_at||':after:')=1))`).bind(now,active)
   ];
 }
 
