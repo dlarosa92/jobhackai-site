@@ -36,7 +36,7 @@ Greater Cincinnati and Northern Kentucky.
 
 **How to get a quote**
 
-Unknown in the checked sources. Ask the provider to confirm in writing.
+Request service using the provider contact form, email info@leitnerelectric.com, or call/text Ohio 513-351-9024 or Kentucky 859-282-9024. No quote price is published on the contact page.
 
 **Published installation scope**
 
@@ -49,6 +49,7 @@ Unknown in the checked sources. Ask the provider to confirm in writing.
 ## Sources and check dates
 
 -   [Provider service page](https://www.leitnerelectric.com/ev-charger-installation-services), checked 2026-10-11
+-   [Provider contact and service request page](https://www.leitnerelectric.com/contact), checked 2026-11-21
 
 [Suggest a correction for review](https://jobhackai.io/directory/get-listed?category=ev-charger-installation)
 

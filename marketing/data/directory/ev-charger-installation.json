@@ -215,7 +215,7 @@
         "charger": null,
         "permits": null,
         "area": "Greater Cincinnati and Northern Kentucky.",
-        "quote": null,
+        "quote": "Request service using the provider contact form, email info@leitnerelectric.com, or call/text Ohio 513-351-9024 or Kentucky 859-282-9024. No quote price is published on the contact page.",
         "scope": "Residential Level 2 chargers, dedicated circuits, garage and outdoor installations, and smart chargers are listed.",
         "license": null
       },
@@ -224,6 +224,11 @@
           "url": "https://www.leitnerelectric.com/ev-charger-installation-services",
           "label": "Provider service page",
           "checkedAt": "2026-10-11"
+        },
+        {
+          "url": "https://www.leitnerelectric.com/contact",
+          "label": "Provider contact and service request page",
+          "checkedAt": "2026-11-21"
         }
       ]
     },
