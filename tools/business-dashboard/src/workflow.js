@@ -1,5 +1,5 @@
 import { businessHoursElapsed, monthlyReportPeriod } from './operating-policy.js';
-import {notificationsEnabled,urgentStatements,alertStatements,notificationStatus,flushOwnerNotifications} from './owner-notifications.js';
+import {notificationsEnabled,urgentStatements,notificationStatus,flushOwnerNotifications} from './owner-notifications.js';
 // Receipts and deadlines are separate from source freshness and external release authority.
 const policies = {preparation:'prepare', reconciliation:'reconcile', coordination:'coordinate'};
 const reconciliationSources = ['marblism','campaign','gmail','directory','github'];
@@ -283,13 +283,12 @@ export async function workflowStatus(db,now=new Date(),overrides={}) {
 }
 export async function checkWorkflowDeadlines(env,now=new Date()) {
   const db=env.DASHBOARD_DB,status=await workflowStatus(db,now,workflowPolicyOverrides(env.DASHBOARD_WORKFLOW_POLICIES)),stamp=now.toISOString();
-  // The monitor records alerts; separately enabled owner transport dispatches eligible notices.
+  // Keep all deadline alerts internal. The outbox dispatches only explicitly saved urgent events.
   const statements=status.alerts.map(a=>db.prepare(`INSERT INTO workflow_alerts(id,detail,first_seen_at,last_seen_at) VALUES(?,?,?,?)
     ON CONFLICT(id) DO UPDATE SET detail=excluded.detail,last_seen_at=excluded.last_seen_at,
       first_seen_at=CASE WHEN workflow_alerts.resolved_at IS NULL THEN workflow_alerts.first_seen_at ELSE excluded.first_seen_at END,resolved_at=NULL`)
     .bind(a.id,a.detail,stamp,stamp));
   const ids=status.alerts.map(a=>a.id);
-  if(notificationsEnabled(env))statements.push(...alertStatements(db,ids,stamp,env,status.alerts.filter(a=>a.notificationDue).map(a=>a.id)));
   statements.push(db.prepare(`UPDATE workflow_alerts SET resolved_at=? WHERE resolved_at IS NULL AND id NOT IN (SELECT value FROM json_each(?))`).bind(stamp,JSON.stringify(ids)));
   await db.batch(statements);
   console.log(JSON.stringify({event:'workflow_deadlines_checked',checkedAt:stamp,alerts:ids}));
