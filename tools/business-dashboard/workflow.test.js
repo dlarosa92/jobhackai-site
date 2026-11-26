@@ -598,3 +598,83 @@ test('recovery of an old attempt cannot hide a newer stalled attempt or rewrite 
  const completed=c.sql.prepare('SELECT * FROM workflow_runs WHERE id=?').get(second.id);
  assert.equal((await c.flow('recover',{...input,id:second.id,expectedActor:completed.actor,expectedStartedAt:completed.started_at,expectedLeaseUntil:completed.lease_until},owner,new Date(later.getTime()+7200000))).status,409);
 });
+
+test('an inspected daily recovery permits one new same-day attempt with its own assessment',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:new Date('2026-11-24T05:00:00Z')});
+ const c=fixture(),first=(await c.flow('start',{workflow:'coordination'})).body;
+ const assessment={id:'daily-interrupted',cadence:'daily',period:first.period,assessments:['product','marketing','sales'].map(department=>({department,summary:'Actual dated owner findings'})),adjustments:'Preserve evidence and next actions',evidence:[proof[0].url]};
+ assert.equal((await c.work('coordination',{...assessment,runId:first.id})).status,200);
+ const original=c.sql.prepare('SELECT * FROM workflow_runs WHERE id=?').get(first.id);
+ t.mock.timers.tick(7200000);const now=new Date();
+ const recovery={id:first.id,expectedActor:original.actor,expectedStartedAt:original.started_at,expectedLeaseUntil:original.lease_until,resolution:'verified_side_effects',summary:'Preserved the saved assessment and verified no native action needs repetition.',evidence:proof};
+ assert.equal((await c.flow('recover',recovery,machine,now)).status,200);
+ const retry=await c.flow('start',{workflow:'coordination',retryOf:first.id},machine,now);
+ assert.equal(retry.status,200);assert.notEqual(retry.body.id,first.id);
+ assert.equal(retry.body.period,'2026-11-24');assert.equal(retry.body.retryOf,first.id);
+ assert.deepEqual(c.sql.prepare('SELECT * FROM workflow_runs WHERE id=?').get(first.id),original);
+ assert.equal(c.sql.prepare('SELECT count(*) n FROM workflow_recoveries').get().n,1);
+ const finish={id:retry.body.id,outcome:'checked',summary:'Reviewed current daily findings and preserved prior work',evidence:proof};
+ assert.equal((await c.flow('finish',finish,machine,now)).status,400);
+ assert.equal((await c.work('coordination',{...assessment,id:'wrong-identity',runId:retry.body.id})).status,409);
+ assert.equal((await c.work('coordination',{...assessment,adjustments:'Changed historical assessment',runId:retry.body.id})).status,409);
+ assert.equal((await c.work('coordination',{...assessment,runId:retry.body.id})).status,200);
+ assert.equal((await c.work('coordination',{...assessment,runId:retry.body.id})).status,200);
+ const done=await c.flow('finish',finish,machine,now);
+ assert.equal(done.status,200);assert.deepEqual(done.body.coordination,['daily-interrupted']);
+ assert.equal(c.sql.prepare('SELECT count(*) n FROM coordination_runs').get().n,1);
+ assert.equal((await workflowStatus(c.db,now)).workflows.find(w=>w.id==='coordination').status,'current');
+ assert.equal((await c.flow('start',{workflow:'coordination'},machine,now)).body.id,retry.body.id);
+ assert.equal((await c.flow('start',{workflow:'coordination',retryOf:first.id},machine,now)).body.id,retry.body.id);
+ assert.equal((await c.flow('start',{workflow:'coordination',retryOf:retry.body.id},machine,now)).status,409);
+});
+
+test('daily retry requires inspected expiry, the original executor and the current day',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:new Date('2026-11-24T05:00:00Z')});
+ const c=fixture(),first=(await c.flow('start',{workflow:'coordination'})).body;
+ const input={workflow:'coordination',retryOf:first.id};
+ assert.equal((await c.flow('start',input)).status,409);
+ assert.equal((await c.flow('start',{workflow:'preparation',retryOf:first.id})).status,400);
+ t.mock.timers.tick(7200000);const now=new Date();
+ assert.equal((await c.flow('start',input,machine,now)).status,409);
+ const row=c.sql.prepare('SELECT * FROM workflow_runs WHERE id=?').get(first.id);
+ assert.equal((await c.flow('recover',{id:first.id,expectedActor:row.actor,expectedStartedAt:row.started_at,expectedLeaseUntil:row.lease_until,resolution:'no_external_action',summary:'Inspected original attempt, no native effects.',evidence:proof},machine,now)).status,200);
+ assert.equal((await c.flow('start',input,{...machine,id:'foreign'},now)).status,409);
+ assert.equal((await c.flow('start',{...input,retryOf:'wrong-reference'},machine,now)).status,409);
+ assert.equal((await c.flow('start',input,machine,new Date('2026-11-25T05:00:00Z'))).status,409);
+ assert.equal(c.sql.prepare('SELECT count(*) n FROM workflow_runs').get().n,1);
+});
+
+test('racing and repeated recovery starts never fork or renew a daily attempt',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:new Date('2026-11-24T05:00:00Z')});
+ const c=fixture(),first=(await c.flow('start',{workflow:'coordination'})).body;
+ const recover=async id=>{const row=c.sql.prepare('SELECT * FROM workflow_runs WHERE id=?').get(id);return c.flow('recover',{id,expectedActor:row.actor,expectedStartedAt:row.started_at,expectedLeaseUntil:row.lease_until,resolution:'no_external_action',summary:'Inspected unfinished attempt; no external action.',evidence:proof},machine,new Date());};
+ t.mock.timers.tick(7200000);assert.equal((await recover(first.id)).status,200);
+ const input={workflow:'coordination',retryOf:first.id};
+ const results=await Promise.all([c.flow('start',input,machine,new Date()),c.flow('start',input,machine,new Date())]);
+ assert.ok(results.every(r=>[200,409].includes(r.status)));
+ assert.equal(c.sql.prepare('SELECT count(*) n FROM workflow_runs').get().n,2);
+ const second=(await c.flow('start',input,machine,new Date())).body;
+ assert.notEqual(second.id,first.id);
+ const before=c.sql.prepare('SELECT * FROM workflow_runs WHERE id=?').get(second.id);
+ assert.equal((await c.flow('start',{workflow:'coordination'},machine,new Date())).body.id,second.id);
+ t.mock.timers.tick(7200000);assert.equal((await recover(second.id)).status,200);
+ const third=(await c.flow('start',{workflow:'coordination',retryOf:second.id},machine,new Date())).body;
+ assert.notEqual(third.id,second.id);
+ assert.equal((await c.flow('start',input,machine,new Date())).status,409);
+ assert.deepEqual(c.sql.prepare('SELECT * FROM workflow_runs WHERE id=?').get(second.id),before);
+ assert.equal(c.sql.prepare('SELECT count(*) n FROM workflow_runs').get().n,3);
+});
+
+test('daily retry can save the missing assessment but cannot adopt an unrelated existing record',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:new Date('2026-11-24T05:00:00Z')});
+ for(const unrelated of [false,true]){
+  const c=fixture(),first=(await c.flow('start',{workflow:'coordination'},machine,new Date())).body;
+  const assessment={id:'daily-review',cadence:'daily',period:first.period,assessments:['product','marketing','sales'].map(department=>({department,summary:'Actual dated owner findings'})),adjustments:'Preserve next actions',evidence:[proof[0].url]};
+  if(unrelated)assert.equal((await c.work('coordination',assessment,owner)).status,200);
+  t.mock.timers.tick(7200000);const now=new Date(),row=c.sql.prepare('SELECT * FROM workflow_runs WHERE id=?').get(first.id);
+  assert.equal((await c.flow('recover',{id:first.id,expectedActor:row.actor,expectedStartedAt:row.started_at,expectedLeaseUntil:row.lease_until,resolution:'no_external_action',summary:'Inspected original attempt, no native action.',evidence:proof},machine,now)).status,200);
+  const retry=(await c.flow('start',{workflow:'coordination',retryOf:first.id},machine,now)).body;
+  assert.equal((await c.work('coordination',{...assessment,runId:retry.id})).status,unrelated?409:200);
+  assert.equal((await c.flow('finish',{id:retry.id,outcome:'checked',summary:'Completed saved daily review',evidence:proof},machine,now)).status,unrelated?400:200);
+ }
+});
