@@ -29,6 +29,7 @@
 ## Comparisons
 
 - [Comparing mobile detailers in Cincinnati and Northern Kentucky | JobHackAI Local](https://jobhackai.io/blog/compare-mobile-detailing-cincinnati-nky.md): Compare mobile detailing in Cincinnati and Northern Kentucky: package scope, starting prices, water and power requirements, and questions to ask before booking. [HTML](https://jobhackai.io/blog/compare-mobile-detailing-cincinnati-nky)
+- [Dumpster Rental or Junk Removal in Cincinnati and Northern Kentucky: How to Choose | JobHackAI Local](https://jobhackai.io/blog/dumpster-rental-or-junk-removal-cincinnati-nky.md): Compare a rented container with a full-service haul in Cincinnati and Northern Kentucky, including what each option covers and when municipal pickup already handles the job. [HTML](https://jobhackai.io/blog/dumpster-rental-or-junk-removal-cincinnati-nky)
 
 ## Optional
 

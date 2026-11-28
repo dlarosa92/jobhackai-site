@@ -13,6 +13,16 @@
 
 window.BLOG_POSTS = [
   {
+  "slug": "dumpster-rental-or-junk-removal-cincinnati-nky",
+  "title": "Dumpster Rental or Junk Removal in Cincinnati and Northern Kentucky: How to Choose",
+  "excerpt": "Compare municipal pickup, a rented container and a full-service haul, including who does the lifting, how long a container can stay, and what to confirm before booking.",
+  "category": "Local Directory",
+  "date": "2026-11-28",
+  "readTime": 4,
+  "author": "JobHackAI Local",
+  "featured": false
+},
+  {
     "slug": "second-round-interview-preparation",
     "title": "How to Prepare for a Second Round Interview with Multiple Interviewers",
     "category": "Interview Prep",

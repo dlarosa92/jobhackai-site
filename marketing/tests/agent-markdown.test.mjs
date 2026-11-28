@@ -205,7 +205,7 @@ test('deployable output includes public assets and omits dependencies, tests and
 
 test('Local content has its own index and full bundle, including the comparison article outside /directory/', t => {
   const root = fixture(t);
-  const localPaths = ['/directory/', '/directory/junk-removal/example', '/blog/compare-mobile-detailing-cincinnati-nky'];
+  const localPaths = ['/directory/', '/directory/junk-removal/example', '/blog/compare-mobile-detailing-cincinnati-nky', '/blog/dumpster-rental-or-junk-removal-cincinnati-nky'];
   let sitemap = readFileSync(join(root, 'sitemap.xml'), 'utf8');
   for (const path of localPaths) {
     const source = path.endsWith('/') ? `${path}index.html` : `${path}.html`;
@@ -238,6 +238,7 @@ test('Local content has its own index and full bundle, including the comparison 
   const headers = readFileSync(join(root, '_headers'), 'utf8');
   assert.match(headers, /\/directory\/\*\n  Link: <\/directory\/llms.txt>/);
   assert.match(headers, /\/blog\/compare-mobile-detailing-cincinnati-nky\*\n  Link: <\/directory\/llms.txt>/);
+  assert.match(headers, /\/blog\/dumpster-rental-or-junk-removal-cincinnati-nky\*\n  Link: <\/directory\/llms.txt>/);
   assert.equal(withoutDiscovery(readFileSync(join(root, 'index.html'), 'utf8')), home);
 });
 
