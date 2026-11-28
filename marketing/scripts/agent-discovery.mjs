@@ -2,12 +2,12 @@
 export const SITE = 'https://jobhackai.io';
 export const BEGIN = '<!-- BEGIN AGENT DISCOVERY -->';
 export const END = '<!-- END AGENT DISCOVERY -->';
-export const LOCAL_ARTICLE = '/blog/compare-mobile-detailing-cincinnati-nky';
+export const LOCAL_ARTICLES = ['/blog/compare-mobile-detailing-cincinnati-nky', '/blog/dumpster-rental-or-junk-removal-cincinnati-nky'];
 
 // One classification for HTML discovery, indexes, bundles, and response headers.
 export function isLocalPage(url) {
   const path = new URL(url, SITE).pathname.replace(/\.html\.md$|\.html$|\.md$/, '');
-  return path === '/directory' || path.startsWith('/directory/') || path === LOCAL_ARTICLE;
+  return path === '/directory' || path.startsWith('/directory/') || LOCAL_ARTICLES.includes(path);
 }
 
 export function agentIndexPath(url) {
